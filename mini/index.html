@@ -1,0 +1,3476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#1a1b26">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest"
+    href="data:application/json,{&quot;name&quot;:&quot;herdr-remote&quot;,&quot;short_name&quot;:&quot;herdr&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%231a1b26&quot;,&quot;theme_color&quot;:&quot;%231a1b26&quot;}">
+  <title>herdr-remote</title>
+  <!-- Before first paint, or the light user gets a dark flash on every load. Inline and
+       synchronous for that reason; it must not wait for the module script below. -->
+  <script>
+    try {
+      if (localStorage.getItem('herdr_theme') === 'light') document.documentElement.dataset.theme = 'light';
+    } catch (e) { /* storage blocked: stay on the default */ }
+  </script>
+  <script type="module">
+    import { play, bind } from 'https://esm.sh/cuelume@0.1.2';
+    window.cue = play;
+    document.addEventListener('DOMContentLoaded', () => bind());
+  </script>
+  <style>
+    /* Dark is the product default, not the OS's: the terminal it wraps is dark either way, and a
+       light shell around a dark pane is the jarring combination. Light is opt-in from Settings. */
+    :root {
+      --bg: #1a1b26;
+      --surface: #202331;
+      --border: #2f3549;
+      --text: #c0caf5;
+      --muted: #565f89;
+      --green: #9ece6a;
+      --red: #f7768e;
+      --blue: #7aa2f7;
+      --orange: #e0af68;
+      --term-bg: #1a1b26;
+      --term-text: #c0caf5;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #e1e2e7;
+      --surface: #d8d9e0;
+      --border: #b6bbd1;
+      --text: #1f2f66;
+      --muted: #68709a;
+      --green: #587539;
+      --red: #f52a65;
+      --blue: #2e7de9;
+      --orange: #8c6c3e;
+      --term-bg: #1a1b26;
+      --term-text: #c0caf5;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    *:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    /* iOS Safari zooms the layout viewport whenever a focused field renders below 16px, which
+       pushes the page edges outside the visual viewport and does not spring back. 16px is a
+       platform threshold, not a design choice: no field rule below may set a smaller size.
+       The one sanctioned exception is the composer, which the user can take down to 8px from the
+       gear menu and which accepts the zoom as the price — see --input-font. */
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+
+    /* The document never scrolls: overflow lives on html because the iOS rubber-band scroll
+       originates there, and height:100% gives body a definite block before dvh support. */
+    html {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, system-ui, -webkit-system-font, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      /* Kills double-tap-to-zoom, which fires on a mistimed second tap on a key or dock button and
+         leaves the pane zoomed. Panning and pinch-zoom are untouched — this is not user-scalable=no,
+         which takes zoom away from the user entirely. */
+      touch-action: manipulation;
+    }
+
+    /* No vertical padding: the 44px controls inside already set the bar's height, and padding on
+       top of them only made it taller than anything it contains needs. */
+    .header {
+      padding: 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* In a pane the app header moves to the bottom, under the composer: the thumb is already
+       down there, and the term header above already carries back, status, title and refresh.
+       `order` moves the same node, so nothing is re-rendered and no state is rebuilt. */
+    body.terminal-open > .header {
+      order: 9;
+      border-bottom: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* The shell's last row at every width. Its bottom padding is as much the point as its
+       contents: ~20px keeps the text clear of the iPhone's bottom curve and home indicator.
+       env() resolves to 0 until P5 adds viewport-fit=cover, so the 20px stands alone for now and
+       the device inset simply adds to it once it starts reporting. */
+    .status-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 5px 14px calc(20px + env(safe-area-inset-bottom, 0px));
+      font-size: 0.65rem;
+      font-weight: 500;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .status-bar .left {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-bar .right {
+      flex-shrink: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .status-bar .right.on {
+      color: var(--green);
+    }
+
+    /* Last row of all, below the app header — which itself sits at the bottom while a pane is open. */
+    body.terminal-open>.status-bar {
+      order: 10;
+    }
+
+    /* One badge per live agent, in the bar that is always on screen. Snapshot order, never
+       recency: a tab that moves the moment you select it is a tab you cannot aim at twice.
+       Sits directly after the title and takes the header's slack, so the two icon buttons on the
+       right keep their full hit area and the tabs truncate instead. */
+    .agent-tabs {
+      /* Only inside a pane. On the landing page the agent list is right there and a duplicate
+         strip above it is noise; the tabs exist to move between panes without leaving one. */
+      display: none;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+      /* The scrollbar is hidden at every width — a 15px bar inside a 44px bar is most of the bar.
+         Touch flings it; a mouse gets wheel-to-horizontal from JS, since neither has a bar to drag.
+         Snapping is `proximity`, not `mandatory`: a fling should settle on a tab edge, but a
+         deliberate small drag must be allowed to stop where the user let go. */
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      /* A fling past the last tab otherwise chains to the page, where Chrome on macOS reads a
+         horizontal swipe as navigate-back and leaves the pane. */
+      overscroll-behavior-x: none;
+      scroll-behavior: smooth;
+      scroll-snap-type: x proximity;
+      scroll-padding: 0 12px;
+    }
+
+    body.terminal-open .agent-tabs {
+      display: flex;
+    }
+
+    /* The pair of icon buttons is one group, not two header children with a gap between them.
+       margin-left:auto pins the group right at every width and in every view — the tab strip is
+       display:none on the landing page, so relying on it to push them over left them next to the
+       title there. */
+    .header .nav-group {
+      display: flex;
+      flex-shrink: 0;
+      gap: 2px;
+      margin-left: auto;
+    }
+
+    .agent-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* With no scrollbar, the only thing saying "there are more tabs that way" is the edge fade.
+       Applied per side, so a strip scrolled to its start never fades a tab that is fully visible. */
+    .agent-tabs.fade-left {
+      mask-image: linear-gradient(to right, transparent 0, #000 20px);
+    }
+
+    .agent-tabs.fade-right {
+      mask-image: linear-gradient(to left, transparent 0, #000 20px);
+    }
+
+    .agent-tabs.fade-left.fade-right {
+      mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .agent-tabs {
+        scroll-behavior: auto;
+      }
+    }
+
+    /* 44px tall for the hit area, but only ~28px of it is painted: the pill is drawn by an inset
+       shadow inside a transparent button, so the bar reads light while the target stays full-size. */
+    /* The button is the 44px touch target and paints nothing; the pill inside it is what the eye
+       sees, and it is 28px. That split is the only way to have a tab that looks slim in a slim bar
+       without taking the hit area down with it. */
+    .agent-tab {
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+      max-width: 132px;
+      min-width: 0;
+      min-height: 44px;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .agent-tab .pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 7px;
+      box-shadow: inset 0 0 0 1px var(--border);
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      transition: box-shadow 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .agent-tab .label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .agent-tab:hover .pill {
+      background: var(--surface);
+      box-shadow: inset 0 0 0 1px var(--muted);
+      color: var(--text);
+    }
+
+    /* Selection is a filled pill, not a tinted border: at 0.72rem in a crowded bar a border-only
+       cue is invisible on a phone. */
+    .agent-tab.active .pill {
+      background: var(--blue);
+      box-shadow: inset 0 0 0 1px var(--blue);
+      color: var(--bg);
+      font-weight: 700;
+    }
+
+    /* The selected tab needs its own hover, or pointing at it makes it look like every other
+       hovered tab and the selection appears to move. Brighter and lifted, never repainted. */
+    .agent-tab.active:hover .pill {
+      background: var(--blue);
+      box-shadow: inset 0 0 0 1px var(--blue), 0 0 0 3px color-mix(in srgb, var(--blue) 30%, transparent);
+      color: var(--bg);
+    }
+
+    /* The dot sits on a saturated fill once selected; the ring is what keeps it readable there. */
+    .agent-tab.active .dot {
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+    }
+
+    .header h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    /* Narrower than the 44px square, on purpose: the tabs are what the user aims at in this bar
+       and every pixel here is a pixel they do not get. Full 44px height is kept, so the target
+       is squeezed on one axis only, and the two sit tight against each other. */
+    .header button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0;
+      min-width: 36px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .header button:hover {
+      color: var(--text);
+      background: var(--border);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot.pulse {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+    }
+
+    /* min-height:0 on every flex:1 scroller — without it the content-based automatic minimum
+       stops the pane shrinking and pushes body past one viewport. */
+    .view {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    /* Settings */
+    .settings {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .settings h2 {
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+
+    .setting-group {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .setting-group label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .setting-group input {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .setting-group select {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .setting-group .hint {
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .setting-group button {
+      margin-top: 8px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      background: var(--green);
+      color: #000;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+
+    /* Agent list */
+    .agents {
+      padding: 12px;
+    }
+
+    /* Recents sit below the list and share its card styling; the section header supplies the
+       top gap, so only the sides and bottom are padded here. */
+    .recents {
+      padding: 0 12px 12px;
+    }
+
+    .section-header {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 16px 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .agent {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .agent:hover {
+      border-color: color-mix(in srgb, var(--text) 20%, transparent);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .agent:active {
+      transform: scale(0.99);
+      box-shadow: none;
+    }
+
+    .agent .dot {
+      width: 10px;
+      height: 10px;
+    }
+
+    .agent.blocked {
+      border-color: var(--red);
+      background: color-mix(in srgb, var(--red) 5%, var(--surface));
+    }
+
+    .workspace-card {
+      border-color: color-mix(in srgb, var(--text) 10%, transparent);
+    }
+
+    .count-pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--text) 8%, transparent);
+      font-size: 0.65rem;
+    }
+
+    .chip-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px 12px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: none;  /* same swipe-back chaining as the tab strip */
+    }
+
+    .chip-strip::-webkit-scrollbar {
+      display: none;
+    }
+
+    .chip-label {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .chip {
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: none;
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s;
+      background: var(--border);
+      color: var(--muted);
+    }
+
+    .chip.active {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .chip.alert::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      border: 2px solid var(--bg);
+    }
+
+    .chip:active {
+      transform: scale(0.95);
+    }
+
+    .chip-add {
+      border: 2px dashed var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 1rem;
+      padding: 4px 12px;
+    }
+
+    .chip-add:hover {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .start-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .start-field select,
+    .start-field input {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+    }
+
+    .start-field select:disabled {
+      opacity: 0.5;
+    }
+
+    #startSubmit:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .agent .info {
+      flex: 1;
+    }
+
+    .agent .project {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .agent .meta {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* Terminal view */
+    .terminal-view {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      background: var(--bg);
+    }
+
+    .terminal-view.active {
+      display: flex;
+    }
+
+    .term-header {
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .term-header .back {
+      background: none;
+      border: none;
+      color: var(--blue);
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    .term-header .title {
+      flex: 1;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .term-header .refresh-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.1rem;
+      cursor: pointer;
+    }
+
+    /* Pane menu — anchored to its gear button, so it needs a positioned ancestor of its own
+       rather than the header, whose other children must stay in normal flow. */
+    .term-menu-wrap {
+      position: relative;
+      display: flex;
+      /* Refresh and the gear sit next to each other and do very different things; the header's
+         8px gap alone put them close enough to mis-tap. */
+      margin-left: 6px;
+      flex-shrink: 0;
+    }
+
+    .term-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 20;
+      min-width: 180px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .term-menu .menu-label {
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .term-menu button {
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .term-menu button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .term-menu .menu-item {
+      width: 100%;
+      text-align: left;
+      padding: 0 10px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .term-menu .menu-item:hover {
+      background: var(--border);
+    }
+
+    .term-menu .menu-item.danger {
+      color: var(--red);
+    }
+
+    .term-menu .menu-sep {
+      height: 1px;
+      background: var(--border);
+      margin: 8px 0;
+    }
+
+    .term-content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px 10px;
+      background: var(--term-bg);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      /* px, not rem: this is the one thing the pane's text-size control resizes. 13px is what
+         the old 0.8rem resolved to at the default root size. */
+      font-size: var(--term-font, 13px);
+      line-height: 1.5;
+      color: var(--term-text);
+      -webkit-overflow-scrolling: touch;
+      /* Split by axis, deliberately. `contain` stops scroll chaining but still permits the
+         elastic bounce, which True size made visible by turning on overflow-x — panning a wide
+         line stretched and snapped, in Chrome and Safari but not Firefox. `none` on x removes
+         the bounce as well, so panning ends where the line ends everywhere.
+
+         y stays `contain`: the bounce at the top of the scrollback is the only feedback that
+         loadMore() just fired, and it is the axis every terminal app on the platform bounces on. */
+      overscroll-behavior-x: none;
+      overscroll-behavior-y: contain;
+    }
+
+    /* Reflow — the viewport decides where lines break. The hanging indent is the honesty: a
+       continuation row is visibly indented, so a wrap the phone inserted never reads as a line
+       the agent wrote. */
+    .term-content.wrap-reflow {
+      overflow-x: hidden;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      word-break: break-all;
+      text-indent: -2ch;
+      padding-left: calc(10px + 2ch);
+    }
+
+    /* True size and Fit width both keep the agent's breaks and only its breaks. `pre` is what
+       makes one logical line one visual row; the horizontal scroll is the price, and in Fit
+       width it never triggers because the font is solved to the pane's column count. */
+    .term-content.wrap-pre {
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* --- Line ruler ---------------------------------------------------------------------
+       The handles live in a column of their own, right of the text, so the finger dragging one
+       never covers the line it is selecting. That single property is what native selection
+       cannot offer and what makes this usable at a 9px terminal.
+
+       Selection is a range of line indices, never a character range — which is also what makes
+       it cheap: with `white-space: pre` one logical line is one visual row of known height, so
+       index <-> y is arithmetic and the whole feature costs one band element. Reflow breaks
+       that (a line spans an unknown number of rows), so the ruler is not offered there. */
+    .term-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      /* The band is positioned against this box and has to clip to it. */
+      overflow: hidden;
+    }
+
+    .term-wrap>.term-content {
+      flex: 1;
+    }
+
+    .ruler {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 32px;
+      /* The ruler owns its drags; without this the page pans out from under them on iOS. */
+      touch-action: none;
+      cursor: ns-resize;
+      z-index: 2;
+    }
+
+    /* Deliberately no background. In True size the text pans underneath, and a solid 32px strip
+       would hide a column of it — only the track and the handles paint. */
+    .ruler::before {
+      content: '';
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 50%;
+      width: 3px;
+      margin-left: -1.5px;
+      border-radius: 2px;
+      background: var(--border);
+      opacity: 0.7;
+    }
+
+    .ruler-handle {
+      position: absolute;
+      left: 0;
+      width: 32px;
+      /* 44px of target for a 6px bar: the grip is deliberately far larger than its paint. */
+      height: 44px;
+      margin-top: -22px;
+      z-index: 3;
+    }
+
+    .ruler-handle::before {
+      content: '';
+      position: absolute;
+      left: 3px;
+      right: 3px;
+      top: 19px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--blue);
+      box-shadow: 0 0 0 1px var(--term-bg);
+    }
+
+    /* Parked at the viewport edge because the range continues past it. A handle that scrolled
+       away is a selection that cannot be adjusted, so it stops instead of leaving. */
+    .ruler-handle.parked::before {
+      opacity: 0.5;
+      left: 9px;
+      right: 9px;
+    }
+
+    .sel-band {
+      position: absolute;
+      left: 0;
+      right: 32px;
+      pointer-events: none;
+      background: color-mix(in srgb, var(--blue) 20%, transparent);
+      border-top: 1px solid var(--blue);
+      border-bottom: 1px solid var(--blue);
+      z-index: 1;
+    }
+
+    /* At 9px the user cannot read the row they are landing on. This is how they confirm the
+       line without needing pixel precision. */
+    .sel-bubble {
+      position: absolute;
+      right: 38px;
+      max-width: 62%;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: var(--text);
+      color: var(--bg);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 0.7rem;
+      white-space: pre;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .sel-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    /* display:flex above outranks the UA rule for [hidden], so it needs saying again. */
+    .sel-bar[hidden] {
+      display: none;
+    }
+
+    .sel-bar .count {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sel-bar .spacer {
+      flex: 1;
+    }
+
+    .sel-bar button {
+      padding: 8px 12px;
+      min-height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .sel-bar button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: var(--bg);
+    }
+
+    /* Empty for most of a pane's life. Left displayed it still drew a top border and 12px of
+       padding, which read as dead space between the terminal and the composer. */
+    .quick-actions:empty {
+      display: none;
+    }
+
+    .quick-actions {
+      padding: 6px 10px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .quick-actions button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex: 1;
+      min-width: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-yes {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn-trust {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn-no {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .term-input {
+      padding: 8px 12px;
+      display: flex;
+      gap: 6px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .term-input input,
+    .term-input textarea {
+      flex: 1;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: monospace;
+      /* Default 16px keeps iOS from zooming on focus; the gear menu can take it to 8px, which
+         re-enables that zoom deliberately. See the base input rule. */
+      font-size: var(--input-font, 16px);
+      min-width: 0;
+    }
+
+    /* Four stacked controls, the text area, two large ones. The text area's min-height sets the
+       row height; the stacks stretch to it, so the buttons size themselves. */
+    .term-input {
+      align-items: stretch;
+    }
+
+    .term-input textarea {
+      resize: none;
+      overflow-y: auto;
+      line-height: 1.4;
+      /* Four stacked 44px targets plus three 4px gaps — the left stack is what sets this, and
+         44px is S3.3's floor. min-height beats the inline height autoGrow writes, so the composer
+         cannot collapse below the stacks beside it. */
+      min-height: 188px;
+      max-height: 280px;
+    }
+
+    .term-input-side {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+      width: 46px;
+    }
+
+    .term-input-side button {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* The right stack holds two controls in the height four take on the left, so both are large.
+       Send takes the larger share and the only filled treatment — it is the one with a
+       consequence, and clear is guarded by its double tap rather than by being small. */
+    .term-input-side button.send {
+      flex: 1.6;
+      border: none;
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .term-input-side button.clear.armed {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .pair-strip {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.7rem;
+      flex-shrink: 0;
+    }
+
+    .pair-strip .pair-name {
+      flex: 1;
+      min-width: 0;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Last child of the pane: its separator has to face the other way. */
+    .pair-strip.at-bottom {
+      border-bottom: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* The reason a pair went stale gets its own line — truncated to "is no lo…" it is useless. */
+    .pair-strip .pair-reason {
+      flex-basis: 100%;
+      color: var(--orange);
+    }
+
+    .pair-strip button {
+      padding: 5px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.7rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .pair-strip button.transfer {
+      border-color: var(--blue);
+      color: var(--blue);
+      font-weight: 600;
+    }
+
+    .pair-strip button.switch {
+      max-width: 40%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pair-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 0.65rem;
+      padding: 4px 8px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .pair-btn.paired {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .term-input button:last-child {
+      padding: 10px 14px;
+      border-radius: 6px;
+      border: none;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .term-keys {
+      border-top: 1px solid var(--border);
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      flex-shrink: 0;
+      padding-bottom: env(safe-area-inset-bottom, 8px);
+    }
+
+    .nav-key {
+      padding: 10px 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .nav-key:active {
+      background: var(--border);
+      transform: scale(0.97);
+    }
+
+    .mod-key {
+      font-size: 12px;
+    }
+
+    .mod-key.armed {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    .tab-btn {
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--blue);
+    }
+
+    .ctrl-key {
+      padding: 10px 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      min-height: 44px;
+    }
+
+    .ctrl-key:active {
+      background: var(--border);
+    }
+
+    .ctrl-key.danger {
+      color: var(--red);
+      border-color: color-mix(in srgb, var(--red) 30%, var(--border));
+    }
+
+    .ctrl-key.confirm {
+      background: var(--red);
+      color: #fff;
+      border-color: var(--red);
+    }
+
+    .digit-key {
+      padding: 14px 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 18px;
+      font-family: monospace;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .digit-key:active {
+      background: var(--border);
+    }
+
+    .queue-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--text) 5%, var(--bg));
+      font-family: monospace;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .queue-chip:hover {
+      border-color: var(--red);
+    }
+
+    .queue-chip.danger {
+      border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+      color: var(--red);
+    }
+
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 60px 20px;
+      font-size: 0.85rem;
+    }
+
+    /* Desktop */
+    @media (min-width: 768px) {
+      body {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+
+      .agents {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 12px;
+      }
+
+      .section-header {
+        grid-column: 1 / -1;
+      }
+
+      .chip-strip {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      body {
+        max-width: 1100px;
+      }
+
+      .agents {
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      }
+    }
+
+    @media (max-width: 380px) {
+
+      .header h1 {
+        font-size: 0.9rem;
+      }
+
+      .agents {
+        padding: 8px;
+      }
+
+      .agent {
+        padding: 12px;
+      }
+
+      .term-input {
+        padding: 6px 8px;
+        gap: 4px;
+      }
+
+      .term-keys {
+        padding: 6px 8px;
+      }
+    }
+
+    @media (pointer: fine) {
+      .quick-actions button {
+        flex: none;
+        min-width: auto;
+        padding: 8px 18px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <span class="dot status-dot"></span>
+    <h1>herdr</h1>
+    <!-- One badge per live agent, selectable like tabs. Filled by renderAgentTabs. -->
+    <div class="agent-tabs" id="agentTabs"></div>
+    <div class="nav-group">
+      <button id="navTimeline" onclick="toggleTimeline()" aria-label="Activity"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg></button>
+      <button id="navSettings" onclick="toggleSettings()" aria-label="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path
+            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg></button>
+    </div>
+  </div>
+
+  <div class="settings" id="settingsView">
+    <h2>Settings</h2>
+    <div class="setting-group">
+      <label for="relayUrl">Relay URL</label>
+      <input id="relayUrl" type="url" placeholder="wss://your-tunnel.trycloudflare.com" />
+      <label for="relayToken" style="margin-top:8px">Token (optional)</label>
+      <input id="relayToken" type="password" placeholder="shared secret" />
+      <button onclick="saveAndConnect()">Connect</button>
+      <div class="hint">Run <code>./relay/start.sh</code> to get a URL. <a
+          href="https://github.com/dcolinmorgan/herdr-remote/blob/main/QUICKSTART.md" style="color:var(--blue)">Setup
+          guide →</a></div>
+    </div>
+
+    <div class="setting-group">
+      <label>Push Notifications</label>
+      <div id="pushStatus" style="font-size:0.75rem;margin-bottom:6px"></div>
+      <button id="pushToggle" onclick="togglePush()">Enable Push</button>
+      <div class="hint">Get notified when agents are blocked, even with this tab closed.</div>
+    </div>
+
+    <div class="setting-group">
+      <label for="themePick">Appearance</label>
+      <select id="themePick" onchange="setTheme(this.value)">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+      </select>
+      <div class="hint">Dark is the default. The terminal itself is dark in both.</div>
+    </div>
+
+    <div class="setting-group">
+      <label>Status</label>
+      <div id="settingsStatus" style="font-size:0.75rem"></div>
+    </div>
+  </div>
+
+  <div class="view" id="agentListView">
+    <div class="agents" id="agents"></div>
+    <!-- Up to five recently opened panes, below the list and rendered with the same cards. A
+       sibling of #agents, not a child: renderBody rewrites that node's innerHTML every snapshot. -->
+    <div class="recents" id="recents" style="display:none"></div>
+  </div>
+
+  <div class="view" id="timelineView" style="display:none;padding:12px;">
+    <div id="timelineList" style="font-family:monospace;font-size:0.75rem;line-height:1.8;"></div>
+  </div>
+
+  <!-- Shell's last row. Left: when the open pane last changed. Right: whether it is doing
+       anything. Deliberately sparse for now — the space exists as much for the iPhone's bottom
+       curve as for what it says. -->
+  <div class="status-bar" id="statusBar">
+    <span class="left" id="statusBarLeft"></span>
+    <span class="right" id="statusBarRight"></span>
+  </div>
+
+  <div class="terminal-view" id="terminalView">
+    <div class="term-header">
+      <button class="back" onclick="closeTerminal()" aria-label="Back to agent list"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6" />
+        </svg></button>
+      <span class="dot status-dot"></span>
+      <span class="title" id="termTitle"></span>
+      <button class="refresh-btn" onclick="refreshPane()" aria-label="Refresh pane"><svg width="16" height="16"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+          <path d="M16 16h5v5" />
+        </svg></button>
+      <div class="term-menu-wrap">
+        <button class="refresh-btn" id="termMenuBtn" onclick="toggleTermMenu()" aria-label="Pane settings"
+          aria-haspopup="true" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg></button>
+        <div class="term-menu" id="termMenu" style="display:none" role="menu">
+          <button class="menu-item" role="menuitem" onclick="closeTermMenu(); renamePane()">Rename pane</button>
+          <!-- Pair items, present only while this pane belongs to a pair — renderPairStrip owns it. -->
+          <div id="termMenuPair"></div>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Terminal text</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button id="fontDec" onclick="bumpFont(-1)" aria-label="Smaller terminal text">A−</button>
+            <span id="fontValue" style="flex:1;text-align:center;font-size:0.75rem"></span>
+            <button id="fontInc" onclick="bumpFont(1)" aria-label="Larger terminal text">A+</button>
+          </div>
+          <div class="menu-label" style="margin-top:10px">Composer text</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button id="inputFontDec" onclick="bumpInputFont(-1)" aria-label="Smaller composer text">A−</button>
+            <span id="inputFontValue" style="flex:1;text-align:center;font-size:0.75rem"></span>
+            <button id="inputFontInc" onclick="bumpInputFont(1)" aria-label="Larger composer text">A+</button>
+          </div>
+          <div class="menu-label" style="margin-top:10px">Line width</div>
+          <select id="wrapMode" onchange="setWrapMode(this.value)" aria-label="How pane lines are laid out"
+            style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+            <option value="true">True size — pan sideways</option>
+            <option value="fit">Fit width — shrink to the pane</option>
+            <option value="reflow">Reflow — wrap to the screen</option>
+          </select>
+          <div id="wrapHint" style="font-size:0.65rem;color:var(--muted);margin-top:5px"></div>
+          <div class="menu-label" style="margin-top:10px">Pair bar</div>
+          <select id="pairPlace" onchange="setPairPlace(this.value)" aria-label="Where the pair bar sits"
+            style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+            <option value="top">Top of the pane</option>
+            <option value="above">Above the composer</option>
+            <option value="bottom">Bottom</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <!-- Pair strip — absent unless the active pane belongs to a pair -->
+    <div class="pair-strip" id="pairStrip" style="display:none"></div>
+    <div class="term-wrap" id="termWrap">
+      <div class="term-content" id="termContent">Loading…</div>
+      <div class="sel-band" id="selBand" hidden></div>
+      <div class="ruler" id="ruler" hidden aria-hidden="true">
+        <div class="ruler-handle" id="rulerTop" hidden></div>
+        <div class="ruler-handle" id="rulerBot" hidden></div>
+      </div>
+      <div class="sel-bubble" id="selBubble" hidden></div>
+    </div>
+    <div class="sel-bar" id="selBar" hidden>
+      <span class="count" id="selCount"></span>
+      <span class="spacer"></span>
+      <button onclick="copySel()" id="selCopy">Copy</button>
+      <button class="primary" onclick="openTransfer()" id="selTransfer" hidden>Transfer ›</button>
+      <button onclick="clearSel()" aria-label="Clear selection">✕</button>
+    </div>
+    <div class="quick-actions" id="quickActions"></div>
+    <div class="term-input">
+      <div class="term-input-side">
+        <button onclick="openCommandPalette()" aria-label="Commands"
+          style="border:1px solid var(--blue);background:var(--bg);color:var(--blue);font-weight:700;font-size:14px">/</button>
+        <button onclick="toggleDock('promptDock')" aria-label="Prompts"
+          style="border:1px solid var(--border);background:var(--bg);color:var(--muted);font-weight:700;font-size:14px">P</button>
+        <button onclick="toggleQuickDock()" aria-label="Quick actions"
+          style="border:1px solid var(--border);background:var(--bg);color:var(--orange)"><svg width="18" height="18"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg></button>
+        <button onclick="toggleKeysDock()" aria-label="Keys"
+          style="border:1px solid var(--border);background:var(--bg);color:var(--muted)"><svg width="18" height="18"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10" />
+          </svg></button>
+      </div>
+      <textarea id="termInput" rows="2" placeholder="Type…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="off"
+        autocapitalize="off" spellcheck="false"></textarea>
+      <div class="term-input-side">
+        <button class="send" onclick="sendText()" aria-label="Send"><svg width="24" height="24" viewBox="0 0 24 24"
+            fill="currentColor" stroke="none">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+          </svg></button>
+        <button class="clear" id="clearBtn" onclick="clearComposer(this)" aria-label="Clear the composer (tap twice)"
+          title="Tap twice to clear" style="border:1px solid var(--border);background:var(--bg);color:var(--muted)"><svg
+            width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg></button>
+      </div>
+    </div>
+    <div class="term-keys" id="termKeys" style="display:none">
+      <!-- Key queue strip (visible when composing) -->
+      <div id="keyQueueStrip"
+        style="display:none;width:100%;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;flex-wrap:wrap;gap:4px;align-items:center">
+      </div>
+      <!-- Tab toggle -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;width:100%;margin-bottom:6px">
+        <button class="tab-btn active" id="tabKeys" onclick="switchKeyTab('keys')">Keys</button>
+        <button class="tab-btn" id="tabDigits" onclick="switchKeyTab('digits')">123</button>
+      </div>
+      <!-- Keys pad -->
+      <div id="keysPad" style="width:100%">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:4px">
+          <button class="nav-key" onclick="fireKey('Escape')">Esc</button>
+          <button class="nav-key" style="grid-column:span 2" onclick="fireKey('Space')">Space</button>
+          <button class="nav-key" onclick="fireKey('Enter')">⏎ Enter</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:4px">
+          <button class="nav-key" onclick="fireKey('Tab')">Tab</button>
+          <button class="nav-key" onclick="fireKey('Left')">←</button>
+          <button class="nav-key" onclick="fireKey('Down')">↓</button>
+          <button class="nav-key" onclick="fireKey('Up')">↑</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:4px">
+          <button class="nav-key" onclick="fireKey('Right')">→</button>
+          <button class="nav-key mod-key" id="modShift" onclick="armMod('shift')">⇧ Shift</button>
+          <button class="nav-key mod-key" id="modCtrl" onclick="armMod('ctrl')">Ctrl</button>
+        </div>
+        <!-- Ctrl presets -->
+        <div>
+          <button onclick="toggleCtrlPresets()"
+            style="background:none;border:none;color:var(--muted);font-size:0.7rem;cursor:pointer;padding:2px 4px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase">Presets
+            <span id="ctrlChevron">▸</span></button>
+          <div id="ctrlPresets" style="display:none;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px"></div>
+        </div>
+      </div>
+      <!-- Digits pad -->
+      <div id="digitsPad" style="display:none;width:100%;grid-template-columns:repeat(3,1fr);gap:4px"></div>
+      <!-- Action keys for blocked state -->
+      <div id="actionKeys" style="width:100%;margin-top:4px"></div>
+    </div>
+    <!-- Quick actions dock -->
+    <div class="term-keys" id="quickDock" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px">
+        <span
+          style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Quick
+          Actions</span>
+        <button onclick="toggleQuickDock()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer">✕</button>
+      </div>
+      <div style="width:100%">
+        <p style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:4px">
+          Confirm</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+          <button class="nav-key" style="color:var(--green);border-color:var(--green)"
+            onclick="quickSend('yes')">yes</button>
+          <button class="nav-key" style="color:var(--red);border-color:var(--red)" onclick="quickSend('no')">no</button>
+        </div>
+        <p style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:4px">
+          Common</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <button class="nav-key" onclick="quickSend('continue')">continue</button>
+          <button class="nav-key" onclick="quickSend('retry')">retry</button>
+          <button class="nav-key" onclick="quickSend('skip')">skip</button>
+          <button class="nav-key" onclick="quickSend('commit and push')">commit & push</button>
+        </div>
+      </div>
+    </div>
+    <!-- Prompts dock — the "P" button beside the composer. These insert at the cursor and
+       never send, unlike Confirm and Common in the quick dock. -->
+    <div class="term-keys" id="promptDock" style="display:none">
+      <div style="width:100%">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span
+            style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Prompts</span>
+          <button onclick="toggleDock('promptDock')" aria-label="Close"
+            style="background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer">✕</button>
+        </div>
+        <div id="shortcutRow" style="display:grid;gap:4px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Command palette -->
+  <div id="cmdPalette" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closePalette()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:50dvh;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Commands</span>
+        <button onclick="closePalette()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <input id="cmdSearch" type="text" placeholder="Search commands…" autocomplete="off" autocorrect="off"
+        style="margin:8px 12px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"
+        oninput="filterCommands()" />
+      <div id="cmdList" style="overflow-y:auto;padding:4px 12px;"></div>
+    </div>
+  </div>
+
+  <!-- Start session — rendered only when the relay advertises start_options -->
+  <div id="startSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closeStart()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Start session · <span id="startProject"></span></span>
+        <button onclick="closeStart()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <label class="start-field">Role<select id="startRole"></select></label>
+        <label class="start-field">Agent<select id="startAgent"></select></label>
+        <label class="start-field">Where<select id="startPlacement" onchange="renderStartTarget()"></select></label>
+        <label class="start-field">Name<input id="startName" type="text" maxlength="32" autocapitalize="none"
+            autocomplete="off" placeholder="Auto — Role N" /></label>
+        <div id="startTargetRow"></div>
+        <p id="startError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
+        <button id="startSubmit" onclick="submitStart()"
+          style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-weight:600;font-size:0.85rem;cursor:pointer">Start
+          session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Relay errors. Until this existed every refusal the relay sent was dropped on the floor,
+     so a rejected send_text or rename looked identical to one that worked. -->
+  <div id="toast" role="status" aria-live="polite"
+    style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom,8px));z-index:200;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
+  </div>
+
+  <!-- Pair editor — pins two live same-host panes. Frontend only; the relay knows nothing of pairs. -->
+  <div id="pairSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closePair()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Pair · <span id="pairSource"></span></span>
+        <button onclick="closePair()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <div id="pairCandidates"></div>
+        <div id="pairFields" style="display:none;flex-direction:column;gap:12px">
+          <label class="start-field">Pair name<input id="pairName" maxlength="64" type="text" /></label>
+          <label class="start-field">This pane's name<input id="pairRoleA" maxlength="32" type="text" /></label>
+          <label class="start-field">Partner's name<input id="pairRoleB" maxlength="32" type="text" /></label>
+        </div>
+        <p id="pairError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
+        <button id="pairSubmit" onclick="savePair()"
+          style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-weight:600;font-size:0.85rem;cursor:pointer">Save
+          pair</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer — picks the instruction, then prefills the partner's composer. Never sends. -->
+  <div id="transferSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closeTransfer()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Transfer to <span id="transferTarget"></span></span>
+        <button onclick="closeTransfer()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+        <p style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:0">
+          Instruction</p>
+        <div id="transferShortcuts" style="display:flex;flex-direction:column;gap:6px"></div>
+        <p style="font-size:0.7rem;color:var(--muted);margin:0">The payload is placed in the composer for you to read.
+          Nothing is sent.</p>
+        <pre id="transferPreview"
+          style="margin:0;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-size:0.65rem;max-height:22vh;overflow:auto;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    let ws = null, agents = [], activePane = null, refreshInterval = null, userScrolledUp = false;
+    let timeline = [], prevStatuses = {};
+    let activeWorkspace = null;
+    let activeTab = null;
+    let projects = [], activeProject = null;
+    // Absence of start_options is the feature gate: no message, no Start session control.
+    let startOptions = null, startProjectId = null;
+    // Pairs live only in this browser. The relay has no pair message and stores no pair data.
+    let pairs = [], pairSource = null, pairPartner = null, transferSelection = '';
+
+    // --- P3 pair logic (pure) --- start
+    // Pure, dependency-free, and extracted verbatim by tests/test_pairs.js. Keep it that way:
+    // anything here that touches the DOM, ws, or localStorage breaks the tests silently.
+    const PAIRS_KEY = 'herdr_pairs';
+    const PAIRS_VERSION = 1;
+    const MAX_PAIRS = 32;
+    const SEND_TEXT_MAX = 4000;      // matches the relay cap in herdr_relay.py
+
+    const SHORTCUTS = [
+      { label: 'Review', text: 'Review, edit, fix; then propose next steps.' },
+      { label: 'Implement', text: 'Proceed to implement.' },
+      { label: 'Architect prompt', text: '/ponytail\n/caveman\n@.agent/prompts/System_Prompt_2_Architect.md\n' },
+    ];
+
+    // codex invokes its prompts with $; every other agent uses /. Only a line-leading slash is
+    // rewritten, so a path or URL inside the shortcut text is left alone. Keyed off the pane the
+    // text is going into, not the one it came from.
+    function agentSlash(text, agent) {
+      return agent === 'codex' ? text.replace(/^\//gm, '$') : text;
+    }
+
+    // A corrupt blob must not brick the terminal view — it loads as no pairs at all.
+    function parsePairs(raw) {
+      let data;
+      try { data = JSON.parse(raw); } catch (e) { return []; }
+      if (!data || data.version !== PAIRS_VERSION || !Array.isArray(data.pairs)) return [];
+      return data.pairs.filter(p => p && typeof p.id === 'string' && Array.isArray(p.members) &&
+        p.members.length === 2 && p.members.every(m => m && m.pane_id));
+    }
+
+    function newPairId() {
+      // Not crypto.randomUUID(): it is undefined in a non-secure context, and the relay serves
+      // this page over plain HTTP on a LAN address. Uniqueness among <=32 local entries is enough.
+      return 'p_' + Math.random().toString(36).slice(2, 10);
+    }
+
+    // All four fields, because herdr reuses a pane_id after a pane closes. A matching pane_id
+    // with a different cwd is a different session, and pasting into it is the worst failure here.
+    function memberMatches(m, a) {
+      return a.pane_id === m.pane_id && (a.host || 'local') === (m.host || 'local') &&
+        a.agent === m.agent && (a.cwd || '') === (m.cwd || '');
+    }
+
+    function recentFingerprint(a) {
+      return { pane_id: a.pane_id, host: a.host || 'local', agent: a.agent, cwd: a.cwd || '' };
+    }
+
+    function pairHealth(pair, list) {
+      for (const m of pair.members) {
+        if (list.filter(a => a.pane_id === m.pane_id).length > 1)
+          return { state: 'stale', reason: `${m.pane_id} is reported by more than one host` };
+        if (!list.some(a => memberMatches(m, a)))
+          return { state: 'stale', reason: `${m.role || m.agent} (${m.pane_id}) is no longer running` };
+      }
+      return { state: 'healthy', reason: '' };
+    }
+
+    function pairFor(list, paneId) {
+      return list.find(p => p.members.some(m => m.pane_id === paneId)) || null;
+    }
+
+    function memberOf(pair, paneId) { return pair.members.find(m => m.pane_id === paneId); }
+    function partnerOf(pair, paneId) { return pair.members.find(m => m.pane_id !== paneId); }
+
+    // Same host only: a bare pane_id cannot be routed unambiguously across hosts.
+    function pairCandidates(list, source) {
+      return list.filter(a => a.pane_id !== source.pane_id &&
+        (a.host || 'local') === (source.host || 'local'));
+    }
+
+    // `from` is the source's display name — the pane label P2 assigns ("Architect 1", "Reviewer 2"),
+    // editable in the pair sheet. The agent name is deliberately not repeated: the receiving agent
+    // is being told which colleague the text came from, not which tool produced it.
+    //
+    // No fence. Removed at the user's direction, knowingly: it was the receiving agent's only
+    // boundary marker for the quoted region, so a transferred line like "Proceed to implement."
+    // now reads the same as an instruction the user typed. The remaining containment is the human
+    // one — the user selects the text and reads the prefilled composer before sending.
+    function composeTransfer(instruction, from, text) {
+      if (!text) return { error: 'Select some text in the pane first' };
+      const body = (instruction ? instruction + '\n\n' : '') + `feedback from ${from}:\n${text}`;
+      if (body.length > SEND_TEXT_MAX)
+        return { error: `Payload is ${body.length} characters, over the ${SEND_TEXT_MAX} limit — select less` };
+      return { text: body };
+    }
+
+    // A ruler selection is a pair of line indices, and `pane read` returns the *last* N lines —
+    // so anything the agent prints shifts every index up, and loading more scrollback shifts them
+    // down. The selection therefore follows its own text, not its position.
+    //
+    // Returns the new [a, b], or null when the block is gone — at which point the selection is
+    // gone too, which is the honest answer. A block that repeats verbatim resolves to the first
+    // match; distinguishing them would need an anchor the pane does not give us.
+    function reanchorSel(text, selText, a, b) {
+      if (!selText) return null;
+      const rows = text.split('\n');
+      if (rows.slice(a, b + 1).join('\n') === selText) return [a, b];
+      // Whole lines only. A mid-line match, or one that stops short of the line's end, is a
+      // different selection that happens to share characters.
+      const whole = (i) => (i === 0 || text[i - 1] === '\n') &&
+        (i + selText.length === text.length || text[i + selText.length] === '\n');
+      let at = text.indexOf(selText);
+      while (at >= 0 && !whole(at)) at = text.indexOf(selText, at + 1);
+      if (at < 0) return null;
+      const start = text.slice(0, at).split('\n').length - 1;
+      return [start, start + selText.split('\n').length - 1];
+    }
+    // --- P3 pair logic (pure) --- end
+
+    // Settings — auto-detect relay when served from same origin
+    const autoRelayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+    const isSelfRelay = !location.hostname.includes('pages.dev') && !location.hostname.includes('github.io');
+    const savedUrl = localStorage.getItem('herdr_relay_url') || (isSelfRelay ? autoRelayUrl : '');
+    const urlToken = new URLSearchParams(location.search).get('token');
+    if (urlToken) localStorage.setItem('herdr_relay_token', urlToken);
+    const savedToken = localStorage.getItem('herdr_relay_token') || '';
+    document.getElementById('relayUrl').value = savedUrl;
+    document.getElementById('relayToken').value = savedToken;
+
+    // Theme. The head script already applied it before paint; this only keeps the control honest.
+    const THEME_KEY = 'herdr_theme';
+
+    function setTheme(name) {
+      const light = name === 'light';
+      if (light) document.documentElement.dataset.theme = 'light';
+      else delete document.documentElement.dataset.theme;
+      try { localStorage.setItem(THEME_KEY, light ? 'light' : 'dark'); } catch (e) { /* private mode: session-only */ }
+      document.getElementById('themePick').value = light ? 'light' : 'dark';
+      // The installed PWA paints its chrome from this, so it has to track the choice.
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = light ? '#e1e2e7' : '#1a1b26';
+    }
+
+    setTheme(localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark');
+
+
+
+    // The terminal is a flex sibling, not an overlay: leaving it open would stack two panes.
+    // Settings and Activity are toggles onto wherever the user already was, not one-way doors.
+    // The pane they came from is remembered so a second tap puts it back; without this, leaving
+    // Settings always dumped them on the agent list and they had to find the pane again.
+    let panelReturnPane = null;
+
+    function panelIsOpen() {
+      return document.getElementById('settingsView').style.display === 'block'
+        || document.getElementById('timelineView').style.display === 'block';
+    }
+
+    function openPanel(id) {
+      // Only capture on the way in. Switching Settings → Activity must not overwrite the pane
+      // with the null that closing the terminal already left behind.
+      if (!panelIsOpen()) {
+        panelReturnPane = activePane;
+        if (activePane) closeTerminal();
+      }
+      document.getElementById('agentListView').style.display = 'none';
+      document.getElementById('settingsView').style.display = id === 'settingsView' ? 'block' : 'none';
+      document.getElementById('timelineView').style.display = id === 'timelineView' ? 'block' : 'none';
+    }
+
+    function closePanel() {
+      document.getElementById('settingsView').style.display = 'none';
+      document.getElementById('timelineView').style.display = 'none';
+      const back = panelReturnPane;
+      panelReturnPane = null;
+      // The pane may have died while the panel was open; openTerminal falls back to the ID, so
+      // check the live snapshot first and land on the list rather than on a dead pane.
+      if (back && agents.some(a => a.pane_id === back)) openTerminal(back);
+      else document.getElementById('agentListView').style.display = '';
+    }
+
+    // Jumping between panes is the most frequent move in the app, so every live agent gets a tab
+    // in the bar that is always on screen. Snapshot order, deliberately not recency: selecting a
+    // tab must not move it, or the next selection lands somewhere else.
+    // Duplicate pane IDs are dropped rather than shown twice — same fail-closed rule as the list.
+    // render() runs on every snapshot, so rewriting innerHTML unconditionally rebuilt the whole
+    // strip a few times a second: the tabs flickered, hover was dropped mid-point, and
+    // scrollIntoView re-fired. Rebuild only when the strip's own contents change, and apply the
+    // selection separately — switching panes then never touches the markup.
+    let tabsSig = '', tabsActive = null;
+
+    function renderAgentTabs() {
+      const el = document.getElementById('agentTabs');
+      const live = agents.filter(a => agents.filter(x => x.pane_id === a.pane_id).length === 1);
+      const sig = live.map(a => `${a.pane_id} | ${paneLabel(a)} | ${a.status}`).join(' /// ');
+      if (sig !== tabsSig) {
+        tabsSig = sig;
+        el.innerHTML = live.map(a => {
+          // Solid, never animated. Colour alone says what the pane is doing; a blinking dot in a
+          // bar that is always on screen is motion the user cannot turn off or look away from.
+          const color = a.status === 'blocked' ? 'var(--red)' : a.status === 'working' ? 'var(--green)' : 'var(--muted)';
+          return `<button class="agent-tab" data-pane="${escapeHtml(a.pane_id)}" ` +
+            `onclick="jumpToPane('${a.pane_id}')" title="${escapeHtml(paneTitle(a))}">` +
+            `<span class="pill">` +
+            `<span class="dot" style="background:${color}" aria-hidden="true"></span>` +
+            `<span class="label">${escapeHtml(paneLabel(a))}</span></span></button>`;
+        }).join('');
+        tabsActive = null;  // the buttons are new, so the class has to be applied again
+      }
+      syncTabFades();
+      if (tabsActive === activePane) return;
+      tabsActive = activePane;
+      el.querySelectorAll('.agent-tab').forEach(b => {
+        const on = b.dataset.pane === activePane;
+        b.classList.toggle('active', on);
+        if (!on) { b.removeAttribute('aria-current'); return; }
+        b.setAttribute('aria-current', 'page');
+        // Centred, not 'nearest': landing the selection flush against an edge hides whichever
+        // neighbour you are most likely to want next. Centring always shows both.
+        b.scrollIntoView({ block: 'nearest', inline: 'center' });
+      });
+    }
+
+    // --- Bottom status bar ---
+    // Left: when the open pane's content last actually changed. Stamping every poll would read
+    // "now" forever and mean nothing, so the stamp is taken only when the text differs.
+    let paneStampAt = null;
+
+    function fmtStamp(d) {
+      const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `${t} · ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+    }
+
+    function renderStatusBar() {
+      const a = activePane ? agents.find(x => x.pane_id === activePane) : null;
+      const on = !!a && a.status === 'working';
+      document.getElementById('statusBarLeft').textContent =
+        a && paneStampAt ? fmtStamp(paneStampAt) : '';
+      const right = document.getElementById('statusBarRight');
+      right.textContent = a ? (on ? 'active' : 'idle') : '';
+      right.classList.toggle('on', on);
+    }
+
+    // With the scrollbar hidden, nothing else says there are more tabs off-screen.
+    function syncTabFades() {
+      const el = document.getElementById('agentTabs');
+      const max = el.scrollWidth - el.clientWidth;
+      el.classList.toggle('fade-left', el.scrollLeft > 1);
+      el.classList.toggle('fade-right', el.scrollLeft < max - 1);
+    }
+
+    {
+      const el = document.getElementById('agentTabs');
+      el.addEventListener('scroll', syncTabFades, { passive: true });
+      // Fit width is solved against the viewport, so a rotation has to re-solve it.
+      addEventListener('resize', () => { syncTabFades(); applyWrapMode(); });
+      // A mouse has no horizontal fling and there is no scrollbar to drag, so vertical wheel over
+      // the strip moves it sideways. Without this, tabs past the edge are unreachable on desktop.
+      el.addEventListener('wheel', e => {
+        const max = el.scrollWidth - el.clientWidth;
+        if (max <= 0 || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        e.preventDefault();
+        // behavior:'auto' overrides the CSS `scroll-behavior: smooth`, which would otherwise
+        // animate every wheel notch and make the strip feel like it is lagging the hand.
+        el.scrollBy({ left: e.deltaY, behavior: 'auto' });
+      }, { passive: false });
+    }
+
+    // A jump is a destination, so it drops any panel the user was in and the pane it would
+    // have returned to — otherwise closing Settings later would yank them back to an older pane.
+    function jumpToPane(paneId) {
+      panelReturnPane = null;
+      document.getElementById('settingsView').style.display = 'none';
+      document.getElementById('timelineView').style.display = 'none';
+      openTerminal(paneId);
+    }
+
+    function toggleSettings() {
+      if (document.getElementById('settingsView').style.display === 'block') { closePanel(); return; }
+      openPanel('settingsView');
+      document.getElementById('settingsStatus').innerHTML = ws && ws.readyState === 1
+        ? `<span style="color:var(--green)">● Connected</span> · ${agents.length} agents`
+        : `<span style="color:var(--red)">● Disconnected</span>`;
+    }
+
+    function toggleTimeline() {
+      if (document.getElementById('timelineView').style.display === 'block') { closePanel(); return; }
+      openPanel('timelineView');
+      renderTimeline();
+    }
+
+    function renderTimeline() {
+      const el = document.getElementById('timelineList');
+      if (!timeline.length) { el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px">No activity yet. Status changes appear here.</p>'; return; }
+      el.innerHTML = timeline.map(e => {
+        const t = e.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const color = e.status === 'blocked' ? 'var(--red)' : e.status === 'working' ? 'var(--green)' : 'var(--muted)';
+        return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">${t}</span><span style="flex:1">${e.project} (${e.agent})</span><span style="color:${color}">${e.status}</span></div>`;
+      }).join('');
+    }
+
+    function saveAndConnect() {
+      const url = document.getElementById('relayUrl').value.trim();
+      if (!url) return;
+      localStorage.setItem('herdr_relay_url', url);
+      const token = document.getElementById('relayToken').value.trim();
+      if (token) localStorage.setItem('herdr_relay_token', token);
+      else localStorage.removeItem('herdr_relay_token');
+      connect();
+      toggleSettings();
+    }
+
+    // Connection
+    function connect() {
+      let url = localStorage.getItem('herdr_relay_url') || (isSelfRelay ? autoRelayUrl : '');
+      if (!url) { showSetup(); return; }
+      if (ws) ws.close();
+      // start_options is a per-connection capability advertisement, never cached state.
+      startOptions = null;
+      closeStart();
+      render();
+      setStatus('connecting');
+      // Append token as query param if stored separately
+      const token = localStorage.getItem('herdr_relay_token');
+      let wsUrl = url;
+      if (token) wsUrl += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => { setStatus('connected'); if (window.cue) cue('ready'); };
+      ws.onclose = () => { setStatus('disconnected'); setTimeout(connect, 3000); };
+      ws.onerror = () => setStatus('disconnected');
+      ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+    }
+
+    // One update path for every status dot: the app header's and the term header's, so the
+    // connection stays visible on mobile where the app header is hidden. The dot carries the
+    // whole signal — the text beside it said the same thing twice and cost tab room.
+    function setStatus(s) {
+      const color = s === 'connected' ? 'var(--green)' : s === 'connecting' ? 'var(--orange)' : 'var(--red)';
+      const label = s === 'connected' ? 'Connected' : s === 'connecting' ? 'Connecting…' : 'Offline';
+      document.querySelectorAll('.status-dot').forEach(d => {
+        d.style.background = color;
+        d.title = label;
+      });
+    }
+
+    function showSetup() {
+      document.getElementById('agents').innerHTML = `<div class="empty">
+    <p style="font-size:1.5rem;margin-bottom:12px">🐑</p>
+    <p><strong>herdr-remote</strong></p>
+    <p style="margin-top:8px">Monitor & approve agents from your phone</p>
+    <p style="margin-top:16px;font-size:0.75rem;color:var(--muted);text-align:left;max-width:280px;margin-left:auto;margin-right:auto">
+      <strong>Connect your own:</strong><br>
+      1. Run: <code style="font-size:0.7rem">cd relay && ./start.sh</code><br>
+      2. Tap ⚙ → paste the wss:// URL<br>
+    </p>
+  </div>`;
+    }
+    function handleMessage(msg) {
+      if (msg.type === 'error') {
+        showToast(msg.message || 'The relay refused that.');
+      }
+      else if (msg.type === 'projects') {
+        projects = msg.projects || [];
+        render();
+      }
+      else if (msg.type === 'start_options') {
+        startOptions = msg;
+        render();
+      }
+      else if (msg.type === 'command_result' && msg.command === 'start_agent') {
+        document.getElementById('startSubmit').disabled = false;
+        // The session appears on the next poll snapshot; the browser invents nothing.
+        if (msg.ok) {
+          // Say so when the relay had to rename around a collision — otherwise the pane shows up
+          // under a name the user never typed and reads as the wrong session.
+          const asked = document.getElementById('startName').value.trim();
+          if (asked && msg.label && msg.label !== asked) showToast(`Name taken — started as "${msg.label}"`);
+          closeStart();
+        }
+        else setStartError(msg.error || 'start failed');
+      }
+      else if (msg.type === 'command_result' && msg.command === 'rename_pane') {
+        // Same rule: apply the label only once the relay confirms herdr took it. Painting it
+        // optimistically made a relay that never handled the message look like a working rename
+        // until the next poll silently undid it.
+        const a = agents.find(x => x.pane_id === msg.pane_id);
+        if (a && msg.ok) {
+          a.label = msg.label;
+          if (activePane === msg.pane_id) document.getElementById('termTitle').textContent = paneTitle(a);
+          render();
+          renderPairStrip();
+        }
+      }
+      else if (msg.type === 'agents') {
+        // Track timeline on status changes
+        for (const a of msg.agents) {
+          const prev = prevStatuses[a.pane_id];
+          if (prev && prev !== a.status) {
+            timeline.unshift({ project: a.project, agent: a.agent, status: a.status, time: new Date() });
+            if (timeline.length > 100) timeline.pop();
+          }
+          prevStatuses[a.pane_id] = a.status;
+        }
+        agents = msg.agents; render();
+      }
+      else if (msg.type === 'agent_update') {
+        const update = msg.agent;
+        if (!update || !update.pane_id) return;
+        const existing = agents.find(a => a.pane_id === update.pane_id);
+        const previousStatus = existing?.status || prevStatuses[update.pane_id];
+        if (existing) Object.assign(existing, update);
+        else agents.push({ ...update });
+        if (previousStatus && previousStatus !== update.status) {
+          timeline.unshift({ project: update.project, agent: update.agent, status: update.status, time: new Date() });
+          if (timeline.length > 100) timeline.pop();
+        }
+        prevStatuses[update.pane_id] = update.status;
+        render();
+      }
+      else if (msg.type === 'blocked') {
+        const a = agents.find(x => x.pane_id === msg.pane_id);
+        if (a) { a.status = 'blocked'; a.prompt = msg.prompt; a.options = msg.options; }
+        else agents.push({ ...msg, status: 'blocked' });
+        if (window.cue) cue('chime');
+        timeline.unshift({ project: msg.project, agent: msg.agent, status: 'blocked', time: new Date() });
+        if (timeline.length > 100) timeline.pop();
+        render();
+      } else if (msg.type === 'pane_content' && msg.pane_id === activePane) {
+        const el = document.getElementById('termContent');
+        const prevHeight = el.scrollHeight;
+        const prevScroll = el.scrollTop;
+        const next = msg.content || '(empty)';
+        // Splitting or resizing a pane changes its width mid-session, so this is re-applied
+        // on change rather than read once when the pane opens.
+        const cols = Number.isInteger(msg.cols) && msg.cols > 0 ? msg.cols : null;
+        if (cols !== paneCols) { paneCols = cols; applyWrapMode(); }
+        // Only a real change is activity. The pane is re-read every 3s regardless.
+        if (next !== el.textContent) { paneStampAt = new Date(); renderStatusBar(); }
+        el.textContent = next;
+        if (userScrolledUp) {
+          // Keep scroll position relative to bottom (content may have grown at top)
+          const growth = el.scrollHeight - prevHeight;
+          el.scrollTop = prevScroll + growth;
+        } else {
+          el.scrollTop = el.scrollHeight;
+        }
+        // After the scroll settles, not before: the band is drawn against scrollTop.
+        setPaneText(next);
+      }
+    }
+
+    function render() {
+      renderStatusBar();
+      renderPairStrip();  // pair health is recomputed from every snapshot, never cached
+      renderBody();
+      renderRecents();
+      renderAgentTabs();
+    }
+
+    function renderBody() {
+      if (projects.length) { renderProjects(); return; }
+      const workspaces = [...new Set(agents.map(a => a.workspace_id).filter(Boolean))];
+      if (workspaces.length <= 1) {
+        activeWorkspace = null;
+        activeTab = null;
+        renderAgentList(agents);
+        return;
+      }
+      let html = hoistHtml(agents) + layoutHtml(agents);
+      if (!agents.length) html = '<div class="empty">Waiting for agents…</div>';
+      document.getElementById('agents').innerHTML = html;
+    }
+
+    // Outer Project layer. Native workspaces and tabs stay beneath it, unchanged.
+    function renderProjects() {
+      if (activeProject && !projects.some(p => p.id === activeProject)) activeProject = null;
+      let html = hoistHtml(agents);
+      html += `<div class="chip-strip"><span class="chip-label">Projects</span>`;
+      html += `<button class="chip${activeProject === null ? ' active' : ''}" onclick="selectProject(null)">All</button>`;
+      for (const p of projects) {
+        const list = agents.filter(a => a.project_id === p.id);
+        const hasBlocked = list.some(a => a.status === 'blocked');
+        html += `<button class="chip${activeProject === p.id ? ' active' : ''}${hasBlocked ? ' alert' : ''}" onclick="selectProject('${p.id}')">${p.label}</button>`;
+      }
+      html += `</div>`;
+      if (activeProject === null) {
+        html += projects.map(projectCard).join('');
+        const other = agents.filter(a => !a.project_id && a.status !== 'blocked');
+        if (other.length) html += section('Other sessions', 'var(--muted)', other);
+      } else {
+        if (startOptions) {
+          html += `<div class="chip-strip"><button class="chip chip-add" onclick="openStartDialog('${activeProject}')">+ Start session</button></div>`;
+        }
+        const mine = agents.filter(a => a.project_id === activeProject);
+        html += mine.length ? layoutHtml(mine) : '<div class="empty">No sessions</div>';
+      }
+      document.getElementById('agents').innerHTML = html;
+    }
+
+    function projectCard(p) {
+      const list = agents.filter(a => a.project_id === p.id);
+      const blocked = list.filter(a => a.status === 'blocked').length;
+      const color = blocked ? 'var(--red)' : list.length ? 'var(--green)' : 'var(--muted)';
+      const host = p.host && p.host !== 'local' ? ` <span style="color:var(--orange);font-size:0.6rem">@${p.host}</span>` : '';
+      const meta = list.length
+        ? `${list.length} session${list.length > 1 ? 's' : ''}${blocked ? ` · ${blocked} blocked` : ''}`
+        : 'No sessions';
+      // Available on every Project card, including one with zero live sessions.
+      const start = startOptions
+        ? `<button class="chip chip-add" aria-label="Start session in ${p.label}" onclick="openStartDialog('${p.id}',event)">+ Start</button>`
+        : '';
+      return `<div class="agent" role="button" tabindex="0" aria-label="${p.label}, ${meta}" onclick="selectProject('${p.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectProject('${p.id}')}">
+    <span class="dot" style="background:${color}" aria-hidden="true"></span>
+    <div class="info"><div class="project">${p.label}${host}</div><div class="meta">${meta}</div></div>
+    ${start}
+    <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
+  </div>`;
+    }
+
+    function hoistHtml(list) {
+      const blocked = list.filter(a => a.status === 'blocked');
+      if (!blocked.length) return '';
+      return `<div class="section-header" style="color:var(--red)"><span class="dot" style="background:var(--red)"></span>Needs you <span style="opacity:0.6">(${blocked.length})</span></div>`
+        + blocked.map(a => agentCard(a)).join('');
+    }
+
+    // Native workspace/tab navigation over `list` — all agents, or one Project's.
+    function layoutHtml(list) {
+      const workspaces = [...new Set(list.map(a => a.workspace_id).filter(Boolean))];
+      let html = '';
+      if (workspaces.length <= 1) {
+        activeWorkspace = null;
+        activeTab = null;
+      } else {
+        // Space chip strip
+        html += `<div class="chip-strip"><span class="chip-label">Spaces</span>`;
+        html += `<button class="chip${activeWorkspace === null ? ' active' : ''}" onclick="backToWorkspaces()">All</button>`;
+        for (const wsId of workspaces) {
+          const wsAgents = list.filter(a => a.workspace_id === wsId);
+          const hasBlocked = wsAgents.some(a => a.status === 'blocked');
+          const name = wsAgents[0]?.project || wsId.slice(0, 8);
+          html += `<button class="chip${activeWorkspace === wsId ? ' active' : ''}${hasBlocked ? ' alert' : ''}" onclick="selectWorkspace('${wsId}')">${name}</button>`;
+        }
+        html += `</div>`;
+        // Tab chip strip (always show when workspace selected)
+        if (activeWorkspace) {
+          const wsTabs = [...new Set(list.filter(a => a.workspace_id === activeWorkspace).map(a => a.tab_id).filter(Boolean))];
+          html += `<div class="chip-strip"><span class="chip-label">Tabs</span>`;
+          if (wsTabs.length > 1) {
+            html += `<button class="chip${!activeTab ? ' active' : ''}" onclick="selectTab(null)">All</button>`;
+          }
+          wsTabs.forEach((tid, i) => {
+            const tabAgents = list.filter(a => a.tab_id === tid);
+            const hasBlocked = tabAgents.some(a => a.status === 'blocked');
+            const tabLabel = tabAgents[0]?.label || 'Tab ' + (i + 1);
+            html += `<button class="chip${activeTab === tid ? ' active' : ''}${hasBlocked ? ' alert' : ''}" onclick="selectTab('${tid}')">${tabLabel}</button>`;
+          });
+          html += `<button class="chip chip-add" onclick="createTab('${activeWorkspace}')">+</button>`;
+          html += `</div>`;
+        }
+      }
+      // Agent list (filtered). Blocked are already hoisted above.
+      let filtered = list;
+      if (activeWorkspace) filtered = filtered.filter(a => a.workspace_id === activeWorkspace);
+      if (activeTab) filtered = filtered.filter(a => a.tab_id === activeTab);
+      const working = filtered.filter(a => a.status === 'working');
+      const done = filtered.filter(a => a.status === 'done');
+      const idle = filtered.filter(a => a.status === 'idle' || a.status === 'unknown');
+      if (working.length) html += section('Working', 'var(--green)', working);
+      if (done.length) html += section('Done', 'var(--muted)', done);
+      if (idle.length) html += section('Idle', 'var(--muted)', idle);
+      return html;
+    }
+
+    function renderAgentList(list) {
+      const blocked = list.filter(a => a.status === 'blocked');
+      const working = list.filter(a => a.status === 'working');
+      const done = list.filter(a => a.status === 'done');
+      const idle = list.filter(a => a.status === 'idle' || a.status === 'unknown');
+      let html = '';
+      if (blocked.length) html += section('Blocked', 'var(--red)', blocked);
+      if (working.length) html += section('Working', 'var(--green)', working);
+      if (done.length) html += section('Done', 'var(--muted)', done);
+      if (idle.length) html += section('Idle', 'var(--muted)', idle);
+      if (!list.length) html = '<div class="empty">Waiting for agents…</div>';
+      document.getElementById('agents').innerHTML = html;
+    }
+
+    // A workspace ID from one Project means nothing under another, and leaving it set
+    // silently filters the new Project down to nothing.
+    function selectProject(id) { activeProject = id; activeWorkspace = null; activeTab = null; render(); }
+    function selectWorkspace(id) { activeWorkspace = id; activeTab = null; render(); }
+    function backToWorkspaces() { activeWorkspace = null; activeTab = null; render(); }
+    function selectTab(id) { activeTab = id; render(); }
+
+    function createTab(workspaceId) {
+      if (!ws) return;
+      if (window.cue) cue('sparkle');
+      ws.send(JSON.stringify({ type: 'create_tab', workspace_id: workspaceId }));
+      setTimeout(() => { activeTab = null; }, 1500);
+    }
+
+    // --- Start session dialog ---
+    function fillSelect(id, options) {
+      const el = document.getElementById(id);
+      el.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+      el.disabled = !options.length;
+      return options.length;
+    }
+
+    function setStartError(text) {
+      const el = document.getElementById('startError');
+      el.textContent = text || '';
+      el.style.display = text ? 'block' : 'none';
+    }
+
+    function openStartDialog(projectId, ev) {
+      if (ev) ev.stopPropagation();
+      if (!startOptions) return;
+      startProjectId = projectId;
+      const p = projects.find(x => x.id === projectId);
+      document.getElementById('startProject').textContent = p ? p.label : '';
+      fillSelect('startRole', startOptions.roles.map(r => [r, r.charAt(0).toUpperCase() + r.slice(1)]));
+      fillSelect('startAgent', startOptions.agents.map(a => [a, a]));
+      fillSelect('startPlacement', [['new_workspace', 'New workspace'], ['new_tab', 'New tab'], ['split', 'Split']]);
+      document.getElementById('startName').value = '';  // blank means "let the relay name it"
+      setStartError('');
+      document.getElementById('startSubmit').disabled = false;
+      renderStartTarget();  // may disable submit again when the Project has no live target
+      document.getElementById('startSheet').style.display = 'block';
+    }
+
+    function closeStart() {
+      document.getElementById('startSheet').style.display = 'none';
+      startProjectId = null;
+    }
+
+    // New tab lists this Project's live workspaces; Split lists its live panes. Neither is
+    // offered for a Project with no live sessions — New workspace always is.
+    function renderStartTarget() {
+      const placement = document.getElementById('startPlacement').value;
+      const row = document.getElementById('startTargetRow');
+      const mine = agents.filter(a => a.project_id === startProjectId);
+      if (placement === 'new_workspace') { row.innerHTML = ''; return; }
+      const isTab = placement === 'new_tab';
+      const label = isTab ? 'Workspace' : 'Beside pane';
+      row.innerHTML = `<label class="start-field">${label}<select id="startTarget"></select></label>`;
+      let options;
+      if (isTab) {
+        const seen = new Set();
+        options = mine.filter(a => a.workspace_id && !seen.has(a.workspace_id) && seen.add(a.workspace_id))
+          .map(a => [a.workspace_id, a.project || a.workspace_id]);
+      } else {
+        options = mine.map(a => [a.pane_id, `${a.label || a.agent} · ${a.pane_id}`]);
+      }
+      const any = fillSelect('startTarget', options);
+      setStartError(any ? '' : (isTab ? 'No live workspaces in this project' : 'No live panes in this project'));
+      document.getElementById('startSubmit').disabled = !any;
+    }
+
+    function submitStart() {
+      if (!ws || !startProjectId) return;
+      const placement = document.getElementById('startPlacement').value;
+      const msg = {
+        type: 'start_agent',
+        name: document.getElementById('startAgent').value,
+        role: document.getElementById('startRole').value,
+        project_id: startProjectId,
+        placement: placement,
+      };
+      // Omitted, not empty: the relay derives "Role N" when the field is absent, and an empty
+      // string is a label it would reject.
+      const name = document.getElementById('startName').value.trim();
+      if (name) msg.label = name;
+      if (placement !== 'new_workspace') {
+        const target = document.getElementById('startTarget');
+        if (!target || !target.value) { setStartError('Select a target first'); return; }
+        msg[placement === 'new_tab' ? 'workspace_id' : 'split_from'] = target.value;
+      }
+      setStartError('');
+      document.getElementById('startSubmit').disabled = true;
+      ws.send(JSON.stringify(msg));
+    }
+
+    // --- Recents ---
+    // Most-recently-opened panes, for one-tap access without hunting the list. Browser-local, like
+    // pairs: the relay has no notion of which panes this device visited.
+
+    const RECENTS_KEY = 'herdr_recents';
+    const MAX_RECENTS = 5;
+
+    function loadRecents() {
+      try {
+        const v = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]');
+        // Version-one recents stored bare pane IDs. Drop them: herdr can reuse an ID for a
+        // different session, and this is a convenience list, not data worth migrating unsafely.
+        return Array.isArray(v) ? v.filter(x => x && typeof x === 'object' && x.pane_id && x.agent) : [];
+      } catch (e) { return []; }
+    }
+
+    function noteRecent(paneId) {
+      const live = agents.filter(a => a.pane_id === paneId);
+      if (live.length !== 1) return;
+      const current = recentFingerprint(live[0]);
+      const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, MAX_RECENTS);
+      localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    }
+
+    // Only live panes are offered. A dead pane_id is dropped rather than shown greyed: herdr reuses
+    // pane IDs, so a stale entry could open a pane the user never visited.
+    function renderRecents() {
+      const el = document.getElementById('recents');
+      // Sliced here too, not only on write: a list stored under an older, larger cap must not
+      // render six entries just because it predates the current one.
+      const live = loadRecents()
+        .map(r => agents.find(a => memberMatches(r, a)))
+        .filter(a => a && agents.filter(x => x.pane_id === a.pane_id).length === 1)
+        .slice(0, MAX_RECENTS);
+      if (!live.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+      // Same section header and same cards as the list above, so a recent reads as the session it
+      // is rather than as a second kind of thing.
+      el.innerHTML = section('Recents', 'var(--blue)', live);
+      el.style.display = '';
+    }
+
+    // --- Pairs (storage and UI) ---
+
+    function loadPairs() { pairs = parsePairs(localStorage.getItem(PAIRS_KEY) || ''); }
+    function savePairs() {
+      localStorage.setItem(PAIRS_KEY, JSON.stringify({ version: PAIRS_VERSION, pairs: pairs }));
+    }
+
+    // --- Line width ---
+    // herdr hands back scrollback already hard-wrapped at the pane's column count, so every long
+    // line the browser wraps again is wrapped twice and no break can be attributed to the agent
+    // rather than to the phone. `cols` from the relay is what closes that gap.
+    //
+    // The arithmetic is unforgiving and worth stating: an 87-column pane in ~370 usable points is
+    // 4.2 points per column. There is no font size that is both readable and fits. Hence three
+    // modes rather than one behaviour — True size keeps the agent's breaks and pans; Fit width
+    // shrinks to the pane, which is comfortable on a tablet and unreadable on a phone; Reflow is
+    // the old behaviour, kept, and marked so a viewport wrap looks like one.
+    const WRAP_KEY = 'herdr_wrap_mode', WRAP_MODES = ['true', 'fit', 'reflow'], WRAP_DEFAULT = 'true';
+    let paneCols = null;   // the open pane's width in cells; null until the relay says
+
+    function currentWrapMode() {
+      const v = localStorage.getItem(WRAP_KEY);
+      return WRAP_MODES.includes(v) ? v : WRAP_DEFAULT;
+    }
+
+    // Advance width of one cell, as a fraction of the font size. Measured, never assumed: the
+    // stack is 'SF Mono', 'Menlo', monospace and which one resolves depends on the platform.
+    let cellRatio = 0;
+
+    function measureCellRatio() {
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-size:100px;' +
+        "font-family:'SF Mono','Menlo',monospace";
+      probe.textContent = '0'.repeat(100);
+      document.body.appendChild(probe);
+      const ratio = probe.getBoundingClientRect().width / 100 / 100;
+      probe.remove();
+      // A zero would divide by zero downstream; fall back to the usual monospace advance.
+      cellRatio = ratio > 0 ? ratio : 0.6;
+    }
+
+    function applyWrapMode() {
+      const mode = currentWrapMode();
+      const el = document.getElementById('termContent');
+      el.classList.toggle('wrap-reflow', mode === 'reflow');
+      el.classList.toggle('wrap-pre', mode !== 'reflow');
+      document.getElementById('wrapMode').value = mode;
+
+      // Fit width overrides the chosen text size; the other two use it as-is.
+      if (mode === 'fit' && paneCols && cellRatio) {
+        const avail = el.clientWidth - 20;  // the padding the text cannot use
+        const px = avail / (paneCols * cellRatio);
+        // Never below 4px: past that the text is a texture, and silently rendering it would
+        // look like a bug rather than like the pane being too wide for the screen.
+        el.style.fontSize = Math.max(4, Math.floor(px * 10) / 10) + 'px';
+      } else {
+        el.style.fontSize = '';
+      }
+      renderWrapHint();
+      syncFontButtons();
+      // Reflow makes line index <-> y unknowable, so the ruler goes away with it.
+      drawSel();
+    }
+
+    function renderWrapHint() {
+      const mode = currentWrapMode();
+      const el = document.getElementById('wrapHint');
+      if (!paneCols) { el.textContent = 'Pane width unknown — the relay did not report it.'; return; }
+      if (mode === 'reflow') { el.textContent = `Pane is ${paneCols} cols; lines re-wrap to the screen.`; return; }
+      const size = document.getElementById('termContent').style.fontSize;
+      el.textContent = mode === 'fit' && size
+        ? `${paneCols} cols at ${size}` : `Pane is ${paneCols} cols.`;
+    }
+
+    function setWrapMode(mode) {
+      if (!WRAP_MODES.includes(mode)) return;
+      try { localStorage.setItem(WRAP_KEY, mode); } catch (e) { /* private mode: session-only */ }
+      applyWrapMode();
+    }
+
+    // --- Line ruler ---
+    // Two integers and one band element. No per-line DOM, nothing rebuilt on the 3s poll — that
+    // is what the non-wrapping modes bought, and it is why the ruler is hidden in Reflow.
+    let selA = null, selB = null, selText = '', paneText = '', paneRows = [];
+
+    function rulerOn() { return currentWrapMode() !== 'reflow' && !!activePane; }
+
+    function clearSel() { selA = selB = null; selText = ''; drawSel(); }
+
+    function lineGeom() {
+      const el = document.getElementById('termContent'), cs = getComputedStyle(el);
+      return { el, lh: parseFloat(cs.lineHeight) || 16, pad: parseFloat(cs.paddingTop) || 0 };
+    }
+
+    function lineAt(clientY) {
+      const { el, lh, pad } = lineGeom();
+      const y = clientY - el.getBoundingClientRect().top + el.scrollTop - pad;
+      return Math.min(paneRows.length - 1, Math.max(0, Math.floor(y / lh)));
+    }
+
+    function drawSel() {
+      const ruler = document.getElementById('ruler');
+      const band = document.getElementById('selBand');
+      const top = document.getElementById('rulerTop'), bot = document.getElementById('rulerBot');
+      const bar = document.getElementById('selBar');
+      ruler.hidden = !rulerOn();
+      const on = rulerOn() && selA !== null && paneRows.length > 0;
+      band.hidden = top.hidden = bot.hidden = bar.hidden = !on;
+      if (!on) return;
+      const { el, lh, pad } = lineGeom();
+      const a = Math.min(selA, selB), b = Math.max(selA, selB);
+      selText = paneRows.slice(a, b + 1).join('\n');
+      const y0 = pad + a * lh - el.scrollTop, y1 = y0 + (b - a + 1) * lh;
+      band.style.top = y0 + 'px';
+      band.style.height = (y1 - y0) + 'px';
+      const h = document.getElementById('termWrap').clientHeight;
+      park(top, y0, h);
+      park(bot, y1, h);
+      document.getElementById('selCount').textContent = (b - a + 1) + (b === a ? ' line' : ' lines');
+      // Transfer is the reason this feature exists, but the button only means something while
+      // this pane is half of a live pair.
+      document.getElementById('selTransfer').hidden = !pairFor(pairs, activePane);
+    }
+
+    // A handle whose end scrolled out of view stops at the edge rather than leaving with it.
+    function park(el, y, h) {
+      const c = Math.min(h - 12, Math.max(12, y));
+      el.style.top = c + 'px';
+      el.classList.toggle('parked', Math.abs(c - y) > 0.5);
+    }
+
+    // Called with every read. The selection follows its text; reanchorSel decides whether it
+    // survived at all.
+    function setPaneText(next) {
+      paneText = next;
+      paneRows = next.split('\n');
+      if (selA !== null) {
+        const at = reanchorSel(next, selText, Math.min(selA, selB), Math.max(selA, selB));
+        if (!at) { clearSel(); return; }
+        [selA, selB] = at;
+      }
+      drawSel();
+    }
+
+    function copySel() {
+      const btn = document.getElementById('selCopy'), text = selText;
+      if (!text) return;
+      const done = () => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1200); };
+      // navigator.clipboard is undefined on a plain-http LAN origin, which is the ordinary way
+      // this app is reached. The textarea path is the one that actually runs at home.
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, () => { });
+        return;
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { if (document.execCommand('copy')) done(); } catch (e) { /* nothing else to offer */ }
+      ta.remove();
+    }
+
+    {
+      const ruler = document.getElementById('ruler');
+      const bubble = document.getElementById('selBubble');
+      let drag = null, autoTimer = null, lastY = 0;
+
+      function moveTo(clientY) {
+        const i = lineAt(clientY);
+        if (drag === 'top') selA = i; else selB = i;
+        drawSel();
+        const wrapTop = document.getElementById('termWrap').getBoundingClientRect().top;
+        bubble.textContent = (paneRows[i] || '').trim().slice(0, 40) || '(blank)';
+        bubble.style.top = Math.max(0, clientY - wrapTop - 12) + 'px';
+        bubble.hidden = false;
+      }
+
+      // Dragging a handle past the viewport edge has to keep growing the range, or a selection
+      // can never be larger than one screen.
+      function edgeScroll() {
+        const { el, lh } = lineGeom(), r = el.getBoundingClientRect();
+        const d = lastY < r.top + 40 ? -lh : lastY > r.bottom - 40 ? lh : 0;
+        if (!d) return;
+        el.scrollTop += d;
+        moveTo(lastY);
+      }
+
+      ruler.addEventListener('pointerdown', e => {
+        if (!rulerOn() || !paneRows.length) return;
+        e.preventDefault();
+        ruler.setPointerCapture(e.pointerId);
+        const id = e.target.id;
+        if (id === 'rulerTop' || id === 'rulerBot') drag = id === 'rulerTop' ? 'top' : 'bot';
+        else { selA = selB = lineAt(e.clientY); drag = 'bot'; }
+        lastY = e.clientY;
+        moveTo(e.clientY);
+        autoTimer = setInterval(edgeScroll, 60);
+      });
+
+      ruler.addEventListener('pointermove', e => {
+        if (!drag) return;
+        lastY = e.clientY;
+        moveTo(e.clientY);
+      });
+
+      function end() {
+        if (!drag) return;
+        drag = null;
+        clearInterval(autoTimer);
+        bubble.hidden = true;
+        // Ends swap once dragged past each other, as every selection UI does.
+        if (selA > selB) { const t = selA; selA = selB; selB = t; }
+        drawSel();
+      }
+      ruler.addEventListener('pointerup', end);
+      ruler.addEventListener('pointercancel', end);
+
+      // Tapping the text clears the range — but not when the tap was really a native drag-select,
+      // which desktop users still have and which this must not fight.
+      document.getElementById('termContent').addEventListener('click', () => {
+        const s = window.getSelection();
+        if (selA !== null && (!s || s.isCollapsed)) clearSel();
+      });
+    }
+
+    const FONT_KEY = 'herdr_font_size', FONT_MIN = 6, FONT_MAX = 24, FONT_DEFAULT = 13;
+
+    function currentFont() {
+      const v = parseInt(localStorage.getItem(FONT_KEY), 10);
+      return Number.isFinite(v) ? Math.min(FONT_MAX, Math.max(FONT_MIN, v)) : FONT_DEFAULT;
+    }
+
+    // Scoped to the pane's own text via --term-font. Deliberately not the root font size: chrome,
+    // keys and inputs must keep their sizes and their 44px hit areas at the small end.
+    function setFont(px) {
+      const v = Math.min(FONT_MAX, Math.max(FONT_MIN, px));
+      document.documentElement.style.setProperty('--term-font', v + 'px');
+      try { localStorage.setItem(FONT_KEY, v); } catch (e) { /* private mode: session-only */ }
+      document.getElementById('fontValue').textContent = v + 'px';
+      syncFontButtons();
+      drawSel();  // the line height just changed, so the band no longer covers those lines
+    }
+
+    // Fit width solves the size from the pane's column count, so A-/A+ cannot also own it.
+    function fontFixedByFit() {
+      return currentWrapMode() === 'fit' && !!paneCols && !!cellRatio;
+    }
+
+    function syncFontButtons() {
+      const v = currentFont(), fixed = fontFixedByFit();
+      document.getElementById('fontDec').disabled = fixed || v <= FONT_MIN;
+      document.getElementById('fontInc').disabled = fixed || v >= FONT_MAX;
+    }
+
+    function bumpFont(d) { setFont(currentFont() + d); }
+
+    // Floor is 8, below iOS Safari's 16px focus-zoom threshold, at the user's explicit direction.
+    // Under 16 the composer will zoom the layout viewport when focused on iPhone; that is the
+    // documented cost of the setting (S5.9), not an oversight. Default stays at 16, so the zoom
+    // is opt-in rather than something a fresh install walks into.
+    const INPUT_FONT_KEY = 'herdr_input_font_size', INPUT_MIN = 8, INPUT_MAX = 24, INPUT_DEFAULT = 16;
+
+    function currentInputFont() {
+      const v = parseInt(localStorage.getItem(INPUT_FONT_KEY), 10);
+      return Number.isFinite(v) ? Math.min(INPUT_MAX, Math.max(INPUT_MIN, v)) : INPUT_DEFAULT;
+    }
+
+    function setInputFont(px) {
+      const v = Math.min(INPUT_MAX, Math.max(INPUT_MIN, px));
+      document.documentElement.style.setProperty('--input-font', v + 'px');
+      try { localStorage.setItem(INPUT_FONT_KEY, v); } catch (e) { /* private mode: session-only */ }
+      document.getElementById('inputFontValue').textContent = v + 'px';
+      document.getElementById('inputFontDec').disabled = v <= INPUT_MIN;
+      document.getElementById('inputFontInc').disabled = v >= INPUT_MAX;
+      autoGrow(document.getElementById('termInput'));
+    }
+
+    function bumpInputFont(d) { setInputFont(currentInputFont() + d); }
+
+    // Where the pair bar sits in the pane. Default 'above': on a phone the switch and transfer
+    // controls are wanted next to the thumb that is already on the composer, not a pane away.
+    const PAIR_PLACE_KEY = 'herdr_pair_place', PAIR_PLACES = ['top', 'above', 'bottom'];
+
+    function currentPairPlace() {
+      const v = localStorage.getItem(PAIR_PLACE_KEY);
+      return PAIR_PLACES.includes(v) ? v : 'above';
+    }
+
+    function placePairStrip() {
+      const place = currentPairPlace();
+      const view = document.getElementById('terminalView');
+      const strip = document.getElementById('pairStrip');
+      if (place === 'top') view.insertBefore(strip, document.getElementById('termWrap'));
+      else if (place === 'bottom') view.appendChild(strip);
+      else view.insertBefore(strip, view.querySelector('.term-input'));
+      strip.classList.toggle('at-bottom', place === 'bottom');
+      document.getElementById('pairPlace').value = place;
+    }
+
+    function setPairPlace(v) {
+      try { localStorage.setItem(PAIR_PLACE_KEY, PAIR_PLACES.includes(v) ? v : 'above'); }
+      catch (e) { /* private mode: session-only */ }
+      placePairStrip();
+    }
+
+    function toggleTermMenu() {
+      const el = document.getElementById('termMenu');
+      const show = el.style.display === 'none';
+      el.style.display = show ? '' : 'none';
+      document.getElementById('termMenuBtn').setAttribute('aria-expanded', String(show));
+    }
+
+    function closeTermMenu() {
+      document.getElementById('termMenu').style.display = 'none';
+      document.getElementById('termMenuBtn').setAttribute('aria-expanded', 'false');
+    }
+
+    // Dismiss on any click outside the menu and its button, and on Escape.
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.term-menu-wrap')) closeTermMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTermMenu(); });
+
+    function fingerprint(a, role) {
+      return {
+        pane_id: a.pane_id, host: a.host || 'local', role: role,
+        agent: a.agent, cwd: a.cwd || ''
+      };
+    }
+
+    function paneLabel(a) { return a.label || a.project || a.agent; }
+
+    // From the live snapshot, never a pinned record: a pane's agent is what herdr reports now.
+    function agentOf(paneId) { return (agents.find(a => a.pane_id === paneId) || {}).agent; }
+
+    // One display form everywhere: project · agent · name, e.g. "charts.TS · claude · Architect 1".
+    // Each part is dropped when absent, so an unnamed pane degrades to "charts.TS · claude" rather
+    // than showing an empty segment or repeating the project as its own name.
+    function paneTitle(a) {
+      const parts = [];
+      if (a.project) parts.push(a.project);
+      if (a.agent) parts.push(a.agent);
+      if (a.label && a.label !== a.project) parts.push(a.label);
+      return parts.join(' · ') || a.pane_id;
+    }
+
+    // warn=true for "this will replace X" — it is a caution, not a refusal, and colouring it like
+    // a failure teaches the user to ignore the colour.
+    function setPairError(text, warn) {
+      const el = document.getElementById('pairError');
+      el.textContent = text || '';
+      el.style.color = warn ? 'var(--orange)' : 'var(--red)';
+      el.style.display = text ? 'block' : 'none';
+    }
+
+    function openPairDialog(paneId, ev) {
+      if (ev) ev.stopPropagation();
+      pairSource = agents.find(a => a.pane_id === paneId);
+      if (!pairSource) return;
+      pairPartner = null;
+      document.getElementById('pairSource').textContent = paneTitle(pairSource);
+      document.getElementById('pairFields').style.display = 'none';
+      setPairError('');
+      renderPairCandidates();
+      document.getElementById('pairSheet').style.display = 'block';
+    }
+
+    function closePair() {
+      document.getElementById('pairSheet').style.display = 'none';
+      pairSource = null; pairPartner = null;
+    }
+
+    function renderPairCandidates() {
+      const box = document.getElementById('pairCandidates');
+      const submit = document.getElementById('pairSubmit');
+      const candidates = pairCandidates(agents, pairSource);
+      if (!candidates.length) {
+        box.innerHTML = `<p style="font-size:0.75rem;color:var(--muted);margin:0">No other live session on ${pairSource.host || 'local'}. A pair needs two live panes on one host.</p>`;
+        submit.disabled = true;
+        return;
+      }
+      box.innerHTML = `<p style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:0 0 6px">Partner</p>` +
+        candidates.map(a => {
+          const existing = pairFor(pairs, a.pane_id);
+          // &nbsp; not a plain space: the button is a flex container, so whitespace between its
+          // children collapses and the note would butt straight against the name.
+          const note = existing ? `<span style="color:var(--orange)">&nbsp;· in "${escapeHtml(existing.name)}"</span>` : '';
+          const on = pairPartner && pairPartner.pane_id === a.pane_id;
+          return `<button class="nav-key" style="width:100%;justify-content:flex-start;margin-bottom:6px;${on ? 'border-color:var(--blue);color:var(--blue)' : ''}" onclick="choosePartner('${a.pane_id}')">${escapeHtml(paneTitle(a))}${note}</button>`;
+        }).join('');
+      submit.disabled = !pairPartner;
+    }
+
+    function choosePartner(paneId) {
+      pairPartner = agents.find(a => a.pane_id === paneId);
+      if (!pairPartner) return;
+      document.getElementById('pairName').value =
+        `${paneLabel(pairSource)} ↔ ${paneLabel(pairPartner)}`.slice(0, 64);
+      // Default to the pane's own name — "Architect 1", "Reviewer 2" — which is what the
+      // receiving agent is shown. The agent name is a poor default: two panes both called
+      // "claude" tell the reader nothing about which colleague sent the text.
+      document.getElementById('pairRoleA').value = paneLabel(pairSource);
+      document.getElementById('pairRoleB').value = paneLabel(pairPartner);
+      document.getElementById('pairFields').style.display = 'flex';
+      // Name what is being replaced — a silent replacement is how a user loses a pair they meant to keep.
+      const clashes = [pairSource, pairPartner].map(p => pairFor(pairs, p.pane_id)).filter(Boolean);
+      const names = [...new Set(clashes.map(p => p.name))];
+      setPairError(names.length ? `Saving replaces the existing pair ${names.map(n => `"${n}"`).join(' and ')}.` : '', true);
+      renderPairCandidates();
+    }
+
+    function savePair() {
+      if (!pairSource || !pairPartner) return;
+      const name = document.getElementById('pairName').value.trim();
+      if (!name) { setPairError('Pair name is required'); return; }
+      const roleA = document.getElementById('pairRoleA').value.trim() || paneLabel(pairSource);
+      const roleB = document.getElementById('pairRoleB').value.trim() || paneLabel(pairPartner);
+      const ids = [pairSource.pane_id, pairPartner.pane_id];
+      const kept = pairs.filter(p => !p.members.some(m => ids.includes(m.pane_id)));
+      if (kept.length >= MAX_PAIRS) { setPairError(`Already at ${MAX_PAIRS} pairs — remove one first`); return; }
+      pairs = kept.concat([{
+        id: newPairId(), name: name.slice(0, 64),
+        members: [fingerprint(pairSource, roleA), fingerprint(pairPartner, roleB)]
+      }]);
+      savePairs();
+      closePair();
+      render();
+      renderPairStrip();
+    }
+
+    function unpair() {
+      const pair = pairFor(pairs, activePane);
+      if (!pair || !confirm(`Remove the pair "${pair.name}"?`)) return;
+      pairs = pairs.filter(p => p.id !== pair.id);
+      savePairs();
+      render();
+      renderPairStrip();
+    }
+
+    // The strip is absent, not disabled, when there is no pair — and the transfer control is
+    // absent whenever the pair is stale, so the UI can never offer an unverified target.
+    function renderPairStrip() {
+      const strip = document.getElementById('pairStrip');
+      const menu = document.getElementById('termMenuPair');
+      const pair = activePane ? pairFor(pairs, activePane) : null;
+      if (!pair) { strip.style.display = 'none'; strip.innerHTML = ''; menu.innerHTML = ''; return; }
+      const health = pairHealth(pair, agents);
+      const partner = partnerOf(pair, activePane);
+      const mine = memberOf(pair, activePane);
+      const ok = health.state === 'healthy';
+      // Read the partner's name from the live snapshot, not from the pair record: the record holds
+      // the name captured at pin time, so renaming a pane would leave a stale name on this button.
+      // Falls back to the pinned name, then the pane ID, so the button is never blank.
+      const live = agents.find(a => a.pane_id === partner.pane_id);
+      const partnerName = (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
+      // Rebuilt wholesale, so the placement class has to be reapplied with it.
+      strip.className = 'pair-strip' + (ok ? '' : ' stale') +
+        (currentPairPlace() === 'bottom' ? ' at-bottom' : '');
+      strip.innerHTML =
+        // Switch sits first, on the left: it is the control reached most often, and the thumb
+        // is already there from the back button above it.
+        (ok ? `<button class="switch" title="Switch to ${escapeHtml(partnerName)} (⌘/Ctrl+Shift+P)" onclick="switchToPartner()">⇄ ${escapeHtml(partnerName)}</button>` : '') +
+        `<span class="pair-name">${escapeHtml(pair.name)}</span>` +
+        (ok ? `<button class="transfer" onclick="openTransfer()">Transfer ›</button>` : '') +
+        (ok ? '' : `<span class="pair-reason">${escapeHtml(health.reason)}</span>`);
+      strip.style.display = 'flex';
+      // Edit and Unpair live in the gear menu: the strip is for the two controls used while
+      // working, and pair management is neither frequent nor something to hit by accident.
+      menu.innerHTML =
+        `<button class="menu-item" role="menuitem" onclick="closeTermMenu(); openPairDialog(activePane)">Edit pair</button>` +
+        `<button class="menu-item danger" role="menuitem" onclick="closeTermMenu(); unpair()">Unpair…</button>`;
+    }
+
+    // Renames the pane in herdr itself, not just in this browser. A frontend-only alias would
+    // disagree with the herdr pane list and with the Architect N labels a started session gets,
+    // leaving one pane with three names.
+    function renamePane() {
+      const a = agents.find(x => x.pane_id === activePane);
+      if (!a || !ws) return;
+      const next = prompt('Name for this pane', a.label || a.project || a.agent);
+      if (next === null) return;
+      const label = next.trim();
+      // Cleared or unchanged means keep what it had — the relay refuses an empty label, and
+      // nagging about it is worse than treating a blank field as "leave it alone".
+      if (!label || label === a.label) return;
+      if (label.length > 32) { showToast('Name must be 32 characters or fewer.'); return; }
+      ws.send(JSON.stringify({ type: 'rename_pane', pane_id: activePane, label: label }));
+      // Nothing is applied here — the command_result branch does it once herdr has accepted the
+      // rename, and an `error` reply surfaces instead if the relay is too old to know the message.
+    }
+
+    // Jump to the other half of the pair without going back through the agent list. Refuses on a
+    // stale pair for the same reason transfer does — the target has not been verified.
+    function switchToPartner() {
+      const pair = activePane ? pairFor(pairs, activePane) : null;
+      if (!pair || pairHealth(pair, agents).state !== 'healthy') return;
+      openTerminal(partnerOf(pair, activePane).pane_id);
+      if (window.cue) cue('page');
+    }
+
+    // --- Transfer ---
+
+    function openTransfer() {
+      const pair = pairFor(pairs, activePane);
+      if (!pair || pairHealth(pair, agents).state !== 'healthy') return;
+      // The ruler's range wins when there is one: it is the deliberate selection, and on a phone
+      // the native one is usually empty anyway. Capture before anything can steal it — switching
+      // panes clears both.
+      transferSelection = selText || String(window.getSelection() || '').trim();
+      const partner = partnerOf(pair, activePane);
+      const live = agents.find(a => a.pane_id === partner.pane_id);
+      document.getElementById('transferTarget').textContent =
+        (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
+      const preview = document.getElementById('transferPreview');
+      const box = document.getElementById('transferShortcuts');
+      if (!transferSelection) {
+        box.innerHTML = '';
+        preview.textContent = 'Select some text in the pane first, then tap Transfer.';
+        document.getElementById('transferSheet').style.display = 'block';
+        return;
+      }
+      box.innerHTML = SHORTCUTS.map((s, i) =>
+        `<button class="nav-key" style="width:100%;justify-content:flex-start" onclick="doTransfer(${i})">${escapeHtml(s.label)}</button>`).join('') +
+        `<button class="nav-key" style="width:100%;justify-content:flex-start;color:var(--muted)" onclick="doTransfer(-1)">No instruction</button>`;
+      preview.textContent = transferSelection.length > 600
+        ? transferSelection.slice(0, 600) + '\n…'
+        : transferSelection;
+      document.getElementById('transferSheet').style.display = 'block';
+    }
+
+    function closeTransfer() {
+      document.getElementById('transferSheet').style.display = 'none';
+    }
+
+    // Prefill and stop. This is the last checkpoint before one agent's output enters another's
+    // context, so it must never end in a send.
+    function doTransfer(shortcutIndex) {
+      const pair = pairFor(pairs, activePane);
+      if (!pair || pairHealth(pair, agents).state !== 'healthy') {
+        document.getElementById('transferPreview').textContent = 'Pair is no longer live; reopen it after choosing a live partner.';
+        return;
+      }
+      const mine = memberOf(pair, activePane), partner = partnerOf(pair, activePane);
+      // The partner's agent, not this pane's: the instruction is about to be typed over there.
+      const instruction = shortcutIndex >= 0
+        ? agentSlash(SHORTCUTS[shortcutIndex].text, agentOf(partner.pane_id)) : '';
+      const out = composeTransfer(instruction, mine.role, transferSelection);
+      if (out.error) { document.getElementById('transferPreview').textContent = out.error; return; }
+      closeTransfer();
+      openTerminal(partner.pane_id);
+      const input = document.getElementById('termInput');
+      input.value = out.text;
+      autoGrow(input);
+      input.focus();
+      // Show the top of the payload, not its tail — reading it is the checkpoint.
+      input.setSelectionRange(0, 0);
+      input.scrollTop = 0;
+      if (window.cue) cue('page');
+    }
+
+    function insertShortcut(i) {
+      const input = document.getElementById('termInput');
+      const text = agentSlash(SHORTCUTS[i].text, agentOf(activePane));
+      const at = input.selectionStart ?? input.value.length;
+      input.value = input.value.slice(0, at) + text + input.value.slice(input.selectionEnd ?? at);
+      input.selectionStart = input.selectionEnd = at + text.length;
+      autoGrow(input);
+      // Close the dock: the text is in the composer now and the user needs to see it.
+      document.getElementById('promptDock').style.display = 'none';
+      input.focus();
+    }
+
+    // The ceiling lives in CSS (max-height) and the floor in min-height, so this only has to
+    // report the content height — a px cap here would drift the moment the font size changes.
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+
+    let toastTimer = null;
+    function showToast(text) {
+      const el = document.getElementById('toast');
+      el.textContent = text;
+      el.style.display = 'block';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+      if (window.cue) cue('error');
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function agentCard(a) {
+      const color = a.status === 'blocked' ? 'var(--red)' : a.status === 'working' ? 'var(--green)' : 'var(--muted)';
+      const pulseClass = a.status === 'working' ? ' pulse' : '';
+      const host = a.host && a.host !== 'local' ? ` <span style="color:var(--orange);font-size:0.6rem">@${a.host}</span>` : '';
+      const cwd = a.cwd ? `<span style="font-family:monospace;opacity:0.7">${a.cwd.split('/').slice(-2).join('/')}</span>` : '';
+      const label = paneLabel(a);
+      // Line 1 is the full project · agent · name; line 2 carries the path, which line 1 no longer
+      // duplicates now that the agent has moved up into the title.
+      return `<div class="agent${a.status === 'blocked' ? ' blocked' : ''}" role="button" tabindex="0" aria-label="${label}, ${a.status}" onclick="openTerminal('${a.pane_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${a.pane_id}')}">
+    <span class="dot${pulseClass}" style="background:${color}" aria-hidden="true"></span>
+    <div class="info"><div class="project">${escapeHtml(paneTitle(a))}${host}</div><div class="meta">${cwd}</div></div>
+    <button class="pair-btn${pairFor(pairs, a.pane_id) ? ' paired' : ''}" aria-label="Pair ${label}" onclick="openPairDialog('${a.pane_id}',event)">${pairFor(pairs, a.pane_id) ? 'Paired' : 'Pair'}</button>
+    <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
+  </div>`;
+    }
+
+    function section(title, color, list) {
+      return `<div class="section-header"><span class="dot" style="background:${color}"></span>${title}</div>` +
+        list.map(a => agentCard(a)).join('');
+    }
+
+    function openTerminal(paneId) {
+      // Opening over an already-open pane leaves the old poller running otherwise, and every
+      // switch adds another read_pane every 3s. Cleared here rather than in each caller, because
+      // switchToPartner and the header chips both land straight on this without closing first.
+      clearInterval(refreshInterval);
+      activePane = paneId; paneLines = 200; userScrolledUp = false;
+      noteRecent(paneId);
+      const a = agents.find(x => x.pane_id === paneId);
+      document.getElementById('termTitle').textContent = a ? paneTitle(a) : paneId;
+      document.getElementById('agentListView').style.display = 'none';
+      document.getElementById('settingsView').style.display = 'none';
+      document.getElementById('timelineView').style.display = 'none';
+      document.body.classList.add('terminal-open');
+      // After the class, never before: the strip is display:none outside a pane, and a hidden
+      // element measures zero — the edge fades and the scroll-into-view would both no-op.
+      renderAgentTabs();  // the tab for this pane has to read as active straight away
+      paneStampAt = null;  // the previous pane's timestamp is not this one's
+      paneCols = null;     // and its column count is not this one's either
+      paneText = ''; paneRows = [];  // nor are its lines, which a stale selection would re-anchor into
+      clearSel();
+      applyWrapMode();
+      renderStatusBar();
+      document.getElementById('terminalView').classList.add('active');
+      const qa = document.getElementById('quickActions');
+      const ak = document.getElementById('actionKeys');
+      if (a && a.status === 'blocked') {
+        const opts = a.options || ['yes, single permission', 'trust, always allow', 'no (tab to edit)'];
+        qa.innerHTML = opts.map(o => {
+          const cls = o.includes('yes') || o.includes('approve') ? 'btn-yes' : o.includes('trust') ? 'btn-trust' : 'btn-no';
+          const icon = o.includes('yes') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : o.includes('trust') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+          const label = o.includes('yes') ? 'Yes' : o.includes('trust') ? 'Yes All' : 'No';
+          return `<button class="${cls}" onclick="respond('${o.replace(/'/g, "\\'")}')">${icon} ${label}</button>`;
+        }).join('');
+        ak.innerHTML = '';
+      } else {
+        qa.innerHTML = '';
+        ak.innerHTML = '';
+      }
+      renderPairStrip();
+      refreshPane();
+      refreshInterval = setInterval(refreshPane, 3000);
+    }
+
+    function closeTerminal() {
+      activePane = null; clearInterval(refreshInterval);
+      clearSel();  // after activePane, so rulerOn() is already false and the ruler goes with it
+      document.getElementById('pairStrip').style.display = 'none';
+      renderRecents();  // the pane just visited belongs at the front before the next poll, not after
+      renderAgentTabs();
+      document.getElementById('terminalView').classList.remove('active');
+      closeTermMenu();
+      document.body.classList.remove('terminal-open');
+      document.getElementById('agentListView').style.display = '';
+      paneStampAt = null;
+      renderStatusBar();
+    }
+
+    let paneLines = 200;
+    function refreshPane() { if (ws && activePane) ws.send(JSON.stringify({ type: 'read_pane', pane_id: activePane, lines: paneLines })); }
+    function loadMore() { paneLines = Math.min(paneLines + 500, 5000); refreshPane(); }
+    function sendText() {
+      const i = document.getElementById('termInput');
+      if (!i.value || !ws || !activePane) return;
+      ws.send(JSON.stringify({ type: 'send_text', pane_id: activePane, text: i.value }));
+      ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: ['Enter'] }));
+      i.value = ''; autoGrow(i); setTimeout(refreshPane, 500);
+    }
+    function sendKey(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: [k] })); setTimeout(refreshPane, 300); }
+    function sendKeys(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: k })); setTimeout(refreshPane, 300); }
+
+    // --- Nav Tray (collie-style) ---
+    let keyQueue = [], armedMod = null, ctrlConfirm = null;
+    const CTRL_PRESETS = [
+      { label: 'Ctrl C', keys: ['ctrl+c'] },
+      { label: 'Ctrl D', keys: ['ctrl+d'], danger: true },
+      { label: 'Ctrl U', keys: ['ctrl+u'] },
+      { label: 'Ctrl R', keys: ['ctrl+r'] },
+      { label: 'Ctrl L', keys: ['ctrl+l'] },
+      { label: 'Ctrl Z', keys: ['ctrl+z'], danger: true },
+    ];
+    const DANGER_KEYS = new Set(['ctrl+c', 'ctrl+d', 'ctrl+z']);
+
+    function fireKey(k) {
+      if (window.cue) cue('tick');
+      const composed = armedMod ? `${armedMod}+${k}` : k;
+      if (keyQueue.length > 0 || armedMod) {
+        keyQueue.push(composed);
+        armedMod = null;
+        if (window.cue) cue('droplet');
+        renderKeyQueue();
+        renderMods();
+      } else {
+        sendKeys([composed]);
+      }
+    }
+
+    function armMod(m) {
+      armedMod = armedMod === m ? null : m;
+      if (window.cue) cue('toggle');
+      renderMods();
+    }
+
+    function renderMods() {
+      const s = document.getElementById('modShift');
+      const c = document.getElementById('modCtrl');
+      if (s) s.classList.toggle('armed', armedMod === 'shift');
+      if (c) c.classList.toggle('armed', armedMod === 'ctrl');
+    }
+
+    function renderKeyQueue() {
+      const strip = document.getElementById('keyQueueStrip');
+      if (!keyQueue.length && !armedMod) { strip.style.display = 'none'; return; }
+      strip.style.display = 'flex';
+      let html = keyQueue.map((k, i) => {
+        const isDanger = DANGER_KEYS.has(k.toLowerCase());
+        const label = k.includes('+') ? k.replace('ctrl+', 'Ctrl ').replace('shift+', '\u21e7 ') : k;
+        return `<span class="queue-chip${isDanger ? ' danger' : ''}" onclick="removeQueueKey(${i})">${label} \u00d7</span>`;
+      }).join('');
+      if (armedMod) html += `<span style="color:var(--muted);font-size:12px;padding:4px">${armedMod === 'shift' ? '\u21e7' : 'Ctrl'} + \u2026</span>`;
+      html += `<span style="margin-left:auto;display:flex;gap:4px">`;
+      html += `<button onclick="sendQueuedKeys()" style="padding:6px 12px;border-radius:6px;border:none;background:${keyQueue.some(k => DANGER_KEYS.has(k.toLowerCase())) ? 'var(--red)' : 'var(--blue)'};color:#fff;font-size:12px;font-weight:600;cursor:pointer">Send</button>`;
+      html += `<button onclick="clearKeyQueue()" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;cursor:pointer">✕</button>`;
+      html += `</span>`;
+      strip.innerHTML = html;
+    }
+
+    function removeQueueKey(i) { keyQueue.splice(i, 1); renderKeyQueue(); }
+    function clearKeyQueue() { keyQueue = []; armedMod = null; renderKeyQueue(); renderMods(); }
+    function sendQueuedKeys() {
+      if (!keyQueue.length) return;
+      if (window.cue) cue('success');
+      sendKeys(keyQueue);
+      keyQueue = []; armedMod = null; renderKeyQueue(); renderMods();
+    }
+
+    // The three docks share the space above the composer, so only one is ever open.
+    const DOCKS = ['termKeys', 'quickDock', 'promptDock'];
+
+    function closeDocks() {
+      DOCKS.forEach(d => { document.getElementById(d).style.display = 'none'; });
+    }
+
+    function toggleDock(id) {
+      const el = document.getElementById(id);
+      const show = el.style.display === 'none';
+      closeDocks();
+      el.style.display = show ? '' : 'none';
+      if (window.cue) cue(show ? 'page' : 'tick');
+    }
+
+    // Typing wins over browsing: a dock and the on-screen keyboard together leave almost no pane
+    // visible, and the user who just tapped the composer wants to read what they are answering.
+    document.getElementById('termInput').addEventListener('focus', closeDocks);
+
+    // Clearing is destructive and sits next to two controls that are not, so it takes two taps.
+    // The armed state expires on its own — a stray first tap must not leave a live trigger behind.
+    let clearArmedAt = 0;
+    function clearComposer(btn) {
+      if (Date.now() - clearArmedAt > 600) {
+        clearArmedAt = Date.now();
+        btn.classList.add('armed');
+        setTimeout(() => btn.classList.remove('armed'), 600);
+        return;
+      }
+      clearArmedAt = 0;
+      btn.classList.remove('armed');
+      const input = document.getElementById('termInput');
+      input.value = '';
+      autoGrow(input);
+      input.focus();
+      if (window.cue) cue('tick');
+    }
+
+    function toggleKeysDock() { toggleDock('termKeys'); }
+
+    function toggleQuickDock() { toggleDock('quickDock'); }
+
+    function quickSend(text) {
+      if (!ws || !activePane) return;
+      if (window.cue) cue('success');
+      ws.send(JSON.stringify({ type: 'send_text', pane_id: activePane, text: text }));
+      ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: ['Enter'] }));
+      document.getElementById('quickDock').style.display = 'none';
+      setTimeout(refreshPane, 500);
+    }
+
+    function switchKeyTab(tab) {
+      document.getElementById('tabKeys').classList.toggle('active', tab === 'keys');
+      document.getElementById('tabDigits').classList.toggle('active', tab === 'digits');
+      document.getElementById('keysPad').style.display = tab === 'keys' ? '' : 'none';
+      const dp = document.getElementById('digitsPad');
+      dp.style.display = tab === 'digits' ? 'grid' : 'none';
+      if (tab === 'digits' && !dp.innerHTML) {
+        dp.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => `<button class="digit-key" onclick="fireKey('${d}')">${d}</button>`).join('');
+      }
+    }
+
+    function toggleCtrlPresets() {
+      const el = document.getElementById('ctrlPresets');
+      const chevron = document.getElementById('ctrlChevron');
+      const show = el.style.display === 'none';
+      el.style.display = show ? 'grid' : 'none';
+      chevron.textContent = show ? '\u25be' : '\u25b8';
+      if (show && !el.innerHTML) {
+        el.innerHTML = CTRL_PRESETS.map(p => {
+          const cls = p.danger ? 'ctrl-key danger' : 'ctrl-key';
+          return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${p.label}</button>`;
+        }).join('');
+      }
+    }
+
+    function pressCtrl(label) {
+      const preset = CTRL_PRESETS.find(p => p.label === label);
+      if (!preset) return;
+      // If composing (queue has items), just stage it
+      if (keyQueue.length > 0) { keyQueue.push(...preset.keys); renderKeyQueue(); return; }
+      // Two-tap confirm for danger keys
+      if (preset.danger && ctrlConfirm !== label) {
+        ctrlConfirm = label;
+        if (window.cue) cue('error');
+        const el = document.getElementById('ctrlPresets');
+        el.innerHTML = CTRL_PRESETS.map(p => {
+          const cls = p.danger ? (p.label === label ? 'ctrl-key confirm' : 'ctrl-key danger') : 'ctrl-key';
+          const txt = p.label === label ? 'Confirm?' : p.label;
+          return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${txt}</button>`;
+        }).join('');
+        setTimeout(() => { ctrlConfirm = null; toggleCtrlPresets(); toggleCtrlPresets(); }, 3000);
+        return;
+      }
+      ctrlConfirm = null;
+      sendKeys(preset.keys);
+    }
+
+    function toggleArrows() { }
+    function hideArrows() { }
+    function respond(t) { if (!ws || !activePane) return; if (window.cue) cue('success'); ws.send(JSON.stringify({ type: 'respond', pane_id: activePane, text: t })); document.getElementById('quickActions').innerHTML = ''; setTimeout(refreshPane, 500); }
+    // Enter inserts a newline; Ctrl/Cmd+Enter sends. Reversed from P2 deliberately: a transferred
+    // payload is multi-line, and submitting it on the first Enter defeats the review checkpoint.
+    document.getElementById('termInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendText(); }
+    });
+    document.getElementById('termInput').addEventListener('input', e => autoGrow(e.target));
+    // Ctrl/Cmd+Shift+P switches to the paired pane. On document, not the composer, so it works
+    // whether or not the composer has focus.
+    document.addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        if (!activePane || !pairFor(pairs, activePane)) return;
+        e.preventDefault();
+        switchToPartner();
+      }
+    });
+    document.getElementById('termContent').addEventListener('scroll', function () {
+      const el = this;
+      userScrolledUp = (el.scrollHeight - el.scrollTop - el.clientHeight) > 50;
+      drawSel();  // the band lives outside the scroller, so it has to be re-placed by hand
+      if (el.scrollTop === 0 && paneLines < 5000) loadMore();
+    });
+
+    if (savedUrl) setTimeout(connect, 100); else showSetup();
+
+    // --- Command Palette ---
+    const COMMANDS = {
+      claude: [
+        { cmd: '/compact', desc: 'Summarize context to free tokens', common: true },
+        { cmd: '/clear', desc: 'Start fresh conversation', common: true, danger: true },
+        { cmd: '/model', desc: 'Switch model', common: true },
+        { cmd: '/status', desc: 'Show version and connectivity', common: true },
+        { cmd: '/context', desc: 'Visualize context-window usage', common: true },
+        { cmd: '/review', desc: 'Review a pull request', common: true },
+        { cmd: '/diff', desc: 'Show uncommitted changes', common: false },
+        { cmd: '/resume', desc: 'Resume previous conversation', common: false },
+        { cmd: '/help', desc: 'Show all commands', common: false },
+      ],
+      codex: [
+        { cmd: '/compact', desc: 'Summarize history to free context', common: true },
+        { cmd: '/clear', desc: 'Reset and start new chat', common: true, danger: true },
+        { cmd: '/diff', desc: 'Show git diff of working tree', common: true },
+        { cmd: '/model', desc: 'Switch model', common: true },
+        { cmd: '/status', desc: 'Show model and token usage', common: true },
+        { cmd: '/review', desc: 'Code review working tree', common: true },
+        { cmd: '/mention', desc: 'Attach files to context', common: false },
+        { cmd: '/plan', desc: 'Enter plan mode', common: false },
+      ],
+      pi: [
+        { cmd: '/compact', desc: 'Compact context', common: true },
+        { cmd: '/new', desc: 'Start new session', common: true, danger: true },
+        { cmd: '/model', desc: 'Switch model', common: true },
+        { cmd: '/session', desc: 'Show session info', common: true },
+        { cmd: '/tree', desc: 'Jump to earlier point', common: true },
+        { cmd: '/share', desc: 'Share session as gist', common: true },
+        { cmd: '/copy', desc: 'Copy last response', common: false },
+        { cmd: '/reload', desc: 'Reload extensions and skills', common: false },
+      ],
+      opencode: [
+        { cmd: '/compact', desc: 'Compact current session', common: true },
+        { cmd: '/new', desc: 'Start new session', common: true, danger: true },
+        { cmd: '/models', desc: 'List and switch models', common: true },
+        { cmd: '/undo', desc: 'Undo last turn and revert', common: true, danger: true },
+        { cmd: '/share', desc: 'Share session', common: true },
+        { cmd: '/diff', desc: 'Show working changes', common: false },
+        { cmd: '/export', desc: 'Export to Markdown', common: false },
+      ],
+    };
+
+    function getAgentCommands() {
+      const a = agents.find(x => x.pane_id === activePane);
+      if (!a) return [];
+      const key = (a.agent || '').toLowerCase();
+      if (COMMANDS[key]) return COMMANDS[key];
+      if (key.startsWith('claude')) return COMMANDS.claude;
+      if (key.startsWith('codex')) return COMMANDS.codex;
+      if (key.startsWith('pi') || key === 'kiro') return COMMANDS.pi;
+      if (key.startsWith('opencode')) return COMMANDS.opencode;
+      return COMMANDS.claude; // fallback
+    }
+
+    function openCommandPalette() {
+      if (window.cue) cue('page');
+      document.getElementById('cmdPalette').style.display = '';
+      document.getElementById('cmdSearch').value = '';
+      filterCommands();
+      document.getElementById('cmdSearch').focus();
+    }
+    function closePalette() { document.getElementById('cmdPalette').style.display = 'none'; }
+
+    function filterCommands() {
+      const q = (document.getElementById('cmdSearch').value || '').toLowerCase();
+      const cmds = getAgentCommands();
+      const filtered = q ? cmds.filter(c => c.cmd.includes(q) || c.desc.toLowerCase().includes(q)) : cmds.filter(c => c.common);
+      const el = document.getElementById('cmdList');
+      if (!filtered.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:0.8rem">No commands match</div>'; return; }
+      el.innerHTML = filtered.map(c => `<div role="button" tabindex="0" onclick="runCommand('${c.cmd}')" onkeydown="if(event.key==='Enter')runCommand('${c.cmd}')" style="padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:2px;transition:background 0.15s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
+    <span style="font-family:monospace;font-weight:600;font-size:0.85rem;${c.danger ? 'color:var(--red)' : 'color:var(--blue)'}">${c.cmd}</span>
+    <span style="flex:1;font-size:0.75rem;color:var(--muted)">${c.desc}</span>
+  </div>`).join('');
+    }
+
+    function runCommand(cmd) {
+      closePalette();
+      if (!ws || !activePane) return;
+      ws.send(JSON.stringify({ type: 'send_text', pane_id: activePane, text: cmd }));
+      ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: ['Enter'] }));
+      setTimeout(refreshPane, 500);
+    }
+
+    // --- Web Push ---
+    let pushSubscription = null;
+
+    async function initPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        document.getElementById('pushStatus').textContent = 'Push not supported in this browser';
+        document.getElementById('pushToggle').style.display = 'none';
+        return;
+      }
+      try {
+        const reg = await navigator.serviceWorker.register(new URL('sw.js', document.baseURI).pathname);
+        pushSubscription = await reg.pushManager.getSubscription();
+        updatePushUI();
+      } catch (e) {
+        document.getElementById('pushStatus').textContent = 'Service worker error: ' + e.message;
+      }
+    }
+
+    function updatePushUI() {
+      const btn = document.getElementById('pushToggle');
+      const status = document.getElementById('pushStatus');
+      if (pushSubscription) {
+        btn.textContent = 'Disable Push';
+        btn.style.background = 'var(--red)';
+        status.innerHTML = '<span style="color:var(--green)">● Enabled</span>';
+      } else {
+        btn.textContent = 'Enable Push';
+        btn.style.background = 'var(--green)';
+        status.innerHTML = '<span style="color:var(--muted)">○ Disabled</span>';
+      }
+    }
+
+    async function togglePush() {
+      if (pushSubscription) {
+        // Unsubscribe
+        if (ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'push_unsubscribe', subscription: pushSubscription.toJSON() }));
+        }
+        await pushSubscription.unsubscribe();
+        pushSubscription = null;
+        updatePushUI();
+      } else {
+        // Subscribe
+        try {
+          const relayUrl = localStorage.getItem('herdr_relay_url') || '';
+          const httpUrl = relayUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+          const resp = await fetch(httpUrl + '/api/vapid-public-key');
+          const { publicKey } = await resp.json();
+          if (!publicKey) {
+            document.getElementById('pushStatus').textContent = 'VAPID key not configured on relay';
+            return;
+          }
+          const reg = await navigator.serviceWorker.ready;
+          pushSubscription = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+          });
+          if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'push_subscribe', subscription: pushSubscription.toJSON() }));
+          }
+          updatePushUI();
+        } catch (e) {
+          document.getElementById('pushStatus').textContent = 'Error: ' + e.message;
+        }
+      }
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const raw = atob(base64);
+      const arr = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+      return arr;
+    }
+
+    initPush();
+
+    loadPairs();
+    measureCellRatio();  // before applyWrapMode, which divides by it
+    setFont(currentFont());
+    setInputFont(currentInputFont());
+    applyWrapMode();
+    placePairStrip();
+    document.getElementById('shortcutRow').innerHTML = SHORTCUTS.map((s, i) =>
+      `<button class="nav-key" style="justify-content:flex-start" onclick="insertShortcut(${i})">${escapeHtml(s.label)}</button>`).join('');
+  </script>
+</body>
+
+</html>
