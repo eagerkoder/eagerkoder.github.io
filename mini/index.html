@@ -35,6 +35,10 @@
       --red: #f7768e;
       --blue: #7aa2f7;
       --orange: #e0af68;
+      /* Terminal panes. Deliberately not red/green/muted: those three mean agent status, and a
+         shell has none. Named --shell rather than --term because --term-bg/--term-text already
+         mean the pane's *content* and a third --term would read as their base. */
+      --shell: #7dcfff;
       --term-bg: #1a1b26;
       --term-text: #c0caf5;
     }
@@ -49,6 +53,7 @@
       --red: #f52a65;
       --blue: #2e7de9;
       --orange: #8c6c3e;
+      --shell: #007197;
       --term-bg: #1a1b26;
       --term-text: #c0caf5;
     }
@@ -81,6 +86,48 @@
     html {
       height: 100%;
       overflow: hidden;
+    }
+
+    /* Scrollbars, on the desktop where they are drawn at all. Left alone they arrive as a wide
+       light gutter that belongs to the OS rather than to this page, and against a dark terminal
+       it reads as a seam down the side.
+
+       Two mechanisms, because no browser has both: `scrollbar-*` is the standard property and
+       what Firefox honours, `::-webkit-scrollbar` is what Safari and Chrome honour. Touch
+       browsers overlay their own and ignore both, which is why nothing here reserves space.
+
+       Scoped away from the strips that deliberately hide their bar (.agent-tabs, .chip-strip) —
+       those set `scrollbar-width: none` themselves and come later in the cascade. */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      /* Inset via a transparent border so the thumb reads as a slim pill rather than filling the
+         gutter edge to edge. */
+      border: 2px solid transparent;
+      background-clip: padding-box;
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+      background-clip: padding-box;
+    }
+
+    ::-webkit-scrollbar-corner {
+      background: transparent;
     }
 
     body {
@@ -477,6 +524,18 @@
       background: color-mix(in srgb, var(--red) 5%, var(--surface));
     }
 
+    /* Occupies the same box as .agent .dot so a terminal card and an agent card align down the
+       left edge. A glyph and not a coloured dot, because a dot in this position means status. */
+    .term-glyph {
+      width: 10px;
+      flex-shrink: 0;
+      color: var(--shell);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 700;
+      line-height: 1;
+      text-align: center;
+    }
+
     .workspace-card {
       border-color: color-mix(in srgb, var(--text) 10%, transparent);
     }
@@ -630,6 +689,47 @@
       flex-shrink: 0;
     }
 
+    /* Terminal panes. A shell has no status dot to colour, so the demarcation has to be
+       structural: the accent rule and the $ in the title say what the missing dot cannot. */
+    .terminal-view.is-terminal .term-header {
+      border-bottom: 2px solid var(--shell);
+    }
+
+    .terminal-view.is-terminal .term-header .status-dot {
+      display: none;
+    }
+
+    /* Everything a shell must not offer, hidden in one place. These elements are written by
+       several functions on the poll path, and a branch in each is several places to forget one.
+       #quickActions is deliberately absent from this list: it also carries session back/forward,
+       and renderQuickActions already emits no approval buttons for a pane with no agent. */
+    .terminal-view.is-terminal #pairStrip,
+    .terminal-view.is-terminal #selTransfer,
+    .terminal-view.is-terminal #quickDock,
+    .terminal-view.is-terminal #commandBtn,
+    .terminal-view.is-terminal #micBtn,
+    .terminal-view.is-terminal #ctrlPresetsWrap,
+    .terminal-view.is-terminal #menuStart,
+    .terminal-view.is-terminal #termMenuPair,
+    .terminal-view.is-terminal #menuPairPlace {
+      display: none !important;
+    }
+
+    .terminal-view.is-terminal #termStopRow {
+      display: grid;
+    }
+
+    /* The mic's slot in the rail, over a terminal: the Ctrl keys, out of the keys pad where they
+       sat three taps deep behind a disclosure. ^C is why — it is the only way to stop what you
+       started — and the other five ride along rather than living in two places. */
+    #ctrlKeysBtn {
+      display: none;
+    }
+
+    .terminal-view.is-terminal #ctrlKeysBtn {
+      display: flex;
+    }
+
     .term-header .back {
       background: none;
       border: none;
@@ -651,6 +751,27 @@
       color: var(--muted);
       font-size: 1.1rem;
       cursor: pointer;
+    }
+
+    /* CLS sits in the header next to Refresh, which is the one it is easiest to mean instead.
+       Text and not an icon: it wipes what is on screen, and a glyph nobody recognises is not the
+       thing to put next to a button that is safe to press. Two taps — see armClear. */
+    .term-header .cls-btn {
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      padding: 3px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      /* Fixed, so arming does not shuffle the buttons beside it as the label changes. */
+      min-width: 42px;
+      text-align: center;
+    }
+
+    .term-header .cls-btn[data-armed="1"] {
+      color: var(--bg);
+      background: var(--orange);
+      border-color: transparent;
     }
 
     /* Pane menu — anchored to its gear button, so it needs a positioned ancestor of its own
@@ -750,16 +871,20 @@
       overscroll-behavior-y: contain;
     }
 
-    /* Reflow — the viewport decides where lines break. The hanging indent is the honesty: a
-       continuation row is visibly indented, so a wrap the phone inserted never reads as a line
-       the agent wrote. */
+    /* Reflow — the viewport decides where lines break.
+
+       Same 10px box as every other mode. It used to hang the first row 2ch left of its
+       continuations so a viewport wrap never read as a break the agent wrote — but at phone
+       widths that indent is itself a break in the text, and it cost 2ch of every line to say
+       something the reader can infer. Full width, no indent, at the user's direction.
+
+       Nothing is reserved for the ruler either. Its strip is transparent, the text under it stays
+       legible, and the other two modes have always run beneath it. */
     .term-content.wrap-reflow {
       overflow-x: hidden;
       white-space: pre-wrap;
       word-wrap: break-word;
       word-break: break-all;
-      text-indent: -2ch;
-      padding-left: calc(10px + 2ch);
     }
 
     /* True size and Fit width both keep the agent's breaks and only its breaks. `pre` is what
@@ -777,8 +902,9 @@
 
        Selection is a range of line indices, never a character range — which is also what makes
        it cheap: with `white-space: pre` one logical line is one visual row of known height, so
-       index <-> y is arithmetic and the whole feature costs one band element. Reflow breaks
-       that (a line spans an unknown number of rows), so the ruler is not offered there. */
+       index <-> y is arithmetic and the whole feature costs one band element. In Reflow a line
+       spans however many rows the width gives it, so those two numbers are measured instead —
+       see rowGeom. Same band, same handles, same selection model. */
     .term-wrap {
       position: relative;
       flex: 1;
@@ -930,7 +1056,7 @@
     }
 
     .quick-actions {
-      padding: 6px 10px;
+      padding: 6px 12px;  /* the pair strip's box, so the two strips read as one family */
       border-top: 1px solid var(--border);
       display: flex;
       gap: 6px;
@@ -951,6 +1077,61 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+    }
+
+    /* Back and forward get their own full-width row under any approval buttons, so the two
+       never compete for the same line. The row is a positioning context for the hide button,
+       which sits over its right edge rather than in the flow — otherwise it would count as a
+       third item and pull the pair off centre. */
+    .qa-nav {
+      flex: 1 0 100%;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    /* Sized to the pair strip, which is the other always-there strip in this view and the only
+       height worth matching. Deliberately under the 44px target floor the approval buttons keep:
+       this row is always on screen, and a permanent 52px band cost more than a mis-tap on a
+       control whose worst outcome is opening the wrong session. */
+    .quick-actions .qa-nav button.nav {
+      flex: 0 1 140px;
+      min-width: 96px;
+      /* Clear of the hide button at the right edge, so a wide thumb aimed at forward cannot
+         land on dismiss instead. */
+      max-width: calc(50% - 24px);
+      padding: 2px 10px;
+      line-height: 1.3;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    .quick-actions .qa-nav button.nav:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    /* Deliberately small and quiet. Hiding the bar is a one-off, and the control for it sits
+       next to two buttons meant to be pressed constantly. */
+    .quick-actions .qa-nav button.qa-hide {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      flex: 0 0 auto;
+      min-width: 0;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 11px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 400;
     }
 
     .btn-yes {
@@ -1154,6 +1335,14 @@
     .nav-key:active {
       background: var(--border);
       transform: scale(0.97);
+    }
+
+    /* A destructive shortcut waiting for its second tap. Red, because the entry it is asking
+       about is the one the user marked as worth asking about. */
+    .nav-key.armed {
+      background: var(--red);
+      border-color: var(--red);
+      color: #fff;
     }
 
     .mod-key {
@@ -1412,6 +1601,10 @@
         </svg></button>
       <span class="dot status-dot"></span>
       <span class="title" id="termTitle"></span>
+      <!-- Left of Refresh, and armed by the first tap: the two sit a thumb apart and one of them
+           throws away what is on screen. See armClear. -->
+      <button class="refresh-btn cls-btn" id="clsBtn" onclick="armClear()"
+        aria-label="Clear screen">CLS</button>
       <button class="refresh-btn" onclick="refreshPane()" aria-label="Refresh pane"><svg width="16" height="16"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round">
@@ -1431,6 +1624,13 @@
         <div class="term-menu" id="termMenu" style="display:none" role="menu">
           <button class="menu-item" role="menuitem" onclick="closeTermMenu(); renamePane()">Rename pane</button>
           <button class="menu-item" role="menuitem" onclick="closeTermMenu(); adjustPane()">Fit pane to this screen</button>
+          <button class="menu-item" role="menuitem" id="menuStart" hidden
+            onclick="closeTermMenu(); startInThisProject()">New session</button>
+          <button class="menu-item" role="menuitem" id="qaToggle"
+            onclick="closeTermMenu(); toggleQuickActions()">Hide quick actions bar</button>
+          <!-- Terminals only — renderTermMenuState shows it and writes its text. -->
+          <button class="menu-item" role="menuitem" id="menuEnterSends" hidden
+            onclick="closeTermMenu(); toggleEnterSends()">Enter sends the line</button>
           <!-- Pair items, present only while this pane belongs to a pair — renderPairStrip owns it. -->
           <div id="termMenuPair"></div>
           <div class="menu-sep"></div>
@@ -1440,11 +1640,14 @@
             <span id="fontValue" style="flex:1;text-align:center;font-size:0.75rem"></span>
             <button id="fontInc" onclick="bumpFont(1)" aria-label="Larger terminal text">A+</button>
           </div>
-          <div class="menu-label" style="margin-top:10px">Composer text</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button id="inputFontDec" onclick="bumpInputFont(-1)" aria-label="Smaller composer text">A−</button>
-            <span id="inputFontValue" style="flex:1;text-align:center;font-size:0.75rem"></span>
-            <button id="inputFontInc" onclick="bumpInputFont(1)" aria-label="Larger composer text">A+</button>
+          <!-- Wrapped so a terminal, which has no composer, does not offer to resize its text. -->
+          <div id="menuInputFont">
+            <div class="menu-label" style="margin-top:10px">Composer text</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button id="inputFontDec" onclick="bumpInputFont(-1)" aria-label="Smaller composer text">A−</button>
+              <span id="inputFontValue" style="flex:1;text-align:center;font-size:0.75rem"></span>
+              <button id="inputFontInc" onclick="bumpInputFont(1)" aria-label="Larger composer text">A+</button>
+            </div>
           </div>
           <div class="menu-label" style="margin-top:10px">Line width</div>
           <select id="wrapMode" onchange="setWrapMode(this.value)" aria-label="How pane lines are laid out"
@@ -1454,13 +1657,16 @@
             <option value="reflow">Reflow — wrap to the screen</option>
           </select>
           <div id="wrapHint" style="font-size:0.65rem;color:var(--muted);margin-top:5px"></div>
-          <div class="menu-label" style="margin-top:10px">Pair bar</div>
-          <select id="pairPlace" onchange="setPairPlace(this.value)" aria-label="Where the pair bar sits"
-            style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
-            <option value="top">Top of the pane</option>
-            <option value="above">Above the composer</option>
-            <option value="bottom">Bottom</option>
-          </select>
+          <!-- Same reason: a shell never belongs to a pair, so it has no pair bar to place. -->
+          <div id="menuPairPlace">
+            <div class="menu-label" style="margin-top:10px">Pair bar</div>
+            <select id="pairPlace" onchange="setPairPlace(this.value)" aria-label="Where the pair bar sits"
+              style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+              <option value="top">Top of the pane</option>
+              <option value="above">Above the composer</option>
+              <option value="bottom">Bottom</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -1485,26 +1691,39 @@
     <div class="quick-actions" id="quickActions"></div>
     <div class="term-input">
       <div class="term-input-side">
-        <button onclick="openCommandPalette()" aria-label="Commands"
+        <button id="commandBtn" onclick="openCommandPalette()" aria-label="Commands"
           style="border:1px solid var(--blue);background:var(--bg);color:var(--blue);font-weight:700;font-size:14px">/</button>
-        <button onclick="toggleDock('promptDock')" aria-label="Prompts"
+        <button id="promptsBtn" onclick="toggleDock('promptDock')" aria-label="Prompts"
           style="border:1px solid var(--border);background:var(--bg);color:var(--muted);font-weight:700;font-size:14px">P</button>
-        <button onclick="toggleQuickDock()" aria-label="Quick actions"
+        <button id="quickDockBtn" onclick="toggleQuickDock()" aria-label="Quick actions"
           style="border:1px solid var(--border);background:var(--bg);color:var(--orange)"><svg width="18" height="18"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
             <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
           </svg></button>
-        <button onclick="toggleKeysDock()" aria-label="Keys"
+        <button id="keysBtn" onclick="toggleKeysDock()" aria-label="Keys"
           style="border:1px solid var(--border);background:var(--bg);color:var(--muted)"><svg width="18" height="18"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
             <rect x="2" y="4" width="20" height="16" rx="2" />
             <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10" />
           </svg></button>
+        <button id="micBtn" onclick="toggleDictation()" aria-label="Dictate" hidden
+          style="border:1px solid var(--border);background:var(--bg);color:var(--muted)"><svg width="18" height="18"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="9" y="2" width="6" height="11" rx="3" />
+            <path d="M5 10a7 7 0 0 0 14 0M12 17v5" />
+          </svg></button>
+        <button id="ctrlKeysBtn" onclick="toggleCtrlDock()" aria-label="Ctrl keys"
+          style="border:1px solid var(--red);background:var(--bg);color:var(--red);font-weight:700;font-size:13px">^C</button>
       </div>
-      <textarea id="termInput" rows="2" placeholder="Type…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="off"
-        autocapitalize="off" spellcheck="false"></textarea>
+      <!-- Autocorrect on, at the user's direction. It is the composer for prose sent to an agent
+           far more often than it is a command line, and the keyboard's own correction is worth
+           more than a literal transcription of every typo. Anything that must survive verbatim
+           still can: the Keys pad and the / palette do not pass through here. -->
+      <textarea id="termInput" rows="2" maxlength="4000" placeholder="Type…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="on"
+        autocapitalize="sentences" spellcheck="true"></textarea>
       <div class="term-input-side">
         <button class="send" onclick="sendText()" aria-label="Send"><svg width="24" height="24" viewBox="0 0 24 24"
             fill="currentColor" stroke="none">
@@ -1531,6 +1750,13 @@
       </div>
       <!-- Keys pad -->
       <div id="keysPad" style="width:100%">
+        <!-- Terminals only. Ctrl+C is the one control that stops what you started, and behind the
+             Ctrl modifier and a Presets disclosure it is three taps deep. -->
+        <div id="termStopRow" style="display:none;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:4px">
+          <button class="nav-key" onclick="sendKeys(['ctrl+c'])">^C Stop</button>
+          <button class="nav-key" onclick="fireKey('Up')">↑ Last</button>
+          <button class="nav-key" onclick="fireKey('Enter')">⏎ Enter</button>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:4px">
           <button class="nav-key" onclick="fireKey('Escape')">Esc</button>
           <button class="nav-key" style="grid-column:span 2" onclick="fireKey('Space')">Space</button>
@@ -1547,8 +1773,9 @@
           <button class="nav-key mod-key" id="modShift" onclick="armMod('shift')">⇧ Shift</button>
           <button class="nav-key mod-key" id="modCtrl" onclick="armMod('ctrl')">Ctrl</button>
         </div>
-        <!-- Ctrl presets -->
-        <div>
+        <!-- Ctrl presets. Over a terminal these live in their own dock instead — same buttons,
+             one tap from the composer rather than folded behind this disclosure. -->
+        <div id="ctrlPresetsWrap">
           <button onclick="toggleCtrlPresets()"
             style="background:none;border:none;color:var(--muted);font-size:0.7rem;cursor:pointer;padding:2px 4px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase">Presets
             <span id="ctrlChevron">▸</span></button>
@@ -1559,6 +1786,18 @@
       <div id="digitsPad" style="display:none;width:100%;grid-template-columns:repeat(3,1fr);gap:4px"></div>
       <!-- Action keys for blocked state -->
       <div id="actionKeys" style="width:100%;margin-top:4px"></div>
+    </div>
+    <!-- Ctrl keys dock — the "^C" button in the rail, terminals only. Same presets the keys pad
+         folds behind its disclosure, painted into both by paintCtrlPresets. -->
+    <div class="term-keys" id="ctrlDock" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px">
+        <span
+          style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Ctrl
+          keys</span>
+        <button onclick="toggleCtrlDock()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer">✕</button>
+      </div>
+      <div id="ctrlDockGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:100%"></div>
     </div>
     <!-- Quick actions dock -->
     <div class="term-keys" id="quickDock" style="display:none">
@@ -1587,12 +1826,13 @@
         </div>
       </div>
     </div>
-    <!-- Prompts dock — the "P" button beside the composer. These insert at the cursor and
-       never send, unlike Confirm and Common in the quick dock. -->
+    <!-- Prompts dock — the "P" button beside the composer. Over an agent these insert at the
+       cursor and never send, unlike Confirm and Common in the quick dock. Over a terminal the
+       same dock holds saved commands, and those do send: renderShortcutDock owns the switch. -->
     <div class="term-keys" id="promptDock" style="display:none">
       <div style="width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span
+          <span id="promptDockTitle"
             style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Prompts</span>
           <button onclick="toggleDock('promptDock')" aria-label="Close"
             style="background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer">✕</button>
@@ -1619,19 +1859,25 @@
     </div>
   </div>
 
-  <!-- Start session — rendered only when the relay advertises start_options -->
+  <!-- Start session, and New terminal — one sheet, because the questions are the same ones
+     minus the agent. Rendered only when the relay advertises start_options. -->
   <div id="startSheet" style="display:none;position:fixed;inset:0;z-index:100;">
     <div onclick="closeStart()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">Start session · <span id="startProject"></span></span>
+        <span style="font-size:0.8rem;font-weight:600;flex:1"><span id="startTitle">Start session</span> · <span
+            id="startProject"></span></span>
         <button onclick="closeStart()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
-        <label class="start-field">Role<select id="startRole"></select></label>
-        <label class="start-field">Agent<select id="startAgent"></select></label>
+        <!-- Hidden whole for a terminal: there is no agent to choose and no role for it to play.
+             Everything below this — where it goes, what it is called — is the same question. -->
+        <div id="startAgentRows" style="display:flex;flex-direction:column;gap:12px">
+          <label class="start-field">Role<select id="startRole"></select></label>
+          <label class="start-field">Agent<select id="startAgent"></select></label>
+        </div>
         <label class="start-field">Where<select id="startPlacement" onchange="renderStartTarget()"></select></label>
         <label class="start-field">Name<input id="startName" type="text" maxlength="32" autocapitalize="none"
             autocomplete="off" placeholder="Auto — Role N" /></label>
@@ -1700,12 +1946,16 @@
   <script>
 
     let ws = null, agents = [], activePane = null, refreshInterval = null, userScrolledUp = false;
+    // Shell panes, from the same snapshot as `agents`. Empty against a relay with terminal mode
+    // off, which sends no `shells` key at all — its presence is the feature gate.
+    let shells = [];
     let timeline = [], prevStatuses = {};
     let activeWorkspace = null;
     let activeTab = null;
     let projects = [], activeProject = null;
     // Absence of start_options is the feature gate: no message, no Start session control.
-    let startOptions = null, startProjectId = null;
+    // startMode is which of the two things the shared dialog is currently asking about.
+    let startOptions = null, startProjectId = null, startMode = 'agent';
     // Pairs live only in this browser. The relay has no pair message and stores no pair data.
     let pairs = [], pairSource = null, pairPartner = null, transferSelection = '';
 
@@ -1722,6 +1972,40 @@
       { label: 'Implement', text: 'Proceed to implement.' },
       { label: 'Architect prompt', text: '/ponytail\n/caveman\n@.agent/prompts/System_Prompt_2_Architect.md\n' },
     ];
+
+    // The terminal half of the same idea, and the opposite verb: an agent prompt is inserted into
+    // the composer to be read before it is sent, a terminal command is the thing being sent.
+    const TERM_KEY = 'herdr_term_shortcuts';
+    const TERM_VERSION = 1;
+    const MAX_TERM_SHORTCUTS = 24;
+
+    // Read-only, every one of them. Nothing that writes ships as a default — a destructive
+    // command in a grid the user did not choose is one mis-tap from a bad afternoon.
+    const DEFAULT_TERM_SHORTCUTS = [
+      { label: 'ls', text: 'ls -la' },
+      { label: 'git status', text: 'git status' },
+      { label: 'git log', text: 'git log --oneline -10' },
+      { label: 'pwd', text: 'pwd' },
+    ];
+
+    // Same contract as parsePairs, with one distinction the caller makes rather than this
+    // function: a *corrupt* blob loads as nothing, because replacing what someone wrote is worse
+    // than showing them an empty grid, while an *absent* key seeds the defaults.
+    function parseTermShortcuts(raw) {
+      let data;
+      try { data = JSON.parse(raw); } catch (e) { return []; }
+      if (!data || data.version !== TERM_VERSION || !Array.isArray(data.items)) return [];
+      return data.items
+        .filter(s => s && typeof s.label === 'string' && s.label &&
+          typeof s.text === 'string' && s.text && s.text.length <= SEND_TEXT_MAX)
+        .slice(0, MAX_TERM_SHORTCUTS)
+        .map(s => ({ label: s.label, text: s.text, danger: !!s.danger }));
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
 
     // codex invokes its prompts with $; every other agent uses /. Only a line-leading slash is
     // rewritten, so a path or URL inside the shortcut text is left alone. Keyed off the pane the
@@ -1816,6 +2100,45 @@
       const start = text.slice(0, at).split('\n').length - 1;
       return [start, start + selText.split('\n').length - 1];
     }
+
+    // Back/forward over the visited-pane list. Split out here because the branch that matters is
+    // the skipping: a session ends, and herdr can hand its pane_id to something else, so every
+    // candidate has to be checked against the live snapshot before it is offered.
+    //
+    // Returns the index to move to, or -1 when there is nothing that way.
+    function navStep(history, index, step, isLive, current) {
+      for (let i = index + step; i >= 0 && i < history.length; i += step) {
+        if (history[i] !== current && isLive(history[i])) return i;
+      }
+      return -1;
+    }
+
+    // Visiting a pane truncates anything ahead of the cursor, so going back and then opening
+    // something else never leaves a forward branch nobody can reach. Returns the new list.
+    function navPush(history, index, paneId, max) {
+      if (history[index] === paneId) return history.slice();
+      return history.slice(0, index + 1).concat([paneId]).slice(-max);
+    }
+    // What Enter means in the composer. Ctrl/Cmd+Enter always sends; over a terminal the user can
+    // opt into a bare Enter sending too, because a shell line ends at Enter and typing a command
+    // then reaching for a modifier is the wrong shape. Shift+Enter still writes a newline.
+    function enterAction(e, opts) {
+      if (e.key !== 'Enter') return 'none';
+      if (e.metaKey || e.ctrlKey) return 'send';
+      if (!e.shiftKey && opts.enterSends && opts.shell) return 'send';
+      return 'newline';
+    }
+    // A physical Ctrl+<letter> typed in the composer, over a terminal, aimed at the shell rather
+    // than at the text box. The browser owns Ctrl+C, Ctrl+X and Ctrl+Z whenever there is something
+    // to copy, cut or undo, so the pane is only handed the chord while the composer is empty —
+    // which is exactly when the user means the shell. Cmd and Alt are never claimed: ⌘C is copy on
+    // macOS, and Alt belongs to the keyboard. Returns the key to send, or null to leave it alone.
+    function ctrlChord(e, opts) {
+      if (!e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return null;
+      if (!opts.shell || !opts.empty) return null;
+      const k = 'ctrl+' + (e.key || '').toLowerCase();
+      return opts.allowed.includes(k) ? k : null;
+    }
     // --- P3 pair logic (pure) --- end
 
     // Settings — auto-detect relay when served from same origin
@@ -1906,14 +2229,18 @@
 
     function renderAgentTabs() {
       const el = document.getElementById('agentTabs');
-      const live = agents.filter(a => agents.filter(x => x.pane_id === a.pane_id).length === 1);
-      const sig = live.map(a => `${a.pane_id} | ${paneLabel(a)} | ${a.status}`).join(' /// ');
+      // Terminals belong here too: the strip is the live panes, and an open terminal with no tab
+      // of its own reads as the strip having lost it.
+      const all = agents.concat(shells);
+      const live = all.filter(a => all.filter(x => x.pane_id === a.pane_id).length === 1);
+      const sig = live.map(a => `${a.pane_id} | ${paneLabel(a)} | ${a.status || '$'}`).join(' /// ');
       if (sig !== tabsSig) {
         tabsSig = sig;
         el.innerHTML = live.map(a => {
           // Solid, never animated. Colour alone says what the pane is doing; a blinking dot in a
           // bar that is always on screen is motion the user cannot turn off or look away from.
-          const color = a.status === 'blocked' ? 'var(--red)' : a.status === 'working' ? 'var(--green)' : 'var(--muted)';
+          const color = !a.agent ? 'var(--shell)' :
+            a.status === 'blocked' ? 'var(--red)' : a.status === 'working' ? 'var(--green)' : 'var(--muted)';
           return `<button class="agent-tab" data-pane="${escapeHtml(a.pane_id)}" ` +
             `onclick="jumpToPane('${a.pane_id}')" title="${escapeHtml(paneTitle(a))}">` +
             `<span class="pill">` +
@@ -1947,12 +2274,15 @@
     }
 
     function renderStatusBar() {
-      const a = activePane ? agents.find(x => x.pane_id === activePane) : null;
-      const on = !!a && a.status === 'working';
+      const pane = activePane ? paneOf(activePane) : null;
+      const agent = activePane ? agents.find(x => x.pane_id === activePane) : null;
+      const on = !!agent && agent.status === 'working';
       document.getElementById('statusBarLeft').textContent =
-        a && paneStampAt ? fmtStamp(paneStampAt) : '';
+        pane && paneStampAt ? fmtStamp(paneStampAt) : '';
       const right = document.getElementById('statusBarRight');
-      right.textContent = a ? (on ? 'active' : 'idle') : '';
+      // Deliberately `agent` and not `pane`: "idle" here means the agent is not working, and a
+      // shell has no agent. Blank rather than a status it cannot have.
+      right.textContent = agent ? (on ? 'active' : 'idle') : '';
       right.classList.toggle('on', on);
     }
 
@@ -2082,7 +2412,8 @@
         startOptions = msg;
         render();
       }
-      else if (msg.type === 'command_result' && msg.command === 'start_agent') {
+      else if (msg.type === 'command_result' &&
+               (msg.command === 'start_agent' || msg.command === 'open_terminal')) {
         document.getElementById('startSubmit').disabled = false;
         // The session appears on the next poll snapshot; the browser invents nothing.
         if (msg.ok) {
@@ -2091,8 +2422,14 @@
           const asked = document.getElementById('startName').value.trim();
           if (asked && msg.label && msg.label !== asked) showToast(`Name taken — started as "${msg.label}"`);
           closeStart();
+          // Open it once the poll has seen it. Not here: the session is not in `agents` yet, and
+          // openTerminal reads the snapshot for the pane's title and its pair. Starting a session
+          // is asking to work in it, so landing on the list and hunting for it is a step nobody
+          // wanted.
+          pendingStart = msg.pane_id || null;
         }
-        else setStartError(msg.error || 'start failed');
+        else setStartError(msg.error ||
+          (msg.command === 'open_terminal' ? 'could not open the terminal' : 'start failed'));
       }
       else if (msg.type === 'command_result' && msg.command === 'set_slot') {
         if (!msg.ok) { showToast(msg.error || 'Could not adjust the pane'); }
@@ -2107,10 +2444,10 @@
         // Same rule: apply the label only once the relay confirms herdr took it. Painting it
         // optimistically made a relay that never handled the message look like a working rename
         // until the next poll silently undid it.
-        const a = agents.find(x => x.pane_id === msg.pane_id);
+        const a = paneOf(msg.pane_id);
         if (a && msg.ok) {
           a.label = msg.label;
-          if (activePane === msg.pane_id) document.getElementById('termTitle').textContent = paneTitle(a);
+          if (activePane === msg.pane_id) syncOpenPaneChrome();
           render();
           renderPairStrip();
         }
@@ -2125,7 +2462,28 @@
           }
           prevStatuses[a.pane_id] = a.status;
         }
-        agents = msg.agents; render();
+        agents = msg.agents;
+        // Not `msg.shells || []` — a relay with terminal mode off sends no key at all, and this
+        // has to read as "no terminals" rather than crash the next .filter.
+        shells = Array.isArray(msg.shells) ? msg.shells : [];
+        render();
+        // Approvals and the back/forward targets both follow the snapshot: a session that just
+        // blocked, or one that just ended, changes what the bar should offer.
+        renderQuickActions();
+        if (activePane) {
+          // herdr reuses a pane_id once its pane closes, so an open pane that has left both lists
+          // is not retargeted or polled on — it is let go.
+          if (!paneOf(activePane)) {
+            const gone = activePane;
+            closeTerminal();
+            showToast(`${gone} ended.`);
+          } else {
+            // A shell herdr just handed an agent loses its $ and its hidden controls here,
+            // without the pane having to be reopened.
+            syncOpenPaneChrome();
+          }
+        }
+        openPendingStart();
       }
       else if (msg.type === 'agent_update') {
         const update = msg.agent;
@@ -2140,6 +2498,7 @@
         }
         prevStatuses[update.pane_id] = update.status;
         render();
+        renderQuickActions();
       }
       else if (msg.type === 'blocked') {
         const a = agents.find(x => x.pane_id === msg.pane_id);
@@ -2149,6 +2508,7 @@
         timeline.unshift({ project: msg.project, agent: msg.agent, status: 'blocked', time: new Date() });
         if (timeline.length > 100) timeline.pop();
         render();
+        renderQuickActions();  // the approval buttons belong on screen the moment it blocks
       } else if (msg.type === 'pane_content' && msg.pane_id === activePane) {
         const el = document.getElementById('termContent');
         const prevHeight = el.scrollHeight;
@@ -2181,7 +2541,20 @@
       renderAgentTabs();
     }
 
+    // One insertion point for all three paths below: each writes #agents itself, and a Terminals
+    // section appended in each is three places to forget one.
     function renderBody() {
+      renderBodyMain();
+      const html = terminalsHtml();
+      if (!html) return;
+      const el = document.getElementById('agents');
+      // "Waiting for agents…" is true of the agents and false of the box: a machine with
+      // terminals and no agents is not waiting for anything.
+      if (!agents.length) el.innerHTML = '';
+      el.insertAdjacentHTML('beforeend', html);
+    }
+
+    function renderBodyMain() {
       if (projects.length) { renderProjects(); return; }
       const workspaces = [...new Set(agents.map(a => a.workspace_id).filter(Boolean))];
       if (workspaces.length <= 1) {
@@ -2213,7 +2586,11 @@
         if (other.length) html += section('Other sessions', 'var(--muted)', other);
       } else {
         if (startOptions) {
-          html += `<div class="chip-strip"><button class="chip chip-add" onclick="openStartDialog('${activeProject}')">+ Start session</button></div>`;
+          // + New terminal only when the relay says both of open_terminal's gates are open —
+          // a chip that always errors is worse than a chip that is not there.
+          const term = startOptions.terminal
+            ? `<button class="chip chip-add" onclick="openStartDialog('${activeProject}', event, 'terminal')">+ New terminal</button>` : '';
+          html += `<div class="chip-strip"><button class="chip chip-add" onclick="openStartDialog('${activeProject}')">+ Start session</button>${term}</div>`;
         }
         const mine = agents.filter(a => a.project_id === activeProject);
         html += mine.length ? layoutHtml(mine) : '<div class="empty">No sessions</div>';
@@ -2332,25 +2709,81 @@
       return options.length;
     }
 
+    // The dialog reopens on the choices it was last used with. Spawning is repetitive — the same
+    // agent into the same kind of place, several times an hour — and restating it every time is
+    // the tax. Browser-local, like the rest of the per-device preferences.
+    const START_AGENT_KEY = 'herdr_start_agent';
+    const START_PLACE_KEY = 'herdr_start_placement';
+
+    // A session the relay just started, waiting for the poll to catch up so it can be opened.
+    let pendingStart = null;
+
+    function openPendingStart() {
+      if (!pendingStart) return;
+      // Both lists: an opened terminal arrives in `shells`, and looking only at `agents` would
+      // leave the pending id set for good, reopening nothing on every poll from then on.
+      const a = paneOf(pendingStart);
+      if (!a) return;
+      // Cleared before opening, not after: openTerminal can throw on a half-rendered snapshot,
+      // and a pending id that survives that would reopen the pane on every poll from then on.
+      pendingStart = null;
+      // Never over a pane the user has since opened themselves — the start was a while ago in
+      // phone terms, and yanking them out of what they are reading is worse than not landing.
+      if (!activePane) openTerminal(a.pane_id);
+    }
+
+    // Spawn into the Project the open pane belongs to, without going back to the list to find
+    // the card for it. Same dialog, same validation — only the Project is answered in advance.
+    function startInThisProject() {
+      const a = agents.find(x => x.pane_id === activePane);
+      if (!a || !a.project_id) return;
+      openStartDialog(a.project_id);
+    }
+
+    function restoreStartChoice(id, key, fallback) {
+      const el = document.getElementById(id);
+      // Falls back when the remembered value is gone — an agent dropped from the relay's
+      // allowlist leaves a stored name that matches no option, and silently ignoring it beats
+      // opening the dialog on a blank select.
+      const want = localStorage.getItem(key) || fallback;
+      if (want && [...el.options].some(o => o.value === want)) el.value = want;
+    }
+
     function setStartError(text) {
       const el = document.getElementById('startError');
       el.textContent = text || '';
       el.style.display = text ? 'block' : 'none';
     }
 
-    function openStartDialog(projectId, ev) {
+    function openStartDialog(projectId, ev, mode) {
       if (ev) ev.stopPropagation();
       if (!startOptions) return;
+      startMode = mode === 'terminal' ? 'terminal' : 'agent';
+      const terminal = startMode === 'terminal';
+      if (terminal && !startOptions.terminal) return;
       startProjectId = projectId;
       const p = projects.find(x => x.id === projectId);
       document.getElementById('startProject').textContent = p ? p.label : '';
+      document.getElementById('startTitle').textContent = terminal ? 'New terminal' : 'Start session';
+      document.getElementById('startAgentRows').style.display = terminal ? 'none' : '';
+      document.getElementById('startSubmit').textContent = terminal ? 'Open terminal' : 'Start session';
+      document.getElementById('startName').placeholder = terminal ? 'Auto — Terminal N' : 'Auto — Role N';
       fillSelect('startRole', startOptions.roles.map(r => [r, r.charAt(0).toUpperCase() + r.slice(1)]));
       fillSelect('startAgent', startOptions.agents.map(a => [a, a]));
-      fillSelect('startPlacement', [['new_workspace', 'New workspace'], ['new_tab', 'New tab'], ['split', 'Split']]);
+      fillSelect('startPlacement', [['new_tab', 'New tab'], ['new_workspace', 'New workspace'], ['split', 'Split']]);
+      restoreStartChoice('startAgent', START_AGENT_KEY);
+      restoreStartChoice('startPlacement', START_PLACE_KEY, 'new_tab');
       document.getElementById('startName').value = '';  // blank means "let the relay name it"
       setStartError('');
       document.getElementById('startSubmit').disabled = false;
       renderStartTarget();  // may disable submit again when the Project has no live target
+      // New tab and Split both need something of this Project's already running. Falling back
+      // keeps the dialog usable instead of opening it disabled on a choice that cannot apply
+      // here — the first session in a Project has nowhere to go but a new workspace.
+      if (document.getElementById('startSubmit').disabled) {
+        document.getElementById('startPlacement').value = 'new_workspace';
+        renderStartTarget();
+      }
       document.getElementById('startSheet').style.display = 'block';
     }
 
@@ -2364,8 +2797,21 @@
     function renderStartTarget() {
       const placement = document.getElementById('startPlacement').value;
       const row = document.getElementById('startTargetRow');
-      const mine = agents.filter(a => a.project_id === startProjectId);
-      if (placement === 'new_workspace') { row.innerHTML = ''; return; }
+      // A terminal may land beside a terminal, and in a workspace holding nothing else. An agent
+      // may not: `agent start` wants a pane of its own, and the relay validates against agents.
+      const live = startMode === 'terminal' ? agents.concat(shells) : agents;
+      const mine = live.filter(a => a.project_id === startProjectId);
+      if (placement === 'new_workspace') {
+        // Clears both, and not only the row. New workspace needs no target, so whatever the
+        // previous placement left behind — the "no live workspaces" error, and the disabled
+        // submit that came with it — belongs to a question this placement does not ask. Leaving
+        // them was what made the dialog impossible to submit from: pick New workspace after
+        // seeing that error and the button stayed dead.
+        row.innerHTML = '';
+        setStartError('');
+        document.getElementById('startSubmit').disabled = false;
+        return;
+      }
       const isTab = placement === 'new_tab';
       const label = isTab ? 'Workspace' : 'Beside pane';
       row.innerHTML = `<label class="start-field">${label}<select id="startTarget"></select></label>`;
@@ -2375,7 +2821,8 @@
         options = mine.filter(a => a.workspace_id && !seen.has(a.workspace_id) && seen.add(a.workspace_id))
           .map(a => [a.workspace_id, a.project || a.workspace_id]);
       } else {
-        options = mine.map(a => [a.pane_id, `${a.label || a.agent} · ${a.pane_id}`]);
+        // Not `a.agent` as the fallback — a terminal has none, and the option read "undefined".
+        options = mine.map(a => [a.pane_id, `${a.label || a.agent || a.project || a.pane_id} · ${a.pane_id}`]);
       }
       const any = fillSelect('startTarget', options);
       setStartError(any ? '' : (isTab ? 'No live workspaces in this project' : 'No live panes in this project'));
@@ -2384,14 +2831,19 @@
 
     function submitStart() {
       if (!ws || !startProjectId) return;
+      const terminal = startMode === 'terminal';
       const placement = document.getElementById('startPlacement').value;
-      const msg = {
-        type: 'start_agent',
-        name: document.getElementById('startAgent').value,
-        role: document.getElementById('startRole').value,
-        project_id: startProjectId,
-        placement: placement,
-      };
+      // Agent fields are omitted rather than blanked: the relay refuses an open_terminal carrying
+      // a name or a role as an unexpected field, which is what keeps the two messages distinct.
+      const msg = terminal
+        ? { type: 'open_terminal', project_id: startProjectId, placement: placement }
+        : {
+          type: 'start_agent',
+          name: document.getElementById('startAgent').value,
+          role: document.getElementById('startRole').value,
+          project_id: startProjectId,
+          placement: placement,
+        };
       // Spawn at the width of the screen doing the spawning, so a session started from a phone is
       // readable on it without a second round trip. Not for a split: "beside that pane" is already
       // a statement about width, and a desktop asking for "wide" would move the new session
@@ -2408,6 +2860,12 @@
       }
       setStartError('');
       document.getElementById('startSubmit').disabled = true;
+      // Remembered on send rather than on change: what the user actually spawned is the choice
+      // worth reopening on, not one they scrolled past.
+      try {
+        if (msg.name) localStorage.setItem(START_AGENT_KEY, msg.name);
+        localStorage.setItem(START_PLACE_KEY, placement);
+      } catch (e) { /* private mode: session-only */ }
       ws.send(JSON.stringify(msg));
     }
 
@@ -2423,14 +2881,30 @@
         const v = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]');
         // Version-one recents stored bare pane IDs. Drop them: herdr can reuse an ID for a
         // different session, and this is a convenience list, not data worth migrating unsafely.
-        return Array.isArray(v) ? v.filter(x => x && typeof x === 'object' && x.pane_id && x.agent) : [];
+        return Array.isArray(v) ? v.filter(x => x && typeof x === 'object' && x.pane_id
+          && (x.agent || x.terminal)) : [];
       } catch (e) { return []; }
     }
 
+    // A terminal has no `agent` to fingerprint on, so it is matched on cwd and host instead and
+    // flagged. The flag is what stops a bare pane_id matching across kinds — herdr reuses IDs, and
+    // a recent terminal landing on the agent that inherited its ID is exactly the failure the
+    // fingerprint exists to prevent. Agents keep memberMatches, which the pair tests own.
+    function recentMatchesPane(r, p, shell) {
+      if (!!r.terminal !== shell) return false;
+      if (!shell) return memberMatches(r, p);
+      return r.pane_id === p.pane_id && (r.host || 'local') === (p.host || 'local')
+        && (r.cwd || '') === (p.cwd || '');
+    }
+
     function noteRecent(paneId) {
-      const live = agents.filter(a => a.pane_id === paneId);
+      const shell = isShell(paneId);
+      const pool = shell ? shells : agents;
+      const live = pool.filter(p => p.pane_id === paneId);
       if (live.length !== 1) return;
-      const current = recentFingerprint(live[0]);
+      const current = shell
+        ? { pane_id: paneId, host: live[0].host || 'local', cwd: live[0].cwd || '', terminal: true }
+        : recentFingerprint(live[0]);
       const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, MAX_RECENTS);
       localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
     }
@@ -2442,13 +2916,20 @@
       // Sliced here too, not only on write: a list stored under an older, larger cap must not
       // render six entries just because it predates the current one.
       const live = loadRecents()
-        .map(r => agents.find(a => memberMatches(r, a)))
-        .filter(a => a && agents.filter(x => x.pane_id === a.pane_id).length === 1)
+        .map(r => {
+          const pool = r.terminal ? shells : agents;
+          return pool.find(p => recentMatchesPane(r, p, !!r.terminal)) || null;
+        })
+        // Still one, and still counted across both lists: an ID that is now an agent here and a
+        // shell there is ambiguous, and the relay will refuse it.
+        .filter(p => p && agents.filter(x => x.pane_id === p.pane_id).length
+          + shells.filter(x => x.pane_id === p.pane_id).length === 1)
         .slice(0, MAX_RECENTS);
       if (!live.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
       // Same section header and same cards as the list above, so a recent reads as the session it
       // is rather than as a second kind of thing.
-      el.innerHTML = section('Recents', 'var(--blue)', live);
+      el.innerHTML = `<div class="section-header"><span class="dot" style="background:var(--blue)"></span>Recents</div>`
+        + live.map(p => isShell(p.pane_id) ? terminalCard(p) : agentCard(p)).join('');
       el.style.display = '';
     }
 
@@ -2512,7 +2993,8 @@
       }
       renderWrapHint();
       syncFontButtons();
-      // Reflow makes line index <-> y unknowable, so the ruler goes away with it.
+      // Width and wrapping both just moved, so every measured row is stale.
+      invalidateRows();
       drawSel();
     }
 
@@ -2533,11 +3015,11 @@
     }
 
     // --- Line ruler ---
-    // Two integers and one band element. No per-line DOM, nothing rebuilt on the 3s poll — that
-    // is what the non-wrapping modes bought, and it is why the ruler is hidden in Reflow.
-    let selA = null, selB = null, selText = '', paneText = '', paneRows = [];
+    // Two integers and one band element. No per-line DOM, nothing rebuilt on the 3s poll — which
+    // is what keeps it cheap in every wrap mode, including the one that has to measure.
+    let selA = null, selB = null, selText = '', paneText = '', paneRows = [], lineStarts = [];
 
-    function rulerOn() { return currentWrapMode() !== 'reflow' && !!activePane; }
+    function rulerOn() { return !!activePane; }
 
     function clearSel() { selA = selB = null; selText = ''; drawSel(); }
 
@@ -2546,10 +3028,55 @@
       return { el, lh: parseFloat(cs.lineHeight) || 16, pad: parseFloat(cs.paddingTop) || 0 };
     }
 
+    // Where each line sits, in content coordinates — measured from the top of the text and
+    // independent of scrollTop, so the cache below survives scrolling.
+    //
+    // In the non-wrapping modes one logical line is one visual row of known height, so this is
+    // arithmetic. Reflow breaks that: a line spans however many rows the screen width and the
+    // break rules give it, and `word-break: break-all` plus a hanging indent plus double-width
+    // glyphs put that beyond any formula worth trusting. So it is measured with a Range over the
+    // text node, which is exact under every one of those.
+    let rowCache = null;
+
+    function invalidateRows() { rowCache = null; }
+
+    function rowGeom(i) {
+      const { el, lh, pad } = lineGeom();
+      if (currentWrapMode() !== 'reflow') return { top: pad + i * lh, height: lh };
+      const node = el.firstChild;
+      // Only ever a single text node in practice; anything else means the pane is not rendered
+      // yet, and the arithmetic is a better answer than a thrown range.
+      if (!node || node.nodeType !== 3) return { top: pad + i * lh, height: lh };
+      if (!rowCache) rowCache = new Map();
+      const hit = rowCache.get(i);
+      if (hit) return hit;
+      const start = lineStarts[i];
+      if (start === undefined) return { top: pad + i * lh, height: lh };
+      const r = document.createRange();
+      // Through the newline, not just the text: a blank line is a zero-length range, and a
+      // zero-length range has no rect to read a height off.
+      r.setStart(node, start);
+      r.setEnd(node, Math.min(node.length, start + (paneRows[i] || '').length + 1));
+      const box = r.getBoundingClientRect();
+      const base = el.getBoundingClientRect().top - el.scrollTop;
+      const geom = { top: box.top - base, height: box.height || lh };
+      rowCache.set(i, geom);
+      return geom;
+    }
+
     function lineAt(clientY) {
       const { el, lh, pad } = lineGeom();
       const y = clientY - el.getBoundingClientRect().top + el.scrollTop - pad;
-      return Math.min(paneRows.length - 1, Math.max(0, Math.floor(y / lh)));
+      const last = paneRows.length - 1;
+      if (currentWrapMode() !== 'reflow') return Math.min(last, Math.max(0, Math.floor(y / lh)));
+      // Rows are ordered top to bottom, so the line under a point is a binary search — about
+      // eleven measurements on a 2000-line pane, rather than one per line.
+      let lo = 0, hi = last;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (rowGeom(mid).top - pad <= y) lo = mid; else hi = mid - 1;
+      }
+      return Math.min(last, Math.max(0, lo));
     }
 
     function drawSel() {
@@ -2561,10 +3088,11 @@
       const on = rulerOn() && selA !== null && paneRows.length > 0;
       band.hidden = top.hidden = bot.hidden = bar.hidden = !on;
       if (!on) return;
-      const { el, lh, pad } = lineGeom();
+      const { el } = lineGeom();
       const a = Math.min(selA, selB), b = Math.max(selA, selB);
       selText = paneRows.slice(a, b + 1).join('\n');
-      const y0 = pad + a * lh - el.scrollTop, y1 = y0 + (b - a + 1) * lh;
+      const first = rowGeom(a), last = rowGeom(b);
+      const y0 = first.top - el.scrollTop, y1 = last.top + last.height - el.scrollTop;
       band.style.top = y0 + 'px';
       band.style.height = (y1 - y0) + 'px';
       const h = document.getElementById('termWrap').clientHeight;
@@ -2588,6 +3116,14 @@
     function setPaneText(next) {
       paneText = next;
       paneRows = next.split('\n');
+      // Character offset of each line, which is what a Range needs. Built here because this is
+      // the one place the text changes.
+      lineStarts = [];
+      for (let i = 0, at = 0; i < paneRows.length; i++) {
+        lineStarts.push(at);
+        at += paneRows[i].length + 1;
+      }
+      invalidateRows();
       if (selA !== null) {
         const at = reanchorSel(next, selText, Math.min(selA, selB), Math.max(selA, selB));
         if (!at) { clearSel(); return; }
@@ -2693,6 +3229,7 @@
       try { localStorage.setItem(FONT_KEY, v); } catch (e) { /* private mode: session-only */ }
       document.getElementById('fontValue').textContent = v + 'px';
       syncFontButtons();
+      invalidateRows();
       drawSel();  // the line height just changed, so the band no longer covers those lines
     }
 
@@ -2761,8 +3298,28 @@
     function toggleTermMenu() {
       const el = document.getElementById('termMenu');
       const show = el.style.display === 'none';
+      if (show) renderTermMenuState();
       el.style.display = show ? '' : 'none';
       document.getElementById('termMenuBtn').setAttribute('aria-expanded', String(show));
+    }
+
+    // The two items whose text depends on live state, refreshed when the menu opens rather than
+    // kept in sync from everywhere that could change it.
+    function renderTermMenuState() {
+      // "bar", because the composer already has a button whose label is Quick actions and which
+      // opens something else entirely.
+      document.getElementById('qaToggle').textContent =
+        quickActionsOn() ? 'Hide quick actions bar' : 'Show quick actions bar';
+      const enter = document.getElementById('menuEnterSends');
+      enter.hidden = !(activePane && isShell(activePane));
+      enter.textContent = enterSendsOn() ? 'Enter inserts a newline' : 'Enter sends the line';
+      const a = agents.find(x => x.pane_id === activePane);
+      const start = document.getElementById('menuStart');
+      // Absent, not disabled, when the pane's Project is unknown or Projects are off: a start
+      // needs a project_id, and there is nothing useful to open the dialog on without one.
+      const can = !!(a && a.project_id && startOptions);
+      start.hidden = !can;
+      if (can) start.textContent = `New session in ${a.project || a.project_id}`;
     }
 
     function closeTermMenu() {
@@ -2783,7 +3340,15 @@
       };
     }
 
-    function paneLabel(a) { return a.label || a.project || a.agent; }
+    // Every existing lookup is agents.find(...), which returns undefined for a terminal and takes
+    // the whole terminal view down to a bare pane_id title. One helper, used by everything that
+    // opens or titles a pane. Pairs deliberately keep looking only at `agents`.
+    function paneOf(id) {
+      return agents.find(a => a.pane_id === id) || shells.find(s => s.pane_id === id) || null;
+    }
+    function isShell(id) { return shells.some(s => s.pane_id === id); }
+
+    function paneLabel(a) { return a.label || a.project || a.agent || a.pane_id; }
 
     // From the live snapshot, never a pinned record: a pane's agent is what herdr reports now.
     function agentOf(paneId) { return (agents.find(a => a.pane_id === paneId) || {}).agent; }
@@ -2792,6 +3357,10 @@
     // Each part is dropped when absent, so an unnamed pane degrades to "charts.TS · claude" rather
     // than showing an empty segment or repeating the project as its own name.
     function paneTitle(a) {
+      // A shell has no agent to name, and its label is its whole identity — the cwd is already on
+      // the card's second line. Titled the same way here as on the card, so the header a terminal
+      // opens into reads as the row that was tapped.
+      if (!a.agent) return a.label || a.project || a.pane_id;
       const parts = [];
       if (a.project) parts.push(a.project);
       if (a.agent) parts.push(a.agent);
@@ -2898,7 +3467,16 @@
       const strip = document.getElementById('pairStrip');
       const menu = document.getElementById('termMenuPair');
       const pair = activePane ? pairFor(pairs, activePane) : null;
-      if (!pair) { strip.style.display = 'none'; strip.innerHTML = ''; menu.innerHTML = ''; return; }
+      if (!pair) {
+        strip.style.display = 'none';
+        strip.innerHTML = '';
+        // No strip without a pair — but the menu still has to offer making one, or an unpaired
+        // pane has no route to pairing from inside the pane at all.
+        menu.innerHTML = activePane
+          ? `<button class="menu-item" role="menuitem" onclick="closeTermMenu(); openPairDialog(activePane)">Pair with…</button>`
+          : '';
+        return;
+      }
       const health = pairHealth(pair, agents);
       const partner = partnerOf(pair, activePane);
       const mine = memberOf(pair, activePane);
@@ -2930,9 +3508,9 @@
     // disagree with the herdr pane list and with the Architect N labels a started session gets,
     // leaving one pane with three names.
     function renamePane() {
-      const a = agents.find(x => x.pane_id === activePane);
+      const a = activePane ? paneOf(activePane) : null;
       if (!a || !ws) return;
-      const next = prompt('Name for this pane', a.label || a.project || a.agent);
+      const next = prompt('Name for this pane', a.label || a.project || a.agent || '');
       if (next === null) return;
       const label = next.trim();
       // Cleared or unchanged means keep what it had — the relay refuses an empty label, and
@@ -3025,6 +3603,114 @@
       input.focus();
     }
 
+    // --- Terminal shortcuts (T2) ---
+    // The same dock as the agent prompts, because they occupy the same place, the same toggle,
+    // and the same "only one dock is open" rule. What differs is the verb: a prompt is inserted
+    // for the user to read before sending, a command is sent.
+    let termShortcuts = [];
+
+    function loadTermShortcuts() {
+      const raw = localStorage.getItem(TERM_KEY);
+      // No key at all is a first run, not a corrupt one — seed the defaults. A key that parses to
+      // nothing is either corrupt or a user who deleted every entry, and both mean an empty grid.
+      termShortcuts = raw === null ? DEFAULT_TERM_SHORTCUTS.slice() : parseTermShortcuts(raw);
+    }
+
+    function saveTermShortcuts() {
+      try { localStorage.setItem(TERM_KEY, JSON.stringify({ version: TERM_VERSION, items: termShortcuts })); }
+      catch (e) { /* private mode: session-only */ }
+    }
+
+    function renderShortcutDock() {
+      const shell = !!activePane && isShell(activePane);
+      document.getElementById('promptDockTitle').textContent = shell ? 'Commands' : 'Prompts';
+      // The button that opens it says what it opens: P for prompts, $ for a command line.
+      const btn = document.getElementById('promptsBtn');
+      btn.textContent = shell ? '$' : 'P';
+      btn.setAttribute('aria-label', shell ? 'Commands' : 'Prompts');
+      const box = document.getElementById('shortcutRow');
+      if (!shell) {
+        box.innerHTML = SHORTCUTS.map((s, i) =>
+          `<button class="nav-key" style="justify-content:flex-start" onclick="insertShortcut(${i})">${escapeHtml(s.label)}</button>`).join('');
+        return;
+      }
+      box.innerHTML = termShortcuts.map((s, i) => {
+        const armed = shortcutArmed === i;
+        const label = escapeHtml(armed ? `Run ${s.label}?` : s.label);
+        const colour = s.danger ? 'color:var(--red);border-color:var(--red)' : '';
+        return `<div style="display:flex;gap:4px">
+      <button class="nav-key${armed ? ' armed' : ''}" style="flex:1;justify-content:flex-start;font-family:monospace;${colour}"
+        title="${escapeHtml(s.text)}" onclick="runShortcut(${i})">${label}</button>
+      <button class="nav-key" style="width:40px;color:var(--muted)" aria-label="Delete ${escapeHtml(s.label)}"
+        onclick="deleteShortcut(${i})">✕</button>
+    </div>`;
+      }).join('') +
+        `<button class="nav-key" style="justify-content:flex-start;color:var(--muted)" onclick="addShortcut()">+ Add command</button>`;
+    }
+
+    // herdr reports no process lifetime, so "has it finished" can only be answered by looking.
+    // Three reads across the first few seconds cover a command that prints and exits, without
+    // raising the 3s interval every open pane pays for.
+    function burstPoll(paneId = activePane) {
+      [400, 1200, 2500].forEach(ms => setTimeout(() => {
+        if (activePane === paneId) refreshPane();
+      }, ms));
+    }
+
+    let shortcutArmed = -1, shortcutArmedAt = 0;
+
+    function runShortcut(i) {
+      const s = termShortcuts[i];
+      if (!s || !ws || !activePane) return;
+      // Arm and fire, the same two taps the Clear control takes, rather than a modal — the arm is
+      // visible in the button that will run, which a dialog covering the grid would not be.
+      if (s.danger && !(shortcutArmed === i && Date.now() - shortcutArmedAt < CLS_ARM_MS)) {
+        shortcutArmed = i; shortcutArmedAt = Date.now();
+        renderShortcutDock();
+        if (window.cue) cue('error');
+        setTimeout(() => {
+          if (shortcutArmed === i && Date.now() - shortcutArmedAt >= CLS_ARM_MS) disarmShortcut();
+        }, CLS_ARM_MS);
+        return;
+      }
+      disarmShortcut();
+      if (window.cue) cue('success');
+      ws.send(JSON.stringify({ type: 'send_text', pane_id: activePane, text: s.text }));
+      ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: ['Enter'] }));
+      document.getElementById('promptDock').style.display = 'none';
+      burstPoll();
+    }
+
+    function disarmShortcut() {
+      if (shortcutArmed === -1) return;
+      shortcutArmed = -1; shortcutArmedAt = 0;
+      renderShortcutDock();
+    }
+
+    function addShortcut() {
+      if (termShortcuts.length >= MAX_TERM_SHORTCUTS) {
+        showToast(`Keep it to ${MAX_TERM_SHORTCUTS} commands.`); return;
+      }
+      const text = (prompt('Command to run in this terminal') || '').trim();
+      if (!text) return;
+      // Checked at save, not at send: the relay refuses over 4000, and a shortcut that can never
+      // run should never make it into the grid.
+      if (text.length > SEND_TEXT_MAX) { showToast(`Command must be ${SEND_TEXT_MAX} characters or fewer.`); return; }
+      const label = (prompt('Button label', text.slice(0, 24)) || '').trim();
+      if (!label) return;
+      termShortcuts.push({ label: label.slice(0, 24), text: text, danger: confirm('Ask twice before running this one?') });
+      saveTermShortcuts();
+      renderShortcutDock();
+    }
+
+    function deleteShortcut(i) {
+      const s = termShortcuts[i];
+      if (!s || !confirm(`Delete "${s.label}"?`)) return;
+      termShortcuts.splice(i, 1);
+      saveTermShortcuts();
+      renderShortcutDock();
+    }
+
     // The ceiling lives in CSS (max-height) and the floor in min-height, so this only has to
     // report the content height — a px cap here would drift the moment the font size changes.
     function autoGrow(el) {
@@ -3040,11 +3726,6 @@
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
       if (window.cue) cue('error');
-    }
-
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, c =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     function agentCard(a) {
@@ -3068,15 +3749,56 @@
         list.map(a => agentCard(a)).join('');
     }
 
+    function terminalCard(s) {
+      const host = s.host && s.host !== 'local' ? ` <span style="color:var(--orange);font-size:0.6rem">@${s.host}</span>` : '';
+      const cwd = s.cwd ? `<span style="font-family:monospace;opacity:0.7">${s.cwd.split('/').slice(-2).join('/')}</span>` : '';
+      const title = s.label || s.project || s.pane_id;
+      // No status dot and no Pair button, and both absences are the point: a shell has no status,
+      // and a pair is agent-to-agent.
+      return `<div class="agent" role="button" tabindex="0" aria-label="Terminal ${escapeHtml(title)}" onclick="openTerminal('${s.pane_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${s.pane_id}')}">
+    <span class="term-glyph" aria-hidden="true">$</span>
+    <div class="info"><div class="project" style="font-family:monospace">${escapeHtml(title)}${host}</div><div class="meta">${cwd}</div></div>
+    <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
+  </div>`;
+    }
+
+    // Not section(): that maps agentCard over its list. Same header markup, different card, and a
+    // colour that is none of the three carrying agent status.
+    function terminalsHtml() {
+      const list = activeProject ? shells.filter(s => s.project_id === activeProject) : shells;
+      if (!list.length) return '';
+      return `<div class="section-header"><span class="dot" style="background:var(--shell)"></span>Terminals</div>`
+        + list.map(terminalCard).join('');
+    }
+
+    // Title and terminal-only chrome for whatever is open. Called on open and again after every
+    // full snapshot, so a shell that herdr hands an agent sheds its $ and its hidden controls
+    // without needing the pane reopened.
+    function syncOpenPaneChrome() {
+      const pane = activePane ? paneOf(activePane) : null;
+      const shell = !!activePane && isShell(activePane);
+      document.getElementById('terminalView').classList.toggle('is-terminal', shell);
+      document.getElementById('termTitle').textContent =
+        pane ? (shell ? '$ ' : '') + paneTitle(pane) : (activePane || '');
+      // The dock holds prompts over an agent and commands over a shell, and a pane can change
+      // kind under a live snapshot — so its contents are re-chosen here, not only on open.
+      renderShortcutDock();
+      syncComposerHint();
+      // The mic button is hidden over a terminal, and a live recogniser with no way to stop it
+      // would keep writing into the composer.
+      if (shell && dictation) dictation.stop();
+    }
+
     function openTerminal(paneId) {
       // Opening over an already-open pane leaves the old poller running otherwise, and every
       // switch adds another read_pane every 3s. Cleared here rather than in each caller, because
       // switchToPartner and the header chips both land straight on this without closing first.
       clearInterval(refreshInterval);
       activePane = paneId; paneLines = 200; userScrolledUp = false;
+      paneSource = 'recent-unwrapped';  // a clear belongs to the pane it was made on
       noteRecent(paneId);
-      const a = agents.find(x => x.pane_id === paneId);
-      document.getElementById('termTitle').textContent = a ? paneTitle(a) : paneId;
+      noteVisit(paneId);
+      syncOpenPaneChrome();
       document.getElementById('agentListView').style.display = 'none';
       document.getElementById('settingsView').style.display = 'none';
       document.getElementById('timelineView').style.display = 'none';
@@ -3091,33 +3813,30 @@
       applyWrapMode();
       renderStatusBar();
       document.getElementById('terminalView').classList.add('active');
-      const qa = document.getElementById('quickActions');
-      const ak = document.getElementById('actionKeys');
-      if (a && a.status === 'blocked') {
-        const opts = a.options || ['yes, single permission', 'trust, always allow', 'no (tab to edit)'];
-        qa.innerHTML = opts.map(o => {
-          const cls = o.includes('yes') || o.includes('approve') ? 'btn-yes' : o.includes('trust') ? 'btn-trust' : 'btn-no';
-          const icon = o.includes('yes') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : o.includes('trust') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-          const label = o.includes('yes') ? 'Yes' : o.includes('trust') ? 'Yes All' : 'No';
-          return `<button class="${cls}" onclick="respond('${o.replace(/'/g, "\\'")}')">${icon} ${label}</button>`;
-        }).join('');
-        ak.innerHTML = '';
-      } else {
-        qa.innerHTML = '';
-        ak.innerHTML = '';
-      }
+      document.getElementById('actionKeys').innerHTML = '';
+      renderQuickActions();
       renderPairStrip();
+      disarmClear();  // an arm belongs to the pane it was made on, not to the next one opened
+      disarmShortcut();
+      disarmCtrl();
       refreshPane();
       refreshInterval = setInterval(refreshPane, 3000);
     }
 
     function closeTerminal() {
       activePane = null; clearInterval(refreshInterval);
+      disarmClear();
+      disarmShortcut();
+      disarmCtrl();
+      renderQuickActions();  // reads activePane, so it empties the bar now that there is none
       clearSel();  // after activePane, so rulerOn() is already false and the ruler goes with it
       document.getElementById('pairStrip').style.display = 'none';
       renderRecents();  // the pane just visited belongs at the front before the next poll, not after
       renderAgentTabs();
       document.getElementById('terminalView').classList.remove('active');
+      // Cleared on the way out, not only on the way into an agent: the next thing opened may be
+      // the Settings view, and a stale is-terminal would leave its hiding rules armed.
+      document.getElementById('terminalView').classList.remove('is-terminal');
       closeTermMenu();
       document.body.classList.remove('terminal-open');
       document.getElementById('agentListView').style.display = '';
@@ -3125,8 +3844,101 @@
       renderStatusBar();
     }
 
+    // --- Session history ---
+    // Back and forward across the panes this device has opened, the way a browser does it: a
+    // list plus a cursor, not a most-recently-used order. The Recents list already holds MRU,
+    // and stepping through something that reorders itself as you step is not navigation.
+    const NAV_MAX = 20;
+    let navHistory = [], navIndex = -1, navigating = false;
+
+    function noteVisit(paneId) {
+      if (navigating || navHistory[navIndex] === paneId) return;
+      navHistory = navPush(navHistory, navIndex, paneId, NAV_MAX);
+      navIndex = navHistory.length - 1;
+    }
+
+    function navTarget(step) {
+      // Both lists, or the history silently steps over every terminal ever visited.
+      return navStep(navHistory, navIndex, step, id => !!paneOf(id), activePane);
+    }
+
+    function navGo(step) {
+      const i = navTarget(step);
+      if (i < 0) return;
+      navIndex = i;
+      navigating = true;
+      try { openTerminal(navHistory[i]); } finally { navigating = false; }
+      if (window.cue) cue('page');
+    }
+
+    const QA_KEY = 'herdr_quick_actions';
+    function quickActionsOn() { return localStorage.getItem(QA_KEY) !== 'off'; }
+
+    // Off by default: the composer is multi-line for agents, and the terminal user who wants a
+    // line to end at Enter asks for it. One preference, not one per pane — the pane a setting was
+    // made on is rarely the pane the next command is typed into.
+    const ENTER_SEND_KEY = 'herdr_term_enter';
+    function enterSendsOn() { return localStorage.getItem(ENTER_SEND_KEY) === 'on'; }
+    function toggleEnterSends() {
+      try { localStorage.setItem(ENTER_SEND_KEY, enterSendsOn() ? 'off' : 'on'); }
+      catch (e) { /* private mode: session-only */ }
+      syncComposerHint();
+    }
+
+    // The placeholder is the only place the composer says what Enter does, so it is rewritten
+    // wherever either input to that answer changes: the setting, or the kind of the open pane.
+    function syncComposerHint() {
+      const send = enterSendsOn() && !!activePane && isShell(activePane);
+      document.getElementById('termInput').placeholder =
+        send ? 'Type…  ⏎ sends' : 'Type…  ⌘/Ctrl+Enter sends';
+    }
+
+    function toggleQuickActions() {
+      try { localStorage.setItem(QA_KEY, quickActionsOn() ? 'off' : 'on'); }
+      catch (e) { /* private mode: session-only */ }
+      renderQuickActions();
+      renderTermMenuState();
+    }
+
+    function renderQuickActions() {
+      const qa = document.getElementById('quickActions');
+      if (!activePane) { qa.innerHTML = ''; return; }
+      const a = agents.find(x => x.pane_id === activePane);
+      const blocked = a && a.status === 'blocked';
+      // An approval prompt is not a quick action the user chose to hide. Turning the bar off
+      // leaves the phone able to approve — otherwise the setting would quietly cost it the one
+      // thing this app exists to do.
+      if (!blocked && !quickActionsOn()) { qa.innerHTML = ''; return; }
+      const nav = (step, glyph, label) =>
+        `<button class="nav" onclick="navGo(${step})" aria-label="${label}"` +
+        `${navTarget(step) < 0 ? ' disabled' : ''}>${glyph}</button>`;
+      const navRow = `<div class="qa-nav">${nav(-1, '‹', 'Previous session')}` +
+        `${nav(1, '›', 'Next session')}` +
+        `<button class="qa-hide" onclick="toggleQuickActions()" title="Hide this bar — turn it ` +
+        `back on from the pane menu" aria-label="Hide quick actions bar">✕</button></div>`;
+      let middle = '';
+      if (blocked) {
+        const opts = a.options || ['yes, single permission', 'trust, always allow', 'no (tab to edit)'];
+        middle = opts.map(o => {
+          const cls = o.includes('yes') || o.includes('approve') ? 'btn-yes' : o.includes('trust') ? 'btn-trust' : 'btn-no';
+          const icon = o.includes('yes') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : o.includes('trust') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+          const label = o.includes('yes') ? 'Yes' : o.includes('trust') ? 'Yes All' : 'No';
+          return `<button class="${cls}" onclick="respond('${o.replace(/'/g, "\\'")}')">${icon} ${label}</button>`;
+        }).join('');
+      }
+      // Approvals first and on their own line, nav underneath: the row order is what puts the
+      // thing that needs answering closest to the terminal it is about.
+      qa.innerHTML = middle + (quickActionsOn() ? navRow : '');
+    }
+
     let paneLines = 200;
-    function refreshPane() { if (ws && activePane) ws.send(JSON.stringify({ type: 'read_pane', pane_id: activePane, lines: paneLines })); }
+    // Which end of the pane is being read. 'visible' is the live frame and nothing behind it,
+    // which is what Clear screen leaves behind; anything that asks for more history puts it back.
+    let paneSource = 'recent-unwrapped';
+    function refreshPane() {
+      if (ws && activePane) ws.send(JSON.stringify(
+        { type: 'read_pane', pane_id: activePane, lines: paneLines, source: paneSource }));
+    }
 
     // --- Slots ---
     // A pane is either alone in its tab (~139 cols) or sharing it with one sibling (~69). Which
@@ -3138,13 +3950,62 @@
       showToast('Adjusting pane…');
       ws.send(JSON.stringify({ type: 'set_slot', pane_id: activePane, slot: slotFor() }));
     }
-    function loadMore() { paneLines = Math.min(paneLines + 500, 5000); refreshPane(); }
+    // --- Clear screen ---
+    // Ctrl+L, the terminal's own clear — not the agent's /clear, which throws away its context.
+    // Two taps, because this button lives a thumb away from Refresh and the two are easy to
+    // confuse: one redraws what is there, the other wipes it. The first tap only arms.
+    // Long enough to read the armed label and decide, which three seconds was not. Still short
+    // enough that a button left armed in a pocket disarms itself.
+    const CLS_ARM_MS = 8000;
+    let clsArmedAt = 0;
+
+    function armClear() {
+      if (!ws || !activePane) return;
+      const btn = document.getElementById('clsBtn');
+      if (Date.now() - clsArmedAt < CLS_ARM_MS) {
+        disarmClear();
+        // Two halves, because no single one covers both kinds of pane. ctrl+l is the terminal's
+        // own clear and works in a shell; a full-screen TUI repaints straight over it, so the
+        // backlog is dropped as well and the view falls back to the live frame. Undone by Load
+        // more, or by scrolling up.
+        sendKey('ctrl+l');
+        paneSource = 'visible';
+        refreshPane();
+        showToast('Cleared — scroll up or Load more for history');
+        return;
+      }
+      clsArmedAt = Date.now();
+      btn.dataset.armed = '1';
+      btn.textContent = 'CLS?';
+      // Disarms itself rather than waiting to be pressed again: a button left armed across a
+      // pocket is the accidental clear this exists to stop.
+      setTimeout(() => { if (Date.now() - clsArmedAt >= CLS_ARM_MS) disarmClear(); }, CLS_ARM_MS);
+    }
+
+    function disarmClear() {
+      clsArmedAt = 0;
+      const btn = document.getElementById('clsBtn');
+      delete btn.dataset.armed;
+      btn.textContent = 'CLS';
+    }
+
+    // Asking for history is what takes the pane back off the live frame Clear screen left it on.
+    function loadMore() {
+      paneSource = 'recent-unwrapped';
+      paneLines = Math.min(paneLines + 500, 5000);
+      refreshPane();
+    }
     function sendText() {
       const i = document.getElementById('termInput');
       if (!i.value || !ws || !activePane) return;
-      ws.send(JSON.stringify({ type: 'send_text', pane_id: activePane, text: i.value }));
-      ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: ['Enter'] }));
-      i.value = ''; autoGrow(i); setTimeout(refreshPane, 500);
+      if (i.value.length > SEND_TEXT_MAX) {
+        showToast(`Text must be ${SEND_TEXT_MAX} characters or fewer.`); return;
+      }
+      const paneId = activePane;
+      ws.send(JSON.stringify({ type: 'send_text', pane_id: paneId, text: i.value }));
+      ws.send(JSON.stringify({ type: 'send_keys', pane_id: paneId, keys: ['Enter'] }));
+      i.value = ''; autoGrow(i);
+      if (isShell(paneId)) burstPoll(paneId); else setTimeout(refreshPane, 500);
     }
     function sendKey(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: [k] })); setTimeout(refreshPane, 300); }
     function sendKeys(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: k })); setTimeout(refreshPane, 300); }
@@ -3160,6 +4021,9 @@
       { label: 'Ctrl Z', keys: ['ctrl+z'], danger: true },
     ];
     const DANGER_KEYS = new Set(['ctrl+c', 'ctrl+d', 'ctrl+z']);
+    // What a physical Ctrl+<letter> may send, derived from the presets so the two cannot drift
+    // apart — and both are a subset of the relay's SAFE_KEYS, which refuses anything else anyway.
+    const CTRL_CHORDS = CTRL_PRESETS.map(p => p.keys[0]);
 
     function fireKey(k) {
       if (window.cue) cue('tick');
@@ -3214,8 +4078,8 @@
       keyQueue = []; armedMod = null; renderKeyQueue(); renderMods();
     }
 
-    // The three docks share the space above the composer, so only one is ever open.
-    const DOCKS = ['termKeys', 'quickDock', 'promptDock'];
+    // The docks share the space above the composer, so only one is ever open.
+    const DOCKS = ['termKeys', 'quickDock', 'promptDock', 'ctrlDock'];
 
     function closeDocks() {
       DOCKS.forEach(d => { document.getElementById(d).style.display = 'none'; });
@@ -3236,6 +4100,52 @@
     // Clearing is destructive and sits next to two controls that are not, so it takes two taps.
     // The armed state expires on its own — a stray first tap must not leave a live trigger behind.
     let clearArmedAt = 0;
+    // --- Dictation ---
+    // The Web Speech API, not the keyboard's own dictation button: reaching that one means
+    // raising the keyboard first, which is the half of the screen this is trying not to spend.
+    // Chrome and Safari have it (prefixed on Safari); Firefox does not, and the button stays
+    // hidden there rather than failing on press.
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let dictation = null, dictationBase = '';
+
+    function toggleDictation() {
+      if (dictation) { dictation.stop(); return; }
+      // The microphone is gated on a secure context, and the ordinary way this app is reached at
+      // home is plain http on a LAN address. Say which URL works rather than failing silently.
+      if (!window.isSecureContext) {
+        showToast('Dictation needs https — open the app over the tunnel URL');
+        return;
+      }
+      const input = document.getElementById('termInput');
+      const r = new SpeechRec();
+      r.lang = navigator.language || 'en-US';
+      r.continuous = true;
+      r.interimResults = true;
+      // Whatever is already typed stays: dictation appends to the composer, it does not own it.
+      dictationBase = input.value && !/\s$/.test(input.value) ? input.value + ' ' : input.value;
+      r.onresult = e => {
+        let said = '';
+        for (let i = 0; i < e.results.length; i++) said += e.results[i][0].transcript;
+        input.value = dictationBase + said;
+        autoGrow(input);  // never focus() — a focused textarea is the keyboard this avoids
+      };
+      r.onerror = e => {
+        showToast(e.error === 'not-allowed' ? 'Microphone permission denied' : `Dictation: ${e.error}`);
+      };
+      r.onend = () => { dictation = null; renderMicState(); };
+      dictation = r;
+      renderMicState();
+      try { r.start(); } catch (err) { dictation = null; renderMicState(); }
+    }
+
+    function renderMicState() {
+      const btn = document.getElementById('micBtn');
+      btn.hidden = !SpeechRec;
+      btn.style.color = dictation ? 'var(--red)' : 'var(--muted)';
+      btn.style.borderColor = dictation ? 'var(--red)' : 'var(--border)';
+      btn.setAttribute('aria-label', dictation ? 'Stop dictating' : 'Dictate');
+    }
+
     function clearComposer(btn) {
       if (Date.now() - clearArmedAt > 600) {
         clearArmedAt = Date.now();
@@ -3254,7 +4164,12 @@
 
     function toggleKeysDock() { toggleDock('termKeys'); }
 
-    function toggleQuickDock() { toggleDock('quickDock'); }
+    // The button stays in the rail over a terminal as the place script calls will live. Its dock
+    // is not the thing to open there — yes / no / continue answer an agent, not a shell prompt.
+    function toggleQuickDock() {
+      if (activePane && isShell(activePane)) { showToast('Scripts — coming soon'); return; }
+      toggleDock('quickDock');
+    }
 
     function quickSend(text) {
       if (!ws || !activePane) return;
@@ -3276,18 +4191,31 @@
       }
     }
 
+    // The presets exist in two places \u2014 the keys pad's disclosure and the terminal's own dock \u2014
+    // so the armed state is painted into both from one function rather than into whichever one
+    // the tap came from. Painting both also means the disarm below actually repaints: the old
+    // toggle-twice trick left "Confirm?" on screen, because a toggle only paints an empty grid.
+    function paintCtrlPresets() {
+      const html = CTRL_PRESETS.map(p => {
+        const armed = p.label === ctrlConfirm;
+        const cls = p.danger ? (armed ? 'ctrl-key confirm' : 'ctrl-key danger') : 'ctrl-key';
+        return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${armed ? 'Confirm?' : p.label}</button>`;
+      }).join('');
+      ['ctrlPresets', 'ctrlDockGrid'].forEach(id => { document.getElementById(id).innerHTML = html; });
+    }
+
     function toggleCtrlPresets() {
       const el = document.getElementById('ctrlPresets');
       const chevron = document.getElementById('ctrlChevron');
       const show = el.style.display === 'none';
       el.style.display = show ? 'grid' : 'none';
       chevron.textContent = show ? '\u25be' : '\u25b8';
-      if (show && !el.innerHTML) {
-        el.innerHTML = CTRL_PRESETS.map(p => {
-          const cls = p.danger ? 'ctrl-key danger' : 'ctrl-key';
-          return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${p.label}</button>`;
-        }).join('');
-      }
+      if (show) paintCtrlPresets();
+    }
+
+    function toggleCtrlDock() {
+      paintCtrlPresets();
+      toggleDock('ctrlDock');
     }
 
     function pressCtrl(label) {
@@ -3299,26 +4227,48 @@
       if (preset.danger && ctrlConfirm !== label) {
         ctrlConfirm = label;
         if (window.cue) cue('error');
-        const el = document.getElementById('ctrlPresets');
-        el.innerHTML = CTRL_PRESETS.map(p => {
-          const cls = p.danger ? (p.label === label ? 'ctrl-key confirm' : 'ctrl-key danger') : 'ctrl-key';
-          const txt = p.label === label ? 'Confirm?' : p.label;
-          return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${txt}</button>`;
-        }).join('');
-        setTimeout(() => { ctrlConfirm = null; toggleCtrlPresets(); toggleCtrlPresets(); }, 3000);
+        paintCtrlPresets();
+        setTimeout(() => { if (ctrlConfirm === label) disarmCtrl(); }, 3000);
         return;
       }
-      ctrlConfirm = null;
+      disarmCtrl();
       sendKeys(preset.keys);
+    }
+
+    function disarmCtrl() {
+      if (ctrlConfirm === null) return;
+      ctrlConfirm = null;
+      paintCtrlPresets();
     }
 
     function toggleArrows() { }
     function hideArrows() { }
-    function respond(t) { if (!ws || !activePane) return; if (window.cue) cue('success'); ws.send(JSON.stringify({ type: 'respond', pane_id: activePane, text: t })); document.getElementById('quickActions').innerHTML = ''; setTimeout(refreshPane, 500); }
+    function respond(t) {
+      if (!ws || !activePane) return;
+      if (window.cue) cue('success');
+      ws.send(JSON.stringify({ type: 'respond', pane_id: activePane, text: t }));
+      // Optimistic, and corrected by the next poll: the prompt has been answered, so the approval
+      // buttons go now rather than lingering for up to three seconds over an agent that is
+      // already working. Re-rendered rather than emptied, so back and forward survive it.
+      const a = agents.find(x => x.pane_id === activePane);
+      if (a) a.status = 'busy';
+      renderQuickActions();
+      setTimeout(refreshPane, 500);
+    }
     // Enter inserts a newline; Ctrl/Cmd+Enter sends. Reversed from P2 deliberately: a transferred
     // payload is multi-line, and submitting it on the first Enter defeats the review checkpoint.
+    // Over a terminal that reversal is opt-out — see enterAction.
     document.getElementById('termInput').addEventListener('keydown', e => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendText(); }
+      const shell = !!activePane && isShell(activePane);
+      const chord = ctrlChord(e, { shell, empty: !e.target.value, allowed: CTRL_CHORDS });
+      if (chord) {
+        e.preventDefault();
+        sendKeys([chord]);
+        showToast(`Sent ${chord}`);  // the pane may show nothing for it, and silence reads as broken
+        return;
+      }
+      const act = enterAction(e, { enterSends: enterSendsOn(), shell: shell });
+      if (act === 'send') { e.preventDefault(); sendText(); }
     });
     document.getElementById('termInput').addEventListener('input', e => autoGrow(e.target));
     // Ctrl/Cmd+Shift+P switches to the paired pane. On document, not the composer, so it works
@@ -3519,8 +4469,9 @@
     setInputFont(currentInputFont());
     applyWrapMode();
     placePairStrip();
-    document.getElementById('shortcutRow').innerHTML = SHORTCUTS.map((s, i) =>
-      `<button class="nav-key" style="justify-content:flex-start" onclick="insertShortcut(${i})">${escapeHtml(s.label)}</button>`).join('');
+    renderMicState();  // stays hidden where the browser has no speech recognition
+    loadTermShortcuts();
+    renderShortcutDock();  // no pane is open yet, so this draws the agent prompts
   </script>
 </body>
 
