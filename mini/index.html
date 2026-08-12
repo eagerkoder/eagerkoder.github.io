@@ -2646,6 +2646,9 @@
     // a link rather than retyped on a phone. Scheme-checked: this writes the address the app will
     // connect to, so anything that is not a WebSocket URL is ignored.
     const q = new URLSearchParams(location.search);
+    // A push carries its pane in the URL. Keep it until the relay snapshot proves that the pane
+    // exists; opening immediately would race the initial websocket connection.
+    let notificationPane = q.get('pane') || '';
     const urlRelay = q.get('relay');
     if (urlRelay && /^wss?:\/\/[^\s]+$/i.test(urlRelay)) localStorage.setItem('herdr_relay_url', urlRelay);
     const urlToken = q.get('token');
@@ -3043,7 +3046,13 @@
       let wsUrl = url;
       if (token) wsUrl += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
       ws = new WebSocket(wsUrl);
-      ws.onopen = () => { setStatus('connected'); if (window.cue) cue('ready'); };
+      // Re-announcing the push subscription here rather than only at subscribe time is what makes
+      // it survive the socket being down at the wrong moment — on a phone that is most of the time.
+      ws.onopen = () => {
+        setStatus('connected');
+        if (window.cue) cue('ready');
+        announceSubscription();
+      };
       ws.onclose = () => { setStatus('disconnected'); setTimeout(connect, 3000); };
       ws.onerror = () => setStatus('disconnected');
       ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
@@ -3167,6 +3176,7 @@
           }
         }
         openPendingStart();
+        openNotificationPane();
       }
       else if (msg.type === 'agent_update') {
         const update = msg.agent;
@@ -4182,6 +4192,33 @@
     // opens or titles a pane. Pairs deliberately keep looking only at `agents`.
     function paneOf(id) {
       return agents.find(a => a.pane_id === id) || shells.find(s => s.pane_id === id) || null;
+    }
+
+    function openNotificationPane() {
+      if (!notificationPane || !paneOf(notificationPane)) return;
+      openTerminal(notificationPane);
+      notificationPane = '';
+      const url = new URL(location.href);
+      url.searchParams.delete('pane');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+
+    // A service worker focuses an existing app before posting this message; a fresh app receives
+    // the same pane through its URL above.
+    //
+    // On navigator.serviceWorker and not on window: Client.postMessage() delivers to the
+    // ServiceWorkerContainer, which is a different EventTarget. A window listener hears iframes
+    // and other windows — everything except the one sender this is for.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type !== 'navigate') return;
+        try {
+          const url = new URL(event.data.url, location.href);
+          if (url.origin !== location.origin) return;
+          notificationPane = url.searchParams.get('pane') || '';
+          openNotificationPane();
+        } catch (e) { /* malformed service-worker message */ }
+      });
     }
     function isShell(id) { return shells.some(s => s.pane_id === id); }
 
@@ -5542,6 +5579,16 @@
       }
     }
 
+    // Tell the relay about this device's subscription. Returns whether it went out — the caller
+    // decides what to say about a socket that was not up. Idempotent by design: the relay keeps a
+    // set, so re-announcing on every connect is what heals a subscription made while offline, and
+    // repopulates a relay that lost its push_subs.json.
+    function announceSubscription() {
+      if (!pushSubscription || !ws || ws.readyState !== 1) return false;
+      ws.send(JSON.stringify({ type: 'push_subscribe', subscription: pushSubscription.toJSON() }));
+      return true;
+    }
+
     async function togglePush() {
       if (pushSubscription) {
         // Unsubscribe
@@ -5589,10 +5636,15 @@
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicKey)
           });
-          if (ws && ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'push_subscribe', subscription: pushSubscription.toJSON() }));
-          }
+          // Subscribing in the browser is only half of it — the relay cannot push to a device it
+          // has never been told about. This used to be attempted once and dropped silently if the
+          // socket happened to be down, which left the button reading "Enabled" for a device the
+          // relay had no record of, and no notification would ever arrive.
           updatePushUI();
+          if (!announceSubscription()) {
+            document.getElementById('pushStatus').innerHTML =
+              '<span style="color:var(--orange)">● Pending</span> — allowed on this device, telling the relay when it reconnects.';
+          }
         } catch (e) {
           document.getElementById('pushStatus').textContent = 'Error: ' + e.message;
         }
