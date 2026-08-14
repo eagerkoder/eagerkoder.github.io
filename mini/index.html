@@ -402,8 +402,7 @@
       scroll-padding: 0 12px;
     }
 
-    body.terminal-open .agent-tabs,
-    body.conversation-open .agent-tabs {
+    body.terminal-open .agent-tabs {
       display: flex;
     }
 
@@ -1520,6 +1519,82 @@
       }
     }
 
+    /* Wide enough, and the three sit in the header exactly as they always did: display:contents
+       takes the wrapper out of the flex line so the header's own gap spaces them. */
+    .fire-wrap { display: contents; }
+    .fire-menu { display: flex; gap: 8px; }
+    .fire-toggle,
+    .fire-label { display: none; }
+
+    /* Narrow, and they fold behind one control. None is frequent — two take two taps, one throws
+       away the agent's context, and the pane re-reads itself anyway — so a tap to reach them is
+       the right price for a header that fits. Same breakpoint as the rest of the layout. */
+    @media (max-width: 767px) {
+      .fire-wrap {
+        display: flex;
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      /* Shaped like what it is. A bare glyph in a row of icon buttons reads as one more action;
+         the border and the caret say a menu opens, which is the same promise .who-btn makes two
+         buttons to the left of it. */
+      .term-header .fire-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-family: 'SF Mono', 'Menlo', monospace;
+        font-size: 0.7rem;
+        padding: 4px 8px;
+        min-height: 28px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+
+      .fire-toggle::after {
+        content: '▾';
+        font-family: system-ui, sans-serif;
+        font-size: 0.8rem;
+        line-height: 1;
+      }
+
+      .term-header .fire-toggle[aria-expanded="true"] {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+
+      .fire-menu {
+        display: none;
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 20;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+      }
+
+      .fire-menu.open { display: flex; }
+
+      /* One column of rows rather than three icons in a popup: a menu is read down its left edge,
+         and the armed label needs the width anyway. */
+      .term-header .fire-menu button {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        min-width: 128px;
+        min-height: 34px;
+        padding: 4px 10px;
+        text-align: left;
+      }
+      .fire-label { display: inline; font-size: 0.7rem; }
+    }
+
     /* Pane menu — anchored to its gear button, so it needs a positioned ancestor of its own
        rather than the header, whose other children must stay in normal flow. */
     .term-menu-wrap {
@@ -1732,33 +1807,25 @@
       z-index: 2;
     }
 
-    /* The strip sits at the foot of the view and stays there while the thread scrolls under it —
-       the same job the tab bar does at the top of a pane, at the end of the thumb rather than the
-       end of the reach. */
+    /* Conversation tabs occupy pane tabs' exact slot in the shared bottom header. A second strip
+       above it would make two rows of tabs say the same kind of thing. */
     .conv-strip {
-      position: sticky;
-      bottom: 0;
-      z-index: 2;
-      display: flex;
-      gap: 6px;
-      /* Pushed to the bottom even when the thread is short: a strip floating mid-screen under two
-         messages reads as part of the thread. */
-      margin-top: auto;
-      padding: 6px 12px;
-      background: var(--bg);
-      border-top: 1px solid var(--border);
+      display: none;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
-      /* A fling past the last tab otherwise chains to the page, where Chrome on macOS reads a
-         horizontal swipe as navigate-back. */
       overscroll-behavior-x: none;
+      scroll-behavior: smooth;
       scroll-snap-type: x proximity;
     }
 
-    .conv-strip:empty {
-      display: none;
+    body.conversation-open .conv-strip:not(:empty) {
+      display: flex;
     }
 
     .conv-strip::-webkit-scrollbar {
@@ -1771,15 +1838,29 @@
       gap: 5px;
       flex: none;
       scroll-snap-align: start;
-      max-width: 46vw;
-      min-height: 32px;
-      padding: 4px 10px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      max-width: 132px;
+      min-height: 44px;
+      padding: 0;
+      border: none;
       background: none;
-      color: var(--muted);
-      font-size: 0.65rem;
       cursor: pointer;
+      font: inherit;
+    }
+
+    .conv-strip .conv-tab .pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 7px;
+      box-shadow: inset 0 0 0 1px var(--border);
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
     }
 
     .conv-strip .conv-tab .name {
@@ -1788,10 +1869,11 @@
       white-space: nowrap;
     }
 
-    .conv-strip .conv-tab[aria-current="true"] {
-      border-color: var(--blue);
-      color: var(--text);
-      background: var(--surface);
+    .conv-strip .conv-tab[aria-current="true"] .pill {
+      color: var(--bg);
+      background: var(--blue);
+      box-shadow: inset 0 0 0 1px var(--blue);
+      font-weight: 700;
     }
 
     .conv-strip .conv-tab .dot {
@@ -1844,8 +1926,9 @@
       display: flex;
     }
 
-    /* Who is in this conversation, as a disclosure rather than a block above every thread. */
-    .conv-view-head .who-btn {
+    /* Who is in this conversation, as a disclosure rather than a block above every thread. The
+       same control in both headers, because it opens the same panel onto the same conversation. */
+    .who-btn {
       font-size: 0.7rem;
       padding: 4px 8px;
       border-radius: 6px;
@@ -1857,7 +1940,7 @@
       min-height: 28px;
     }
 
-    .conv-view-head .who-btn[aria-expanded="true"] {
+    .who-btn[aria-expanded="true"] {
       border-color: var(--blue);
       color: var(--blue);
     }
@@ -2097,6 +2180,28 @@
 
     .conv-roster .conv-eye[aria-pressed="true"] {
       color: var(--muted);
+    }
+
+    /* The pane whose thread this is. Same mark in the same place, without the affordance — the
+       row is not offering something it will refuse. */
+    .conv-roster .conv-eye.reading {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      opacity: 0.45;
+    }
+
+    /* In the pane the header is outside the scroller, so the panel needs no sticky of its own —
+       it hangs off the top of the thread it covers. */
+    #convPaneRoster {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 6;
+      max-height: 70%;
+      overflow-y: auto;
     }
 
     /* Folded out of the thread, still in the conversation. Dimmed rather than struck through: it
@@ -3208,6 +3313,8 @@
     <h1>herdr</h1>
     <!-- One badge per live agent, selectable like tabs. Filled by renderAgentTabs. -->
     <div class="agent-tabs" id="agentTabs"></div>
+    <!-- Replaces pane tabs while a standalone conversation is open. -->
+    <div class="conv-strip" id="convStrip"></div>
     <div class="nav-group">
       <button id="navTimeline" onclick="toggleTimeline()" aria-label="Activity"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3361,10 +3468,6 @@
     <div class="conv-panel" id="convViewRoster" hidden></div>
     </div>
     <div class="conv-thread" id="convViewThread"></div>
-    <!-- The conversations, as tabs, so moving between them does not mean going back to the list
-         and finding your place in it again. Same list and same order as the landing page, down to
-         the auto ones being there only when they are shown there. -->
-    <div class="conv-strip" id="convStrip"></div>
   </div>
 
   <!-- Shell's last row. Left: when the open pane last changed. Right: whether it is doing
@@ -3388,20 +3491,40 @@
            is still on screen and this one is free to say something else. -->
       <span class="dot" id="paneDot"></span>
       <span class="title" id="termTitle"></span>
+      <!-- Only while the thread is what is on screen: the rows have no conversation to manage.
+           Left of QUIT, so the two undoable things stay a thumb from the two that are not. -->
+      <button class="who-btn" id="paneConvWho" onclick="toggleConvPaneRoster()" hidden
+        aria-expanded="false" aria-controls="convPaneRoster"
+        aria-label="Who is in this conversation, and what to do with it"></button>
       <!-- Left of Refresh, and armed by the first tap: the three sit a thumb apart and two of
-           them are not undoable. See armFire. -->
-      <button class="refresh-btn cls-btn" id="quitBtn" onclick="armQuit()"
-        aria-label="Quit what is running in this pane">QUIT</button>
-      <button class="refresh-btn cls-btn" id="clsBtn" onclick="armClear()"
-        aria-label="Clear this pane">CLS</button>
-      <button class="refresh-btn" onclick="refreshPane()" aria-label="Refresh pane"><svg width="16" height="16"
-          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-          stroke-linejoin="round">
-          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-          <path d="M3 3v5h5" />
-          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-          <path d="M16 16h5v5" />
-        </svg></button>
+           them are not undoable. See armFire.
+           One pair of buttons, two layouts: side by side where the header has the room, and behind
+           f() where it does not. Moved rather than duplicated, because arming is state on the
+           element — two copies of QUIT would be two arms, and only one of them counting down. -->
+      <div class="fire-wrap">
+        <button class="refresh-btn fire-toggle" id="fireBtn" onclick="toggleFireMenu()"
+          aria-haspopup="true" aria-expanded="false"
+          aria-label="Quit or clear this pane">f()</button>
+        <div class="fire-menu" id="fireMenu">
+          <button class="refresh-btn cls-btn" id="quitBtn" onclick="armQuit()"
+            aria-label="Quit what is running in this pane">QUIT</button>
+          <button class="refresh-btn cls-btn" id="clsBtn" onclick="armClear()"
+            aria-label="Clear this pane">CLS</button>
+          <!-- Refresh rides with them. The pane polls itself every few seconds, so this is the
+               button for the one state where it does not: past POLL_MAX_LINES the poll stops and
+               a manual read is the only way to update. The icon alone says nothing in a menu, so
+               the word appears with the fold. -->
+          <button class="refresh-btn" id="refreshBtn" onclick="closeFireMenu(); refreshPane()"
+            aria-label="Refresh pane"><svg width="16" height="16"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16h5v5" />
+            </svg><span class="fire-label">Refresh</span></button>
+        </div>
+      </div>
       <div class="term-menu-wrap">
         <button class="refresh-btn" id="termMenuBtn" onclick="toggleTermMenu()" aria-label="Pane settings"
           aria-haspopup="true" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -3505,6 +3628,10 @@
     <!-- Pair strip — absent unless the active pane belongs to a pair -->
     <div class="pair-strip" id="pairStrip" style="display:none"></div>
     <div class="term-wrap" id="termWrap">
+      <!-- The same roster and actions the conversation view owns, opened by the same button in
+           the header above it. Over the thread rather than above it, for the reason .conv-panel
+           gives: a thread that jumps a hundred pixels loses the reader's place. -->
+      <div class="conv-panel" id="convPaneRoster" hidden></div>
       <div class="term-content" id="termContent"></div>
       <!-- The same pane, read as a thread. A sibling of the rows rather than a replacement for
            them: switching views is a re-render of what is already in memory, and nothing about
@@ -7611,6 +7738,7 @@
       box.hidden = !on;
       if (!on) {
         box.innerHTML = '';
+        hideConvPaneRoster();
         convViewToken++;
         // Picks were bubbles, and they filled the same selection bar the rows fill, so they leave
         // with the thread. Only then: this runs on every recorded read, and clearing unasked would
@@ -7646,9 +7774,23 @@
       // Filtered in the composer rather than in the renderer: picks, Summary and the count are all
       // positions in the list that was drawn, so the list that was drawn has to be the list they
       // index.
-      const entries = composed.entries, all = composed.all;
+      // The same per-conversation filter the standalone view reads. The open pane is exempt from
+      // it: this is its thread, and a pane that hid itself would be reading an empty screen with no
+      // obvious way back.
+      const hidden = convHidden(conv.id);
+      const shows = e => (e.key || key) === key || !hidden.has(e.key || key);
+      const entries = hidden.size ? composed.entries.filter(shows) : composed.entries;
+      const all = hidden.size ? composed.all.filter(shows) : composed.all;
       const thread = members === conv.members ? conv : Object.assign({}, conv, {members});
       const paired = joint && (conv.pair_id || pairFor(pairs, a.pane_id)) && members.length === 2;
+      // While the panel is open it is this conversation the actions act on. convViewId is "the
+      // conversation being managed" and not "the one the standalone view is showing" — the two
+      // views are never on screen at once, so one variable answers for both.
+      if (convPaneRoster) convViewId = conv.id;
+      // Under the pane's own header, not inside the thread: the same control in the same place as
+      // the conversation view's, and drawn separately so an arriving message cannot rewrite the
+      // roster under a reader who has just opened it.
+      renderConvPaneChrome(conv, recs, hidden, key);
       box.innerHTML = convHeadHtml(thread, key, joint ? -1 : entries.length,
         joint ? entries.length : -1, convsForPane(a)) +
         (joint ? convMembersHtml(thread, recs) : '') + (entries.length
@@ -8356,6 +8498,19 @@
         : 'This pane has no Project, so the strip shows the others that have none either.';
     }
 
+    // f() — the fold QUIT and CLS live behind on a narrow header. Open state is the class, so the
+    // media query alone decides whether the fold exists at all.
+    function toggleFireMenu() { setFireMenu(!document.getElementById('fireMenu').classList.contains('open')); }
+
+    function setFireMenu(open) {
+      document.getElementById('fireMenu').classList.toggle('open', open);
+      document.getElementById('fireBtn').setAttribute('aria-expanded', String(open));
+      // An arm is a promise about the next tap, and the button carrying it is about to be hidden.
+      if (!open) { disarmQuit(); disarmClear(); }
+    }
+
+    function closeFireMenu() { if (document.getElementById('fireMenu').classList.contains('open')) setFireMenu(false); }
+
     function closeTermMenu() {
       document.getElementById('termMenu').style.display = 'none';
       document.getElementById('termMenuBtn').setAttribute('aria-expanded', 'false');
@@ -8364,8 +8519,11 @@
     // Dismiss on any click outside the menu and its button, and on Escape.
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.term-menu-wrap')) closeTermMenu();
+      if (!e.target.closest('.fire-wrap')) closeFireMenu();
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTermMenu(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeTermMenu(); closeFireMenu(); }
+    });
 
     function fingerprint(a, role) {
       return {
@@ -9243,12 +9401,55 @@
       try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(all)); }
       catch (e) { /* private mode: this session only */ }
       convStandaloneHtml = '';
+      renderConvManage();
+    }
+
+    // Whichever of the two views is on screen. Same roster, same actions; only the frame differs,
+    // and each of these returns immediately when its own view is not up.
+    function renderConvManage() {
       renderConvStandalone(false);
+      renderConvView();
     }
 
     function toggleConvRoster() {
       convRosterOpen = !convRosterOpen;
       renderConvStandalone(false);
+    }
+
+    // The pane's own copy of that disclosure. Separate state: closing the panel in one view must
+    // not close it in the other, and the two are never on screen together.
+    let convPaneRoster = false;
+
+    function toggleConvPaneRoster() {
+      convPaneRoster = !convPaneRoster;
+      renderConvView();
+    }
+
+    // The button and its panel, which live in the pane header rather than in the thread. The panel
+    // is diffed on its own: renderConvView runs on every poll, and rebuilding open rows three times
+    // a minute would take a reader's tap target out from under their finger.
+    let convPaneRosterHtml = '';
+
+    function renderConvPaneChrome(conv, recs, hidden, key) {
+      const who = document.getElementById('paneConvWho'), panel = document.getElementById('convPaneRoster');
+      const n = (conv.members || []).length;
+      who.hidden = false;
+      who.textContent = `${n} pane${n === 1 ? '' : 's'} ▾`;
+      who.setAttribute('aria-expanded', convPaneRoster ? 'true' : 'false');
+      panel.hidden = !convPaneRoster;
+      const html = convPaneRoster ? convRosterHtml(conv, recs, hidden, key) : '';
+      if (html !== convPaneRosterHtml) { panel.innerHTML = html; convPaneRosterHtml = html; }
+    }
+
+    // Leaving the thread takes the panel with it — it acts on a conversation the pane is no longer
+    // showing, and the header behind it belongs to the rows.
+    function hideConvPaneRoster() {
+      const who = document.getElementById('paneConvWho'), panel = document.getElementById('convPaneRoster');
+      who.hidden = true;
+      panel.hidden = true;
+      panel.innerHTML = '';
+      convPaneRosterHtml = '';
+      convPaneRoster = false;
     }
     // What the standalone view last drew, so Copy and Start again read the same thread the reader
     // is looking at rather than fetching it a second time and getting a different one.
@@ -9262,7 +9463,7 @@
     // member is recording or ended, and that is derived (D1). This pulls what that member said out
     // of the thread and stops its transcript being referenced, so it is worded as what it does and
     // asked twice.
-    function convRosterHtml(conv, recs, hidden) {
+    function convRosterHtml(conv, recs, hidden, reading) {
       const live = new Set(agents.map(x => convMemberKey(x)));
       const off = hidden || new Set();
       const rows = (conv.members || []).map((m, i) => {
@@ -9273,9 +9474,12 @@
           // Folding a member out of the thread, and nothing more. Beside the name because that is
           // what it acts on, and pressed rather than checked because the row already says which
           // state it is in by how it is drawn.
-          `<button class="conv-eye" data-key="${escapeHtml(m.key)}" aria-pressed="${out ? 'true' : 'false'}"` +
-          ` onclick="toggleConvHidden(this.dataset.key)"` +
-          ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>` +
+          // Not on the pane whose thread this is: hiding it would leave the reader on an empty
+          // screen with the way back on the thing they just hid.
+          (m.key === reading ? '<span class="conv-eye reading" aria-hidden="true">◉</span>'
+            : `<button class="conv-eye" data-key="${escapeHtml(m.key)}" aria-pressed="${out ? 'true' : 'false'}"` +
+              ` onclick="toggleConvHidden(this.dataset.key)"` +
+              ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>`) +
           `<span class="dot" style="background:${convTint(i)}"></span>` +
           `<span class="who">${escapeHtml(rec.label || m.label || 'Former pane')}</span>` +
           agentBadge((rec.spawn || {}).agent || '') +
@@ -9459,7 +9663,17 @@
       saveConvIndex(items);
       renderConversations();
       // Straight into the copy: the next thing the user does is add the member they made it for.
-      openConversation(copy.id);
+      // From a pane that means switching that pane's thread to it rather than leaving the pane —
+      // the copy holds this pane, so it is a grouping the pane can be read under.
+      const a = document.getElementById('convView').style.display === 'none' && activePane
+        ? paneOf(activePane) : null;
+      if (a && (copy.members || []).some(m => m.key === convMemberKey(a))) {
+        convViewId = copy.id;
+        convSetView(a, copy.id);
+        renderConvBar();
+      } else {
+        openConversation(copy.id);
+      }
       showToast(`Copied to "${copy.name}".`);
     }
 
@@ -9471,10 +9685,10 @@
 
     async function convToggleAdd() {
       convAdding = !convAdding;
-      if (!convAdding) { convPickRecs = []; renderConvStandalone(false); return; }
-      renderConvStandalone(false);
+      if (!convAdding) { convPickRecs = []; renderConvManage(); return; }
+      renderConvManage();
       convPickRecs = await convAll();
-      if (convAdding) renderConvStandalone(false);
+      if (convAdding) renderConvManage();
     }
 
     // A member built from a record instead of from a pane: the session has ended, so there is no
@@ -9545,9 +9759,9 @@
         `<button class="conv-tab" data-conv-id="${escapeHtml(r.c.id)}"` +
         ` aria-current="${r.c.id === convViewId ? 'true' : 'false'}"` +
         ` onclick="openConversation(this.dataset.convId)">` +
-        `<span class="dot${r.pulse}" style="background:${r.dot}" aria-hidden="true"></span>` +
+        `<span class="pill"><span class="dot${r.pulse}" style="background:${r.dot}" aria-hidden="true"></span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
-        (r.c.auto ? '<span class="tier">auto</span>' : '') + '</button>').join('');
+        (r.c.auto ? '<span class="tier">auto</span>' : '') + '</span></button>').join('');
       const open = el.querySelector('[aria-current="true"]');
       if (open) open.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
@@ -9677,6 +9891,7 @@
       // The view this pane was last read in, restored with it — after activePane is set, which is
       // what it reads.
       renderConvView();
+      closeFireMenu();
       disarmClear();  // an arm belongs to the pane it was made on, not to the next one opened
       disarmQuit();
       disarmAbort();
@@ -9689,6 +9904,7 @@
     function closeTerminal() {
       activePane = null; clearInterval(refreshInterval);
       syncPaneLoading();  // after activePane, so a pane closed mid-wait takes the pill with it
+      closeFireMenu();
       disarmClear();
       disarmQuit();
       disarmAbort();
@@ -10016,6 +10232,7 @@
 
     function armClear() {
       armFire('clsBtn', () => {
+        closeFireMenu();
         const line = isShell(activePane) ? 'clear' : '/clear';
         sendLine(line);
         // The screen the pane repaints after a clear is the live frame; the backlog behind it is
@@ -10027,6 +10244,7 @@
 
     function armQuit() {
       armFire('quitBtn', () => {
+        closeFireMenu();
         const line = isShell(activePane) ? 'exit' : '/quit';
         sendLine(line);
         showToast(`Sent ${line}`);
