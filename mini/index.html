@@ -91,6 +91,7 @@
         } catch (e) { /* no audio on this device: not a reason to break the caller */ }
       };
     })();
+
   </script>
   <style>
     /* Dark is the product default, not the OS's. Light is opt-in from Settings and goes all the
@@ -4014,8 +4015,7 @@
     </div>
   </div>
 
-  <script>
-
+    <script>
     let ws = null, agents = [], activePane = null, refreshInterval = null, userScrolledUp = false;
     // Shell panes, from the same snapshot as `agents`. Empty against a relay with terminal mode
     // off, which sends no `shells` key at all — its presence is the feature gate.
@@ -4087,6 +4087,8 @@
       return end > (at.working || 0) ? end : 0;
     }
 
+  </script>
+  <script>
     // --- Attention ---
     //
     // A pane is asking for you when it is blocked or done and you have not looked at it since.
@@ -4177,6 +4179,8 @@
       if (dropped) saveAcked();
     }
 
+  </script>
+  <script>
     // How recently a pane moved, in the three bands the colours are drawn from. One function so
     // the dot and the tab strip's cache signature cannot disagree about which band a pane is in.
     function activityBucket(paneId) {
@@ -4221,6 +4225,8 @@
     // Pairs live only in this browser. The relay has no pair message and stores no pair data.
     let pairs = [], pairSource = null, pairPartner = null, transferSelection = '';
 
+  </script>
+  <script>
     // --- P3 pair logic (pure) --- start
     // Pure, dependency-free, and extracted verbatim by tests/test_pairs.js. Keep it that way:
     // anything here that touches the DOM, ws, or localStorage breaks the tests silently.
@@ -4403,6 +4409,8 @@
     }
     // --- P3 pair logic (pure) --- end
 
+  </script>
+  <script>
     // Settings — auto-detect relay when served from same origin
     const autoRelayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
     const isSelfRelay = !location.hostname.includes('pages.dev') && !location.hostname.includes('github.io');
@@ -4468,6 +4476,8 @@
     document.getElementById('userHighlight').checked = highlightOn(USER_HIGHLIGHT_KEY);
     document.getElementById('summaryHighlight').checked = highlightOn(SUMMARY_HIGHLIGHT_KEY);
 
+  </script>
+  <script>
     // --- Sounds ---
     // The store is read inside window.cue, in the head, so nothing here has to reach the call
     // sites — all twenty-odd of them route through that one function and are already guarded.
@@ -4488,6 +4498,8 @@
       document.getElementById(id).checked = window.cueOn ? window.cueOn(group) : true;
     }
 
+  </script>
+  <script>
     // --- Main page sections ---
     // Which main-page sections show, and in what order. Stored as the order itself rather
     // than as booleans plus a separate ranking: switching one on means "put it after what is
@@ -4566,8 +4578,8 @@
     sectionOrder = loadSections();
     syncSectionBoxes();
 
-
-
+  </script>
+  <script>
     // The terminal is a flex sibling, not an overlay: leaving it open would stack two panes.
     // Settings and Activity are toggles onto wherever the user already was, not one-way doors.
     // The pane they came from is remembered so a second tap puts it back; without this, leaving
@@ -4828,6 +4840,8 @@
       });
     }
 
+  </script>
+  <script>
     // --- Bottom status bar ---
     // Left: how long ago the open pane last changed. Stamping every poll would read "now" forever
     // and mean nothing, so the stamp is taken only when the text differs — and, for the same
@@ -5526,6 +5540,8 @@
       setTimeout(() => { activeTab = null; }, 1500);
     }
 
+  </script>
+  <script>
     // --- Start session dialog ---
     function fillSelect(id, options) {
       const el = document.getElementById(id);
@@ -5883,6 +5899,8 @@
       applySections();
     }
 
+  </script>
+  <script>
     // --- Pairs (storage and UI) ---
 
     function loadPairs() { pairs = parsePairs(localStorage.getItem(PAIRS_KEY) || ''); }
@@ -5968,6 +5986,8 @@
       applyWrapMode();
     }
 
+  </script>
+  <script>
     // --- Final message detection ---
     // A finished pane is mostly tool output — command runs, diffs, test logs — with the agent's
     // closing message a handful of lines at the end of it. Both harnesses already separate the
@@ -6456,6 +6476,8 @@
       if (scroll) scrollPaneToLine(Math.min(selA, selB));
     }
 
+  </script>
+  <script>
     // --- Conversation recorder (pure) --- start
     // A pane keeps a few hundred lines of history and then forgets. This turns what is on screen
     // into transcript entries that outlive it, and it does so as a function of (rows, agent, what
@@ -6894,6 +6916,8 @@
       saveOutbox(outboxAdd(loadOutbox(), convHash(text), note, now));
     }
 
+  </script>
+  <script>
     // --- Conversation store ---
     // Transcripts live in IndexedDB and the index lives in localStorage. localStorage is a ~5 MB
     // origin-wide cap this app already spends a dozen keys of, and transcripts are the one thing
@@ -7518,6 +7542,8 @@
       renderConvBar();
     }
 
+  </script>
+  <script>
     // --- Conversation view ---
     // The same pane read as a thread. Which view a pane was last read in is remembered per pane:
     // a pane being watched as a terminal and one being followed as a thread are two different
@@ -8100,6 +8126,8 @@
         !pair || pairHealth(pair, agents).state !== 'healthy';
     }
 
+  </script>
+  <script>
     // --- Line ruler ---
     // Two integers and one band element — the selection itself is never per-line DOM, and nothing
     // here is rebuilt on the 3s poll. The rows it measures against are spans (renderPaneRows), so
@@ -8698,6 +8726,8 @@
       return parts.join(' · ') || a.pane_id;
     }
 
+  </script>
+  <script>
     // --- Reorder sheet ---
     // A sheet rather than handles on the cards themselves. The card is the one thing on this page
     // read on a phone all day and it has no room to spare; more to the point, #agents has its
@@ -9040,6 +9070,8 @@
       if (window.cue) cue('page');
     }
 
+  </script>
+  <script>
     // --- Transfer ---
 
     let transferSource = '';
@@ -9140,6 +9172,8 @@
       input.focus();
     }
 
+  </script>
+  <script>
     // --- Terminal shortcuts (T2) ---
     // The same dock as the agent prompts, because they occupy the same place, the same toggle,
     // and the same "only one dock is open" rule. What differs is the verb: a prompt is inserted
@@ -10087,6 +10121,8 @@
       renderStatusBar();
     }
 
+  </script>
+  <script>
     // --- Session history ---
     // Back and forward across the panes this device has opened, the way a browser does it: a
     // list plus a cursor, not a most-recently-used order. The Recents list already holds MRU,
@@ -10327,6 +10363,8 @@
       }
     }
 
+  </script>
+  <script>
     // --- Slots ---
     // A pane is either alone in its tab (~139 cols) or sharing it with one sibling (~69). Which
     // of the two this screen wants is the only thing the browser gets to decide; the relay owns
@@ -10561,6 +10599,9 @@
     // Clearing is destructive and sits next to two controls that are not, so it takes two taps.
     // The armed state expires on its own — a stray first tap must not leave a live trigger behind.
     let clearArmedAt = 0;
+
+  </script>
+  <script>
     // --- Dictation ---
     // The Web Speech API, not the keyboard's own dictation button: reaching that one means
     // raising the keyboard first, which is the half of the screen this is trying not to spend.
@@ -10772,6 +10813,8 @@
 
     if (savedUrl) setTimeout(connect, 100); else showSetup();
 
+  </script>
+  <script>
     // --- Command Palette ---
     const COMMANDS = {
       claude: [
@@ -10926,6 +10969,8 @@
       setTimeout(refreshPane, 500);
     }
 
+  </script>
+  <script>
     // --- Web Push ---
     let pushSubscription = null;
 
@@ -11060,6 +11105,8 @@
       return arr;
     }
 
+  </script>
+  <script>
     initPush();
 
     loadPairs();
@@ -11078,6 +11125,8 @@
     document.getElementById('historyPick').value = String(paneHistoryMax());
     loadTermShortcuts();
     syncPromptsBtn();  // no pane is open yet, so this labels the button for an agent
+  
+
   </script>
 </body>
 
