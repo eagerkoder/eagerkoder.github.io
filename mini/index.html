@@ -751,7 +751,8 @@
     .agents,
     .terminals,
     .pairs,
-    .recents {
+    .recents,
+    .conversations {
       padding: 0 12px 12px;
     }
 
@@ -888,18 +889,106 @@
 
     .conversation-title {
       display: flex;
+      align-items: center;
       gap: 8px;
+      min-width: 0;
       color: var(--text);
       font-weight: 600;
     }
 
-    .conversation-title span,
+    /* The agent list's dot, at the agent list's size: this card stands in for the panes in it,
+       so it says what they say and it pulses when they are working. */
+    .conversation-title .dot {
+      width: 10px;
+      height: 10px;
+    }
+
+    .transfer-head {
+      position: relative;
+      padding: 14px 44px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .transfer-head button {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.2rem;
+      line-height: 1;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .transfer-head .to {
+      margin: 0;
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .transfer-head .who {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin: 4px 0 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      /* A 32-character pane name must not push the badge onto a second line. */
+      min-width: 0;
+    }
+
+    .conversation-title .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* The tier, not the name. Naming an auto conversation promotes it, so this is what goes away
+       when it does — the name the user typed is never marked up. */
+    .conversation-tier {
+      flex: none;
+      font-size: 0.55rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .conversation-count,
     .conversation-meta {
       color: var(--muted);
       font-size: 0.7rem;
     }
 
-    .conversation-title span { margin-left: auto; font-weight: 400; }
+    .conversation-count {
+      margin-left: auto;
+      flex: none;
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    /* The newest thing said, which is what answers "is this the one I want" — one line, because a
+       card that grows with the message stops being scannable. */
+    .conversation-last {
+      margin-top: 6px;
+      font-size: 0.72rem;
+      color: var(--text);
+      opacity: 0.85;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .conversation-meta { margin-top: 4px; }
 
     .agent:active {
@@ -1614,6 +1703,100 @@
       display: none;
     }
 
+    /* The standalone view scrolls as a whole — .view already does — so the thread is content here
+       rather than its own scroller, and the header stays put by sticking rather than by a second
+       flex column. */
+    #convView {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #convViewThread {
+      flex: none;
+      overflow: visible;
+    }
+
+    .conv-view-top {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .conv-view-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .conv-view-head .count {
+      font-size: 0.7rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .conv-view-head .title {
+      flex: 1;
+      min-width: 0;
+      /* The pane header's title, one notch bolder: same row, same job, and a 64-character name
+         needs the width. */
+      font-size: 0.85rem;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conv-view-head .back {
+      background: none;
+      border: none;
+      color: var(--blue);
+      cursor: pointer;
+      padding: 4px 8px;
+      display: flex;
+    }
+
+    /* Who is in this conversation, as a disclosure rather than a block above every thread. */
+    .conv-view-head .who-btn {
+      font-size: 0.7rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 28px;
+    }
+
+    .conv-view-head .who-btn[aria-expanded="true"] {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    /* Hangs under the header rather than pushing the thread down: opening it is a glance at who is
+       here, and a thread that jumps a hundred pixels loses the reader's place. */
+    .conv-panel {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 12px;
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+    }
+
+    /* The one action this read-only view offers, shaped like the header buttons a pane has. */
+    .conv-view-head .open-pane {
+      font-size: 0.7rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--blue);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
     .conv-head {
       display: flex;
       align-items: baseline;
@@ -1630,6 +1813,21 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* The picker a pane in more than one conversation gets. Sized and coloured as the name it
+       replaces — it is the same word in the same place, and only the caret says it can be changed. */
+    select.name {
+      max-width: 60%;
+      border: 0;
+      background: none;
+      font: inherit;
+      font-weight: 600;
+      color: var(--text);
+      padding: 2px 0;
+      /* A tap target on a phone, without the row growing to meet it. */
+      min-height: 28px;
+      cursor: pointer;
     }
 
     /* Who is in this conversation. One row until tapped, because it is reference rather than
@@ -1694,6 +1892,167 @@
 
     .conv-members.open .conv-member .spawn {
       display: block;
+    }
+
+    /* The roster, in the view where a conversation is owned: one row per member, live or not, and
+       the three edits under it. Rows and not the collapsed strip .conv-members draws, because each
+       row carries a button and the strip is itself one. */
+    .conv-roster {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .conv-roster-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      font-size: 0.68rem;
+      color: var(--text);
+      padding: 3px 0;
+    }
+
+    .conv-roster-row.gone {
+      opacity: 0.65;
+    }
+
+    .conv-roster-row .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex: none;
+    }
+
+    /* The name gives up the width, and Remove keeps its place at the end of every row. */
+    .conv-roster-row .who {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conv-roster-row .tag {
+      flex: 1;
+      font-size: 0.6rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .conv-roster-row.gone .tag {
+      color: var(--orange);
+    }
+
+    .conv-roster .conv-drop,
+    .conv-roster .conv-again,
+    .conv-roster .conv-open,
+    .conv-roster-actions button,
+    .conv-roster-add .conv-chip {
+      font-size: 0.65rem;
+      /* Not the menu's 44px floor — a roster of eight members at 44px a row is a screen of
+         buttons and no thread. 32px is a thumb, and every one of these is either reversible or
+         asked twice. */
+      min-height: 32px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .conv-roster-actions {
+      display: flex;
+      /* Four actions do not fit a phone on one row, and a button pushed off the edge is a button
+         that does not exist. */
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-top: 4px;
+    }
+
+    .conv-roster-actions button[aria-pressed="true"] {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .conv-roster-add {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-top: 6px;
+    }
+
+    .conv-roster-add .conv-chip,
+    .conv-roster .conv-open,
+    .conv-roster .conv-again {
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    /* Borderless and ahead of the colour dot: it acts on the row, and a third bordered button per
+       row would read as a third action of the same weight as Remove. */
+    .conv-roster .conv-eye {
+      flex: none;
+      border: 0;
+      background: none;
+      padding: 0 2px;
+      font-size: 0.8rem;
+      line-height: 1;
+      color: var(--blue);
+      cursor: pointer;
+      /* Same thumb target as the rest of the roster, without the row growing to meet it. */
+      min-width: 28px;
+      min-height: 28px;
+    }
+
+    .conv-roster .conv-eye[aria-pressed="true"] {
+      color: var(--muted);
+    }
+
+    /* Folded out of the thread, still in the conversation. Dimmed rather than struck through: it
+       is a reading state, and nothing about it is a deletion. */
+    .conv-roster-row.hidden-member .who {
+      opacity: 0.55;
+    }
+
+    .conv-roster-add .conv-none {
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+
+    /* The ended sessions in the picker, under their own heading — "which pane is running" and
+       "which recording exists" are different questions, and a flat list of chips would ask them as
+       one. */
+    .conv-roster-add .conv-pick-head {
+      flex-basis: 100%;
+      margin: 4px 0 0;
+      font-size: 0.6rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .conv-roster-add .conv-chip.past {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      /* Dimmer than a live pane, and it has to stay legible: this is a real choice, not a disabled
+         one. */
+      opacity: 0.85;
+    }
+
+    .conv-roster-add .conv-chip .ago {
+      font-size: 0.6rem;
+      color: var(--muted);
+    }
+
+    .conv-roster .conv-tier-note {
+      margin: 8px 0 0;
+      font-size: 0.65rem;
+      line-height: 1.4;
+      color: var(--muted);
     }
 
     /* A time rule, and the same element says "there is history missing here" — one shape for
@@ -2274,7 +2633,7 @@
        an outline alone is not enough to say which of two views is showing. */
     .quick-actions .qa-nav button.qa-conv {
       min-width: 0;
-      width: 22px;
+      width: 34px;
       height: 22px;
       padding: 0;
       border-radius: 11px;
@@ -2433,6 +2792,22 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .pair-strip .pair-target {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .pair-strip .pair-target .label {
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* Last child of the pane: its separator has to face the other way. */
@@ -2869,6 +3244,34 @@
     <div id="timelineList" style="font-family:monospace;font-size:0.75rem;line-height:1.8;"></div>
   </div>
 
+  <!-- A conversation read as itself. Its own view and not the pane's thread panel, because the
+       record outlives the panes that wrote it: a conversation whose members have all exited has
+       no pane to hang a panel off, and it is still the thing worth reading. Read-only. -->
+  <div class="view" id="convView" style="display:none">
+    <!-- Header and panel stick as one, so the panel needs no measurement of the header to sit
+         under it. -->
+    <div class="conv-view-top">
+    <div class="conv-view-head">
+      <button class="back" onclick="closePanel()" aria-label="Back to list"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6" />
+        </svg></button>
+      <span class="title" id="convViewTitle"></span>
+      <span class="count" id="convViewCount"></span>
+      <button class="who-btn" id="convViewWho" onclick="toggleConvRoster()" aria-expanded="false"
+        aria-controls="convViewRoster" aria-label="Who is in this conversation, and what to do with it"></button>
+      <button class="open-pane" id="convViewOpen" onclick="openConvPane()" hidden
+        aria-label="Open the live pane in this conversation">Open pane</button>
+    </div>
+    <!-- The roster and the conversation's own actions, out of the thread and under the header that
+         names them. They are reference and ownership, not reading: a panel two taps deep beats a
+         block of chrome above every thread. -->
+    <div class="conv-panel" id="convViewRoster" hidden></div>
+    </div>
+    <div class="conv-thread" id="convViewThread"></div>
+  </div>
+
   <!-- Shell's last row. Left: when the open pane last changed. Right: whether it is doing
        anything. Deliberately sparse for now — the space exists as much for the iPhone's bottom
        curve as for what it says. -->
@@ -2929,6 +3332,10 @@
                text, because "start one" and "you are in one" are different offers. -->
           <button class="menu-item" role="menuitem" id="menuConv"
             onclick="closeTermMenu(); openConvDialog(activePane)">Start conversation…</button>
+          <!-- The default recorder, global rather than per pane: it is a preference about whether
+               this browser keeps a record at all, and the per-pane switch is membership. -->
+          <button class="menu-item" role="menuitem" id="menuConvAuto"
+            onclick="closeTermMenu(); toggleConvAuto()">Record every session</button>
           <!-- Shown only while this pane's conversation has someone else in it. -->
           <button class="menu-item" role="menuitem" id="menuConvJoint" hidden
             onclick="closeTermMenu(); toggleConvJoint()">Show paired conversation</button>
@@ -3297,10 +3704,14 @@
     <div onclick="closeTransfer()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">Transfer to <span id="transferTarget"></span></span>
-        <button onclick="closeTransfer()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <!-- The destination, centred and on its own line rather than folded into a header. This is
+           one agent's output entering another's context, and "which agent" is the fact the reader
+           has to be sure of before anything else on this sheet matters. -->
+      <div class="transfer-head">
+        <button onclick="closeTransfer()" aria-label="Close">✕</button>
+        <p class="to">Transfer to</p>
+        <p class="who"><span class="dot" id="transferDot" aria-hidden="true"></span><span
+          id="transferTarget"></span><span id="transferBadge"></span></p>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
         <p style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:0">
@@ -3896,9 +4307,17 @@
     // Settings always dumped them on the agent list and they had to find the pane again.
     let panelReturnPane = null;
 
+    // Every panel that takes the list's place, against the display mode it wants — adding one is a
+    // line here rather than a line in each of the four functions below. Settings is display:none in
+    // its class, so an empty string would hide it; the conversation view is a flex column.
+    const PANELS = { settingsView: 'block', timelineView: 'block', convView: 'flex' };
+
+    function hidePanels() {
+      for (const id in PANELS) document.getElementById(id).style.display = 'none';
+    }
+
     function panelIsOpen() {
-      return document.getElementById('settingsView').style.display === 'block'
-        || document.getElementById('timelineView').style.display === 'block';
+      return Object.keys(PANELS).some(id => document.getElementById(id).style.display !== 'none');
     }
 
     function openPanel(id) {
@@ -3909,13 +4328,11 @@
         if (activePane) closeTerminal();
       }
       document.getElementById('agentListView').style.display = 'none';
-      document.getElementById('settingsView').style.display = id === 'settingsView' ? 'block' : 'none';
-      document.getElementById('timelineView').style.display = id === 'timelineView' ? 'block' : 'none';
+      for (const p in PANELS) document.getElementById(p).style.display = p === id ? PANELS[p] : 'none';
     }
 
     function closePanel() {
-      document.getElementById('settingsView').style.display = 'none';
-      document.getElementById('timelineView').style.display = 'none';
+      hidePanels();
       const back = panelReturnPane;
       panelReturnPane = null;
       // The pane may have died while the panel was open; openTerminal falls back to the ID, so
@@ -4259,8 +4676,7 @@
     // have returned to — otherwise closing Settings later would yank them back to an older pane.
     function jumpToPane(paneId) {
       panelReturnPane = null;
-      document.getElementById('settingsView').style.display = 'none';
-      document.getElementById('timelineView').style.display = 'none';
+      hidePanels();
       openTerminal(paneId);
     }
 
@@ -4474,6 +4890,11 @@
         // Not `msg.shells || []` — a relay with terminal mode off sends no key at all, and this
         // has to read as "no terminals" rather than crash the next .filter.
         shells = Array.isArray(msg.shells) ? msg.shells : [];
+        // Before the render, so a pane's first snapshot and the card for it arrive together.
+        convAutoJoin();
+        // Which member is ended is a question only a snapshot answers, so the prune rides on one.
+        // It writes nothing on the polls where nothing has outgrown the cap, which is all of them.
+        convPruneAuto();
         render();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.
@@ -4636,6 +5057,8 @@
       document.getElementById('terminals').innerHTML = html;
       document.getElementById('pairs').innerHTML = pairsHtml();
       renderConversations();
+      // Live-ness is the one thing on the standalone view that this snapshot can change.
+      renderConvStandalone(false);
       // "Waiting for agents…" is true of the agents and false of the box: a machine with
       // terminals and no agents is not waiting for anything. Only that placeholder goes — wiping
       // the node took the Projects strip and its cards with it.
@@ -4876,6 +5299,24 @@
         const paired = !pairSource;   // savePair closes the dialog; a refusal leaves it open
         showSpawnStatus(`${a.label || a.agent || 'Session'} started` +
           (paired ? ' and paired.' : ' — confirm the pair.'), 'success');
+        return;
+      }
+      // A respawn asked from a conversation: the new session joins it as a new member, and the
+      // pane opens on the thread — continuing a conversation is asking to say the next thing in it.
+      if (intent && intent.conv) {
+        const items = loadConvIndex();
+        const conv = items.find(c => c.id === intent.conv);
+        if (conv) {
+          conv.members = (conv.members || []).concat(convMemberOf(a));
+          saveConvIndex(items);
+          const key = convMemberKey(a), views = convViews();
+          views[key] = conv.id;
+          try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
+          catch (e) { /* private mode: this session only */ }
+        }
+        openTerminal(a.pane_id);
+        showSpawnStatus(conv ? `${a.label || a.agent || 'Session'} joined "${conv.name}".`
+          : `${a.label || a.agent || 'Session'} started.`, 'success');
         return;
       }
       // Never over a pane the user has since opened themselves — the start was a while ago in
@@ -5851,18 +6292,42 @@
       return ms.map((m, i) => convEntry(m, now, { at: now - (ms.length - i), at_src: 'backfill' }));
     }
 
-    // A send can win the race to the store before the pane's first read. Its echoed prompt is not
-    // history: keep the older prefix as backfill and let the turn event append its reply after the
-    // exact sent entry. Only the newest stored prompt is consulted.
+    // A send can win the race to the store before the pane's first read, and more than one can:
+    // nothing makes the user wait for a read between two prompts. Every one of them is already an
+    // entry, so none of their echoes is history — and neither is anything the agent said after the
+    // oldest of them. The seam is that oldest echo; the prefix above it is backfill.
     function splitFirstRead(fresh, stored) {
-      const ms = fresh || [], last = (stored || [])[(stored || []).length - 1];
-      if (!last || last.who !== 'user' || last.at_src !== 'sent') return { history: ms, turn: [] };
-      for (let i = ms.length - 1; i >= 0; i--) {
-        if (ms[i].who === 'user' && convKey(ms[i].text) === convKey(last.text)) {
-          return { history: ms.slice(0, i), turn: ms.slice(i) };
+      const ms = fresh || [];
+      const sent = (stored || [])
+        .filter(e => e.who === 'user' && e.at_src === 'sent').map(e => convKey(e.text));
+      let seam = -1;
+      for (const key of sent) {
+        // Newest occurrence, which is how a single send has always been matched: a prompt that
+        // also appears far up the scrollback must not swallow the history above it.
+        for (let i = ms.length - 1; i >= 0; i--) {
+          if (ms[i].who === 'user' && convKey(ms[i].text) === key) {
+            if (seam < 0 || i < seam) seam = i;
+            break;
+          }
         }
       }
-      return { history: ms, turn: [] };
+      return seam < 0 ? { history: ms, turn: [] }
+        : { history: ms.slice(0, seam), turn: ms.slice(seam) };
+    }
+
+    // The tail below that seam, as entries. Not `turnEntries`: that keeps the last agent block
+    // alone, which is right for a turn that just ended and wrong here — two sends means two
+    // replies, and the older one is not scrollback either. What it drops is the echoes, which the
+    // sends already committed.
+    //
+    // The replies below the first echo are dated `now`, so the thread shows both prompts and then
+    // both replies rather than interleaving them. That is what the store can honestly say: the
+    // sends carry exact clocks and the replies were all first seen at this read.
+    function sentTurnEntries(fresh, stored, now, end) {
+      const sent = new Set((stored || [])
+        .filter(e => e.who === 'user' && e.at_src === 'sent').map(e => convKey(e.text)));
+      return stampTurn((fresh || [])
+        .filter(m => !(m.who === 'user' && sent.has(convKey(m.text)))), now, end);
     }
 
     // The turn that just ended, out of the window read when it ended: the agent's closing message,
@@ -5929,7 +6394,12 @@
     // finished, and `read` is the honest stamp for "this is when it was found".
     function turnEntries(fresh, stored, now, end, recover) {
       const picked = turnMessages(fresh);
-      const add = newTurnMessages(stored, recover ? recoveredTurn(stored, picked) : picked);
+      return stampTurn(newTurnMessages(stored, recover ? recoveredTurn(stored, picked) : picked),
+        now, end);
+    }
+
+    // `end` dates the closing message and nothing else — every other line was first seen now.
+    function stampTurn(add, now, end) {
       return add.map((m, i) => convEntry(m, now, m.who === 'agent' && i === add.length - 1 && end
         ? { at: end, at_src: 'state' } : { at: now, at_src: 'read' }));
     }
@@ -5997,7 +6467,15 @@
     }
     // The ceilings. IndexedDB's budget is a share of free disk rather than 5 MB, so these are set
     // by what a thread is still readable at rather than by what fits.
+    //
+    // MEMBER_MAX is a ceiling on *recording* members, and always was a statement about the view —
+    // past this a joint thread stops being one. A conversation continued across several respawns
+    // accumulates ended members that cost nothing to draw, so the roster's own cap is separate and
+    // far larger. The index is localStorage, where the roster is what a member actually costs
+    // (~120 bytes); the transcripts are IndexedDB, which is a different store and a different
+    // budget.
     const CONV_ENTRY_MAX = 5000, CONV_MEMBER_MAX = 8, CONV_CONV_MAX = 200, CONV_TRANSCRIPT_MAX = 500;
+    const CONV_ROSTER_MAX = 200, CONV_AUTO_ROSTER_MAX = 20;
 
     // A corrupt blob is no conversations, never a half-index — the contract parsePairs already
     // holds to, and for the same reason: a store that outlives the panes it describes will one day
@@ -6007,8 +6485,9 @@
         const d = JSON.parse(raw || '');
         if (!d || d.version !== 1 || !Array.isArray(d.items)) return [];
         return d.items.filter(c => c && c.id && typeof c.name === 'string' && Array.isArray(c.members))
-          .map(c => Object.assign({}, c, { members: c.members.slice(0, CONV_MEMBER_MAX) }))
-          .slice(0, CONV_CONV_MAX);
+          // The roster, not the recording cap: an ended member is the record of a session that
+          // happened, and truncating it here would delete history on the next read of the index.
+          .map(c => Object.assign({}, c, { members: c.members.slice(-CONV_ROSTER_MAX) }));
       } catch (e) { return []; }
     }
 
@@ -6019,18 +6498,30 @@
       return entries.length > cap ? entries.slice(entries.length - cap) : entries;
     }
 
-    // What to drop when there are too many transcripts. Unreferenced first: a transcript no
-    // conversation names is the only thing here nobody asked to keep. Then oldest `touched` among
-    // the rest — so naming a conversation is what protects its history, which is the promise the
-    // name makes.
-    function evictOrder(records, referenced, max) {
+    // What to drop when there are too many transcripts, and what may never be dropped at all.
+    //
+    // A transcript a *named* conversation holds is a floor, not a preference: the record outliving
+    // the panes that wrote it is the whole feature, and silently deleting one to stay under a
+    // ceiling is the single failure this model cannot absorb. So `kept` is removed from the pool
+    // entirely, and a cap reached with everything kept drops nothing — the caller says so out loud
+    // instead.
+    //
+    // Everything else is ordered by how much anyone asked for it: a transcript no conversation
+    // names at all, then one only an auto conversation holds, then oldest `touched` within each.
+    // That is the tier split — what the user named is permanent, what the app started on its own
+    // is book-keeping — and it is what lets recording be on by default without growing forever.
+    function evictOrder(records, referenced, max, kept) {
       const keep = max || CONV_TRANSCRIPT_MAX;
       if (records.length <= keep) return [];
-      const named = k => !!(referenced && referenced.has(k));
-      return records.slice()
-        .sort((a, b) => (named(a.key) ? 1 : 0) - (named(b.key) ? 1 : 0)
+      const held = k => !!(kept && kept.has(k));
+      const auto = k => !!(referenced && referenced.has(k));
+      const pool = records.filter(r => !held(r.key));
+      // Over the ceiling on kept records alone. Nothing here is the right thing to delete.
+      const over = records.length - keep;
+      return pool.slice()
+        .sort((a, b) => (auto(a.key) ? 1 : 0) - (auto(b.key) ? 1 : 0)
           || (a.touched || 0) - (b.touched || 0))
-        .slice(0, records.length - keep)
+        .slice(0, Math.min(over, pool.length))
         .map(r => r.key);
     }
     // Several members, one thread. A stable merge on `seen`: each member's own entries keep the
@@ -6083,6 +6574,18 @@
         out.push(e);
       }
       return { entries: out, removed: removed };
+    }
+
+    // A copy's name, against the names already taken. "(copy)", then "(copy 2)" — the second copy
+    // of a thing is the third grouping of it, and a list holding two rows called the same is a list
+    // nobody can pick from.
+    function convCopyName(name, taken) {
+      const base = (name || 'Conversation').replace(/ \(copy( \d+)?\)$/, '');
+      const used = new Set(taken || []);
+      for (let n = 1; ; n++) {
+        const next = `${base} (copy${n > 1 ? ' ' + n : ''})`.slice(0, 64);
+        if (!used.has(next)) return next;
+      }
     }
     // --- Conversation recorder (pure) --- end
 
@@ -6214,10 +6717,15 @@
       } catch (e) { return false; }   // full, or private mode: this session keeps it in memory
     }
 
-    // The transcripts for the members of one conversation — at most MEMBER_MAX records, by key, in
-    // one transaction. Nothing scans the store to render a thread.
+    // The transcripts for the members of one conversation, by key, in one transaction. Nothing
+    // scans the store to render a thread.
+    //
+    // Capped by the roster and not by MEMBER_MAX: that one is a ceiling on how many panes record
+    // at once, and a conversation continued across several respawns has ended members whose
+    // records are most of what it is. Fetching only the first eight would draw the oldest sessions
+    // and drop the live one.
     async function convGet(keys) {
-      const want = (keys || []).slice(0, CONV_MEMBER_MAX);
+      const want = (keys || []).slice(0, CONV_ROSTER_MAX);
       if (!want.length) return [];
       const db = await openConvDB();
       if (!db) {
@@ -6228,6 +6736,21 @@
         const tx = db.transaction(CONV_DB_STORE, 'readonly').objectStore(CONV_DB_STORE);
         const got = await Promise.all(want.map(k => idbReq(tx.get(k))));
         return got.filter(Boolean);
+      } catch (e) { return []; }
+    }
+
+    // Every transcript this browser holds, for the one screen that has to offer them as choices
+    // rather than render them. Read when the picker opens and never on the poll path — this is the
+    // only scan of the store outside eviction, and it stays that way.
+    async function convAll() {
+      const db = await openConvDB();
+      if (!db) {
+        const all = convFallbackAll();
+        return Object.keys(all).map(k => all[k]).filter(Boolean);
+      }
+      try {
+        const read = db.transaction(CONV_DB_STORE, 'readonly').objectStore(CONV_DB_STORE);
+        return (await idbReq(read.getAll())) || [];
       } catch (e) { return []; }
     }
 
@@ -6270,9 +6793,33 @@
       return out;
     }
 
+    // The two tiers, as key sets. A conversation the user named is permanent and its transcripts
+    // are a floor; one the recorder started on its own is book-keeping, and is what stays
+    // evictable so that recording everything by default cannot become a storage problem. Naming an
+    // auto conversation is the whole promotion — there is no keep switch and no archive.
+    function convKept() {
+      const out = new Set();
+      for (const c of loadConvIndex()) if (!c.auto) for (const m of c.members || []) out.add(m.key);
+      return out;
+    }
+
+    // Said once per page, not once per eviction pass: a ceiling reached with nothing droppable is
+    // a standing condition, and repeating it every read would be the only thing on screen.
+    let convFullSaid = false;
+
+    function convEvictable(all, referenced, kept, max) {
+      const drop = evictOrder(all, referenced, max, kept);
+      const over = all.length - (max || CONV_TRANSCRIPT_MAX);
+      if (over > 0 && drop.length < over && !convFullSaid) {
+        convFullSaid = true;
+        showToast('Every recording is in a named conversation — nothing was deleted to make room.');
+      }
+      return drop;
+    }
+
     function convFallbackTrim(all) {
-      const keys = evictOrder(Object.keys(all).map(k => all[k]), convReferenced(),
-        CONV_FALLBACK_TRANSCRIPTS);
+      const keys = convEvictable(Object.keys(all).map(k => all[k]), convReferenced(),
+        convKept(), CONV_FALLBACK_TRANSCRIPTS);
       for (const k of keys) delete all[k];
     }
 
@@ -6282,7 +6829,7 @@
       try {
         const read = db.transaction(CONV_DB_STORE, 'readonly').objectStore(CONV_DB_STORE);
         const all = await idbReq(read.getAll());
-        const drop = evictOrder(all, convReferenced());
+        const drop = convEvictable(all, convReferenced(), convKept());
         if (!drop.length) return;
         const write = db.transaction(CONV_DB_STORE, 'readwrite').objectStore(CONV_DB_STORE);
         await Promise.all(drop.map(k => idbReq(write.delete(k))));
@@ -6376,7 +6923,7 @@
         before = backfillEntries(first.history, now);
         // A local send has its own event and timestamp. Its pane echo opens the current turn,
         // rather than becoming an older copy of the same prompt.
-        if (first.turn.length && end) add = turnEntries(first.turn, held.entries, now, end);
+        if (first.turn.length) add = sentTurnEntries(first.turn, held.entries, now, end);
         if (body.length) held.backfilled = true;
         if (add.length) held.lastTurn = end;
       } else if (end > (held.lastTurn || 0)) {
@@ -6502,7 +7049,7 @@
       const a = activePane ? paneOf(activePane) : null;
       if (!a) return false;
       if (convMemberKey(a) === key) return true;
-      const conv = convsForPane(a)[0];
+      const conv = convViewConv(a);
       return !!conv && convViewOn(a) && convJointOn() &&
         pairedConvMembers(a, conv).some(m => m.key === key);
     }
@@ -6520,7 +7067,16 @@
       const last = convAt(entries[entries.length - 1]) || now;
       let hit = false;
       for (const c of items) for (const m of c.members || []) {
-        if (m.key === key) { m.messages = entries.length; m.seen = last; hit = true; }
+        if (m.key === key) {
+          m.messages = entries.length;
+          m.seen = last;
+          // Enough of the newest message to recognise it on a card, and no more: this lives in
+          // the ~5 MB localStorage index beside fourteen other keys, and the words themselves are
+          // in IndexedDB where there is room for them.
+          m.last = String((entries[entries.length - 1] || {}).text || '')
+            .replace(/\s+/g, ' ').trim().slice(0, 120);
+          hit = true;
+        }
       }
       // Not while a pane is open: the landing list is behind it, and this runs on every recorded
       // read of every member. renderBody redraws it on the way back out.
@@ -6540,10 +7096,23 @@
       };
     }
 
+    // At the ceiling it is the auto tier that gives way, oldest first (D4). New conversations are
+    // prepended, so the tail is the oldest — and slicing the tail is exactly how the named ones,
+    // the ones the user asserted mattered, would be the first to go.
+    function convFit(items) {
+      if (items.length <= CONV_CONV_MAX) return items;
+      const drop = new Set(items.map((c, i) => ({ c, i })).filter(x => x.c.auto)
+        .sort((a, b) => (a.c.created || 0) - (b.c.created || 0))
+        .slice(0, items.length - CONV_CONV_MAX).map(x => x.i));
+      // Named records are a floor, not the second tier of an eviction algorithm. A local index
+      // may predate this cap; keeping it is safer than silently making a user's record disappear.
+      return items.filter((c, i) => !drop.has(i));
+    }
+
     function saveConvIndex(items) {
       try {
         localStorage.setItem(CONV_INDEX_KEY,
-          JSON.stringify({ version: 1, items: items.slice(0, CONV_CONV_MAX) }));
+          JSON.stringify({ version: 1, items: convFit(items) }));
       } catch (e) { /* private mode: this session only */ }
     }
 
@@ -6634,8 +7203,10 @@
         conv.members.splice(at, 1);
         setConvError('');
       } else {
-        if (conv.members.length >= CONV_MEMBER_MAX) {
-          setConvError(`"${conv.name}" already has ${CONV_MEMBER_MAX} panes.`); return;
+        // Recording members, not the roster: MEMBER_MAX is what a joint thread stops being one
+        // past, and an ended member draws history without competing for a colour or a poll.
+        if (convRecordingMembers(conv).length >= CONV_MEMBER_MAX) {
+          setConvError(`"${conv.name}" already has ${CONV_MEMBER_MAX} live panes.`); return;
         }
         conv.members.push(convMemberOf(convSource));
         setConvError('');
@@ -6690,15 +7261,41 @@
       return !!(key && convViews()[key]);
     }
 
+    // Which of a pane's conversations its thread is showing. The stored value is the conversation's
+    // id; versions before the pane could be in more than one wrote `1`, which still reads as on and
+    // means "the first". A stored id that names nothing this pane is in any more falls back the
+    // same way — a stale preference must never make a recorded pane look empty.
+    function convViewConv(a) {
+      const mine = convsForPane(a);
+      if (!mine.length) return null;
+      const want = convViews()[convMemberKey(a)];
+      return mine.find(c => c.id === want) || mine[0];
+    }
+
+    function convSetView(a, id) {
+      const key = convMemberKey(a), views = convViews();
+      if (id) views[key] = id; else delete views[key];
+      try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
     function toggleConvView() {
       const a = activePane ? paneOf(activePane) : null;
       if (!a) return;
-      const key = convMemberKey(a), views = convViews();
-      if (views[key]) delete views[key]; else views[key] = 1;
-      try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
-      catch (e) { /* private mode: this session only */ }
+      const on = convViewOn(a), conv = on ? null : convViewConv(a);
+      convSetView(a, on ? '' : ((conv && conv.id) || 1));
       renderConvBar();
       if (window.cue) cue('page');
+    }
+
+    // The thread's own picker, for a pane in more than one conversation. Reading the same pane under
+    // two groupings is the whole point of a grouping being a view, and index order — which is
+    // creation order — is not a preference anybody expressed.
+    function selectConvView(id) {
+      const a = activePane ? paneOf(activePane) : null;
+      if (!a) return;
+      convSetView(a, id);
+      renderConvView();
     }
 
     // Not everything in a thread is a settled fact about what was said. Two kinds are not:
@@ -6744,6 +7341,118 @@
       renderConvView();
     }
 
+    // --- The default recorder ---
+    // Book-keeping — "what happened in this repo" — is not served by a feature you have to
+    // remember to switch on before the thing worth keeping happens (D5). So every agent pane files
+    // itself under a conversation of its own, and the user's job is reading it rather than
+    // arming it. D4's auto tier is what keeps that from becoming a storage problem.
+    const CONV_AUTO_KEY = 'herdr_conv_auto', CONV_AUTO_SEEN_KEY = 'herdr_conv_auto_seen';
+    const CONV_AUTO_SEEN_MAX = 500;
+    const CONV_LANDING_AUTO_KEY = 'herdr_conv_landing_auto', CONV_LANDING_AUTO_MAX = 10;
+
+    function convLandingAutoOn() {
+      try { return localStorage.getItem(CONV_LANDING_AUTO_KEY) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function toggleConvLandingAuto() {
+      try { localStorage.setItem(CONV_LANDING_AUTO_KEY, convLandingAutoOn() ? 'off' : 'on'); }
+      catch (e) { /* private mode: this session only */ }
+      renderConversations();
+    }
+
+    function convAutoOn() {
+      try { return localStorage.getItem(CONV_AUTO_KEY) !== 'off'; }
+      catch (e) { return true; }
+    }
+
+    function toggleConvAuto() {
+      try { localStorage.setItem(CONV_AUTO_KEY, convAutoOn() ? 'off' : 'on'); }
+      catch (e) { /* private mode: this session only */ }
+      renderTermMenuState();
+      if (convAutoOn()) convAutoJoin();
+    }
+
+    // Which panes this has already filed, kept apart from membership on purpose: "already in an
+    // auto conversation" is not the question. A member the user removed must stay removed, and
+    // reading it off the roster would file it again on the next poll.
+    function convAutoSeen() {
+      try {
+        const d = JSON.parse(localStorage.getItem(CONV_AUTO_SEEN_KEY) || '');
+        return Array.isArray(d) ? d : [];
+      } catch (e) { return []; }
+    }
+
+    // One conversation per pane, not per project: a project runs several threads of work at once,
+    // and folding them into one record produces a transcript nobody can read. The name is the
+    // project and the pane's label, which the relay sends for every pane — no Projects config
+    // needed, and unique enough to tell two parallel sessions apart.
+    function convAutoName(a) {
+      const label = paneLabel(a) || a.agent || a.pane_id;
+      const project = a.project || (a.cwd || '').split('/').filter(Boolean).pop() || '';
+      return (project ? `${project} · ${label}` : label).slice(0, 64);
+    }
+
+    function convAutoJoin() {
+      if (!convAutoOn() || !agents.length) return;
+      const seen = convAutoSeen(), had = new Set(seen);
+      // Only a pane an agent is running in has messages to record — the same gate the menu item
+      // uses, so a harness the app cannot read is not filed under a record it can never write to.
+      const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
+        && profileFor(a.agent));
+      if (!fresh.length) return;
+      const items = loadConvIndex();
+      const added = fresh.map(a => {
+        const conv = {
+          id: 'c_' + Math.random().toString(36).slice(2, 10),
+          name: convAutoName(a), created: Date.now(), members: [convMemberOf(a)],
+          // The tier, and the whole of it: naming one is what promotes it (D4).
+          auto: true,
+        };
+        items.unshift(conv);
+        return { a, conv };
+      });
+      // Fitted once, and what is stored is what `kept` was read from. saveConvIndex fits again —
+      // it has to, since every other caller writes through it — and on an already-fitted list that
+      // is a no-op, which is the property that keeps the two from disagreeing.
+      const fitted = convFit(items);
+      const kept = new Set(fitted.map(c => c.id));
+      saveConvIndex(fitted);
+      // Do not call a pane filed if the cap had no auto slot for it. It retries after space is
+      // freed; marking it seen here would lose its transcript permanently.
+      for (const {a, conv} of added) if (kept.has(conv.id)) seen.push(convMemberKey(a));
+      try { localStorage.setItem(CONV_AUTO_SEEN_KEY,
+        JSON.stringify(seen.slice(-CONV_AUTO_SEEN_MAX))); }
+      catch (e) { /* private mode: this session only */ }
+      renderConversations();
+    }
+
+    // The other half of D4. A named conversation's roster grows without limit — the user asserted
+    // that record mattered, and an ended member is a session that happened. An auto one was never
+    // asserted by anybody, and a pane respawned daily would otherwise carry every session it ever
+    // had in a ~5 MB store shared with fourteen other keys.
+    //
+    // Recording members are never touched, however many there are: what gives way is the oldest
+    // *ended* ones, which is also what unreferences their transcripts and lets evictOrder reclaim
+    // the words. Nothing here depends on the recorder being switched on — the tier is the question,
+    // and a respawn adds a member either way.
+    function convPruneAuto() {
+      if (!agents.length) return;
+      const live = new Set(agents.map(x => convMemberKey(x)));
+      let changed = false;
+      const items = loadConvIndex().map(c => {
+        const members = c.members || [];
+        if (!c.auto || members.length <= CONV_AUTO_ROSTER_MAX) return c;
+        const drop = new Set(members.filter(m => !live.has(m.key))
+          .sort((a, b) => (a.added || 0) - (b.added || 0))
+          .slice(0, members.length - CONV_AUTO_ROSTER_MAX));
+        if (!drop.size) return c;
+        changed = true;
+        return Object.assign({}, c, { members: members.filter(m => !drop.has(m)) });
+      });
+      if (changed) saveConvIndex(items);
+    }
+
     // A pair can predate conversations, leaving each pane with its own recorded thread. Read
     // those two records together without changing either conversation's membership on disk.
     function pairedConvMembers(a, conv) {
@@ -6754,6 +7463,37 @@
       if (!partner || !convsForPane(partner).length) return members;
       const key = convMemberKey(partner);
       return members.some(m => m.key === key) ? members : members.concat({key, label: paneLabel(partner)});
+    }
+
+    // A member is recording or it has ended, and that is derived rather than stored: a live pane
+    // answers it, and a pane that has exited answers it by not being there. No lifecycle, no event
+    // to miss, and a conversation whose panes have all gone is a full record rather than a
+    // half-cleaned one.
+    function convRecordingMembers(conv) {
+      const live = new Set(agents.map(x => convMemberKey(x)));
+      return (conv.members || []).filter(m => live.has(m.key));
+    }
+
+    // The thread, composed from the store and from nothing else. No pane, no view, no selection —
+    // a conversation is a record, and reading one must not require a live pane to read it through.
+    // The caller supplies the drafts, because a draft is the one part that only exists while a
+    // pane is being watched.
+    async function convCompose(conv, keys, drafts) {
+      const recs = await convRecords(keys);
+      const joint = keys.length > 1;
+      const stored = joint ? mergeEntries(recs) : ((recs[0] && recs[0].entries) || []);
+      // An entry recorded before convStamped existed carries no name and no harness, and a thread
+      // read with no pane behind it has nothing else to fall back to. The record knows both.
+      const by = new Map(recs.map(r => [r.key, r]));
+      const all = stored.concat(drafts || []).map(e => {
+        if (e.label) return e;
+        const rec = by.get(e.key || (recs[0] || {}).key) || {};
+        return Object.assign({}, e, { label: rec.label, agent: e.agent || (rec.spawn || {}).agent });
+      });
+      // `all` and `entries` both, because "nothing recorded" and "everything recorded is
+      // provisional" are different empty states and the view says so differently.
+      return { recs: recs, joint: joint, all: all,
+        entries: convFinalOnly() ? all.filter(e => !convProvisional(e)) : all };
     }
 
     // Both halves of the switch: the button that offers it and the view it selects.
@@ -6769,7 +7509,7 @@
     async function renderConvView() {
       const wrap = document.getElementById('termWrap'), box = document.getElementById('convThread');
       const a = activePane ? paneOf(activePane) : null;
-      const conv = a ? convsForPane(a)[0] : null;
+      const conv = a ? convViewConv(a) : null;
       const on = !!conv && convViewOn(a);
       wrap.classList.toggle('conv-on', on);
       box.hidden = !on;
@@ -6793,28 +7533,30 @@
       const members = pairedConvMembers(a, conv);
       const joint = convJointOn() && members.length > 1;
       const want = joint ? members.map(m => m.key) : [key];
-      const recs = await convRecords(want);
-      if (token !== convViewToken) return;
-      // Following the newest message is the default, and a reader who has scrolled up keeps their
-      // place: the same rule the pane rows follow.
-      const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
-      const stored = joint ? mergeEntries(recs) : ((recs[0] && recs[0].entries) || []);
       // The live draft is drawn, never stored: it is what a working pane is saying right now, and
       // the turn it belongs to has not ended, so there is nothing to record yet. Always last —
       // whatever is still being written is newer than everything that has been.
-      const all = stored.concat(want.map((k, i) => {
+      const drafts = want.map((k, i) => {
         const d = convDrafts.get(k), live = agents.find(x => convMemberKey(x) === k);
         return d && live && live.status === 'working'
           ? Object.assign({}, d, { key: k, member: joint ? i : 0 }) : null;
-      }).filter(Boolean));
-      // Filtered here rather than in the renderer: picks, Summary and the count are all positions
-      // in the list that was drawn, so the list that was drawn has to be the list they index.
-      const entries = convFinalOnly() ? all.filter(e => !convProvisional(e)) : all;
+      }).filter(Boolean);
+      const composed = await convCompose(conv, want, drafts);
+      if (token !== convViewToken) return;
+      const recs = composed.recs;
+      // Following the newest message is the default, and a reader who has scrolled up keeps their
+      // place: the same rule the pane rows follow.
+      const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+      // Filtered in the composer rather than in the renderer: picks, Summary and the count are all
+      // positions in the list that was drawn, so the list that was drawn has to be the list they
+      // index.
+      const entries = composed.entries, all = composed.all;
       const thread = members === conv.members ? conv : Object.assign({}, conv, {members});
       const paired = joint && (conv.pair_id || pairFor(pairs, a.pane_id)) && members.length === 2;
-      box.innerHTML = convHeadHtml(thread, key, joint ? -1 : entries.length, joint ? entries.length : -1) +
+      box.innerHTML = convHeadHtml(thread, key, joint ? -1 : entries.length,
+        joint ? entries.length : -1, convsForPane(a)) +
         (joint ? convMembersHtml(thread, recs) : '') + (entries.length
-        ? convEntriesHtml(entries, a, paired)
+        ? convEntriesHtml(entries, { key: key, agent: a.agent, label: paneLabel(a) }, paired)
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional — a live draft, or ' +
             'backfill off the scrollback. Turn "final messages only" off in the pane menu to see it.</p>'
@@ -6869,11 +7611,18 @@
     // on screen — the index is written after a fold, so it is a message behind for exactly as long
     // as it takes this to run. A joint thread has every member's entries on screen already and
     // passes -1 to say so.
-    function convHeadHtml(conv, key, count, total) {
+    function convHeadHtml(conv, key, count, total, mine) {
       const n = total >= 0 ? total : (conv.members || []).reduce(
         (t, m) => t + (count >= 0 && m.key === key ? count : (m.messages || 0)), 0);
-      return `<div class="conv-head"><span class="name">${escapeHtml(conv.name)}</span>` +
-        `<span>${n} message${n === 1 ? '' : 's'}</span></div>`;
+      // A select and not a tap-to-cycle: cycling hides how many groupings this pane is in, and the
+      // count is the information. One conversation draws the name it always drew.
+      const name = (mine || []).length > 1
+        ? `<select class="name" onchange="selectConvView(this.value)"` +
+          ` aria-label="Which conversation this pane's thread is showing">` +
+          mine.map(c => `<option value="${escapeHtml(c.id)}"${c.id === conv.id ? ' selected' : ''}>` +
+            `${escapeHtml(c.name)}</option>`).join('') + '</select>'
+        : `<span class="name">${escapeHtml(conv.name)}</span>`;
+      return `<div class="conv-head">${name}<span>${n} message${n === 1 ? '' : 's'}</span></div>`;
     }
 
     // Colour carries "who", so it reuses what the tab strip already assigns: one PAIR_TINTS hue
@@ -6926,8 +7675,12 @@
       return convAtRank(e) ? t : '~' + t;
     }
 
-    function convEntriesHtml(entries, a, paired) {
-      const self = convMemberKey(a);
+    // `self` is what an entry written before the recorder stamped its own label and harness falls
+    // back to: the pane the thread is being read through, or nothing at all when it is being read
+    // as a record with no pane behind it. `pick` is off for a thread that is not a selection —
+    // the standalone view reads, it does not transfer.
+    function convEntriesHtml(entries, self, paired, pick) {
+      const me = self || {};
       let last = 0;
       return entries.map((e, i) => {
         const at = convAt(e);
@@ -6949,13 +7702,13 @@
         // Every agent bubble carries its label as well as its colour: two washes of one family are
         // not enough on a phone in sunlight, and past two members colour alone stops working.
         const tint = convTint(e.member || 0);
-        const key = e.key || self;
+        const key = e.key || me.key || '';
         const live = agents.find(x => convMemberKey(x) === key);
         // The harness the entry was recorded under, not the one running in that pane today: a
         // conversation outlives its panes, and a member that has exited still gets its own badge.
-        const agent = e.agent || (live && live.agent) || a.agent;
+        const agent = e.agent || (live && live.agent) || me.agent || '';
         const color = agentColor(agent) || 'var(--muted)';
-        const name = escapeHtml(e.label || paneLabel(a));
+        const name = escapeHtml(e.label || me.label || '');
         // The same badge the pane list and the pair sheet use, beside the name: colour says which
         // member, and the badge says what it is — a thread of claude and codex reads as two
         // colleagues rather than as two colours.
@@ -6978,18 +7731,19 @@
         // spelled out.
         const mark = e.draft ? '<span class="conv-state">draft</span>' : '';
         const head = bar || time ? `<span class="conv-who">${bar}${time}${mark}</span>` : '';
-        // The wash is the member's hue at low alpha, exactly as the tab strip mixes it. Only in
-        // the joint thread: one member needs no telling apart from itself.
-        const side = paired && e.member === 1 ? ' conv-right' : '';
+        // The pane being read is always the right side. Stored member order is conversation
+        // history, not a reading preference, and can change when a pair is created or reopened.
+        const side = paired && key === me.key ? ' conv-right' : '';
         // Told apart by having no fill at all rather than by a different one: an unfilled bubble
         // against a wall of washed ones is unmistakable at a glance, on any of the eleven themes,
         // and it needs no colour of its own to say "this is not settled yet".
         const state = convProvisional(e) ? ` provisional${e.draft ? ' draft' : ''}` : '';
-        const pick = `<button class="conv-pick" onclick="toggleConvPick(${i})" aria-pressed="false" ` +
+        const tick = pick === false ? '' :
+          `<button class="conv-pick" onclick="toggleConvPick(${i})" aria-pressed="false" ` +
           `aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
         return rule + `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
-          ` data-i="${i}" data-text="${text}" style="--conv-agent:${color}">${pick}${head}${text}</div>`;
+          ` data-i="${i}" data-text="${text}" style="--conv-agent:${color}">${tick}${head}${text}</div>`;
       }).join('');
     }
 
@@ -7230,15 +7984,10 @@
       document.getElementById('termContent').replaceChildren(frag);
     }
 
-    function copySel() {
-      const btn = document.getElementById('selCopy'), text = selText;
+    // navigator.clipboard is undefined on a plain-http LAN origin, which is the ordinary way this
+    // app is reached. The textarea path is the one that actually runs at home.
+    function writeClipboard(text, done) {
       if (!text) return;
-      // Copying is a commit too. Without a pair configured the Transfer button never appears
-      // (:4095), so this is the only thing most panes will ever teach from.
-      learnFromSelection();
-      const done = () => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1200); };
-      // navigator.clipboard is undefined on a plain-http LAN origin, which is the ordinary way
-      // this app is reached. The textarea path is the one that actually runs at home.
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(done, () => { });
         return;
@@ -7250,6 +7999,18 @@
       ta.select();
       try { if (document.execCommand('copy')) done(); } catch (e) { /* nothing else to offer */ }
       ta.remove();
+    }
+
+    function copySel() {
+      const btn = document.getElementById('selCopy');
+      if (!selText) return;
+      // Copying is a commit too. Without a pair configured the Transfer button never appears
+      // (:4095), so this is the only thing most panes will ever teach from.
+      learnFromSelection();
+      writeClipboard(selText, () => {
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+      });
     }
 
     {
@@ -7450,6 +8211,8 @@
       const conv = document.getElementById('menuConv');
       // Only a pane an agent is running in has messages to record, so a shell is not offered one.
       conv.hidden = !(a && profileFor(a.agent));
+      document.getElementById('menuConvAuto').textContent = convAutoOn()
+        ? 'Stop recording new sessions' : 'Record every session';
       const joint = document.getElementById('menuConvJoint');
       const convFont = document.getElementById('menuConvFont');
       const dedupe = document.getElementById('menuConvDedupe');
@@ -7893,14 +8656,24 @@
       // Falls back to the pinned name, then the pane ID, so the button is never blank.
       const live = agents.find(a => a.pane_id === partner.pane_id);
       const partnerName = (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
+      const mineLive = agents.find(a => a.pane_id === activePane);
+      const targetShown = ok && bottomDockOpen() && mineLive;
+      const center = targetShown
+        ? `<span class="pair-target" title="Typing to ${escapeHtml(paneLabel(mineLive))}">` +
+          `<span class="dot${mineLive.status === 'working' ? ' pulse' : ''}" ` +
+          `style="background:${statusColor(mineLive)}" aria-hidden="true"></span>` +
+          `<span class="label">${escapeHtml(paneLabel(mineLive))}</span>${agentBadge(mineLive.agent)}</span>`
+        : `<span class="pair-name">${escapeHtml(pair.name)}</span>`;
       // Rebuilt wholesale, so the placement class has to be reapplied with it.
       strip.className = 'pair-strip' + (ok ? '' : ' stale') +
         (currentPairPlace() === 'bottom' ? ' at-bottom' : '');
       strip.innerHTML =
         // Switch sits first, on the left: it is the control reached most often, and the thumb
         // is already there from the back button above it.
-        (ok ? `<button class="switch" title="Switch to ${escapeHtml(partnerName)} (⌘/Ctrl+Shift+P)" onclick="switchToPartner()">⇄ ${escapeHtml(partnerName)}</button>` : '') +
-        `<span class="pair-name">${escapeHtml(pair.name)}</span>` +
+        (ok ? `<button class="switch" title="Switch to ${escapeHtml(partnerName)} (⌘/Ctrl+Shift+P)" ` +
+          `onpointerdown="if(document.activeElement===document.getElementById('termInput'))event.preventDefault()" ` +
+          `onclick="switchToPartner()">⇄ ${escapeHtml(partnerName)}</button>` : '') +
+        center +
         (ok ? `<button class="transfer" onclick="openTransfer()">Transfer ›</button>` : '') +
         (ok ? '' : `<span class="pair-reason">${escapeHtml(health.reason)}</span>`);
       strip.style.display = 'flex';
@@ -7934,7 +8707,9 @@
     function switchToPartner() {
       const pair = activePane ? pairFor(pairs, activePane) : null;
       if (!pair || pairHealth(pair, agents).state !== 'healthy') return;
+      const keepComposer = document.activeElement === document.getElementById('termInput');
       openTerminal(partnerOf(pair, activePane).pane_id);
+      if (keepComposer) document.getElementById('termInput').focus();
       if (window.cue) cue('page');
     }
 
@@ -7958,6 +8733,13 @@
       const live = agents.find(a => a.pane_id === partner.pane_id);
       document.getElementById('transferTarget').textContent =
         (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
+      // The harness badge and the live dot, exactly as the agent list draws them: this sheet
+      // prefills a composer in another pane, and a name alone is not enough to be sure which.
+      document.getElementById('transferBadge').innerHTML =
+        agentBadge((live && live.agent) || partner.agent || '');
+      const dot = document.getElementById('transferDot');
+      dot.style.background = live ? statusColor(live) : 'var(--muted)';
+      dot.classList.toggle('pulse', !!live && live.status === 'working');
       const preview = document.getElementById('transferPreview');
       const box = document.getElementById('transferShortcuts');
       if (!transferSelection) {
@@ -8232,14 +9014,43 @@
         const live = members.map(m => agents.find(a => convMemberKey(a) === m.key)).filter(Boolean);
         const names = members.map(m => escapeHtml(m.label || (agents.find(a => convMemberKey(a) === m.key) || {}).label || 'Former pane'));
         const liveNames = live.map(a => escapeHtml(paneLabel(a)));
-        return { c, count, seen, names, liveNames };
+        // The newest message across the members, which is the one line that says whether this
+        // conversation is worth opening. Written by convNoteCounts as each member records.
+        const newest = members.reduce((w, m) =>
+          (Number(m.seen) || 0) >= (Number(w.seen) || 0) ? m : w, members[0] || {});
+        // The agent card's dot, not a second dialect of it: this card stands in for the panes in
+        // it, and a conversation whose agent is working should read exactly as that agent's own
+        // card does — pulse included. One member speaks for the card, and it is the one whose
+        // state the reader would have gone looking for.
+        const lead = live.find(a => a.status === 'blocked') || live.find(a => a.status === 'working')
+          || live.find(a => attentionKind(a) === 'done') || live[0];
+        return {
+          c, count, seen, names, liveNames, last: newest.last || '',
+          dot: lead ? statusColor(lead) : 'var(--muted)',
+          pulse: lead && lead.status === 'working' ? ' pulse' : '',
+        };
       }).sort((a, b) => b.seen - a.seen || b.count - a.count);
-      el.innerHTML = rows.length ? `<div class="section-header">Conversations</div>` + rows.map(r =>
+      const autos = rows.filter(r => r.c.auto), showAuto = convLandingAutoOn();
+      const shown = rows.filter(r => !r.c.auto).concat(showAuto ? autos.slice(0, CONV_LANDING_AUTO_MAX) : [])
+        .sort((a, b) => b.seen - a.seen || b.count - a.count);
+      const autoControl = autos.length
+        ? `<button class="section-action" onclick="toggleConvLandingAuto()" aria-pressed="${showAuto}" ` +
+          `title="Shows up to ${CONV_LANDING_AUTO_MAX} latest automatic conversations">` +
+          `${showAuto ? 'Hide auto' : 'Show auto'} (${autos.length})</button>` : '';
+      el.innerHTML = rows.length ? `<div class="section-header">Conversations${autoControl}</div>` + shown.map(r =>
         `<div class="conversation-card" role="button" tabindex="0" data-conv-id="${escapeHtml(r.c.id)}"` +
         ` onclick="openConversation(this.dataset.convId)"` +
         ` onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openConversation(this.dataset.convId); }">` +
-        `<div class="conversation-title">💬 ${escapeHtml(r.c.name)}` +
-        `<span>${r.count} ${r.count === 1 ? 'message' : 'messages'}</span></div>` +
+        `<div class="conversation-title"><span class="dot${r.pulse}" style="background:${r.dot}"` +
+        ` aria-hidden="true"></span>` +
+        `<span class="name">${escapeHtml(r.c.name)}</span>` +
+        // The tier, on the card rather than in the name: promotion is a rename the user makes,
+        // not a marker the app writes into what they typed (D4).
+        `${r.c.auto ? '<span class="conversation-tier" title="Filed automatically, and dropped ' +
+          'first when space runs out. Open it and rename it to keep it for good.">auto</span>' : ''}` +
+        `<span class="conversation-count">${r.count} ` +
+        `${r.count === 1 ? 'message' : 'messages'}</span></div>` +
+        (r.last ? `<div class="conversation-last">${escapeHtml(r.last)}</div>` : '') +
         `<div class="conversation-meta">${r.names.join(' · ')}</div>` +
         `<div class="conversation-meta">${r.liveNames.length ? 'Live: ' + r.liveNames.join(', ') : 'No live members'}` +
         `${r.seen ? ' · Last activity ' + fmtAgo(new Date(Math.min(r.seen, now))) : ''}</div></div>`
@@ -8247,22 +9058,402 @@
       applySections();
     }
 
-    // Every other card on this page opens something, so this one does too: the conversation's
-    // first live member, in the thread view. A conversation whose panes have all exited is a
-    // record with nothing to open — said plainly rather than by a card that does nothing.
+    // The conversation the standalone view is showing, or null. Held rather than passed, because
+    // the snapshot redraws it: live-ness is the one thing on that view that changes under it.
+    let convViewId = null;
+
+    // A card opens the conversation itself, and not a pane: the record is what the card names, and
+    // it outlives every pane that wrote it. Read-only — the pane is one tap further on, for the
+    // members that still have one.
     function openConversation(id) {
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv) return;
-      const live = (conv.members || [])
-        .map(m => agents.find(a => convMemberKey(a) === m.key)).find(Boolean);
-      if (!live) { showToast(`No live pane in "${conv.name}"`); return; }
-      const key = convMemberKey(live), views = convViews();
-      if (!views[key]) {
-        views[key] = 1;
-        try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
-        catch (e) { /* private mode: this session only */ }
-      }
-      openTerminal(live.pane_id);
+      convViewId = id;
+      convStandaloneHtml = '';
+      convRosterHtmlLast = '';
+      convRosterOpen = false;
+      convAdding = false;
+      openPanel('convView');
+      renderConvStandalone(true);
+    }
+
+    // The only action the read-only view offers: the first live member's pane, opened as the list
+    // would open it. Absent — not disabled — when the conversation has no live member, because
+    // that is the ordinary end state of a record and not a failure to explain.
+    // The header button's choice: the first member of the roster that is both live and not folded
+    // out of the thread. Roster order is when each member joined, so this is the conversation's
+    // oldest running session — there is no "primary", and a pair partner is something the pane's
+    // own thread adds once it is open, not something this picks.
+    function convVisibleLive(conv) {
+      const hidden = convHidden(conv.id);
+      return (conv.members || []).filter(m => !hidden.has(m.key))
+        .map(m => agents.find(a => convMemberKey(a) === m.key)).find(Boolean) || null;
+    }
+
+    function openConvPane() {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      const live = conv && convVisibleLive(conv);
+      if (live) openConvMemberPane(convMemberKey(live));
+    }
+
+    function openConvMemberPane(key) {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      const live = conv && agents.find(a => convMemberKey(a) === key);
+      if (!live) return;
+      // The thread panel, on, and showing *this* conversation: a pane in several would otherwise
+      // open on whichever one it was last read under.
+      convSetView(live, conv.id);
+      jumpToPane(live.pane_id);
+    }
+
+    let convStandaloneToken = 0, convStandaloneHtml = '', convAdding = false;
+    // The roster panel's disclosure state, and which members the reader has folded out of the
+    // thread. Both are about looking, not about the record: hiding a member changes no membership,
+    // deletes no words, and stops no recording — it is the reading equivalent of turning a page
+    // sideways, and unhiding puts everything back.
+    let convRosterOpen = false, convRosterHtmlLast = '';
+    const CONV_HIDDEN_KEY = 'herdr_conv_hidden';
+
+    function convHiddenAll() {
+      try {
+        const d = JSON.parse(localStorage.getItem(CONV_HIDDEN_KEY) || '');
+        return d && typeof d === 'object' ? d : {};
+      } catch (e) { return {}; }
+    }
+
+    // Per conversation, because the same pane can be worth reading in one grouping and noise in
+    // another — which is the whole reason a pane may be in several.
+    function convHidden(id) { return new Set(convHiddenAll()[id] || []); }
+
+    function toggleConvHidden(key) {
+      const all = convHiddenAll(), have = new Set(all[convViewId] || []);
+      if (have.has(key)) have.delete(key); else have.add(key);
+      if (have.size) all[convViewId] = Array.from(have); else delete all[convViewId];
+      try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(all)); }
+      catch (e) { /* private mode: this session only */ }
+      convStandaloneHtml = '';
+      renderConvStandalone(false);
+    }
+
+    function toggleConvRoster() {
+      convRosterOpen = !convRosterOpen;
+      renderConvStandalone(false);
+    }
+    // What the standalone view last drew, so Copy and Start again read the same thread the reader
+    // is looking at rather than fetching it a second time and getting a different one.
+    let convViewRecs = [], convViewEntries = [];
+
+    // Who is in this conversation, and the three edits that are the conversation's own rather than
+    // a pane's. Only in the standalone view: this is where a conversation is owned, and the pane's
+    // thread panel is a pane reading itself.
+    //
+    // Removing a member is deliberately not what a pane exiting does. An exit removes nothing — a
+    // member is recording or ended, and that is derived (D1). This pulls what that member said out
+    // of the thread and stops its transcript being referenced, so it is worded as what it does and
+    // asked twice.
+    function convRosterHtml(conv, recs, hidden) {
+      const live = new Set(agents.map(x => convMemberKey(x)));
+      const off = hidden || new Set();
+      const rows = (conv.members || []).map((m, i) => {
+        const rec = recs.find(r => r.key === m.key) || {};
+        const on = live.has(m.key);
+        const out = off.has(m.key);
+        return `<div class="conv-roster-row${on ? '' : ' gone'}${out ? ' hidden-member' : ''}">` +
+          // Folding a member out of the thread, and nothing more. Beside the name because that is
+          // what it acts on, and pressed rather than checked because the row already says which
+          // state it is in by how it is drawn.
+          `<button class="conv-eye" data-key="${escapeHtml(m.key)}" aria-pressed="${out ? 'true' : 'false'}"` +
+          ` onclick="toggleConvHidden(this.dataset.key)"` +
+          ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>` +
+          `<span class="dot" style="background:${convTint(i)}"></span>` +
+          `<span class="who">${escapeHtml(rec.label || m.label || 'Former pane')}</span>` +
+          agentBadge((rec.spawn || {}).agent || '') +
+          `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'no longer live')}</span>` +
+          // Every live member, not only whichever one the header's button would pick: the header
+          // opens the first, and a conversation of four is exactly where that is the wrong one.
+          (on ? `<button class="conv-open" data-key="${escapeHtml(m.key)}"` +
+            ` onclick="openConvMemberPane(this.dataset.key)"` +
+            ` aria-label="Open this member's pane">Open</button>` : '') +
+          (!on && canRespawn(rec.spawn) ? `<button class="conv-again" data-key="${escapeHtml(m.key)}"` +
+            ` onclick="convRespawn(this.dataset.key)"` +
+            ` aria-label="Start a new session and continue this conversation">Start again</button>` : '') +
+          `<button class="conv-drop" data-key="${escapeHtml(m.key)}"` +
+          ` onclick="convRemoveMember(this.dataset.key)"` +
+          ` aria-label="Remove this member from the conversation">Remove</button></div>`;
+      }).join('');
+      // Candidates are the live panes this conversation does not already name — including panes
+      // already recording elsewhere, which bring their own transcript with them (D3).
+      const taken = new Set((conv.members || []).map(m => m.key));
+      const free = agents.filter(x => convMemberKey(x) && !taken.has(convMemberKey(x)));
+      // And the sessions that have already ended, which is what a conversation assembled after the
+      // fact is made of. Newest first: a picker is ordered by what you are most likely to want.
+      const now = Date.now();
+      const past = convPickRecs
+        .filter(r => !taken.has(r.key) && !live.has(r.key) && (r.entries || []).length)
+        .sort((a, b) => (b.touched || 0) - (a.touched || 0))
+        .slice(0, CONV_PICK_MAX);
+      const chips = !convAdding ? '' : `<div class="conv-roster-add">` + (free.length
+        ? free.map(x => `<button class="conv-chip" data-key="${escapeHtml(convMemberKey(x))}"` +
+            ` onclick="convJoinPane(this.dataset.key)">${escapeHtml(paneLabel(x))}</button>`).join('')
+        : '<span class="conv-none">Every live pane is already in this conversation.</span>') +
+        (past.length ? `<span class="conv-pick-head">Recorded</span>` + past.map(r =>
+          `<button class="conv-chip past" data-key="${escapeHtml(r.key)}"` +
+          ` onclick="convJoinRecord(this.dataset.key)">${escapeHtml(r.label || 'Former pane')}` +
+          agentBadge((r.spawn || {}).agent || '') +
+          `<span class="ago">${escapeHtml(convSpan(now - (r.touched || now)))}</span></button>`
+        ).join('') : '') + '</div>';
+      // The tier, said where the button that changes it is. "How do I make this one mine" is the
+      // question an auto record raises, and the answer is one word on the button below it.
+      const tier = conv.auto
+        ? '<p class="conv-tier-note">Filed automatically, and dropped first when space runs out. ' +
+          'Rename it to keep it for good.</p>' : '';
+      return `<div class="conv-roster">${rows}<div class="conv-roster-actions">` +
+        `<button onclick="renameConversation()">Rename</button>` +
+        `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
+        `<button onclick="duplicateConversation()"` +
+        ` aria-label="Copy this conversation so panes can be added without changing this one">` +
+        `Duplicate</button>` +
+        `<button aria-pressed="${convAdding ? 'true' : 'false'}"` +
+        ` onclick="convToggleAdd()">Add pane</button></div>${chips}${tier}</div>`;
+    }
+
+    // A pane does not carry the role it was started with, and neither does a record that predates
+    // convSpawn. The fallback is the one the Start dialog would have opened on, exactly as roleOf's.
+    function respawnRole(spawn) {
+      const roles = (startOptions && startOptions.roles) || [];
+      return roles.includes(spawn.role) ? spawn.role : roles[0];
+    }
+
+    // canDuplicate's predicate, read off a record rather than off a pane: the relay willing to
+    // start, a Project it still knows, and a harness inside the allowlist. Everything it refuses
+    // gets no button rather than a refusal after the tap.
+    function canRespawn(spawn) {
+      return !!(spawn && spawn.agent && spawn.project_id && startOptions
+        && (startOptions.agents || []).includes(spawn.agent)
+        && projects.some(p => p.id === spawn.project_id) && respawnRole(spawn));
+    }
+
+    // Continuing is adding a member, and a respawn is a **new** one — a new pane means a new
+    // convMemberKey, which means a new transcript (D3). That is what stops a recycled pane id
+    // inheriting a dead session's words, and the joint view's time merge is what makes the two
+    // read as one thread across the seam.
+    function convRespawn(key) {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      const rec = convViewRecs.find(r => r.key === key);
+      const spawn = rec && rec.spawn;
+      if (!ws || !conv || !canRespawn(spawn)) return;
+      const project = projects.find(p => p.id === spawn.project_id);
+      // The relay takes a new session's cwd from the Project and never from the client, so the
+      // recorded cwd is shown rather than sent: if the Project has been repointed since, the two
+      // disagree, and pretending they agree is the one thing this must not do.
+      const where = agents.find(x => x.project_id === spawn.project_id && x.cwd);
+      const moved = where && spawn.cwd && where.cwd !== spawn.cwd
+        ? `\n\nIt ran in ${spawn.cwd}. That Project now points at ${where.cwd}.` : '';
+      if (!confirm(`Start a new ${spawn.agent} session in ${project.label} and continue ` +
+        `"${conv.name}"?${moved}`)) return;
+      // herdr recycles workspace IDs, so a stale one cannot be trusted to name the workspace the
+      // session was in. New tab only where that workspace is live on that host right now.
+      const tab = !!spawn.workspace_id && agents.some(x => x.workspace_id === spawn.workspace_id
+        && (x.host || 'local') === (spawn.host || 'local'));
+      const msg = {
+        type: 'start_agent', name: spawn.agent, role: respawnRole(spawn),
+        project_id: spawn.project_id,
+        placement: tab ? 'new_tab' : 'new_workspace', slot: slotFor(),
+      };
+      if (tab) msg.workspace_id = spawn.workspace_id;
+      startIntent = { conv: conv.id };
+      showSpawnStatus(`Continuing "${conv.name}"…`, 'busy');
+      ws.send(JSON.stringify(msg));
+    }
+
+    // The whole thread as Markdown, members and what they were included: a conversation is a
+    // record of what happened in a repo, and the place that record is wanted is usually somewhere
+    // that is not this app. The roster doubles as the start details — every field is one the
+    // transcript already carries, so there is no second button for it.
+    function convMarkdown(conv, recs, entries) {
+      const live = new Set(agents.map(x => convMemberKey(x)));
+      const who = (conv.members || []).map(m => {
+        const rec = recs.find(r => r.key === m.key) || {}, spawn = rec.spawn || {};
+        const facts = [spawn.agent, spawn.role, spawn.project || spawn.cwd].filter(Boolean);
+        return `- ${rec.label || m.label || 'Former pane'}` +
+          (facts.length ? ` — ${facts.join(' · ')}` : '') +
+          ` (${live.has(m.key) ? 'recording' : 'no longer live'})`;
+      }).join('\n');
+      const body = entries.map(e => {
+        const at = convAt(e);
+        // The tilde the thread draws, in words: a stamp that is an ordering rather than a reading
+        // must not be pasted somewhere else as if it were a reading.
+        const when = at ? new Date(at).toLocaleString() + (convAtRank(e) ? '' : ' (approx)') : '';
+        return `### ${e.label || 'unknown'}${when ? ` — ${when}` : ''}\n\n${e.text || ''}`;
+      }).join('\n\n');
+      return `# ${conv.name}\n\n${who}\n\n${body}\n`;
+    }
+
+    function convCopy() {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv || !convViewEntries.length) return;
+      const btn = document.getElementById('convCopyBtn');
+      writeClipboard(convMarkdown(conv, convViewRecs, convViewEntries), () => {
+        if (!btn) return;
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+      });
+    }
+
+    function convEdit(fn) {
+      const items = loadConvIndex();
+      const conv = items.find(c => c.id === convViewId);
+      if (!conv || fn(conv, items) === false) return;
+      saveConvIndex(items);
+      renderConversations();
+      renderTermMenuState();
+      renderConvBar();
+      renderConvStandalone(false);
+    }
+
+    // Naming is the whole of promotion (D4): what the user named is permanent, what the app named
+    // for them is not, and there is no second concept to learn.
+    function renameConversation() {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv) return;
+      const next = prompt('Name for this conversation', conv.name || '');
+      if (next === null) return;
+      const name = next.trim().slice(0, 64);
+      if (!name || name === conv.name) return;
+      convEdit(c => { c.name = name; delete c.auto; });
+    }
+
+    // A grouping is a view over transcripts, so a copy of one costs a row in the index and not a
+    // word in the database. That is what makes "A and B, then A, B and C, and compare" a thing the
+    // user can do at all: editing the original would destroy the reading being compared against.
+    //
+    // The copy is named, never auto. Making one is an assertion that this grouping matters, which is
+    // exactly what D4 defines the named tier to be — and it stops the copy being evicted out from
+    // under the comparison it was made for.
+    function duplicateConversation() {
+      const items = loadConvIndex(), conv = items.find(c => c.id === convViewId);
+      if (!conv) return;
+      const copy = {
+        id: 'c_' + Math.random().toString(36).slice(2, 10),
+        name: convCopyName(conv.name, items.map(c => c.name)),
+        created: Date.now(),
+        members: (conv.members || []).map(m => Object.assign({}, m)),
+      };
+      items.unshift(copy);
+      saveConvIndex(items);
+      renderConversations();
+      // Straight into the copy: the next thing the user does is add the member they made it for.
+      openConversation(copy.id);
+      showToast(`Copied to "${copy.name}".`);
+    }
+
+    // What the picker offers besides the live panes, read once when it opens. Held rather than
+    // re-read on every redraw: the standalone view repaints on every snapshot, and a store scan on
+    // the poll path is what this deliberately is not.
+    let convPickRecs = [];
+    const CONV_PICK_MAX = 60;
+
+    async function convToggleAdd() {
+      convAdding = !convAdding;
+      if (!convAdding) { convPickRecs = []; renderConvStandalone(false); return; }
+      renderConvStandalone(false);
+      convPickRecs = await convAll();
+      if (convAdding) renderConvStandalone(false);
+    }
+
+    // A member built from a record instead of from a pane: the session has ended, so there is no
+    // paneLabel to ask and the record's own label is the only name it has left.
+    function convJoinRecord(key) {
+      const rec = convPickRecs.find(r => r.key === key);
+      if (!rec) return;
+      convAdding = false;
+      convPickRecs = [];
+      // No CONV_MEMBER_MAX check: that caps panes *recording* at once, and this one has stopped.
+      convEdit(conv => {
+        conv.members = (conv.members || []).concat(
+          { key: key, added: Date.now(), label: rec.label || '' });
+      });
+    }
+
+    function convJoinPane(key) {
+      const pane = agents.find(x => convMemberKey(x) === key);
+      if (!pane) return;
+      convAdding = false;
+      convPickRecs = [];
+      convEdit(conv => {
+        if (convRecordingMembers(conv).length >= CONV_MEMBER_MAX) {
+          showToast(`"${conv.name}" already has ${CONV_MEMBER_MAX} live panes.`);
+          return false;
+        }
+        conv.members = (conv.members || []).concat(convMemberOf(pane));
+      });
+    }
+
+    function convRemoveMember(key) {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      const m = conv && (conv.members || []).find(x => x.key === key);
+      if (!m) return;
+      if (!confirm(`Remove "${m.label || 'this member'}" from "${conv.name}"?\n\n` +
+        'What it said leaves the thread, and its transcript stops being kept.')) return;
+      convEdit(c => { c.members = (c.members || []).filter(x => x.key !== key); });
+    }
+
+    // The whole record, every member, from the store alone. `bottom` scrolls to the newest on the
+    // way in; a redraw from the snapshot leaves the reader where they were.
+    async function renderConvStandalone(bottom) {
+      const view = document.getElementById('convView');
+      if (!view || view.style.display === 'none') return;
+      const box = document.getElementById('convViewThread');
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv) { closePanel(); return; }
+      document.getElementById('convViewTitle').textContent = conv.name;
+      const members = conv.members || [], hidden = convHidden(conv.id);
+      const shown = members.filter(m => !hidden.has(m.key));
+      const open = document.getElementById('convViewOpen');
+      open.hidden = !convVisibleLive(conv);
+      const who = document.getElementById('convViewWho');
+      who.textContent = (hidden.size ? `${shown.length}/${members.length}` : `${members.length}`) +
+        ` pane${members.length === 1 ? '' : 's'} ▾`;
+      who.setAttribute('aria-expanded', convRosterOpen ? 'true' : 'false');
+      const token = ++convStandaloneToken;
+      const keys = members.map(m => m.key);
+      // No drafts: a draft belongs to a pane being watched, and this view watches none.
+      const composed = await convCompose(conv, keys, []);
+      if (token !== convStandaloneToken || convViewId !== conv.id) return;
+      // Composed over every member and filtered after, never composed over the visible ones: the
+      // member index is what picks a bubble's colour, so hiding the first member must not repaint
+      // the second one in its tint.
+      // A single-member thread is read straight off its one record and its entries carry no key —
+      // there was never another member to tell them from. That member is keys[0].
+      const visible = e => !hidden.has(e.key || keys[0]);
+      const entries = hidden.size ? composed.entries.filter(visible) : composed.entries;
+      const all = hidden.size ? composed.all.filter(visible) : composed.all;
+      // The count goes in the header beside the name rather than in a conv-head above the thread:
+      // the name is already up there, and printing it twice is the panel's only line of chrome
+      // saying nothing.
+      document.getElementById('convViewCount').textContent =
+        `${entries.length} message${entries.length === 1 ? '' : 's'}`;
+      convViewRecs = composed.recs;
+      convViewEntries = entries;
+      // The panel is its own element and diffed on its own: a message arriving must not rewrite the
+      // roster under a reader who has just opened it.
+      const panel = document.getElementById('convViewRoster');
+      const rosterHtml = convRosterOpen ? convRosterHtml(conv, composed.recs, hidden) : '';
+      if (rosterHtml !== convRosterHtmlLast) { convRosterHtmlLast = rosterHtml; panel.innerHTML = rosterHtml; }
+      panel.hidden = !convRosterOpen;
+      const html = (entries.length
+        ? convEntriesHtml(entries, null, false, false)
+        : (all.length
+          ? '<p class="conv-empty">Everything recorded here is still provisional. Turn "final ' +
+            'messages only" off in the pane menu to see it.</p>'
+          : hidden.size && composed.all.length
+            ? '<p class="conv-empty">Every member is hidden. Open the panel above to bring one ' +
+              'back.</p>'
+            : '<p class="conv-empty">Nothing recorded here yet.</p>'));
+      // The snapshot redraws this view every three seconds, and rewriting innerHTML would take the
+      // reader's text selection with it mid-copy. Only a thread that actually changed is written.
+      if (html !== convStandaloneHtml) { convStandaloneHtml = html; box.innerHTML = html; }
+      if (bottom) view.scrollTop = view.scrollHeight;
     }
 
     // Title and terminal-only chrome for whatever is open. Called on open and again after every
@@ -8299,8 +9490,7 @@
       noteVisit(paneId);
       syncOpenPaneChrome();
       document.getElementById('agentListView').style.display = 'none';
-      document.getElementById('settingsView').style.display = 'none';
-      document.getElementById('timelineView').style.display = 'none';
+      hidePanels();
       document.body.classList.add('terminal-open');
       // After the class, never before: the strip is display:none outside a pane, and a hidden
       // element measures zero — the edge fades and the scroll-into-view would both no-op.
@@ -8434,6 +9624,9 @@
       catch (e) { /* private mode: session-only */ }
       syncBottomDock();
       renderQuickActions();  // the v has to become a ^, and vice versa
+      // The strip names the pane the composer types into, so it is only true while there is a
+      // composer. Without this the name outlives the fold by up to one poll.
+      renderPairStrip();
     }
 
     // Jump to the newest line. It also puts the pane back to following the tail: the scroll
