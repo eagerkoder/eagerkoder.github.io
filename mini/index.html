@@ -1824,8 +1824,14 @@
       scroll-snap-type: x proximity;
     }
 
-    body.conversation-open .conv-strip:not(:empty) {
+    body.conversation-open .conv-strip:not(:empty),
+    body.terminal-open.conv-tabs .conv-strip:not(:empty) {
       display: flex;
+    }
+
+    /* One row of tabs, whichever kind it is holding. */
+    body.terminal-open.conv-tabs .agent-tabs {
+      display: none;
     }
 
     .conv-strip::-webkit-scrollbar {
@@ -2143,6 +2149,13 @@
       padding-top: 4px;
     }
 
+    /* The one action in this row that ends something. Coloured rather than moved apart — the row
+       wraps on a phone, so a gap cannot be relied on to keep it away from the others. */
+    .conv-roster-actions .conv-del {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
     .conv-roster-actions button[aria-pressed="true"] {
       border-color: var(--blue);
       color: var(--blue);
@@ -2160,6 +2173,37 @@
     .conv-roster .conv-again {
       color: var(--blue);
       border-color: var(--blue);
+    }
+
+    /* The same two-tap promise QUIT makes in the header, on a button a render draws rather than
+       one that lives in the markup. Longer drain — see ARM_MS: these are aimed at off a panel,
+       not pressed by a thumb already resting on them. */
+    .arm-btn[data-armed="1"],
+    .term-menu .menu-item.arm-btn[data-armed="1"] {
+      color: var(--bg);
+      border-color: transparent;
+      background: linear-gradient(to right, var(--orange) 50%, var(--border) 50%) right / 200% 100%;
+      animation: arm-drain 2.5s linear forwards;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .arm-btn[data-armed="1"],
+      .term-menu .menu-item.arm-btn[data-armed="1"] {
+        background: var(--orange);
+        animation: none;
+      }
+    }
+
+    /* A class rather than the inline styles it used to carry: an inline background outranks every
+       rule, including the armed one. */
+    .palette-del {
+      background: none;
+      border: none;
+      border-radius: 6px;
+      padding: 2px 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      cursor: pointer;
     }
 
     /* Borderless and ahead of the colour dot: it acts on the row, and a third bordered button per
@@ -3543,8 +3587,8 @@
             onclick="closeTermMenu(); startInThisProject()">New session</button>
           <!-- Another one of these, beside this one, without answering the dialog again.
                renderTermMenuState names the agent and hides it when it cannot be started. -->
-          <button class="menu-item" role="menuitem" id="menuDuplicate" hidden
-            onclick="closeTermMenu(); duplicatePane()">Duplicate</button>
+          <button class="menu-item arm-btn" role="menuitem" id="menuDuplicate" hidden
+            onclick="armButton(this, 'Duplicate?', duplicatePane)">Duplicate</button>
           <!-- One item for both jobs: membership is a list the user edits, so joining an existing
                conversation and naming a new one are the same sheet. renderTermMenuState writes the
                text, because "start one" and "you are in one" are different offers. -->
@@ -3610,6 +3654,7 @@
             <option value="project">This project only</option>
             <option value="all">Every live pane</option>
             <option value="pairs">Every pair</option>
+            <option value="convs">Conversations</option>
           </select>
           <div id="tabScopeHint" style="font-size:0.65rem;color:var(--muted);margin-top:5px"></div>
           <!-- Same reason: a shell never belongs to a pair, so it has no pair bar to place. -->
@@ -4627,7 +4672,7 @@
     // turns it into a row to scroll rather than one to tap. 'all' is the old behaviour, kept.
     // 'pairs' is the third: the strip becomes the pairs themselves.
     const TAB_SCOPE_KEY = 'herdr_tab_scope';
-    const TAB_SCOPES = ['project', 'all', 'pairs'];
+    const TAB_SCOPES = ['project', 'all', 'pairs', 'convs'];
     function tabScope() {
       const v = localStorage.getItem(TAB_SCOPE_KEY);
       return TAB_SCOPES.includes(v) ? v : 'project';
@@ -4701,6 +4746,13 @@
 
     function renderAgentTabs() {
       const el = document.getElementById('agentTabs');
+      // Conversations in the pane tabs' slot, when that is the setting. Not two strips: the header
+      // has one row for tabs, and a second saying the same kind of thing is how a bar stops being
+      // read. On the landing page there is nothing to leave, so the pane strip is not drawn there
+      // either and this changes nothing.
+      const convTabs = tabScope() === 'convs' && !!activePane;
+      document.body.classList.toggle('conv-tabs', convTabs);
+      if (convTabs) { renderConvStrip(); return; }
       // Terminals belong here too: the strip is the live panes, and an open terminal with no tab
       // of its own reads as the strip having lost it.
       // One order for agents and terminals, not an agent block followed by a terminal block. The
@@ -5571,6 +5623,8 @@
     function duplicatePane() {
       const a = activePane ? agents.find(x => x.pane_id === activePane) : null;
       if (!ws || !canDuplicate(a)) return;
+      // Armed in the menu, so the menu is still open behind the second tap.
+      closeTermMenu();
       const tab = !!a.workspace_id;
       const msg = {
         type: 'start_agent', name: a.agent, role: roleOf(a), project_id: a.project_id,
@@ -7723,6 +7777,9 @@
     function renderConvBar() {
       renderQuickActions();
       renderConvView();
+      // Which conversation the pane is reading is what the strip marks current, when the strip is
+      // holding conversations. Diffed by its own signature, so this costs nothing when it is not.
+      renderConvStrip();
     }
 
     // A render can be overtaken by the next one while it waits on the database, and the loser
@@ -7790,7 +7847,7 @@
       // Under the pane's own header, not inside the thread: the same control in the same place as
       // the conversation view's, and drawn separately so an arriving message cannot rewrite the
       // roster under a reader who has just opened it.
-      renderConvPaneChrome(conv, recs, hidden, key);
+      renderConvPaneChrome(conv, recs, hidden, key, entries);
       box.innerHTML = convHeadHtml(thread, key, joint ? -1 : entries.length,
         joint ? entries.length : -1, convsForPane(a)) +
         (joint ? convMembersHtml(thread, recs) : '') + (entries.length
@@ -8484,6 +8541,11 @@
       const el = document.getElementById('tabScopeHint');
       const scope = tabScope();
       if (scope === 'all') { el.textContent = 'Every live agent and terminal.'; return; }
+      if (scope === 'convs') {
+        el.textContent = 'Conversations instead of panes. A tab this pane is in switches its ' +
+          'thread; any other opens the conversation on its own.';
+        return;
+      }
       if (scope === 'pairs') {
         const n = pairs.filter(p => pairHealth(p, agents).state === 'healthy').length;
         el.textContent = n
@@ -8520,9 +8582,19 @@
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.term-menu-wrap')) closeTermMenu();
       if (!e.target.closest('.fire-wrap')) closeFireMenu();
+      // The pane's roster panel is a disclosure hung off the header, and a tap on the thread
+      // behind it is a tap on the thing it is covering.
+      if (convPaneRoster && !e.target.closest('#convPaneRoster') && !e.target.closest('#paneConvWho')) {
+        toggleConvPaneRoster();
+      }
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeTermMenu(); closeFireMenu(); }
+      if (e.key === 'Escape') {
+        closeTermMenu();
+        closeFireMenu();
+        disarmButton();
+        if (convPaneRoster) toggleConvPaneRoster();
+      }
     });
 
     function fingerprint(a, role) {
@@ -8878,7 +8950,9 @@
 
     function unpair() {
       const pair = pairFor(pairs, activePane);
-      if (!pair || !confirm(`Remove the pair "${pair.name}"?`)) return;
+      if (!pair) return;
+      // The arm is what asked; the menu it was armed in is still open behind it.
+      closeTermMenu();
       pairs = pairs.filter(p => p.id !== pair.id);
       savePairs();
       render();
@@ -8935,7 +9009,8 @@
       // working, and pair management is neither frequent nor something to hit by accident.
       menu.innerHTML =
         `<button class="menu-item" role="menuitem" onclick="closeTermMenu(); openPairDialog(activePane)">Edit pair</button>` +
-        `<button class="menu-item danger" role="menuitem" onclick="closeTermMenu(); unpair()">Unpair…</button>`;
+        `<button class="menu-item danger arm-btn" role="menuitem"` +
+        ` onclick="armButton(this, 'Unpair?', unpair)">Unpair…</button>`;
     }
 
     // Renames the pane in herdr itself, not just in this browser. A frontend-only alias would
@@ -9150,7 +9225,7 @@
 
     function deleteShortcut(i) {
       const s = termShortcuts[i];
-      if (!s || !confirm(`Delete "${s.label}"?`)) return;
+      if (!s) return;
       termShortcuts.splice(i, 1);
       saveTermShortcuts();
       refreshPalette();
@@ -9430,9 +9505,14 @@
     // a minute would take a reader's tap target out from under their finger.
     let convPaneRosterHtml = '';
 
-    function renderConvPaneChrome(conv, recs, hidden, key) {
+    function renderConvPaneChrome(conv, recs, hidden, key, entries) {
       const who = document.getElementById('paneConvWho'), panel = document.getElementById('convPaneRoster');
       const n = (conv.members || []).length;
+      // The panel's actions read the thread that was drawn — Copy writes it out, Start again reads
+      // a member's spawn from it. Same variables as the standalone view's, for the same reason
+      // convViewId is: the two are never on screen together.
+      convViewRecs = recs;
+      convViewEntries = entries;
       who.hidden = false;
       who.textContent = `${n} pane${n === 1 ? '' : 's'} ▾`;
       who.setAttribute('aria-expanded', convPaneRoster ? 'true' : 'false');
@@ -9489,11 +9569,11 @@
           (on ? `<button class="conv-open" data-key="${escapeHtml(m.key)}"` +
             ` onclick="openConvMemberPane(this.dataset.key)"` +
             ` aria-label="Open this member's pane">Open</button>` : '') +
-          (!on && canRespawn(rec.spawn) ? `<button class="conv-again" data-key="${escapeHtml(m.key)}"` +
-            ` onclick="convRespawn(this.dataset.key)"` +
+          (!on && canRespawn(rec.spawn) ? `<button class="conv-again arm-btn" data-key="${escapeHtml(m.key)}"` +
+            ` onclick="convArmRespawn(this, this.dataset.key)"` +
             ` aria-label="Start a new session and continue this conversation">Start again</button>` : '') +
-          `<button class="conv-drop" data-key="${escapeHtml(m.key)}"` +
-          ` onclick="convRemoveMember(this.dataset.key)"` +
+          `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.key)}"` +
+          ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button></div>`;
       }).join('');
       // Candidates are the live panes this conversation does not already name — including panes
@@ -9530,11 +9610,17 @@
       return `<div class="conv-roster">${rows}<div class="conv-roster-actions">` +
         `<button onclick="renameConversation()">Rename</button>` +
         `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
-        `<button onclick="duplicateConversation()"` +
+        `<button class="arm-btn" onclick="armButton(this, 'Duplicate?', duplicateConversation)"` +
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
         `Duplicate</button>` +
         `<button aria-pressed="${convAdding ? 'true' : 'false'}"` +
-        ` onclick="convToggleAdd()">Add pane</button></div>${chips}${tier}</div>`;
+        ` onclick="convToggleAdd()">Add pane</button>` +
+        // Last, and the only one here that ends something. The words are not what goes: a
+        // conversation is a roster and a name, and deleting one unreferences transcripts rather
+        // than erasing them — which is what D2's floor has always meant by removal.
+        `<button class="conv-del arm-btn" onclick="armButton(this, 'Delete?', deleteConversation)"` +
+        ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
+        `</div>${chips}${tier}</div>`;
     }
 
     // A pane does not carry the role it was started with, and neither does a record that predates
@@ -9557,20 +9643,32 @@
     // convMemberKey, which means a new transcript (D3). That is what stops a recycled pane id
     // inheriting a dead session's words, and the joint view's time merge is what makes the two
     // read as one thread across the seam.
+    // What the first tap says, because the second one starts a real session on a real host and a
+    // drain cannot carry a sentence. The relay takes a new session's cwd from the Project and
+    // never from the client, so the recorded cwd is *shown* rather than sent: if the Project has
+    // been repointed since, the two disagree, and pretending they agree is the one thing this
+    // must not do.
+    function respawnNote(key) {
+      const rec = convViewRecs.find(r => r.key === key), spawn = rec && rec.spawn;
+      if (!canRespawn(spawn)) return '';
+      const project = projects.find(p => p.id === spawn.project_id) || {};
+      const where = agents.find(x => x.project_id === spawn.project_id && x.cwd);
+      const moved = where && spawn.cwd && where.cwd !== spawn.cwd
+        ? ` It ran in ${spawn.cwd}; that Project now points at ${where.cwd}.` : '';
+      return `Tap again to start a new ${spawn.agent} session in ${project.label || 'this Project'}.${moved}`;
+    }
+
+    function convArmRespawn(btn, key) {
+      // Said on the arm, not on the fire: by the second tap the session is already starting.
+      if (armedEl !== btn) { const note = respawnNote(key); if (note) showToast(note); }
+      armButton(btn, 'Start again?', () => convRespawn(key));
+    }
+
     function convRespawn(key) {
       const conv = loadConvIndex().find(c => c.id === convViewId);
       const rec = convViewRecs.find(r => r.key === key);
       const spawn = rec && rec.spawn;
       if (!ws || !conv || !canRespawn(spawn)) return;
-      const project = projects.find(p => p.id === spawn.project_id);
-      // The relay takes a new session's cwd from the Project and never from the client, so the
-      // recorded cwd is shown rather than sent: if the Project has been repointed since, the two
-      // disagree, and pretending they agree is the one thing this must not do.
-      const where = agents.find(x => x.project_id === spawn.project_id && x.cwd);
-      const moved = where && spawn.cwd && where.cwd !== spawn.cwd
-        ? `\n\nIt ran in ${spawn.cwd}. That Project now points at ${where.cwd}.` : '';
-      if (!confirm(`Start a new ${spawn.agent} session in ${project.label} and continue ` +
-        `"${conv.name}"?${moved}`)) return;
       // herdr recycles workspace IDs, so a stale one cannot be trusted to name the workspace the
       // session was in. New tab only where that workspace is live on that host right now.
       const tab = !!spawn.workspace_id && agents.some(x => x.workspace_id === spawn.workspace_id
@@ -9719,13 +9817,48 @@
       });
     }
 
+    // A conversation is a roster and a name, so this ends the grouping and nothing else: every
+    // member's transcript stays in the store, unreferenced, and takes its turn under the eviction
+    // rules like any other. Said in the toast, because "delete" reads as "the words are gone".
+    function deleteConversation() {
+      const items = loadConvIndex(), conv = items.find(c => c.id === convViewId);
+      if (!conv) return;
+      saveConvIndex(items.filter(c => c.id !== conv.id));
+      // The reading state goes with it, or a conversation created later on a recycled id would
+      // inherit a stranger's folded-out members.
+      const hidden = convHiddenAll();
+      delete hidden[conv.id];
+      try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(hidden)); }
+      catch (e) { /* private mode: this session only */ }
+      convStandaloneHtml = '';
+      renderConversations();
+      if (document.body.classList.contains('conversation-open')) {
+        closePanel();
+      } else {
+        // In a pane: fall back to another of its conversations, or to the rows if that was the
+        // last one. The panel it was deleted from goes too — it acts on something that is gone.
+        const a = activePane ? paneOf(activePane) : null;
+        if (convPaneRoster) toggleConvPaneRoster();
+        if (a) {
+          const next = convsForPane(a)[0];
+          convSetView(a, next ? next.id : '');
+          renderConvBar();
+        }
+      }
+      showToast(`Deleted "${conv.name}". What its panes said stays on this device, ` +
+        'unreferenced, until space runs out.');
+    }
+
     function convRemoveMember(key) {
       const conv = loadConvIndex().find(c => c.id === convViewId);
       const m = conv && (conv.members || []).find(x => x.key === key);
       if (!m) return;
-      if (!confirm(`Remove "${m.label || 'this member'}" from "${conv.name}"?\n\n` +
-        'What it said leaves the thread, and its transcript stops being kept.')) return;
       convEdit(c => { c.members = (c.members || []).filter(x => x.key !== key); });
+      // The modal that used to ask said what leaving costs. The drain asks instead, and cannot
+      // carry a sentence, so the sentence lands after — it is the part the user has to know, and
+      // the tap it would have interrupted has already happened.
+      showToast(`Removed "${m.label || 'this member'}" — its words leave the thread, ` +
+        'and its transcript stops being kept.');
     }
 
     // The tab bar at the foot of the conversation view. Rebuilt only when what it says changed:
@@ -9740,8 +9873,9 @@
       // The open conversation is always a tab, even when the reader has the auto ones hidden — a
       // strip that cannot show what is on screen is worse than one carrying an extra tab, which is
       // the rule the pane strip already follows for the open pane.
-      const list = shown.some(c => c.id === convViewId)
-        ? shown : shown.concat(loadConvIndex().filter(c => c.id === convViewId));
+      const here = convCurrentId();
+      const list = shown.some(c => c.id === here)
+        ? shown : shown.concat(loadConvIndex().filter(c => c.id === here));
       const live = new Set(agents.map(x => convMemberKey(x)));
       const rows = list.map(c => {
         const on = (c.members || []).map(m => agents.find(a => live.has(m.key) && convMemberKey(a) === m.key))
@@ -9751,19 +9885,45 @@
         return { c: c, dot: lead ? statusColor(lead) : 'var(--muted)',
           pulse: lead && lead.status === 'working' ? ' pulse' : '' };
       });
+      const now = convCurrentId();
       const sig = rows.map(r => `${r.c.id}|${r.c.name}|${r.c.auto ? 'a' : '-'}|${r.dot}|${r.pulse}`)
-        .join(' /// ') + ` @@ ${convViewId}`;
+        .join(' /// ') + ` @@ ${now}`;
       if (sig === convStripSig) return;
       convStripSig = sig;
       el.innerHTML = rows.map(r =>
         `<button class="conv-tab" data-conv-id="${escapeHtml(r.c.id)}"` +
-        ` aria-current="${r.c.id === convViewId ? 'true' : 'false'}"` +
-        ` onclick="openConversation(this.dataset.convId)">` +
+        ` aria-current="${r.c.id === now ? 'true' : 'false'}"` +
+        ` onclick="convTabPick(this.dataset.convId)">` +
         `<span class="pill"><span class="dot${r.pulse}" style="background:${r.dot}" aria-hidden="true"></span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
         (r.c.auto ? '<span class="tier">auto</span>' : '') + '</span></button>').join('');
       const open = el.querySelector('[aria-current="true"]');
       if (open) open.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    // Which tab is the one you are looking at. Two views ask it: the standalone one is showing a
+    // conversation outright, and a pane is showing whichever of its own it last read.
+    function convCurrentId() {
+      if (document.body.classList.contains('conversation-open')) return convViewId;
+      const a = activePane ? paneOf(activePane) : null;
+      const conv = a && convViewOn(a) ? convViewConv(a) : null;
+      return conv ? conv.id : '';
+    }
+
+    // A tab is a conversation, and where it opens depends on whether the pane on screen is in it.
+    // Switching the pane's own thread beats leaving the pane: the composer, the rows and the
+    // ruler are all still there, and the reader asked for a different grouping, not a different
+    // screen.
+    function convTabPick(id) {
+      const a = document.body.classList.contains('conversation-open') || !activePane
+        ? null : paneOf(activePane);
+      const conv = loadConvIndex().find(c => c.id === id);
+      if (a && conv && (conv.members || []).some(m => m.key === convMemberKey(a))) {
+        convSetView(a, id);
+        renderConvBar();
+        return;
+      }
+      openConversation(id);
     }
 
     // The whole record, every member, from the store alone. `bottom` scrolls to the newest on the
@@ -10216,6 +10376,42 @@
       delete btn.dataset.armed;
       btn.textContent = ARM_LABELS[id];
     }
+
+    // The same two taps, for a button a render drew. armFire cannot serve these: it is keyed by
+    // element id against a table of labels, and these buttons are rebuilt from innerHTML with no
+    // id worth having. So the arm hangs off the element, and only one is ever armed — a second
+    // arm disarms the first, because two buttons both claiming the next tap is not a promise.
+    //
+    // 2.5s rather than the header's 1.5s. That window is short because QUIT sits under the thumb
+    // for as long as a pane is open; these are reached by opening a panel and aiming, and a
+    // deadline that expires while you are still moving teaches people to double-tap blind.
+    const ARM_MS = 2500;
+    let armedEl = null, armedTimer = 0;
+
+    function armButton(btn, label, run) {
+      if (armedEl === btn) { disarmButton(); run(); return; }
+      disarmButton();
+      armedEl = btn;
+      btn.dataset.armLabel = btn.textContent;
+      btn.dataset.armed = '1';
+      btn.textContent = label;
+      // Disarms itself rather than waiting to be pressed again — the same reason the header's does.
+      armedTimer = setTimeout(disarmButton, ARM_MS);
+    }
+
+    function disarmButton() {
+      clearTimeout(armedTimer);
+      const btn = armedEl;
+      armedEl = null;
+      if (!btn) return;
+      btn.textContent = btn.dataset.armLabel;
+      delete btn.dataset.armed;
+      delete btn.dataset.armLabel;
+    }
+
+    // Anywhere else, and the arm is off: a tap that lands somewhere else is a tap that was not
+    // the second half of this pair.
+    document.addEventListener('click', (e) => { if (e.target !== armedEl) disarmButton(); }, true);
 
     function disarmClear() { disarmFire('clsBtn'); }
     function disarmQuit() { disarmFire('quitBtn'); }
@@ -10713,8 +10909,8 @@
           : paletteMode === 'prompts' ? `insertShortcut(${c.idx})`
             : `runShortcut(${c.idx})`;
         const del = paletteMode === 'terminal'
-          ? `<button aria-label="Delete ${escapeHtml(c.cmd)}" onclick="event.stopPropagation();deleteShortcut(${c.idx})"
-        style="background:none;border:none;color:var(--muted);font-size:0.9rem;cursor:pointer">✕</button>` : '';
+          ? `<button class="palette-del arm-btn" aria-label="Delete ${escapeHtml(c.cmd)}"
+        onclick="event.stopPropagation();armButton(this, 'Delete?', () => deleteShortcut(${c.idx}))">✕</button>` : '';
         return `<div role="button" tabindex="0" onclick="${act}" onkeydown="if(event.key==='Enter')${act}" style="padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:2px;transition:background 0.15s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
     <span style="font-family:monospace;font-weight:600;font-size:0.85rem;${c.danger ? 'color:var(--red)' : 'color:var(--blue)'}">${escapeHtml(armed ? `Run ${c.cmd}?` : c.cmd)}</span>
     <span style="flex:1;font-size:0.75rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.desc)}</span>${del}
