@@ -704,34 +704,52 @@
       font-weight: 500;
     }
 
-    .bandwidth-row {
+    /* One grid holding the clock row and all three data rows, so the columns line up and the whole
+       thing scrolls as one table. The rows and the chip strip are display: contents, which keeps
+       the markup readable while every cell sits in the one grid. */
+    #bandwidthRows {
       display: grid;
-      grid-template-columns: 52px minmax(0, 1fr);
       align-items: center;
-      gap: 6px;
-      margin-top: 5px;
+      gap: 5px 4px;
+      overflow-x: auto;
+      padding-bottom: 2px;
       font: 0.62rem monospace;
     }
 
-    .bandwidth-label { color: var(--muted); }
+    .bandwidth-head,
+    .bandwidth-row,
+    .bandwidth-chips { display: contents; }
 
-    .bandwidth-chips {
-      display: flex;
-      flex-wrap: nowrap;
-      gap: 4px;
-      overflow-x: auto;
-      padding-bottom: 2px;
+    /* The row's name stays put while the hour scrolls past it, so a number is never nameless. */
+    .bandwidth-label {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      padding-right: 4px;
+      color: var(--muted);
+      background: var(--bg);
     }
 
+    .bandwidth-time {
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .bandwidth-time.now { color: var(--green); }
+
     .bandwidth-chip {
-      flex: 0 0 auto;
-      min-width: 38px;
       padding: 3px 4px;
       border: 1px solid var(--border);
       border-radius: 4px;
       text-align: center;
       color: var(--text);
       background: color-mix(in srgb, var(--text) 4%, var(--bg));
+    }
+
+    /* The bucket still being filled: what is on the wire right now, not a closed total. */
+    .bandwidth-chip.now {
+      border-color: color-mix(in srgb, var(--green) 55%, var(--border));
+      background: color-mix(in srgb, var(--green) 8%, var(--bg));
     }
 
     /* Settings */
@@ -3999,8 +4017,33 @@
 
     <div class="setting-group">
       <label class="toggle-option"><input type="checkbox" id="bandwidthOn" onchange="setBandwidthOn(this.checked)"> Track WebSocket payload data</label>
-      <div class="hint">Shows sent, received and total payload bytes in Activity, in five-minute buckets
-        for this browser session. WebSocket frame and TLS overhead are not available to the page.</div>
+      <div class="hint">Shows sent, received and total payload bytes in Activity, for this browser
+        session. The newest bucket is the one filling now. WebSocket frame and TLS overhead are not
+        available to the page.</div>
+      <label for="bandwidthStep">Bucket</label>
+      <select id="bandwidthStep" onchange="setBandwidthStep(Number(this.value))">
+        <option value="5">5 minutes</option>
+        <option value="10">10 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">60 minutes</option>
+      </select>
+      <label for="bandwidthSpan">Keep</label>
+      <select id="bandwidthSpan" onchange="setBandwidthSpan(Number(this.value))">
+        <option value="1">1 hour</option>
+        <option value="5">5 hours</option>
+      </select>
+      <div class="hint">A narrower bucket is closer to live, a wider one is easier to read across
+        hours. Changing the bucket clears what has been collected: it is already cut on the old
+        boundaries. Changing how much is kept only changes how far back the table draws.</div>
+    </div>
+
+    <div class="setting-group">
+      <label class="toggle-option"><input type="checkbox" id="autocorrectOn" onchange="setAutocorrect(this.checked)"> Autocorrect in the composer</label>
+      <div class="hint">Off by default. Both composers type into an agent's prompt, where a flag is
+        not a typo and a path is not a sentence — a keyboard that capitalises the first word of one
+        has changed it. On gives you the phone's own correction, capitalisation and spellcheck for
+        writing prose to an agent. A terminal's composer never takes it either way: there it is a
+        command line.</div>
     </div>
 
     <div class="setting-group">
@@ -4035,7 +4078,7 @@
   <div class="view" id="timelineView" style="display:none;padding:12px;">
     <div id="timelineList" style="font-family:monospace;font-size:0.75rem;line-height:1.8;"></div>
     <section class="bandwidth" id="bandwidth" hidden aria-label="WebSocket payload data">
-      <h2>Data exchange · last hour</h2>
+      <h2 id="bandwidthTitle">Data exchange · last hour</h2>
       <div id="bandwidthRows"></div>
     </section>
   </div>
@@ -4084,7 +4127,7 @@
           <div class="conv-field">
             <div class="conv-ghost" id="convGhost" aria-hidden="true"></div>
             <textarea id="convInput" rows="1" maxlength="16000" placeholder="Message…  ⌘/Ctrl+Enter sends"
-              autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"
+              autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
               oninput="autoGrow(this); syncConvCursor()" onkeydown="convInputKey(event)"
               onkeyup="syncConvCursor()" onclick="syncConvCursor()" onselect="syncConvCursor()"
               onfocus="syncConvCursor()" onblur="syncConvCursor()"
@@ -4143,6 +4186,8 @@
             aria-label="Quit what is running in this pane">QUIT</button>
           <button class="refresh-btn cls-btn" id="clsBtn" onclick="armClear()"
             aria-label="Clear this pane">CLS</button>
+          <button class="refresh-btn" id="resendBtn" onclick="resendLast()" hidden
+            aria-label="Load this pane's last message into the composer">Resend</button>
           <!-- Refresh rides with them. The pane polls itself every few seconds, so this is the
                button for the one state where it does not: past POLL_MAX_LINES the poll stops and
                a manual read is the only way to update. The icon alone says nothing in a menu, so
@@ -4327,14 +4372,12 @@
         <button id="ctrlKeysBtn" onclick="toggleCtrlDock()" aria-label="Ctrl keys"
           style="border:1px solid var(--red);background:var(--bg);color:var(--red);font-weight:700;font-size:13px">^C</button>
       </div>
-      <!-- Autocorrect on, at the user's direction. It is the composer for prose sent to an agent
-           far more often than it is a command line, and the keyboard's own correction is worth
-           more than a literal transcription of every typo. Anything that must survive verbatim
-           still can: the Keys pad and the / palette do not pass through here.
-           These are the agent values. syncComposerMode turns all three off over a terminal, where
-           the composer *is* a command line — see it for why. -->
-      <textarea id="termInput" rows="2" maxlength="4000" placeholder="Type…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="on"
-        autocapitalize="sentences" spellcheck="true"></textarea>
+      <!-- Off, which is what the markup says before any script runs: a composer that autocorrected
+           for one frame on a slow phone would have already capitalised the first word. The setting
+           turns it back on for prose, and syncComposerMode still refuses it over a terminal
+           whatever the setting says — see it for why. -->
+      <textarea id="termInput" rows="2" maxlength="4000" placeholder="Type…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="off"
+        autocapitalize="none" spellcheck="false"></textarea>
       <div class="term-input-side">
         <button class="send" onclick="sendText()" aria-label="Send"><svg width="24" height="24" viewBox="0 0 24 24"
             fill="currentColor" stroke="none">
@@ -4641,13 +4684,53 @@
     // this API and are deliberately not guessed at. Kept for this session only, like the activity
     // log it is shown beside: turning collection on starts a fresh hour rather than claiming to
     // know traffic from before this page was open.
-    const BANDWIDTH_KEY = 'herdr_bandwidth', BANDWIDTH_BUCKET_MS = 5 * 60 * 1000,
-      BANDWIDTH_BUCKETS = 12;
-    let bandwidth = [];
+    const BANDWIDTH_KEY = 'herdr_bandwidth', BANDWIDTH_STEP_KEY = 'herdr_bandwidth_step',
+      BANDWIDTH_SPAN_KEY = 'herdr_bandwidth_span';
+    // How wide a bucket is and how far back they run, both settings: five minutes across the last
+    // hour by default, which is close enough to live to watch a transfer land, and an hour is long
+    // enough to see the idle rate. Offered as a pair because they only mean anything together — one
+    // hour in five-minute steps is twelve chips, five hours in the same step is sixty.
+    const BANDWIDTH_STEPS = [5, 10, 30, 60];   // minutes
+    const BANDWIDTH_SPANS = [1, 5];            // hours
 
     function bandwidthOn() {
       try { return localStorage.getItem(BANDWIDTH_KEY) === 'on'; }
       catch (e) { return false; }
+    }
+
+    function bandwidthPick(key, allowed) {
+      let v;
+      try { v = Number(localStorage.getItem(key)); } catch (e) { /* private mode */ }
+      return allowed.indexOf(v) < 0 ? allowed[0] : v;
+    }
+
+    function bandwidthStepMin() { return bandwidthPick(BANDWIDTH_STEP_KEY, BANDWIDTH_STEPS); }
+    function bandwidthSpanHr() { return bandwidthPick(BANDWIDTH_SPAN_KEY, BANDWIDTH_SPANS); }
+    function bandwidthBucketMs() { return bandwidthStepMin() * 60 * 1000; }
+    function bandwidthCount() { return Math.round(bandwidthSpanHr() * 60 / bandwidthStepMin()); }
+
+    // A wider bucket is not a merge of narrower ones: what is held is already cut on the old
+    // boundaries, and re-cutting it would invent numbers for edges that were never measured. So
+    // changing the step starts again, the same way turning collection on does. Changing the span
+    // keeps everything — it only decides how much of it is drawn.
+    function setBandwidthStep(min) {
+      try { localStorage.setItem(BANDWIDTH_STEP_KEY, String(min)); } catch (e) { /* session-only */ }
+      bandwidth = [];
+      syncBandwidthRange();
+      renderBandwidth();
+    }
+
+    function setBandwidthSpan(hr) {
+      try { localStorage.setItem(BANDWIDTH_SPAN_KEY, String(hr)); } catch (e) { /* session-only */ }
+      syncBandwidthRange();
+      renderBandwidth();
+    }
+
+    function syncBandwidthRange() {
+      const step = document.getElementById('bandwidthStep');
+      const span = document.getElementById('bandwidthSpan');
+      if (step) step.value = String(bandwidthStepMin());
+      if (span) span.value = String(bandwidthSpanHr());
     }
 
     function setBandwidthOn(on) {
@@ -4668,19 +4751,27 @@
 
     function noteBandwidth(direction, data, now) {
       if (!bandwidthOn()) return;
-      const at = Math.floor((now || Date.now()) / BANDWIDTH_BUCKET_MS) * BANDWIDTH_BUCKET_MS;
+      const size = bandwidthBucketMs();
+      const at = Math.floor((now || Date.now()) / size) * size;
       let bucket = bandwidth.find(b => b.at === at);
       if (!bucket) { bucket = {at: at, sent: 0, received: 0}; bandwidth.push(bucket); }
       bucket[direction] += bandwidthBytes(data);
-      const cutoff = at - (BANDWIDTH_BUCKETS - 1) * BANDWIDTH_BUCKET_MS;
+      // Held against the widest span on offer, not the one being drawn, so widening the span shows
+      // history that was already collected rather than an hour of blanks.
+      const cutoff = at - (Math.max.apply(null, BANDWIDTH_SPANS) * 60 * 60 * 1000);
       bandwidth = bandwidth.filter(b => b.at >= cutoff);
-      if (document.getElementById('timelineView')?.style.display === 'flex') renderBandwidth();
+      // Whether the view is on screen, not which display mode it happens to use: PANELS decides
+      // that, and a counter that stopped updating because a panel changed layout would be a
+      // silent failure.
+      const view = document.getElementById('timelineView');
+      if (view && view.style.display !== 'none') renderBandwidth();
     }
 
     function bandwidthBuckets(now) {
-      const end = Math.floor((now || Date.now()) / BANDWIDTH_BUCKET_MS) * BANDWIDTH_BUCKET_MS;
-      return Array.from({length: BANDWIDTH_BUCKETS}, (_, i) => {
-        const at = end - (BANDWIDTH_BUCKETS - 1 - i) * BANDWIDTH_BUCKET_MS;
+      const size = bandwidthBucketMs(), count = bandwidthCount();
+      const end = Math.floor((now || Date.now()) / size) * size;
+      return Array.from({length: count}, (_, i) => {
+        const at = end - (count - 1 - i) * size;
         return bandwidth.find(b => b.at === at) || {at: at, sent: 0, received: 0};
       });
     }
@@ -5197,6 +5288,38 @@
       document.getElementById(id).checked = on;
       repaintHighlights();
     }
+    // Autocorrect, autocapitalisation and spellcheck, as one switch, because a phone keyboard does
+    // all three or none. Off by default: this composer types into an agent's prompt, where a flag
+    // is not a typo, a path is not a sentence, and a capital letter the keyboard added to the front
+    // of one is a different path. It was on once, and what that cost was every command typed on a
+    // phone being quietly rewritten. Prose to an agent is the case for turning it back on, and
+    // that is what the setting is for.
+    const AUTOCORRECT_KEY = 'herdr_autocorrect';
+
+    function autocorrectOn() {
+      try { return localStorage.getItem(AUTOCORRECT_KEY) === 'on'; } catch (e) { return false; }
+    }
+
+    // One field, whatever the answer is for it. A shell's composer never gets it whatever the
+    // setting says — see syncComposerMode.
+    function applyAutocorrect(input, on) {
+      if (!input) return;
+      input.setAttribute('autocorrect', on ? 'on' : 'off');
+      input.setAttribute('autocapitalize', on ? 'sentences' : 'none');
+      input.spellcheck = !!on;
+    }
+
+    function setAutocorrect(on) {
+      try { localStorage.setItem(AUTOCORRECT_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      const box = document.getElementById('autocorrectOn');
+      if (box) box.checked = !!on;
+      // Both composers, because both write to an agent and a setting that only reached one of them
+      // would be a setting nobody could trust.
+      syncComposerMode();
+      applyAutocorrect(document.getElementById('convInput'), on);
+    }
+
     function setUserHighlight(on) { setHighlight(USER_HIGHLIGHT_KEY, 'userHighlight', on); }
     function setSummaryHighlight(on) { setHighlight(SUMMARY_HIGHLIGHT_KEY, 'summaryHighlight', on); }
     document.getElementById('userHighlight').checked = highlightOn(USER_HIGHLIGHT_KEY);
@@ -5725,7 +5848,9 @@
     }
 
     function toggleTimeline() {
-      if (document.getElementById('timelineView').style.display === 'block') { closePanel(); return; }
+      // Against being on screen, not against a display mode: PANELS decides that, and this view is
+      // a flex column since it grew a scrolling log with the data panel pinned under it.
+      if (document.getElementById('timelineView').style.display !== 'none') { closePanel(); return; }
       openPanel('timelineView');
       renderTimeline();
     }
@@ -5757,18 +5882,58 @@
       panel.hidden = !bandwidthOn();
       if (panel.hidden) return;
       const buckets = bandwidthBuckets();
+      const size = bandwidthBucketMs();
+      const title = document.getElementById('bandwidthTitle');
+      if (title) {
+        const span = bandwidthSpanHr();
+        title.textContent = `Data exchange · ${bandwidthStepMin()} min · ` +
+          `last ${span === 1 ? 'hour' : span + ' hours'}`;
+      }
       const kinds = [
         ['Total', b => b.sent + b.received],
         ['Sent', b => b.sent],
         ['Received', b => b.received],
       ];
-      rows.innerHTML = kinds.map(([label, value]) => `<div class="bandwidth-row"><span class="bandwidth-label">${label}</span>` +
-        `<div class="bandwidth-chips">${buckets.map((b, i) => {
-          const start = new Date(b.at), end = new Date(b.at + BANDWIDTH_BUCKET_MS);
-          const time = `${start.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}–` +
+      // The rows are built when the *window* moves — once a bucket — and never for a number
+      // changing. The chips overflow a phone, so they scroll, and this is redrawn on every message
+      // that lands, which with the poll is three times a minute. An innerHTML rebuild there would
+      // send a reader who had scrolled back to an earlier bucket to the left edge again, three
+      // times a minute. Same rule the dock's chip row follows.
+      const sig = buckets.map(b => b.at).join(',');
+      if (rows.dataset.sig !== sig) {
+        // One grid for the header and all three rows, so the columns line up and the whole table
+        // scrolls as one — three scrollers of their own would let a reader compare Sent at 3:05
+        // against Received at 2:40 and never see that they had.
+        rows.style.gridTemplateColumns = `52px repeat(${buckets.length}, minmax(46px, 1fr))`;
+        const at = (b, i) => {
+          const start = new Date(b.at), end = new Date(b.at + size);
+          const range = `${start.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}–` +
             end.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
-          return `<span class="bandwidth-chip" title="${label}, ${time}">${formatBandwidth(value(b))}</span>`;
-        }).join('')}</div></div>`).join('');
+          // The last bucket is the one being filled: it is a few minutes old at most, and saying so
+          // is the difference between a small number and a number that has stopped moving.
+          return {range: range, live: i === buckets.length - 1,
+            clock: `${String(start.getHours()).padStart(2, '0')}:` +
+              `${String(start.getMinutes()).padStart(2, '0')}`};
+        };
+        rows.innerHTML =
+          `<div class="bandwidth-head"><span class="bandwidth-label"></span>` +
+          buckets.map((b, i) => { const t = at(b, i);
+            return `<span class="bandwidth-time${t.live ? ' now' : ''}" title="${t.range}">` +
+              `${t.live ? 'now' : t.clock}</span>`; }).join('') + `</div>` +
+          kinds.map(([label]) =>
+            `<div class="bandwidth-row"><span class="bandwidth-label">${label}</span>` +
+            `<div class="bandwidth-chips">${buckets.map((b, i) => { const t = at(b, i);
+              return `<span class="bandwidth-chip${t.live ? ' now' : ''}" ` +
+                `title="${label}, ${t.range}${t.live ? ' (in progress)' : ''}"></span>`;
+            }).join('')}</div></div>`).join('');
+        rows.dataset.sig = sig;
+      }
+      // The numbers, written into the chips that are already there.
+      const bars = rows.querySelectorAll('.bandwidth-row');
+      kinds.forEach(([, value], r) => {
+        const chips = bars[r].querySelectorAll('.bandwidth-chip');
+        buckets.forEach((b, i) => { chips[i].textContent = formatBandwidth(value(b)); });
+      });
     }
 
     // What lands in this box is almost never a bare URL. start.sh fences the address as a code
@@ -6630,14 +6795,20 @@
 
     const RECENTS_KEY = 'herdr_recents';
     const MAX_RECENTS = 5;
+    // What is stored, against what the landing section draws. The section shows five panes; the
+    // switcher in the status bar orders everything that is running, and a five-entry log would have
+    // it forgetting the pane before last. Storing more costs nothing and the section still slices.
+    const RECENT_LOG = 24;
 
     function loadRecents() {
       try {
         const v = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]');
         // Version-one recents stored bare pane IDs. Drop them: herdr can reuse an ID for a
         // different session, and this is a convenience list, not data worth migrating unsafely.
-        return Array.isArray(v) ? v.filter(x => x && typeof x === 'object' && x.pane_id
-          && (x.agent || x.terminal)) : [];
+        // Conversations are in the same log, because "where was I" has one answer and it is in the
+        // order things were visited, not one order per kind of thing.
+        return Array.isArray(v) ? v.filter(x => x && typeof x === 'object'
+          && (x.conv || (x.pane_id && (x.agent || x.terminal)))) : [];
       } catch (e) { return []; }
     }
 
@@ -6660,8 +6831,18 @@
       const current = shell
         ? { pane_id: paneId, host: live[0].host || 'local', cwd: live[0].cwd || '', terminal: true }
         : recentFingerprint(live[0]);
-      const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, MAX_RECENTS);
+      const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, RECENT_LOG);
       localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    }
+
+    // A conversation window opened is a visit, in the same log and the same order. Stored by id
+    // alone: a conversation is this browser's own record, so there is no session to fingerprint
+    // against and nothing another machine could reuse the id for.
+    function noteConvVisit(id) {
+      if (!id) return;
+      const next = [{conv: id}, ...loadRecents().filter(r => r.conv !== id)].slice(0, RECENT_LOG);
+      try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); }
+      catch (e) { /* private mode: this session only */ }
     }
 
     // --- The recent switcher ---
@@ -6678,40 +6859,71 @@
         + shells.filter(x => x.pane_id === p.pane_id).length === 1);
     }
 
-    function recentPanes() {
+    // Panes and conversations in one order, which is what makes this a switcher rather than two
+    // lists that happen to share a sheet: a reader who was last in a conversation window and before
+    // that in a pane wants those two in that order, not the panes first because they are panes.
+    //
+    // Conversations appear only once visited. A pane is offered whether or not this device has
+    // opened it — it is running, and something running that cannot be reached from here would be a
+    // hole — but every conversation is already one tap away on the landing page, and listing all of
+    // them would make the switcher a second copy of it.
+    function recentItems() {
       const log = loadRecents();
-      const rank = p => {
+      const paneRank = p => {
         const i = log.findIndex(r => recentMatchesPane(r, p, isShell(p.pane_id)));
         return i < 0 ? log.length : i;
       };
-      // Visited panes first, in visit order. The rest follow by when they last moved, which keeps
-      // the list a recent list rather than making it a second copy of the agent list — and a pane
-      // this device has never opened still has to be reachable from here.
-      return livePanes().map((p, i) => [p, i])
-        .sort((a, b) => rank(a[0]) - rank(b[0]) ||
-          (lastSeen[b[0].pane_id] || 0) - (lastSeen[a[0].pane_id] || 0) || a[1] - b[1])
-        .map(pair => pair[0]);
+      const convs = loadConvIndex();
+      const items = livePanes().map((p, i) => ({pane: p, rank: paneRank(p), seen: lastSeen[p.pane_id] || 0, i}));
+      log.forEach((r, at) => {
+        const conv = r.conv && convs.find(c => c.id === r.conv);
+        // A conversation deleted since it was visited is simply gone; the log is a convenience
+        // list, not a record, and it is rewritten by the next visit anyway.
+        if (conv) items.push({conv: conv, rank: at, seen: 0, i: items.length});
+      });
+      // Visited first in visit order; everything else after it by when it last moved, so the list
+      // stays a recent list rather than a second copy of the agent list.
+      return items.sort((a, b) => a.rank - b.rank || b.seen - a.seen || a.i - b.i);
+    }
+
+    function recentPaneRow(p) {
+      const shell = isShell(p.pane_id);
+      const seen = lastSeen[p.pane_id];
+      const meta = [p.project, shell ? (p.cwd || 'shell') : p.status,
+        seen ? fmtAgo(new Date(seen)) : ''].filter(Boolean).join(' · ');
+      return `<button class="pair-pick${p.pane_id === activePane ? ' on' : ''}" ` +
+        `onclick="closeRecentSheet(); jumpToPane('${escapeHtml(p.pane_id)}')">` +
+        `<span class="kind" aria-hidden="true">${shell ? '⬛' : '🤖'}</span>` +
+        `<span class="info"><span class="name">${escapeHtml(paneLabel(p))}` +
+        `${shell ? '' : agentBadge(p.agent)}</span>` +
+        `<span class="meta">${escapeHtml(meta)}</span></span>` +
+        `<span class="dot" style="background:${statusColor(p)}" aria-hidden="true"></span>` +
+        `</button>`;
+    }
+
+    // The same row, saying what a conversation is instead of what a pane is doing: the 💬 the
+    // conversation sheet uses, the name, and how many panes wrote it. No status dot — a record has
+    // no status, and the members that do have their own rows here.
+    function recentConvRow(c) {
+      const n = (c.members || []).length;
+      const live = (c.members || []).filter(m => agents.some(a => convMemberKey(a) === m.key)).length;
+      const meta = `${n} pane${n === 1 ? '' : 's'}` + (live ? ` · ${live} live` : '');
+      return `<button class="pair-pick${c.id === convViewId ? ' on' : ''}" ` +
+        `onclick="closeRecentSheet(); openConversation('${escapeHtml(c.id)}')">` +
+        `<span class="kind" aria-hidden="true">💬</span>` +
+        `<span class="info"><span class="name">${escapeHtml(c.name)}</span>` +
+        `<span class="meta">${escapeHtml(meta)}</span></span>` +
+        `</button>`;
     }
 
     function openRecentSheet() {
       const box = document.getElementById('recentList');
-      const list = recentPanes();
+      const list = recentItems();
       // Same row as the pair and conversation sheets: a list of things to pick reads as one when
       // every list in the app is picked from the same way.
-      box.innerHTML = list.length ? list.map(p => {
-        const shell = isShell(p.pane_id);
-        const seen = lastSeen[p.pane_id];
-        const meta = [p.project, shell ? (p.cwd || 'shell') : p.status,
-          seen ? fmtAgo(new Date(seen)) : ''].filter(Boolean).join(' · ');
-        return `<button class="pair-pick${p.pane_id === activePane ? ' on' : ''}" ` +
-          `onclick="closeRecentSheet(); jumpToPane('${escapeHtml(p.pane_id)}')">` +
-          `<span class="kind" aria-hidden="true">${shell ? '⬛' : '🤖'}</span>` +
-          `<span class="info"><span class="name">${escapeHtml(paneLabel(p))}` +
-          `${shell ? '' : agentBadge(p.agent)}</span>` +
-          `<span class="meta">${escapeHtml(meta)}</span></span>` +
-          `<span class="dot" style="background:${statusColor(p)}" aria-hidden="true"></span>` +
-          `</button>`;
-      }).join('') : '<p class="pair-empty">Nothing is running.</p>';
+      box.innerHTML = list.length
+        ? list.map(x => x.conv ? recentConvRow(x.conv) : recentPaneRow(x.pane)).join('')
+        : '<p class="pair-empty">Nothing is running.</p>';
       document.getElementById('recentSheet').style.display = 'block';
     }
 
@@ -10788,6 +11000,7 @@
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv) return;
       convViewId = id;
+      noteConvVisit(id);
       clearConvDock();
       convStandaloneHtml = '';
       convRosterHtmlLast = '';
@@ -12173,15 +12386,15 @@
     //
     // A shell wants none of them. `git commit` capitalised to `Git commit` is a command not found,
     // and autocorrect on a path or a flag is worse — it fails silently and looks like the shell
-    // misbehaved. The agent composer keeps all three: it carries prose far more often than it
-    // carries a command line, and there the keyboard is helping.
+    // misbehaved. An agent's composer carries the same paths and flags, so it starts with none of
+    // them either and the setting is what turns them on for prose.
     function syncComposerMode() {
       const input = document.getElementById('termInput');
       const shell = !!activePane && isShell(activePane);
       input.placeholder = enterSendsOn() && shell ? 'Type…  ⏎ sends' : 'Type…  ⌘/Ctrl+Enter sends';
-      input.setAttribute('autocorrect', shell ? 'off' : 'on');
-      input.setAttribute('autocapitalize', shell ? 'none' : 'sentences');
-      input.spellcheck = !shell;
+      // A shell is a command line and never gets soft input, whatever the setting says: a rewritten
+      // command is a wrong command, and there is no prose case over a terminal to weigh against it.
+      applyAutocorrect(input, autocorrectOn() && !shell);
     }
 
     // Whether the composer stack is folded away. Open by default, and remembered: someone reading
@@ -12242,6 +12455,7 @@
     function renderQuickActions() {
       const qa = document.getElementById('quickActions');
       if (!activePane) { qa.innerHTML = ''; return; }
+      syncResend();
       const a = agents.find(x => x.pane_id === activePane);
       const blocked = a && a.status === 'blocked';
       // The nav row carries the fold control, so it also has to survive the bar being switched
@@ -12278,23 +12492,13 @@
         `title="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}" ` +
         `aria-label="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}">💬</button>`
         : '';
-      // Offered only where there is something to repeat, for the reason Summary is conditional. An
-      // agent that dropped a prompt on a full context, a transfer that landed while the pane was
-      // mid-tool-call: the answer is the same text again, and retyping it on a phone is the part
-      // that does not happen. Per pane — the last thing sent to *this* one.
-      const again = lastSentText[activePane];
-      const resend = again
-        ? `<button class="qa-resend" onclick="resendLast(this)" ` +
-        `title="Send this pane the last thing you sent it: ${escapeHtml(again.slice(0, 80))}" ` +
-        `aria-label="Send this pane the last thing you sent it">Resend</button>`
-        : '';
       const navRow = `<div class="qa-nav"><div class="qa-left">` +
         `<button class="qa-fold" onclick="toggleBottomDock()" aria-expanded="${open}" ` +
         `title="${open ? 'Fold the composer away' : 'Bring the composer back'}" ` +
         `aria-label="${open ? 'Fold the composer away' : 'Bring the composer back'}">` +
         `${open ? 'v' : '^'}</button>${conv}</div>` +
         `<div class="qa-mid">${nav(-1, '‹', 'Previous session')}${nav(1, '›', 'Next session')}</div>` +
-        `<div class="qa-right">${resend}${summary}` +
+        `<div class="qa-right">${summary}` +
         `<button class="qa-last" onclick="scrollPaneToBottom()" title="Jump to the newest line" ` +
         `aria-label="Jump to the newest line">Last</button></div></div>`;
       let middle = '';
@@ -12519,6 +12723,7 @@
       // text, not a chunk of it — what was sent is one message, however many the wire took.
       noteSent(text, paneId);
       lastSentText[paneId] = text;
+      syncResend();
       // One message per chunk, then the single Enter that submits all of them. Nothing between the
       // chunks submits, so they land in the agent's composer as one text; the relay handles a
       // connection's messages in order and already sleeps SEND_SETTLE after each `send_text`, which
@@ -12539,21 +12744,25 @@
       if (isShell(paneId)) burstPoll(paneId); else setTimeout(refreshPane, 500);
     }
 
-    // The same text again, through the same path — so it is chunked, recorded and classified like
-    // anything else typed. Two taps, because a duplicate prompt in a live agent is not undoable and
-    // this button sits where a thumb already is. `armFire` is the app's answer to that everywhere
-    // else it is true.
-    function resendLast(btn) {
+    function syncResend() {
+      const btn = document.getElementById('resendBtn');
+      if (!btn) return;
+      const again = lastSentText[activePane];
+      btn.hidden = !again;
+      if (again) btn.title = `Load this pane's last message into the composer: ${again.slice(0, 80)}`;
+    }
+
+    // A resend is a composer prefill, never a direct write. The visible draft is the gate in pane
+    // mode; preserving one is more important than replacing it with an older message.
+    function resendLast() {
       const again = lastSentText[activePane];
       if (!again) return;
-      // armButton and not armFire: this one is drawn by renderQuickActions from innerHTML, so it
-      // has no stable id for the header's table to key on.
-      armButton(btn, 'Resend?', () => {
-        const i = document.getElementById('termInput');
-        i.value = again;
-        autoGrow(i);
-        sendText();
-      });
+      const i = document.getElementById('termInput');
+      if (i.value.trim()) { showToast('Composer already has a draft. Send or clear it first.'); return; }
+      i.value = again;
+      autoGrow(i);
+      i.focus();
+      closeFireMenu();
     }
     function sendKey(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: [k] })); setTimeout(refreshPane, 300); }
     function sendKeys(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: k })); setTimeout(refreshPane, 300); }
@@ -13176,7 +13385,9 @@
     setConvDeepAll(convDeepAll());
     setConvTidy(convTidyOn());
     setDockMru(dockMruOn());
+    setAutocorrect(autocorrectOn());
     setBandwidthOn(bandwidthOn());
+    syncBandwidthRange();
     setConvSweep(localStorage.getItem('herdr_conv_sweep') || '1h');
     loadTermShortcuts();
     syncPromptsBtn();  // no pane is open yet, so this labels the button for an agent
