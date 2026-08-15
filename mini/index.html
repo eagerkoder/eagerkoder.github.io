@@ -282,17 +282,14 @@
       border-top: 1px solid var(--border);
     }
 
-    /* The shell's last row at every width. Its bottom padding is as much the point as its
-       contents: ~20px keeps the text clear of the iPhone's bottom curve and home indicator.
-       env() resolves to 0 until P5 adds viewport-fit=cover, so the 20px stands alone for now and
-       the device inset simply adds to it once it starts reporting. */
+    /* Desktop needs only a compact footer; phones add their own safe-area inset below. */
     .status-bar {
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 5px 14px calc(20px + env(safe-area-inset-bottom, 0px));
+      padding: 5px 14px calc(5px + env(safe-area-inset-bottom, 0px));
       font-size: 0.65rem;
       font-weight: 500;
       color: var(--muted);
@@ -325,11 +322,45 @@
       text-overflow: ellipsis;
     }
 
+    /* The walk and its destination list, as one group, so it is the group that is centred and the
+       Recent button does not shift sideways when an arrow goes disabled. */
+    .status-bar .walk {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* A disabled arrow is dimmed rather than removed: "there is nowhere back from here" is worth
+       saying, and a control that vanished would take the Recent button's position with it.
+       Sized as a target rather than as a glyph: these are the two most-pressed controls in the app
+       on a phone, and a bare 28px chevron is under every thumb-target floor there is. Bordered like
+       Recent between them, so the three read as one group of buttons rather than as a label with
+       decoration either side. */
+    .status-bar .nav-btn {
+      flex: 0 0 auto;
+      width: 46px;
+      min-height: 30px;
+      padding: 0;
+      font: inherit;
+      font-size: 1.15rem;
+      line-height: 1;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .status-bar .nav-btn:hover:not(:disabled) { color: var(--text); }
+    .status-bar .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
     /* Sized like the Esc chip beside it and always present, so the bar's height is what it was —
        the reserved heights above exist because this row must never change size. */
     .status-bar .recent-btn {
       flex: 0 0 auto;
-      padding: 2px 10px;
+      min-height: 30px;
+      padding: 2px 12px;
       font: inherit;
       font-size: 0.65rem;
       font-weight: 600;
@@ -698,10 +729,29 @@
     }
 
     .bandwidth h2 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       margin: 0 0 8px;
       font-size: 0.75rem;
       color: var(--muted);
       font-weight: 500;
+    }
+
+    .bandwidth-total {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 4px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font: 0.62rem monospace;
+      background: color-mix(in srgb, var(--text) 4%, var(--bg));
+    }
+
+    .bandwidth-total.now {
+      border-color: color-mix(in srgb, var(--green) 55%, var(--border));
+      background: color-mix(in srgb, var(--green) 8%, var(--bg));
     }
 
     /* One grid holding the clock row and all three data rows, so the columns line up and the whole
@@ -751,6 +801,27 @@
       border-color: color-mix(in srgb, var(--green) 55%, var(--border));
       background: color-mix(in srgb, var(--green) 8%, var(--bg));
     }
+
+    .pane-bandwidth-name {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .pane-bandwidth-name .dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; }
+    .pane-bandwidth-ping { color: var(--muted); font-size: 0.56rem; }
+
+    .bandwidth-metrics { display: inline-flex; gap: 3px; margin-left: 6px; }
+    .bandwidth-metric { padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); background: transparent; font: 0.6rem monospace; }
+    .bandwidth-metric[aria-pressed="true"] { color: var(--text); border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--bg)); }
+    #bandwidthPanes { margin-left: auto; }
 
     /* Settings */
     .settings {
@@ -1385,6 +1456,9 @@
       font-size: 0.75rem;
     }
 
+    /* Text presentation makes the chat glyph obey the shared green in every browser. */
+    .conv-kind { color: var(--green); font-family: Arial, sans-serif; }
+
     .order-row .info,
     .pair-pick .info {
       flex: 1;
@@ -1642,6 +1716,48 @@
        away the agent's context, and the pane re-reads itself anyway — so a tap to reach them is
        the right price for a header that fits. Same breakpoint as the rest of the layout. */
     @media (max-width: 767px) {
+      /* Phone thumbs reach the edges, while the home indicator lives under the centre. Keep the
+         walk's arrows out at the safe edges and leave Recent in the middle; time and state stay in
+         the DOM but do not spend this row's height. Esc remains beside Back when it is needed. */
+      .status-bar {
+        position: relative;
+        display: grid;
+        grid-template-columns: 68px minmax(0, 1fr) 68px;
+        grid-template-areas: 'back recent forward';
+        gap: 0;
+        padding-left: max(8px, env(safe-area-inset-left, 0px));
+        padding-right: max(8px, env(safe-area-inset-right, 0px));
+      }
+
+      .status-bar .walk { display: contents; }
+      .status-bar #navBack { grid-area: back; justify-self: start; width: 68px; min-height: 34px; margin-left: 10vw; }
+      .status-bar #recentBtn { grid-area: recent; justify-self: center; }
+      .status-bar #navFwd { grid-area: forward; justify-self: end; width: 68px; min-height: 34px; margin-right: 10vw; }
+
+      /* Reuse the reserved safe-area padding as a tiny footer rather than adding a second row. */
+      .status-bar .left {
+        position: absolute;
+        left: max(8px, env(safe-area-inset-left, 0px));
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+        flex: none;
+        min-height: 0;
+        font-size: 0.5rem;
+      }
+
+      .status-bar #statusBarRight { display: block; font-size: 0.5rem; }
+
+      .status-bar .state {
+        position: absolute;
+        left: auto;
+        right: max(8px, env(safe-area-inset-right, 0px));
+        top: auto;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+        transform: none;
+        display: flex;
+        flex: none;
+        min-height: 0;
+      }
+
       .fire-wrap {
         display: flex;
         position: relative;
@@ -1954,7 +2070,7 @@
        what is added to it and the text itself are one control — the border says which agent is
        about to receive it, so the answer is on the thing being written rather than beside it. */
     .conv-bubble {
-      margin: 8px;
+      margin: 4px 8px 8px;
       border: 1px solid var(--dock-accent, var(--border));
       border-radius: 18px;
       background: var(--surface);
@@ -1964,11 +2080,14 @@
       background-image: linear-gradient(var(--dock-wash, transparent), var(--dock-wash, transparent));
     }
 
+    /* The field starts at the top of the row. It is shorter than the Send button beside it until a
+       second line arrives, and bottom-aligning it put the first line you type below the button's
+       middle — a box you appear to be typing into from underneath. */
     .conv-composer {
       display: flex;
-      align-items: flex-end;
+      align-items: flex-start;
       gap: 8px;
-      padding: 8px 8px 8px 12px;
+      padding: 4px 8px 8px 12px;
     }
 
     /* The field and its ghost, stacked. The ghost is the one that paints the block cursor. */
@@ -2041,6 +2160,9 @@
 
     .conv-composer .send {
       flex: 0 0 auto;
+      /* Send stays at the bottom while the field grows upward past it: it belongs beside the line
+         being written, which is the last one, and on a phone that is also where the thumb is. */
+      align-self: flex-end;
       width: 40px;
       height: 40px;
       display: flex;
@@ -2996,9 +3118,9 @@
     .xfer-row {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
       width: 100%;
-      padding: 8px 10px;
+      padding: 6px 10px 4px;
       /* Hairline rather than a gap: one bubble divided into what it says and who it is for, not
          two boxes sharing a shadow. */
       border-bottom: 1px solid var(--border);
@@ -3270,12 +3392,11 @@
       gap: 6px;
     }
 
-    /* Back and forward get their own full-width row under any approval buttons, so the two
-       never compete for the same line. Three columns: the fold, the arrows, and the right-edge
-       group. The edges size to their content and the middle takes the rest, which is what keeps
-       the arrows off them — a track cannot be overrun by its neighbour. These used to be absolute
-       with the arrows reserving width for them by hand, and the hand-written reserve was wrong the
-       moment Summary appeared and made the right edge twice as wide. */
+    /* The pane's own switches get their own full-width row under any approval buttons, so the two
+       never compete for the same line. Three columns: the fold and conversation switch, an empty
+       middle, and the right-edge group. The edges size to their content and the middle takes the
+       rest, so the two groups are pushed apart by the row rather than by a hand-written reserve —
+       which was wrong the moment Summary appeared and made the right edge twice as wide. */
     .qa-nav {
       flex: 1 0 100%;
       display: grid;
@@ -3288,14 +3409,6 @@
       display: flex;
       align-items: center;
       gap: 6px;
-    }
-
-    /* The arrows, centred in whatever the edges leave rather than in the row. Off-centre by the
-       difference between the two edges, which is the price of never sitting under either. */
-    .qa-nav .qa-mid {
-      display: flex;
-      justify-content: center;
-      gap: 8px;
     }
 
     /* Sized to the pair strip, which is the other always-there strip in this view and the only
@@ -3340,6 +3453,10 @@
        has a closing message to offer. One column holding both, so the width the pair needs is
        measured rather than guessed and the middle track gives up exactly that much. */
     .quick-actions .qa-nav .qa-right {
+      /* Third column named rather than counted: the middle track has nothing in it since the walk
+         moved to the status bar, and an empty div held only to fill a grid slot is a box that has
+         to be styled forever to keep its own height out of the row. */
+      grid-column: 3;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -3380,11 +3497,11 @@
       border-radius: 11px;
       border: 1px solid var(--border);
       background: var(--surface);
-      color: var(--muted);
+      color: var(--green);
       font-size: 0.7rem;
       font-weight: 400;
-      filter: grayscale(1);
-      opacity: 0.75;
+      filter: none;
+      opacity: 1;
     }
 
     .quick-actions .qa-nav button.qa-conv.on {
@@ -4017,24 +4134,31 @@
 
     <div class="setting-group">
       <label class="toggle-option"><input type="checkbox" id="bandwidthOn" onchange="setBandwidthOn(this.checked)"> Track WebSocket payload data</label>
-      <div class="hint">Shows sent, received and total payload bytes in Activity, for this browser
-        session. The newest bucket is the one filling now. WebSocket frame and TLS overhead are not
-        available to the page.</div>
+      <div class="hint">Shows sent, received and total payload bytes in Activity, newest interval
+        first. Quiet time adds no bucket, so a gap in the record is time nothing was on the wire
+        rather than a row of zeroes. Kept on this device until it is cleared. WebSocket frame and
+        TLS overhead are not available to the page.</div>
       <label for="bandwidthStep">Bucket</label>
       <select id="bandwidthStep" onchange="setBandwidthStep(Number(this.value))">
+        <option value="1">1 minute</option>
         <option value="5">5 minutes</option>
         <option value="10">10 minutes</option>
         <option value="30">30 minutes</option>
         <option value="60">60 minutes</option>
       </select>
-      <label for="bandwidthSpan">Keep</label>
-      <select id="bandwidthSpan" onchange="setBandwidthSpan(Number(this.value))">
-        <option value="1">1 hour</option>
-        <option value="5">5 hours</option>
+      <label for="bandwidthKeep">Show</label>
+      <select id="bandwidthKeep" onchange="setBandwidthKeep(Number(this.value))">
+        <option value="12">12 intervals</option>
+        <option value="60">60 intervals</option>
       </select>
       <div class="hint">A narrower bucket is closer to live, a wider one is easier to read across
         hours. Changing the bucket clears what has been collected: it is already cut on the old
-        boundaries. Changing how much is kept only changes how far back the table draws.</div>
+        boundaries. Changing how much is shown only changes how far back the table draws.</div>
+      <!-- Neutral, not the group's green primary: throwing data away is not the thing this panel
+           wants you to do, it is the thing it owes you a way to do. -->
+      <button class="nav-key" onclick="clearBandwidth()">Clear recorded data</button>
+      <div class="hint">Turning tracking off stops collecting; what was already recorded stays on
+        this device until this throws it away. Per-pane totals go with it.</div>
     </div>
 
     <div class="setting-group">
@@ -4078,7 +4202,12 @@
   <div class="view" id="timelineView" style="display:none;padding:12px;">
     <div id="timelineList" style="font-family:monospace;font-size:0.75rem;line-height:1.8;"></div>
     <section class="bandwidth" id="bandwidth" hidden aria-label="WebSocket payload data">
-      <h2 id="bandwidthTitle">Data exchange · last hour</h2>
+      <h2><span id="bandwidthTitle">Data exchange</span><span class="bandwidth-metrics" aria-label="Pane metric">
+        <button class="bandwidth-metric" data-bandwidth-metric="total" aria-pressed="true" onclick="setBandwidthMetric('total')">Total</button>
+        <button class="bandwidth-metric" data-bandwidth-metric="sent" aria-pressed="false" onclick="setBandwidthMetric('sent')">Sent</button>
+        <button class="bandwidth-metric" data-bandwidth-metric="received" aria-pressed="false" onclick="setBandwidthMetric('received')">Received</button>
+      </span><span class="bandwidth-total now" id="bandwidthTotal"></span>
+      <button class="bandwidth-metric" id="bandwidthPanes" aria-pressed="false" onclick="setBandwidthPanes(!bandwidthPanesOn())">Agents</button></h2>
       <div id="bandwidthRows"></div>
     </section>
   </div>
@@ -4091,7 +4220,7 @@
          under it. -->
     <div class="conv-view-top">
     <div class="conv-view-head">
-      <button class="back" onclick="closePanel()" aria-label="Back to list"><svg width="20" height="20"
+      <button class="back" onclick="showLanding()" aria-label="Back to list"><svg width="20" height="20"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round">
           <path d="m15 18-6-6 6-6" />
@@ -4128,9 +4257,9 @@
             <div class="conv-ghost" id="convGhost" aria-hidden="true"></div>
             <textarea id="convInput" rows="1" maxlength="16000" placeholder="Message…  ⌘/Ctrl+Enter sends"
               autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
-              oninput="autoGrow(this); syncConvCursor()" onkeydown="convInputKey(event)"
+              oninput="autoGrow(this); syncConvCursor(); stickConvLatest()" onkeydown="convInputKey(event)"
               onkeyup="syncConvCursor()" onclick="syncConvCursor()" onselect="syncConvCursor()"
-              onfocus="syncConvCursor()" onblur="syncConvCursor()"
+              onfocus="syncConvCursor(); stickConvLatest()" onblur="syncConvCursor()"
               onscroll="syncConvCursor()"></textarea>
           </div>
           <button class="send" id="convSendBtn" onclick="convSend()" aria-label="Send"><svg width="22" height="22"
@@ -4147,17 +4276,25 @@
        curve as for what it says. -->
   <div class="status-bar" id="statusBar">
     <span class="left" id="statusBarLeft"></span>
-    <!-- The one control in the app's last row. Centred because it belongs to no view: the bar is
-         on screen whatever is above it, and so is the question it answers. -->
-    <button class="recent-btn" id="recentBtn" onclick="openRecentSheet()" aria-haspopup="dialog"
-      aria-label="Recent panes">Recent ▴</button>
+    <!-- The app's last row, and the only controls in it that belong to no view: the bar is on
+         screen whatever is above it, and so are the questions these answer. Recent is "where else
+         could I be"; the arrows either side of it are "where was I", which is why they flank it
+         rather than sitting somewhere else. The pane's own bar had the arrows first and the
+         conversation window had nothing — one walk deserves one control, in the row that is
+         always there. -->
+    <span class="walk">
+      <button class="nav-btn" id="navBack" onclick="navGo(-1)" aria-label="Back">‹</button>
+      <button class="recent-btn" id="recentBtn" onclick="openRecentSheet()" aria-haspopup="dialog"
+        aria-label="Recent panes">Recent ▴</button>
+      <button class="nav-btn" id="navFwd" onclick="navGo(1)" aria-label="Forward">›</button>
+    </span>
     <span class="state"><button class="abort" id="abortBtn" onclick="abortWorking()" hidden
       aria-label="Stop working agent">Esc</button><span class="right" id="statusBarRight"></span></span>
   </div>
 
   <div class="terminal-view" id="terminalView">
     <div class="term-header">
-      <button class="back" onclick="closeTerminal()" aria-label="Back to agent list"><svg width="20" height="20"
+      <button class="back" id="termBack" onclick="showLanding()" aria-label="Back to agent list"><svg width="20" height="20"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round">
           <path d="m15 18-6-6 6-6" />
@@ -4681,66 +4818,174 @@
     let timeline = [], prevStatuses = {};
 
     // WebSocket payload bytes the browser can observe. Frame, TLS and transport overhead live below
-    // this API and are deliberately not guessed at. Kept for this session only, like the activity
-    // log it is shown beside: turning collection on starts a fresh hour rather than claiming to
-    // know traffic from before this page was open.
+    // this API and are deliberately not guessed at.
     const BANDWIDTH_KEY = 'herdr_bandwidth', BANDWIDTH_STEP_KEY = 'herdr_bandwidth_step',
-      BANDWIDTH_SPAN_KEY = 'herdr_bandwidth_span';
-    // How wide a bucket is and how far back they run, both settings: five minutes across the last
-    // hour by default, which is close enough to live to watch a transfer land, and an hour is long
-    // enough to see the idle rate. Offered as a pair because they only mean anything together — one
-    // hour in five-minute steps is twelve chips, five hours in the same step is sixty.
-    const BANDWIDTH_STEPS = [5, 10, 30, 60];   // minutes
-    const BANDWIDTH_SPANS = [1, 5];            // hours
-    let bandwidth = [];
+      BANDWIDTH_KEEP_KEY = 'herdr_bandwidth_keep', BANDWIDTH_DATA_KEY = 'herdr_bandwidth_data',
+      PANE_BANDWIDTH_DATA_KEY = 'herdr_pane_bandwidth_data', BANDWIDTH_METRIC_KEY = 'herdr_bandwidth_metric',
+      BANDWIDTH_PANES_KEY = 'herdr_bandwidth_panes', BANDWIDTH_OPEN_KEY = 'herdr_bandwidth_open';
+    // Buckets are a small persisted stack, not a continuous chart. Empty slots say no interval was
+    // collected; they do not invent a time or a zero-byte interval.
+    const BANDWIDTH_STEPS = [1, 5, 10, 30, 60];   // minutes
+    const BANDWIDTH_KEEPS = [12, 60];
+    const PANE_BANDWIDTH_KEEP_MS = 24 * 60 * 60 * 1000;
+    const BANDWIDTH_RESUME_MS = 30 * 1000;
+    let bandwidth = loadBandwidth();
+    let paneBandwidth = loadPaneBandwidth();
+    let bandwidthOpen = loadBandwidthOpen();
+    let bandwidthSaveTimer = null;
 
     function bandwidthOn() {
       try { return localStorage.getItem(BANDWIDTH_KEY) === 'on'; }
       catch (e) { return false; }
     }
 
-    function bandwidthPick(key, allowed) {
+    function bandwidthPick(key, allowed, fallback) {
       let v;
       try { v = Number(localStorage.getItem(key)); } catch (e) { /* private mode */ }
-      return allowed.indexOf(v) < 0 ? allowed[0] : v;
+      return allowed.indexOf(v) < 0 ? (fallback || allowed[0]) : v;
     }
 
-    function bandwidthStepMin() { return bandwidthPick(BANDWIDTH_STEP_KEY, BANDWIDTH_STEPS); }
-    function bandwidthSpanHr() { return bandwidthPick(BANDWIDTH_SPAN_KEY, BANDWIDTH_SPANS); }
+    function bandwidthStepMin() { return bandwidthPick(BANDWIDTH_STEP_KEY, BANDWIDTH_STEPS, 5); }
+    function bandwidthKeep() { return bandwidthPick(BANDWIDTH_KEEP_KEY, BANDWIDTH_KEEPS); }
     function bandwidthBucketMs() { return bandwidthStepMin() * 60 * 1000; }
-    function bandwidthCount() { return Math.round(bandwidthSpanHr() * 60 / bandwidthStepMin()); }
+    function bandwidthCount() { return bandwidthKeep(); }
 
-    // A wider bucket is not a merge of narrower ones: what is held is already cut on the old
-    // boundaries, and re-cutting it would invent numbers for edges that were never measured. So
-    // changing the step starts again, the same way turning collection on does. Changing the span
-    // keeps everything — it only decides how much of it is drawn.
+    function loadBandwidth() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(BANDWIDTH_DATA_KEY) || '[]');
+        return Array.isArray(saved) ? saved.filter(b => b && Number.isFinite(b.at) &&
+          Number.isFinite(b.sent) && Number.isFinite(b.received) && b.sent >= 0 && b.received >= 0)
+          .sort((a, b) => b.at - a.at).slice(0, Math.max.apply(null, BANDWIDTH_KEEPS)) : [];
+      } catch (e) { return []; }
+    }
+
+    function saveBandwidth() {
+      try { localStorage.setItem(BANDWIDTH_DATA_KEY, JSON.stringify(bandwidth)); }
+      catch (e) { /* private mode: session-only */ }
+    }
+
+    // A reload during normal polling is not an outage. Resume only the bucket explicitly left
+    // open and only while it was active very recently; disconnect and tracking-off remove its key.
+    function loadBandwidthOpen() {
+      try {
+        const at = Number(localStorage.getItem(BANDWIDTH_OPEN_KEY));
+        const bucket = bandwidth.find(b => b.at === at);
+        return bucket && Number.isFinite(bucket.last) && Date.now() - bucket.last < BANDWIDTH_RESUME_MS ? bucket : null;
+      } catch (e) { return null; }
+    }
+
+    function saveBandwidthOpen() {
+      try {
+        if (bandwidthOpen) localStorage.setItem(BANDWIDTH_OPEN_KEY, String(bandwidthOpen.at));
+        else localStorage.removeItem(BANDWIDTH_OPEN_KEY);
+      } catch (e) { /* private mode: session-only */ }
+    }
+
+    // Payloads arrive every poll. Keep live values in memory and batch the synchronous storage
+    // write; pagehide flushes the small pending tail before a normal refresh.
+    function flushBandwidth() {
+      if (bandwidthSaveTimer) clearTimeout(bandwidthSaveTimer);
+      bandwidthSaveTimer = null;
+      saveBandwidth();
+      savePaneBandwidth();
+      saveBandwidthOpen();
+    }
+
+    function queueBandwidthSave() {
+      if (bandwidthSaveTimer) return;
+      bandwidthSaveTimer = setTimeout(flushBandwidth, 1000);
+    }
+
+    // Guarded because these modules are also run as slices in a vm context, which has no window and
+    // no event target — an unguarded call there throws at load and takes the whole suite with it.
+    if (typeof addEventListener === 'function') addEventListener('pagehide', flushBandwidth);
+
+    function loadPaneBandwidth() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(PANE_BANDWIDTH_DATA_KEY) || '{}');
+        return saved && typeof saved === 'object' ? Object.fromEntries(Object.entries(saved).filter(([, b]) =>
+          b && Number.isFinite(b.ping) && Array.isArray(b.buckets)).map(([key, b]) => [key, {
+          ping: b.ping,
+          buckets: b.buckets.filter(x => x && Number.isFinite(x.at) && Number.isFinite(x.sent) &&
+            Number.isFinite(x.received)).slice(0, Math.max.apply(null, BANDWIDTH_KEEPS))
+        }])) : {};
+      } catch (e) { return {}; }
+    }
+
+    function savePaneBandwidth() {
+      try { localStorage.setItem(PANE_BANDWIDTH_DATA_KEY, JSON.stringify(paneBandwidth)); }
+      catch (e) { /* private mode: session-only */ }
+    }
+
+    // A wider bucket is not a merge of narrower ones: re-cutting would invent edge values. Start
+    // a new stack when its interval changes; changing how many records are shown keeps the stack.
     function setBandwidthStep(min) {
       try { localStorage.setItem(BANDWIDTH_STEP_KEY, String(min)); } catch (e) { /* session-only */ }
       bandwidth = [];
+      paneBandwidth = {};
+      resetBandwidthBucket();
+      saveBandwidth();
+      savePaneBandwidth();
       syncBandwidthRange();
       renderBandwidth();
     }
 
-    function setBandwidthSpan(hr) {
-      try { localStorage.setItem(BANDWIDTH_SPAN_KEY, String(hr)); } catch (e) { /* session-only */ }
+    function setBandwidthKeep(count) {
+      try { localStorage.setItem(BANDWIDTH_KEEP_KEY, String(count)); } catch (e) { /* session-only */ }
       syncBandwidthRange();
+      renderBandwidth();
+    }
+
+    function bandwidthMetric() {
+      try { const v = localStorage.getItem(BANDWIDTH_METRIC_KEY); return ['total', 'sent', 'received'].includes(v) ? v : 'total'; }
+      catch (e) { return 'total'; }
+    }
+
+    function setBandwidthMetric(metric) {
+      if (!['total', 'sent', 'received'].includes(metric)) return;
+      try { localStorage.setItem(BANDWIDTH_METRIC_KEY, metric); } catch (e) { /* session-only */ }
+      renderBandwidth();
+    }
+
+    function bandwidthPanesOn() {
+      try { return localStorage.getItem(BANDWIDTH_PANES_KEY) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function setBandwidthPanes(on) {
+      try { localStorage.setItem(BANDWIDTH_PANES_KEY, on ? 'on' : 'off'); } catch (e) { /* session-only */ }
       renderBandwidth();
     }
 
     function syncBandwidthRange() {
       const step = document.getElementById('bandwidthStep');
-      const span = document.getElementById('bandwidthSpan');
+      const keep = document.getElementById('bandwidthKeep');
       if (step) step.value = String(bandwidthStepMin());
-      if (span) span.value = String(bandwidthSpanHr());
+      if (keep) keep.value = String(bandwidthKeep());
     }
 
     function setBandwidthOn(on) {
       try { localStorage.setItem(BANDWIDTH_KEY, on ? 'on' : 'off'); }
       catch (e) { /* private mode: session-only */ }
-      if (!on) bandwidth = [];
+      // Turning collection off closes the open interval rather than leaving it to be resumed later:
+      // a bucket that spans an hour of not looking, labelled with the minute it started, is a
+      // measurement of nothing. Turning it back on opens a fresh one.
+      if (!on) { flushBandwidth(); resetBandwidthBucket(); }
       const input = document.getElementById('bandwidthOn');
       if (input) input.checked = !!on;
       renderBandwidth();
+    }
+
+    // The counterpart of keeping it: what has been recorded stays on this device until it is either
+    // pushed off the end of the stack or thrown away here. Off only stops collecting.
+    function clearBandwidth() {
+      bandwidth = [];
+      paneBandwidth = {};
+      resetBandwidthBucket();
+      saveBandwidth();
+      savePaneBandwidth();
+      renderBandwidth();
+      showToast('Cleared the recorded payload data');
     }
 
     function bandwidthBytes(data) {
@@ -4753,14 +4998,17 @@
     function noteBandwidth(direction, data, now) {
       if (!bandwidthOn()) return;
       const size = bandwidthBucketMs();
-      const at = Math.floor((now || Date.now()) / size) * size;
-      let bucket = bandwidth.find(b => b.at === at);
-      if (!bucket) { bucket = {at: at, sent: 0, received: 0}; bandwidth.push(bucket); }
+      const at = now || Date.now();
+      if (!bandwidthOpen || at < bandwidthOpen.at || at - bandwidthOpen.at >= size) {
+        bandwidthOpen = {at: at, last: at, sent: 0, received: 0};
+        bandwidth.push(bandwidthOpen);
+      }
+      const bucket = bandwidthOpen;
       bucket[direction] += bandwidthBytes(data);
-      // Held against the widest span on offer, not the one being drawn, so widening the span shows
-      // history that was already collected rather than an hour of blanks.
-      const cutoff = at - (Math.max.apply(null, BANDWIDTH_SPANS) * 60 * 60 * 1000);
-      bandwidth = bandwidth.filter(b => b.at >= cutoff);
+      bucket.last = at;
+      bandwidth.sort((a, b) => b.at - a.at);
+      bandwidth = bandwidth.slice(0, Math.max.apply(null, BANDWIDTH_KEEPS));
+      queueBandwidthSave();
       // Whether the view is on screen, not which display mode it happens to use: PANELS decides
       // that, and a counter that stopped updating because a panel changed layout would be a
       // silent failure.
@@ -4768,13 +5016,47 @@
       if (view && view.style.display !== 'none') renderBandwidth();
     }
 
-    function bandwidthBuckets(now) {
-      const size = bandwidthBucketMs(), count = bandwidthCount();
-      const end = Math.floor((now || Date.now()) / size) * size;
-      return Array.from({length: count}, (_, i) => {
-        const at = end - (count - 1 - i) * size;
-        return bandwidth.find(b => b.at === at) || {at: at, sent: 0, received: 0};
-      });
+    // Only read_pane and pane_content name a pane. Shared snapshots stay in the global total: a
+    // browser cannot honestly assign their bytes to one agent.
+    function notePaneBandwidth(paneId, direction, data, now) {
+      if (!bandwidthOn() || !paneId) return;
+      const at = now || Date.now();
+      const pane = paneBandwidth[paneId] || (paneBandwidth[paneId] = {ping: at, buckets: []});
+      const bucketAt = bandwidthOpen ? bandwidthOpen.at : at;
+      const bucket = pane.buckets.find(b => b.at === bucketAt) ||
+        (pane.buckets.push({at: bucketAt, sent: 0, received: 0}), pane.buckets[pane.buckets.length - 1]);
+      bucket[direction] += bandwidthBytes(data);
+      if (direction === 'sent') pane.ping = at;
+      pane.buckets.sort((a, b) => b.at - a.at);
+      pane.buckets = pane.buckets.slice(0, Math.max.apply(null, BANDWIDTH_KEEPS));
+      // herdr reuses a pane_id once its pane is gone, and these totals are cumulative — a day-old
+      // entry inherited by a new agent would report another session's traffic under its name. A day
+      // is also longer than any pane worth attributing bytes to has been quiet for.
+      const stale = at - PANE_BANDWIDTH_KEEP_MS;
+      const keys = Object.keys(paneBandwidth)
+        .filter(key => { if (paneBandwidth[key].ping >= stale) return true;
+          delete paneBandwidth[key]; return false; })
+        .sort((a, b) => paneBandwidth[b].ping - paneBandwidth[a].ping);
+      keys.slice(200).forEach(key => delete paneBandwidth[key]);
+      queueBandwidthSave();
+      const view = document.getElementById('timelineView');
+      if (view && view.style.display !== 'none') renderBandwidth();
+    }
+
+    function resetBandwidthBucket() { bandwidthOpen = null; saveBandwidthOpen(); }
+
+    // Which record, if any, is still being filled — the only place that knows it, because a bucket
+    // starts at the message that opened it rather than on a clock boundary, so no arithmetic over
+    // `at` can recover it. Read by the table to mark the one number that is still moving.
+    function bandwidthLiveAt() {
+      return bandwidthOpen && bandwidthOn() &&
+        Date.now() - bandwidthOpen.at < bandwidthBucketMs() ? bandwidthOpen.at : 0;
+    }
+
+    function bandwidthBuckets() {
+      const kept = bandwidth.slice().sort((a, b) => b.at - a.at).slice(0, bandwidthCount());
+      return kept.concat(Array.from({length: bandwidthCount() - kept.length}, () =>
+        ({empty: true, sent: 0, received: 0})));
     }
 
     // When each pane last did anything. herdr reports no timestamps, so this is kept here and
@@ -5431,10 +5713,9 @@
   </script>
   <script>
     // The terminal is a flex sibling, not an overlay: leaving it open would stack two panes.
-    // Settings and Activity are toggles onto wherever the user already was, not one-way doors.
-    // The pane they came from is remembered so a second tap puts it back; without this, leaving
-    // Settings always dumped them on the agent list and they had to find the pane again.
-    let panelReturnPane = null;
+    // Settings and Activity are toggles onto wherever the user already was, not one-way doors —
+    // and where that was is the previous entry on the walk. This used to be a private one-deep
+    // panelReturnPane, which could only remember a pane and could only remember one.
 
     // Every panel that takes the list's place, against the display mode it wants — adding one is a
     // line here rather than a line in each of the four functions below. Settings is display:none in
@@ -5445,31 +5726,48 @@
       for (const id in PANELS) document.getElementById(id).style.display = 'none';
     }
 
-    function panelIsOpen() {
-      return Object.keys(PANELS).some(id => document.getElementById(id).style.display !== 'none');
+    // Which panel is up, or '' for none. Read off the screen rather than tracked, so it cannot go
+    // stale against a view someone hid directly.
+    function openPanelId() {
+      return Object.keys(PANELS)
+        .find(id => document.getElementById(id).style.display !== 'none') || '';
     }
 
+    function panelIsOpen() { return !!openPanelId(); }
+
     function openPanel(id) {
-      // Only capture on the way in. Switching Settings → Activity must not overwrite the pane
-      // with the null that closing the terminal already left behind.
-      if (!panelIsOpen()) {
-        panelReturnPane = activePane;
-        if (activePane) closeTerminal();
-      }
+      // Only leave the pane on the way in. Switching Settings → Activity has no pane to close, and
+      // the walk already holds where the pane was.
+      if (!panelIsOpen() && activePane) closeTerminal();
+      // The conversation window pushes its own entry, naming the conversation rather than the
+      // panel — openConversation has done it by the time this runs.
+      if (id !== 'convView') notePanelNav(id);
       document.body.classList.toggle('conversation-open', id === 'convView');
       document.getElementById('agentListView').style.display = 'none';
       for (const p in PANELS) document.getElementById(p).style.display = p === id ? PANELS[p] : 'none';
+      syncNavBtns();
     }
 
-    function closePanel() {
+    // Leaving a panel is a step back, not a return to a remembered pane: the panel is an entry, so
+    // "where I was before this" is simply the one before it — and that survives opening a second
+    // panel on top of the first, which the old one-deep memory did not.
+    function closePanel() { goBack(); }
+
+    // The agent list is an exit, not a history entry. Header back buttons always land here — and
+    // the browser is rewound to the entry the document was loaded on, so its own Back gesture does
+    // not still think it is standing on the pane that was just left.
+    function showLanding() {
+      if (navRewind()) return;   // asynchronous; popstate calls landNow below
+      landNow();
+    }
+
+    function landNow() {
+      // closeTerminal puts the list up itself, and does the rest of the teardown a pane needs.
+      if (activePane) { closeTerminal(); return; }
       hidePanels();
       document.body.classList.remove('conversation-open');
-      const back = panelReturnPane;
-      panelReturnPane = null;
-      // The pane may have died while the panel was open; openTerminal falls back to the ID, so
-      // check the live snapshot first and land on the list rather than on a dead pane.
-      if (back && agents.some(a => a.pane_id === back)) openTerminal(back);
-      else document.getElementById('agentListView').style.display = '';
+      document.getElementById('agentListView').style.display = '';
+      syncNavBtns();
     }
 
     // Jumping between panes is the most frequent move in the app, so every live agent gets a tab
@@ -5778,6 +6076,9 @@
     function renderStatusBar() {
       const pane = activePane ? paneOf(activePane) : null;
       paintPaneDot();
+      // The arrows sit in this row and their reach depends on which panes are still alive, which is
+      // a fact the snapshot changes without anybody navigating.
+      syncNavBtns();
       document.getElementById('statusBarLeft').textContent =
         pane && paneStampAt ? `changed ${fmtAgo(paneStampAt)}` : '';
       const right = document.getElementById('statusBarRight');
@@ -5832,10 +6133,9 @@
       }, { passive: false });
     }
 
-    // A jump is a destination, so it drops any panel the user was in and the pane it would
-    // have returned to — otherwise closing Settings later would yank them back to an older pane.
+    // A jump is a destination, so the panel the user was in is left behind rather than closed back
+    // into — openTerminal pushes the pane onto the walk, and the panel stays where it was on it.
     function jumpToPane(paneId) {
-      panelReturnPane = null;
       hidePanels();
       openTerminal(paneId);
     }
@@ -5873,7 +6173,7 @@
     function formatBandwidth(bytes) {
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
     }
 
     function renderBandwidth() {
@@ -5882,58 +6182,107 @@
       if (!panel || !rows) return;
       panel.hidden = !bandwidthOn();
       if (panel.hidden) return;
+      // Called from every snapshot, update and approval so the numbers keep up with the socket —
+      // which means most calls arrive with Activity off screen, where drawing is work nobody sees
+      // and an innerHTML rebuild of rows a reader is not looking at.
+      const view = document.getElementById('timelineView');
+      if (view && view.style.display === 'none') return;
       const buckets = bandwidthBuckets();
       const size = bandwidthBucketMs();
+      const liveAt = bandwidthLiveAt();
       const title = document.getElementById('bandwidthTitle');
       if (title) {
-        const span = bandwidthSpanHr();
-        title.textContent = `Data exchange · ${bandwidthStepMin()} min · ` +
-          `last ${span === 1 ? 'hour' : span + ' hours'}`;
+        title.textContent = `Data exchange · ${bandwidthStepMin()} min buckets · ` +
+          `latest ${bandwidthCount()}`;
+      }
+      const total = document.getElementById('bandwidthTotal');
+      if (total) {
+        // The same scale the chips under it use. Fixed MB read "0.00 MB" for an hour of a quiet
+        // relay, which is a panel reporting that it is not measuring anything.
+        total.textContent = `Total: ${formatBandwidth(
+          buckets.reduce((n, b) => n + b.sent + b.received, 0))}`;
+        total.title = `Every interval drawn below, added up`;
+        // Green is what this panel uses for "still moving". A sum that includes an interval still
+        // being filled is; one over a stack that stopped an hour ago is not.
+        total.classList.toggle('now', !!liveAt);
       }
       const kinds = [
-        ['Total', b => b.sent + b.received],
-        ['Sent', b => b.sent],
-        ['Received', b => b.received],
+        ['total', 'Total', b => b.sent + b.received],
+        ['sent', 'Sent', b => b.sent],
+        ['received', 'Received', b => b.received],
       ];
+      const metric = bandwidthMetric();
+      const paneKind = kinds.find(([key]) => key === metric) || kinds[0];
+      const panesOn = bandwidthPanesOn();
+      document.querySelectorAll('[data-bandwidth-metric]').forEach(button =>
+        button.setAttribute('aria-pressed', String(button.dataset.bandwidthMetric === metric)));
+      const paneToggle = document.getElementById('bandwidthPanes');
+      if (paneToggle) paneToggle.setAttribute('aria-pressed', String(panesOn));
       // The rows are built when the *window* moves — once a bucket — and never for a number
       // changing. The chips overflow a phone, so they scroll, and this is redrawn on every message
       // that lands, which with the poll is three times a minute. An innerHTML rebuild there would
       // send a reader who had scrolled back to an earlier bucket to the left edge again, three
       // times a minute. Same rule the dock's chip row follows.
-      const sig = buckets.map(b => b.at).join(',');
+      const panes = panesOn ? agents.filter(a => a.agent) : [];
+      const sig = buckets.map(b => b.at || 'empty').concat(liveAt ? 'live' : [], metric,
+        panes.map(a => a.pane_id)).join(',');
       if (rows.dataset.sig !== sig) {
         // One grid for the header and all three rows, so the columns line up and the whole table
         // scrolls as one — three scrollers of their own would let a reader compare Sent at 3:05
         // against Received at 2:40 and never see that they had.
-        rows.style.gridTemplateColumns = `52px repeat(${buckets.length}, minmax(46px, 1fr))`;
-        const at = (b, i) => {
+        rows.style.gridTemplateColumns = `minmax(110px, 1fr) repeat(${buckets.length}, minmax(46px, 1fr))`;
+        const at = b => {
+          if (b.empty) return {range: 'No data', live: false, clock: '—'};
           const start = new Date(b.at), end = new Date(b.at + size);
-          const range = `${start.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}–` +
+          const day = start.toDateString() === new Date().toDateString() ? '' :
+            start.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ';
+          const range = day + `${start.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}–` +
             end.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
-          // The last bucket is the one being filled: it is a few minutes old at most, and saying so
-          // is the difference between a small number and a number that has stopped moving.
-          return {range: range, live: i === buckets.length - 1,
-            clock: `${String(start.getHours()).padStart(2, '0')}:` +
+          // Live is the interval still being filled, which only the collector knows: a record starts
+          // at the message that opened it, not on a clock boundary, so its time cannot be compared
+          // against one. The stack survives a reload and can hold days, so a column outside today
+          // says which day — HH:MM alone would read as this morning.
+          return {range: range, live: b.at === liveAt,
+            clock: day + `${String(start.getHours()).padStart(2, '0')}:` +
               `${String(start.getMinutes()).padStart(2, '0')}`};
         };
         rows.innerHTML =
           `<div class="bandwidth-head"><span class="bandwidth-label"></span>` +
-          buckets.map((b, i) => { const t = at(b, i);
+          buckets.map(b => { const t = at(b);
             return `<span class="bandwidth-time${t.live ? ' now' : ''}" title="${t.range}">` +
               `${t.live ? 'now' : t.clock}</span>`; }).join('') + `</div>` +
-          kinds.map(([label]) =>
+          kinds.map(([, label]) =>
             `<div class="bandwidth-row"><span class="bandwidth-label">${label}</span>` +
-            `<div class="bandwidth-chips">${buckets.map((b, i) => { const t = at(b, i);
+            `<div class="bandwidth-chips">${buckets.map(b => { const t = at(b);
               return `<span class="bandwidth-chip${t.live ? ' now' : ''}" ` +
                 `title="${label}, ${t.range}${t.live ? ' (in progress)' : ''}"></span>`;
+            }).join('')}</div></div>`).join('') +
+          panes.map(a => `<div class="bandwidth-row pane-bandwidth-row" data-pane="${escapeHtml(a.pane_id)}">` +
+            `<span class="bandwidth-label pane-bandwidth-name"><span class="dot"></span>` +
+            `${escapeHtml(paneLabel(a))}${agentBadge(a.agent)}<small class="pane-bandwidth-ping"></small></span>` +
+            `<div class="bandwidth-chips">${buckets.map(b => { const t = at(b);
+              return `<span class="bandwidth-chip${t.live ? ' now' : ''}" ` +
+                `title="${paneKind[1]}, ${t.range}${t.live ? ' (in progress)' : ''}"></span>`;
             }).join('')}</div></div>`).join('');
         rows.dataset.sig = sig;
       }
       // The numbers, written into the chips that are already there.
       const bars = rows.querySelectorAll('.bandwidth-row');
-      kinds.forEach(([, value], r) => {
+      kinds.forEach(([, , value], r) => {
         const chips = bars[r].querySelectorAll('.bandwidth-chip');
-        buckets.forEach((b, i) => { chips[i].textContent = formatBandwidth(value(b)); });
+        buckets.forEach((b, i) => { chips[i].textContent = b.empty ? '' : formatBandwidth(value(b)); });
+      });
+      panes.forEach((a, i) => {
+        const row = bars[i + kinds.length];
+        const b = paneBandwidth[a.pane_id];
+        const dot = row.querySelector('.dot');
+        dot.style.background = statusColor(a);
+        dot.classList.toggle('pulse', a.status === 'working');
+        row.querySelector('.pane-bandwidth-ping').textContent = b && b.ping ? ` · ${fmtAgo(new Date(b.ping))}` : '';
+        const byAt = Object.fromEntries((b ? b.buckets : []).map(entry => [entry.at, entry]));
+        const chips = row.querySelectorAll('.bandwidth-chip');
+        buckets.forEach((bucket, j) => { const entry = byAt[bucket.at];
+          chips[j].textContent = entry ? formatBandwidth(paneKind[2](entry)) : ''; });
       });
     }
 
@@ -5996,7 +6345,12 @@
       // Central wire accounting. Every caller goes through this socket, so instrumenting it here
       // catches polls, sends, pushes and commands without duplicating counters at each call site.
       const send = ws.send.bind(ws);
-      ws.send = data => { noteBandwidth('sent', data); return send(data); };
+      ws.send = data => {
+        noteBandwidth('sent', data);
+        try { const msg = JSON.parse(data); if (msg.type === 'read_pane') notePaneBandwidth(msg.pane_id, 'sent', data); }
+        catch (e) { /* non-JSON wire payloads have no pane identity */ }
+        return send(data);
+      };
       // Re-announcing the push subscription here rather than only at subscribe time is what makes
       // it survive the socket being down at the wrong moment — on a phone that is most of the time.
       ws.onopen = () => {
@@ -6008,11 +6362,17 @@
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
+        resetBandwidthBucket();
         setStatus('disconnected');
         setTimeout(connect, 3000);
       };
       ws.onerror = () => setStatus('disconnected');
-      ws.onmessage = (e) => { noteBandwidth('received', e.data); handleMessage(JSON.parse(e.data)); };
+      ws.onmessage = (e) => {
+        noteBandwidth('received', e.data);
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'pane_content') notePaneBandwidth(msg.pane_id, 'received', e.data);
+        handleMessage(msg);
+      };
     }
 
     // One update path for every status dot: the app header's and the term header's, so the
@@ -6143,6 +6503,7 @@
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        renderBandwidth();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.
         renderQuickActions();
@@ -6187,6 +6548,7 @@
         }
         prevStatuses[update.pane_id] = update.status;
         render();
+        renderBandwidth();
         renderQuickActions();
         syncConvBadge();
       }
@@ -6202,6 +6564,7 @@
         timeline.unshift({ project: msg.project, agent: msg.agent, status: 'blocked', time: new Date() });
         if (timeline.length > 100) timeline.pop();
         render();
+        renderBandwidth();
         renderQuickActions();  // the approval buttons belong on screen the moment it blocks
         syncConvBadge();
       } else if (msg.type === 'pane_content' && msg.pane_id !== activePane) {
@@ -6911,7 +7274,7 @@
       const meta = `${n} pane${n === 1 ? '' : 's'}` + (live ? ` · ${live} live` : '');
       return `<button class="pair-pick${c.id === convViewId ? ' on' : ''}" ` +
         `onclick="closeRecentSheet(); openConversation('${escapeHtml(c.id)}')">` +
-        `<span class="kind" aria-hidden="true">💬</span>` +
+        `<span class="kind conv-kind" aria-hidden="true">💬︎</span>` +
         `<span class="info"><span class="name">${escapeHtml(c.name)}</span>` +
         `<span class="meta">${escapeHtml(meta)}</span></span>` +
         `</button>`;
@@ -8957,7 +9320,7 @@
         const msgs = (c.members || []).reduce((t, m) => t + (m.messages || 0), 0);
         const meta = `${n} member${n > 1 ? 's' : ''}` + (msgs ? ` · ${msgs} messages` : '');
         return `<button class="pair-pick${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleConvMember('${escapeHtml(c.id)}')">
-      <span class="kind" aria-hidden="true">💬</span>
+      <span class="kind conv-kind" aria-hidden="true">💬︎</span>
       <span class="info"><span class="name">${escapeHtml(c.name)}</span><span class="meta">${meta}</span></span>
       <span class="pair-tick" aria-hidden="true">${on ? '✓' : ''}</span>
     </button>`;
@@ -9282,6 +9645,9 @@
     // Both halves of the switch: the button that offers it and the view it selects.
     function renderConvBar() {
       renderQuickActions();
+      // The pair strip shares the pane composer, whose folded/thread state just changed. Repaint it
+      // with the same transition so an existing pair cannot retain an absent or stale strip.
+      renderPairStrip();
       renderConvView();
       // Which conversation the pane is reading is what the strip marks current, when the strip is
       // holding conversations. Diffed by its own signature, so this costs nothing when it is not.
@@ -9496,8 +9862,11 @@
     function convClock(e) {
       const at = convAt(e);
       if (!at) return '';
-      const t = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      return convAtRank(e) ? t : '~' + t;
+      const date = new Date(at), today = new Date();
+      const day = date.toDateString() === today.toDateString() ? '' :
+        date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ';
+      const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return (convAtRank(e) ? '' : '~') + day + time;
     }
 
     // `self` is what an entry written before the recorder stamped its own label and harness falls
@@ -9526,7 +9895,6 @@
           : '';
         // Every agent bubble carries its label as well as its colour: two washes of one family are
         // not enough on a phone in sunlight, and past two members colour alone stops working.
-        const tint = convTint(e.member || 0);
         const key = e.key || me.key || '';
         const live = agents.find(x => convMemberKey(x) === key);
         // The harness the entry was recorded under, not the one running in that pane today: a
@@ -9542,7 +9910,12 @@
         // the one that spoke — in a joint thread "which colleague was this said to" is the question
         // the view exists to answer, and in a single-pane thread it is what keeps a prompt and the
         // reply to it under headers of the same shape rather than two different ones.
-        const who = `<span class="dot" style="background:${tint}"></span>${name}${badge}`;
+        // This is a status dot, so it carries only the member's state now. The bubble wash, name
+        // and badge already identify the speaker; a second colour ring made a working dot look
+        // like it had changed to an unrelated warning state.
+        const dot = live ? statusColor(live) : 'var(--muted)';
+        const who = `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
+          `style="background:${dot}"></span>${name}${badge}`;
         const bar = user ? [who, from].filter(Boolean).join(' · ') : who;
         // On every bubble, including a user's own in a single-pane thread, where it is the whole
         // header: a time you have to switch views to check is not one you can check an entry with.
@@ -11001,7 +11374,8 @@
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv) return;
       convViewId = id;
-      noteConvVisit(id);
+      noteConvVisit(id);   // the Recent switcher's log, which is MRU
+      noteConvNav(id);     // and the ‹ › walk, which is order of visit
       clearConvDock();
       convStandaloneHtml = '';
       convRosterHtmlLast = '';
@@ -11009,6 +11383,10 @@
       convRosterOpen = false;
       convAdding = false;
       openPanel('convView');
+      syncNavBtns();   // the walk is standing somewhere new, and its arrows are on screen here too
+      // Tabs come from the index and live snapshot, not transcript storage. Draw them before the
+      // IndexedDB read below so first open has navigation while its messages load.
+      renderConvStrip();
       renderConvStandalone(true);
     }
 
@@ -11038,6 +11416,8 @@
       // The thread panel, on, and showing *this* conversation: a pane in several would otherwise
       // open on whichever one it was last read under.
       convSetView(live, conv.id);
+      // No "return to this conversation" carried along: the conversation is the entry behind this
+      // one on the walk, and Back is that entry.
       jumpToPane(live.pane_id);
     }
 
@@ -11525,6 +11905,7 @@
       const view = document.getElementById('convView');
       if (!view || view.style.display === 'none') return;
       const box = document.getElementById('convViewThread');
+      const stick = bottom || view.scrollTop + view.clientHeight >= view.scrollHeight - 24;
       const conv = loadConvIndex().find(c => c.id === convViewId);
       if (!conv) { closePanel(); return; }
       document.getElementById('convViewTitle').textContent = conv.name;
@@ -11585,7 +11966,7 @@
       syncDockPicks(entries.length);
       renderConvDock();
       renderConvStrip();
-      if (bottom) view.scrollTop = view.scrollHeight;
+      if (stick) view.scrollTop = view.scrollHeight;
     }
 
     // Title and terminal-only chrome for whatever is open. Called on open and again after every
@@ -11982,6 +12363,15 @@
       if (!input) return;
       input.focus();
       syncConvCursor();
+      stickConvLatest();
+    }
+
+    // The composer grows upward under the thread. Keep its newest bubble in view while writing;
+    // reading history still wins because this only runs after the writer explicitly focuses it.
+    function stickConvLatest() {
+      const view = document.getElementById('convView');
+      if (!view || view.style.display === 'none') return;
+      requestAnimationFrame(() => { view.scrollTop = view.scrollHeight; });
     }
 
     // The block cursor. A textarea's own caret is a hairline that disappears with focus, and this
@@ -12347,25 +12737,202 @@
     const NAV_MAX = 20;
     let navHistory = [], navIndex = -1, navigating = false;
 
-    function noteVisit(paneId) {
-      if (navigating || navHistory[navIndex] === paneId) return;
-      navHistory = navPush(navHistory, navIndex, paneId, NAV_MAX);
+    // The browser's session history is the same walk, not a mirror of it: one cursor, held by the
+    // browser, so the phone's Back gesture and the `‹` button cannot end up pointing at different
+    // entries. Each of our entries carries a serial rather than an index, because the list drops
+    // its oldest entry at NAV_MAX and every index below it would shift under a state already
+    // written into the browser's stack.
+    let navSerials = [], navSerial = 0, navDetached = false;
+    function navBrowserHistory() {
+      return typeof window === 'object' && window && window.history &&
+        typeof window.history.pushState === 'function' ? window.history : null;
+    }
+
+    function navPushState() {
+      const api = navBrowserHistory();
+      if (!api) return;
+      // Always a push, never a replace: the document's own entry is the landing page, which is not
+      // on the walk but is where the browser's Back has to be able to reach. Stamping our first
+      // destination onto it would make Back off that destination leave the app instead.
+      api.pushState({herdrNav: navSerials[navIndex]}, '');
+      navDetached = false;   // whatever we had drifted past, this entry is ours again
+    }
+
+    // The gesture, the mouse button and the browser's own chrome all arrive here. Moving the cursor
+    // *to* the entry named in the state — rather than stepping — is what keeps one cursor: the
+    // browser has already moved, and this follows it.
+    //
+    // Guarded because these modules are also run as slices in a vm context, which has no window.
+    if (typeof addEventListener === 'function') addEventListener('popstate', e => {
+      const at = e.state && e.state.herdrNav;
+      // No state at all is the entry the document was loaded on, which is the landing page. It is
+      // not a stop on the walk — nothing is behind the first destination — so the cursor sits
+      // before entry 0, from where Forward is a step of one and Back is nothing. Without this the
+      // phone's Back gesture out of the first pane opened would leave the screen exactly as it was.
+      if (at == null) {
+        navIndex = -1;
+        landNow();
+        syncNavBtns();
+        return;
+      }
+      const i = navSerials.indexOf(at);
+      // A state older than NAV_MAX entries, or one another page wrote. We cannot show it, and we
+      // must not keep computing deltas against a cursor the browser has already moved off — so the
+      // walk stops driving the browser until the next visit re-anchors it.
+      if (i < 0) { navDetached = true; return; }
+      navShow(i);
+    });
+
+    // A conversation window is a stop on this walk, not a place outside it. Reading a conversation,
+    // opening a member's pane from it and then wanting the record back is the ordinary way round a
+    // multi-agent thread, and until this the only way back was the pane's own Back — which lands on
+    // the agent list, from where the conversation has to be found again.
+    //
+    // Held in the same list, prefixed, rather than in a second one: back and forward are one order,
+    // and two lists would have to be interleaved by a timestamp to answer "where was I" — which is
+    // the list this already is.
+    // Everything you can be looking at is an entry, so one walk covers all of it rather than each
+    // destination growing its own one-deep memory of where it came from. Strings, not objects: the
+    // list is compared with `===` in three places and the entry never needs a payload — which view
+    // a pane is read in is a stored per-pane preference, so putting it in the entry would let a
+    // step back override a choice made after the entry was made.
+    //
+    //   'w1:p1'             a pane
+    //   'conv:<id>'         a conversation window
+    //   'panel:settingsView' a panel
+    //   'landing'           screen marker only; never a history entry
+    const NAV_CONV = 'conv:', NAV_PANEL = 'panel:', NAV_LANDING = 'landing';
+    function navIsConv(id) { return typeof id === 'string' && id.startsWith(NAV_CONV); }
+    function navConvId(id) { return id.slice(NAV_CONV.length); }
+    function navIsPanel(id) { return typeof id === 'string' && id.startsWith(NAV_PANEL); }
+    function navPanelId(id) { return id.slice(NAV_PANEL.length); }
+
+    function noteVisit(id) {
+      if (navigating || navHistory[navIndex] === id) return;
+      navHistory = navPush(navHistory, navIndex, id, NAV_MAX);
+      // The same push, on the same cursor and cap, so the two arrays stay index-for-index: the
+      // serial is what a browser history entry carries, because an index shifts under it every
+      // time the list drops its oldest entry.
+      navSerials = navPush(navSerials, navIndex, ++navSerial, NAV_MAX);
       navIndex = navHistory.length - 1;
+      navPushState();
+      syncNavBtns();
+    }
+
+    function noteConvNav(id) { noteVisit(NAV_CONV + id); }
+    function notePanelNav(id) { noteVisit(NAV_PANEL + id); }
+
+    // A conversation is alive while its record exists; a pane is alive while herdr reports it. Both
+    // are skipped when they are not, so a step never lands on a record that was deleted or a pane
+    // that has exited. Panels are always reachable.
+    function navAlive(id) {
+      if (navIsConv(id)) return loadConvIndex().some(c => c.id === navConvId(id));
+      if (navIsPanel(id) || id === NAV_LANDING) return true;
+      return !!paneOf(id);
     }
 
     function navTarget(step) {
       // Both lists, or the history silently steps over every terminal ever visited.
-      return navStep(navHistory, navIndex, step, id => !!paneOf(id), activePane);
+      return navStep(navHistory, navIndex, step, navAlive, navHere());
     }
 
+    // Where the walk currently stands, read off the screen rather than remembered. Passed to
+    // navStep so a step never re-opens what is already open.
+    function navHere() {
+      if (activePane) return activePane;
+      const panel = openPanelId();
+      if (panel === 'convView') return convViewId ? NAV_CONV + convViewId : NAV_LANDING;
+      return panel ? NAV_PANEL + panel : NAV_LANDING;
+    }
+
+    // Returns whether there was anywhere to go, so a caller with its own fallback — the Back
+    // chevrons, which must always leave — can tell "stepped" from "nowhere to step".
     function navGo(step) {
       const i = navTarget(step);
-      if (i < 0) return;
+      if (i < 0) return false;
+      // The browser's own stack holds the cursor where it can, so `‹`, the phone's Back gesture and
+      // a mouse's back button are one action rather than two that can disagree. go() is
+      // asynchronous: popstate below is what actually opens the destination.
+      const api = navBrowserHistory();
+      if (api && !navDetached) api.go(i - navIndex);
+      else navShow(i);
+      return true;
+    }
+
+    function navShow(i) {
       navIndex = i;
       navigating = true;
-      try { openTerminal(navHistory[i]); } finally { navigating = false; }
+      const id = navHistory[i];
+      try {
+        if (navIsConv(id)) openConversation(navConvId(id));
+        else if (navIsPanel(id)) openPanel(navPanelId(id));
+        else if (id === NAV_LANDING) showLanding();
+        else openTerminal(id);
+      } finally { navigating = false; }
+      syncNavBtns();
       if (window.cue) cue('page');
     }
+
+    // Panels use the walk. Pane and conversation header chevrons deliberately return to the list.
+    function goBack() { if (!navGo(-1)) showLanding(); }
+
+    // Exiting to the list is a rewind, not a step: the list is the entry the document was loaded
+    // on, so the browser goes back to *it* and the popstate above does the landing. Without this
+    // the chevron would put the list on screen while the browser's cursor stayed parked on the
+    // destination just left — and the next Back gesture would replay the one before it.
+    //
+    // False where there is no browser history to drive, which is also the vm slices; the caller
+    // lands directly instead.
+    function navRewind() {
+      const api = navBrowserHistory();
+      if (!api || navDetached || navIndex < 0) return false;
+      api.go(-(navIndex + 1));
+      return true;
+    }
+
+    // The walk's own controls live in the status bar, which is the one row on screen in every view —
+    // the pane had arrows and the conversation window had none, and a walk that crosses both needs
+    // a control that does too. Enabled state is recomputed rather than remembered: a pane exiting
+    // can empty the walk without anybody navigating.
+    function syncNavBtns() {
+      [[-1, 'navBack'], [1, 'navFwd']].forEach(([step, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const label = navLabel(step);
+        btn.disabled = navTarget(step) < 0;
+        btn.title = btn.disabled ? '' : label;
+        btn.setAttribute('aria-label', btn.disabled ? (step < 0 ? 'Back' : 'Forward') : label);
+      });
+      syncBackLabel();
+    }
+
+    // The pane header always exits to the list; only the status-bar arrows walk history.
+    function syncBackLabel() {
+      const back = document.getElementById('termBack');
+      if (!back) return;
+      back.setAttribute('aria-label', 'Back to the agent list');
+    }
+
+    // What a destination is called in a label. The panel names are the words on the buttons that
+    // open them, not the element IDs.
+    const NAV_NAMES = { settingsView: 'Settings', timelineView: 'Activity' };
+    function navName(id) {
+      if (id === NAV_LANDING) return 'the agent list';
+      if (navIsPanel(id)) return NAV_NAMES[navPanelId(id)] || navPanelId(id);
+      if (!navIsConv(id)) return paneLabel(paneOf(id)) || id;
+      const conv = loadConvIndex().find(c => c.id === navConvId(id));
+      return (conv && conv.name) || 'the conversation';
+    }
+
+    // What the arrow will land on, so the button says where it goes rather than "Previous session"
+    // over a conversation. Falls back to the generic word where there is nowhere to step, which is
+    // where the button is disabled anyway.
+    function navLabel(step) {
+      const i = navTarget(step);
+      if (i < 0) return step < 0 ? 'Back' : 'Forward';
+      return `${step < 0 ? 'Back to' : 'Forward to'} ${navName(navHistory[i])}`;
+    }
+
 
     const QA_KEY = 'herdr_quick_actions';
     function quickActionsOn() { return localStorage.getItem(QA_KEY) !== 'off'; }
@@ -12467,9 +13034,6 @@
       // leaves the phone able to approve — otherwise the setting would quietly cost it the one
       // thing this app exists to do.
       if (!blocked && !showNav) { qa.innerHTML = ''; return; }
-      const nav = (step, glyph, label) =>
-        `<button class="nav" onclick="navGo(${step})" aria-label="${label}"` +
-        `${navTarget(step) < 0 ? ' disabled' : ''}>${glyph}</button>`;
       const open = bottomDockOpen();
       // Offered only when there is one to select. A button that does nothing on most panes would
       // teach people to stop pressing it on the panes where it works.
@@ -12492,14 +13056,16 @@
         ? `<button class="qa-conv${threaded ? ' on' : ''}" onclick="toggleConvView()" ` +
         `aria-pressed="${threaded}" ` +
         `title="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}" ` +
-        `aria-label="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}">💬</button>`
+        `aria-label="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}"><span class="conv-kind">💬︎</span></button>`
         : '';
       const navRow = `<div class="qa-nav"><div class="qa-left">` +
         `<button class="qa-fold" onclick="toggleBottomDock()" aria-expanded="${open}" ` +
         `title="${open ? 'Fold the composer away' : 'Bring the composer back'}" ` +
         `aria-label="${open ? 'Fold the composer away' : 'Bring the composer back'}">` +
         `${open ? 'v' : '^'}</button>${conv}</div>` +
-        `<div class="qa-mid">${nav(-1, '‹', 'Previous session')}${nav(1, '›', 'Next session')}</div>` +
+        // The walk used to sit in a middle column here, where only a pane could reach it. It is in
+        // the status bar now, one row down and on screen in every view, so the middle is empty
+        // track rather than a second pair of arrows disagreeing with the first.
         `<div class="qa-right">${summary}` +
         `<button class="qa-last" onclick="scrollPaneToBottom()" title="Jump to the newest line" ` +
         `aria-label="Jump to the newest line">Last</button></div></div>`;
@@ -12754,8 +13320,9 @@
       if (again) btn.title = `Load this pane's last message into the composer: ${again.slice(0, 80)}`;
     }
 
-    // A resend is a composer prefill, never a direct write. The visible draft is the gate in pane
-    // mode; preserving one is more important than replacing it with an older message.
+    // One tap, unlike the buttons it sits beside. Those arm because what they do cannot be taken
+    // back; this one fills a text box you can still edit, empty or send, and a draft already there
+    // is refused rather than overwritten — there is nothing here for a second tap to protect.
     function resendLast() {
       const again = lastSentText[activePane];
       if (!again) return;
@@ -13059,6 +13626,14 @@
         if (activePane || window.innerWidth < 768) return;
         if (stepTab(e.shiftKey ? -1 : 1)) { e.preventDefault(); e.stopPropagation(); }
       }
+
+      // Desktop only: < and > walk the same history as the footer arrows. Never steal text input
+      // or a modified shortcut; Shift is already part of producing these two characters.
+      if (window.innerWidth < 768 || e.altKey || e.metaKey || e.ctrlKey ||
+          (e.key !== '<' && e.key !== '>') ||
+          (e.target && typeof e.target.closest === 'function' &&
+            e.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+      if (navGo(e.key === '<' ? -1 : 1)) e.preventDefault();
     }, true);
     document.getElementById('termContent').addEventListener('scroll', function () {
       const el = this;
