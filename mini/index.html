@@ -1790,9 +1790,15 @@
       flex-direction: column;
     }
 
+    /* Grows to fill the view so the dock below it is at the bottom of the screen and not halfway
+       up it: a conversation of three messages is the ordinary case, and a composer that floats in
+       the middle of an empty view reads as an unfinished layout. */
     #convViewThread {
-      flex: none;
+      flex: 1 0 auto;
       overflow: visible;
+      /* Room to scroll past the floating dock — measured, because the dock grows with the address
+         row, the instruction list and a composer that has been typed into. See syncDockHeight. */
+      padding-bottom: calc(var(--dock-h, 96px) + 8px);
     }
 
     /* Full width, unlike the pane's thread. There the 86% leaves room for the other half of a pair
@@ -1806,6 +1812,123 @@
       position: sticky;
       top: 0;
       z-index: 2;
+    }
+
+    /* The dock floats: sticky pins it to the bottom of the view, and the negative margin takes back
+       the space it would otherwise occupy, so the conversation scrolls behind it rather than
+       stopping above it. #convViewThread's padding is what lets the last bubble clear it. */
+    .conv-dock {
+      position: sticky;
+      bottom: 0;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      margin-top: calc(-1 * var(--dock-h, 96px));
+      /* Not a hard edge: the thread fades into the dock instead of sliding under a line, which is
+         what makes it read as depth rather than as two panels meeting. */
+      background: linear-gradient(to top, var(--bg) 68%, transparent);
+      pointer-events: none;   /* the fade is not a wall; the controls in it take their own taps */
+    }
+
+    .conv-dock[hidden] {
+      display: none;
+    }
+
+    .conv-dock > * {
+      pointer-events: auto;
+    }
+
+    /* The bubble, drawn as what it is: the next message in the thread, elevated a little so it
+       reads as being in front of the conversation rather than beneath it. Who it is addressed to,
+       what is added to it and the text itself are one control — the border says which agent is
+       about to receive it, so the answer is on the thing being written rather than beside it. */
+    .conv-bubble {
+      margin: 8px;
+      border: 1px solid var(--dock-accent, var(--border));
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+      /* A wash of the same colour, so the tint survives on a theme where a 1px border is nearly
+         invisible — and stays under the text at 6%, which no theme's contrast notices. */
+      background-image: linear-gradient(var(--dock-wash, transparent), var(--dock-wash, transparent));
+    }
+
+    .conv-composer {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 8px 8px 8px 12px;
+    }
+
+    /* The field and its ghost, stacked. The ghost is the one that paints the block cursor. */
+    .conv-field {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .conv-composer textarea,
+    .conv-ghost {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 0.95rem;
+      line-height: 1.4;
+      padding: 6px 0;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+
+    .conv-composer textarea {
+      display: block;
+      max-height: 40vh;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      resize: none;
+      outline: none;
+      /* The platform's caret is off: the block below is the cursor, and two would be one too many. */
+      caret-color: transparent;
+    }
+
+    /* Behind the text, mirroring it exactly, so the block lands where the caret is. Nothing here is
+       read by anyone — the textarea is still the field, and this is aria-hidden. */
+    .conv-ghost {
+      position: absolute;
+      inset: 0;
+      color: transparent;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    /* A terminal's cursor, because this is a box that types into agents. Always drawn, dimmed when
+       the field is not focused: where the next character lands is worth knowing before tapping in,
+       and a caret that vanishes with focus is the thing a phone keyboard hides anyway. */
+    .conv-ghost .cur {
+      display: inline-block;
+      min-width: 0.6em;
+      border-radius: 1px;
+      background: var(--dock-cursor, var(--text));
+      opacity: 0.4;
+    }
+
+    .conv-field.on .conv-ghost .cur {
+      opacity: 0.85;
+    }
+
+    .conv-composer .send {
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: var(--blue);
+      color: var(--bg);
+      cursor: pointer;
     }
 
     /* Conversation tabs occupy pane tabs' exact slot in the shared bottom header. A second strip
@@ -2425,9 +2548,11 @@
       flex: none;
     }
 
-    /* The live state of the pane the last bubble belongs to, hung off its top-right corner. Only
-       the last one carries it: a status is a fact about the pane now, not about the message, and
-       a column of them would read as a per-message history that does not exist. */
+    /* The live state of the pane a bubble belongs to, hung off its top-right corner. One per
+       member, on that member's newest bubble: a status is a fact about the pane now, not about the
+       message, so a column of them would read as a per-message history that does not exist — but a
+       joint thread has more than one pane, and the partner working while someone else spoke last
+       is exactly what a joint thread is for. */
     .conv-badge {
       position: absolute;
       top: -8px;
@@ -2451,6 +2576,40 @@
     .conv-badge.working {
       color: var(--orange);
       border-color: var(--orange);
+    }
+
+    /* Working is the one state that is an activity rather than a result, so it is the one that
+       moves. The dots are drawn by CSS and not by the badge's text: syncConvBadge runs on the poll
+       and writes in place precisely so that nothing re-renders under a reader's finger, and a
+       badge animated by rewriting textContent would be that re-render three times a second.
+
+       Reserved width, revealed by clip-path — the badge is right-anchored, so dots that grew the
+       box would walk its left edge back and forth. `ch` is exact here: the badge is monospace. */
+    .conv-badge.working::after {
+      content: '...';
+      display: inline-block;
+      width: 3ch;
+      overflow: hidden;
+      vertical-align: bottom;
+      animation: conv-dots 1.2s steps(4, jump-none) infinite;
+    }
+
+    @keyframes conv-dots {
+      from {
+        clip-path: inset(0 100% 0 0);
+      }
+
+      to {
+        clip-path: inset(0 0 0 0);
+      }
+    }
+
+    /* Still three dots, still reading as work in progress, without the motion. A pane that is
+       working has to say so whether or not this browser will animate. */
+    @media (prefers-reduced-motion: reduce) {
+      .conv-badge.working::after {
+        animation: none;
+      }
     }
 
     .conv-badge.blocked {
@@ -2704,6 +2863,190 @@
       border-top: 1px solid var(--border);
       background: var(--surface);
       flex-shrink: 0;
+      /* The transfer chips are a full-width row above the rest, so the bar wraps rather than
+         scrolling the two into one line. */
+      flex-wrap: wrap;
+    }
+
+    /* The address line: who the message is going to, and what is added to it. Two lines — who, then
+       what — inside the bubble and above the text, because that is what they modify. Only the
+       conversation window has it; a pane's composer types into its pane. */
+    .xfer-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      padding: 8px 10px;
+      /* Hairline rather than a gap: one bubble divided into what it says and who it is for, not
+         two boxes sharing a shadow. */
+      border-bottom: 1px solid var(--border);
+    }
+
+    .xfer-row[hidden] {
+      display: none;
+    }
+
+    /* Both lines scroll rather than wrap. A conversation can hold more agents than fit across a
+       phone, and a row that wrapped would push the thread up by an unpredictable amount every time
+       one joined. */
+    .xfer-who-row,
+    .xfer-chip-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+
+    .xfer-who-row::-webkit-scrollbar,
+    .xfer-chip-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .xfer-act {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .xfer-act .xfer-chip-row {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    /* The conversation's agents. The one that will receive it is lit; the rest are dimmed rather
+       than hidden, because which agents are in this conversation is information and a row showing
+       only the chosen one would answer a different question. */
+    .xfer-row .xfer-who {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      min-height: 32px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      opacity: 0.55;
+    }
+
+    /* Lit in the agent's own colour, the same one the bubble's border takes and the same one that
+       agent's messages wear in the thread — so "who is this going to" is answered once, in one
+       colour, in three places. */
+    .xfer-row .xfer-who.on {
+      border-color: var(--who-accent, var(--text));
+      color: var(--text);
+      opacity: 1;
+    }
+
+    /* The badge is a fact about the pane, not part of the pill's own emphasis: it keeps its own
+       colour and stays a size down from the name. */
+    .xfer-row .xfer-who .badge {
+      font-size: 0.62rem;
+      padding: 1px 4px;
+    }
+
+    .xfer-row .xfer-who .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    /* An instruction, not a send. Chips are additive — two lit chips are two instructions, in the
+       order they were tapped, which is why a second one wears its position. */
+    .xfer-row .xfer-chip {
+      flex: 0 0 auto;
+      padding: 7px 11px;
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    /* Lit, not filled. Send is the only filled thing on this row: three picked chips in the same
+       solid blue as the button that fires them make four buttons that look equally like the
+       action. Outline for chosen, fill for the one that sends. */
+    .xfer-row .xfer-chip.on {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .xfer-row .xfer-chip sub {
+      font-size: 0.6em;
+      vertical-align: sub;
+      margin-left: 2px;
+      opacity: 0.8;
+    }
+
+    .xfer-row .xfer-send {
+      flex: 0 0 auto;
+      padding: 7px 13px;
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--blue);
+      background: var(--blue);
+      color: var(--bg);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    /* Every instruction as a list, for a chip row that has scrolled past the edge of a phone and
+       for reading the full label rather than its @name. Same picks, drawn twice. */
+    .chip-menu {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: 40vh;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      /* The dock's own surface, not the thread's: this list floats over messages, and on --bg its
+         border is the only thing separating it from them. */
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+      padding: 4px;
+    }
+
+    .chip-menu[hidden] {
+      display: none;
+    }
+
+    /* Left-aligned, unlike the bar's buttons: this is a list being read down, and the ticks only
+       line up under each other if the labels start in the same place. */
+    .chip-menu .menu-item {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 10px;
+      justify-content: flex-start;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .chip-menu .menu-item:hover {
+      background: var(--border);
+    }
+
+    .chip-menu .tick {
+      display: inline-block;
+      width: 1.2em;
+      color: var(--blue);
     }
 
     /* display:flex above outranks the UA rule for [hidden], so it needs saying again. */
@@ -2901,6 +3244,14 @@
     .terminal-view.dock-folded .term-input,
     .terminal-view.dock-folded .term-keys {
       display: none !important;
+    }
+
+    /* Except with a thread on screen. The fold's trade is height for a control you are not using
+       while you read a long pane — but the thread's equivalent of reading is replying, and a
+       conversation whose composer folded away would be the one view where the fold takes the thing
+       the view is for. The key docks still fold; the text area and Send do not. */
+    .terminal-view.dock-folded.conv-view .term-input {
+      display: flex !important;
     }
 
     /* Every label that sits on an accent fill — these three, the armed keys, Send, Start, the
@@ -3455,6 +3806,46 @@
     </div>
 
     <div class="setting-group">
+      <label for="deepPick">Conversation recovery</label>
+      <select id="deepPick" onchange="setConvDeepAll(this.value === 'full')">
+        <option value="day">A day of history</option>
+        <option value="full">Everything the relay has</option>
+      </select>
+      <div class="hint">How much a conversation reads back when you return to it after being away
+        for more than fifteen minutes. Nothing is fetched while you are connected, and neither
+        setting is what the pane draws — this is the record, not the screen. Everything is one read
+        per agent at whatever depth your relay allows, which on a phone over cellular is worth
+        knowing about; a day is 5,000 lines. Recover history in a pane's ⋯ menu always fetches
+        everything, whichever this says.</div>
+    </div>
+
+    <div class="setting-group">
+      <label for="sweepPick">Background catch-up</label>
+      <select id="sweepPick" onchange="setConvSweep(this.value)">
+        <option value="1h">Every hour</option>
+        <option value="4h">Every four hours</option>
+        <option value="off">Off</option>
+      </select>
+      <div class="hint">How often conversations you have not opened are caught up on. A pane you do
+        open catches up the moment you open it, whatever this says, so this is only about the ones
+        you never look at — the other half of a joint thread, mostly. Off means those fill in when
+        you next open them.</div>
+    </div>
+
+    <div class="setting-group">
+      <label for="tidyPick">Tidy old transcripts</label>
+      <select id="tidyPick" onchange="setConvTidy(this.value === 'on')">
+        <option value="on">On</option>
+        <option value="off">Off</option>
+      </select>
+      <div class="hint">Transcripts recorded by an earlier version could fold the same screen in
+        twice. On, each one is repaired the first time it is opened, and says how many copies it
+        removed. Only those: nothing recorded since can hold a duplicate, and the repair is never
+        run on a record that could not have one. Remove duplicates in a pane's ⋯ menu does the same
+        thing by hand.</div>
+    </div>
+
+    <div class="setting-group">
       <label for="micPick">Dictation</label>
       <select id="micPick" onchange="setDictationEnabled(this.value === 'on')">
         <option value="off">Off</option>
@@ -3513,6 +3904,34 @@
     <div class="conv-panel" id="convViewRoster" hidden></div>
     </div>
     <div class="conv-thread" id="convViewThread"></div>
+    <!-- The dock: who you are talking to, what is added to what you send, and the composer it all
+         modifies. It floats over the thread rather than sitting under it — see .conv-dock. -->
+    <div class="conv-dock" id="convDock">
+      <div class="chip-menu" id="chipMenu" role="menu" hidden></div>
+      <!-- One bubble: who it goes to, what is added to it, and the message itself. Three stacked
+           panels would read as three controls that happen to be near each other; this is one thing
+           being addressed and written. Its border carries the chosen agent's colour. -->
+      <div class="conv-bubble" id="convBubble">
+        <div class="xfer-row" id="xferRow" hidden></div>
+        <div class="conv-composer" id="convComposer">
+          <!-- The ghost mirrors the field's text under a transparent caret, so the block cursor is
+               drawn rather than borrowed from the platform — see syncConvCursor. -->
+          <div class="conv-field">
+            <div class="conv-ghost" id="convGhost" aria-hidden="true"></div>
+            <textarea id="convInput" rows="1" maxlength="16000" placeholder="Message…  ⌘/Ctrl+Enter sends"
+              autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"
+              oninput="autoGrow(this); syncConvCursor()" onkeydown="convInputKey(event)"
+              onkeyup="syncConvCursor()" onclick="syncConvCursor()" onselect="syncConvCursor()"
+              onfocus="syncConvCursor()" onblur="syncConvCursor()"
+              onscroll="syncConvCursor()"></textarea>
+          </div>
+          <button class="send" id="convSendBtn" onclick="convSend()" aria-label="Send"><svg width="22" height="22"
+              viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg></button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Shell's last row. Left: when the open pane last changed. Right: whether it is doing
@@ -3610,6 +4029,10 @@
                pane that has one, and it counts before it asks. -->
           <button class="menu-item" role="menuitem" id="menuConvDedupe" hidden
             onclick="closeTermMenu(); removeConvDuplicates()">Remove duplicates</button>
+          <!-- Turns a gap you can see into a gap you can close: reads the pane as far back as the
+               relay allows and records what the transcript is missing. Only ever adds. -->
+          <button class="menu-item" role="menuitem" id="menuConvRecover" hidden
+            onclick="closeTermMenu(); recoverConvHistory()">Recover history</button>
           <button class="menu-item" role="menuitem" id="qaToggle"
             onclick="closeTermMenu(); toggleQuickActions()">Hide quick actions bar</button>
           <!-- Terminals only — renderTermMenuState shows it and writes its text. -->
@@ -4017,6 +4440,15 @@
 
     <script>
     let ws = null, agents = [], activePane = null, refreshInterval = null, userScrolledUp = false;
+    // When the socket went down, or 0 while it is up. The only record this app has that it was away:
+    // `prevStatuses` survives a dropped socket, so a long outage with no reload looks like a
+    // continuous session to everything else. Cleared by the first snapshot after the reconnect,
+    // which is the one place that has to read it.
+    let wsDownSince = 0;
+    // The last text sent to each pane, for Resend. In memory and not persisted: a prompt worth
+    // repeating is one from the session you are in, and a button that fires a week-old transfer
+    // into a live agent on the first tap after a reload is a worse offer than no button.
+    const lastSentText = {};
     // Shell panes, from the same snapshot as `agents`. Empty against a relay with terminal mode
     // off, which sends no `shells` key at all — its presence is the feature gate.
     let shells = [];
@@ -4062,7 +4494,7 @@
     // snapshot carrying it — and the recorder appends a turn when this clock moves past what it
     // last wrote, so a second stamp for a state the pane is already in would append the turn twice.
     // `seeded` is a status this browser did not watch arrive — the first snapshot after a reload,
-    // where a pane sitting on `done` finished at some unknown time while nothing was connected.
+    // where a pane sitting in an ending state finished at some unknown time while nothing was connected.
     // The stamp is still taken, because a clock that starts at zero would make the pane's next
     // turn look like its first; what the flag says is that the stamp is the reconnect, not the
     // transition, and a turn written off it has to prove itself some other way (§5.2).
@@ -4079,12 +4511,31 @@
       return !!(statusAt[paneId] || {}).seeded;
     }
 
+    // The statuses that mean "the agent stopped writing", which is what ends a turn.
+    //
+    // `idle` is the one that matters and it was missing. herdr's agent lifecycle vocabulary is
+    // `idle, working, blocked, unknown` — those four and no more; `herdr pane report-agent --state`
+    // enumerates them, and 42s of polling a live workspace produced 1818 samples of which none was
+    // `done`. So an agent finishing goes `working → idle`, and a turn clock that only watched
+    // `done` and `blocked` never moved. Every consequence followed from that one omission: the
+    // recorder's `end > held.lastTurn` was never true, so a transcript kept whatever its first read
+    // backfilled and whatever this app sent, and never gained another word the agent said.
+    //
+    // `done` is kept ahead of it rather than replaced. It costs nothing, and if herdr ever
+    // distinguishes "finished and unread" from "idle" this reads the better signal without
+    // changing again. It is *not* dropped in favour of `idle` alone for the same reason.
+    const TURN_END_STATES = ['idle', 'done', 'blocked'];
+
     // The end of the pane's most recent turn, or 0 while it is still writing one — then the fold's
-    // own clock is already the right answer and a stale `done` would date a live message hours ago.
+    // own clock is already the right answer and a stale stamp would date a live message hours ago.
     function turnEnd(paneId) {
       const at = statusAt[paneId] || {};
-      const end = Math.max(at.done || 0, at.blocked || 0);
+      const end = Math.max(...TURN_END_STATES.map(s => at[s] || 0));
       return end > (at.working || 0) ? end : 0;
+    }
+
+    function endsTurn(status) {
+      return TURN_END_STATES.includes(status);
     }
 
   </script>
@@ -4233,12 +4684,55 @@
     const PAIRS_KEY = 'herdr_pairs';
     const PAIRS_VERSION = 1;
     const MAX_PAIRS = 32;
-    const SEND_TEXT_MAX = 4000;      // matches the relay cap in herdr_relay.py
+    // The relay's cap on one `send_text` message, and no longer a cap on what may be sent: text
+    // past it is split into this many characters at a time and typed into the same composer, then
+    // submitted by the single `send_keys ['Enter']` that follows. Restated here rather than asked
+    // for because the relay does not offer it — and it is the *oldest* relay's number, which is
+    // what makes a client-side split work against a relay this app did not ship with.
+    const SEND_TEXT_MAX = 4000;
 
+    // Text too long for one message, split into messages that are not. Line boundaries where there
+    // are any: a chunk boundary is invisible to the agent — it is one composer either way — but the
+    // relay's audit log records one line per message, and a log that cuts a diff mid-hunk is harder
+    // to read afterwards than one that does not.
+    //
+    // The newline stays with the line it ends, so the chunks concatenate back to exactly the input.
+    function chunkText(text, max) {
+      const cap = max || SEND_TEXT_MAX;
+      const s = String(text == null ? '' : text);
+      if (s.length <= cap) return s ? [s] : [];
+      const out = [];
+      let buf = '';
+      const flush = () => { if (buf) { out.push(buf); buf = ''; } };
+      const lines = s.split('\n').map((l, i, all) => i < all.length - 1 ? l + '\n' : l);
+      for (let line of lines) {
+        // One line longer than the cap has no boundary to break on, so it is cut. Never through a
+        // surrogate pair: half an emoji is a byte sequence the agent receives as a replacement
+        // character, and the two halves never rejoin.
+        while (line.length > cap) {
+          flush();
+          const lead = line.charCodeAt(cap - 1);
+          const n = lead >= 0xD800 && lead <= 0xDBFF ? cap - 1 : cap;
+          out.push(line.slice(0, n));
+          line = line.slice(n);
+        }
+        if (!line) continue;
+        if (buf.length + line.length > cap) flush();
+        buf += line;
+      }
+      flush();
+      return out;
+    }
+
+    // `at` is the chip's name in the thread — `@review`, `@test` — and the label is its name
+    // everywhere else. Two fields rather than one derived from the other: a label is prose and can
+    // be renamed without silently renaming the control the user has learned to tap.
     const SHORTCUTS = [
-      { label: 'Review', text: 'Review, edit, fix; then propose next steps.' },
-      { label: 'Implement', text: 'Proceed to implement.' },
-      { label: 'Architect prompt', text: '/ponytail\n/caveman\n@.agent/prompts/System_Prompt_2_Architect.md\n' },
+      { at: 'review', label: 'Review', text: 'Review, edit, fix; then propose next steps.' },
+      { at: 'implement', label: 'Implement', text: 'Proceed to implement.' },
+      { at: 'test', label: 'Test',
+        text: 'Write the tests this needs, run them, and report what actually failed.' },
+      { at: 'architect', label: 'Architect prompt', text: '/ponytail\n/caveman\n@.agent/prompts/System_Prompt_2_Architect.md\n' },
     ];
 
     // The terminal half of the same idea, and the opposite verb: an agent prompt is inserted into
@@ -4341,10 +4835,11 @@
     // one — the user selects the text and reads the prefilled composer before sending.
     function composeTransfer(instruction, from, text) {
       if (!text) return { error: 'Select some text in the pane first' };
-      const body = (instruction ? instruction + '\n\n' : '') + `feedback from ${from}:\n${text}`;
-      if (body.length > SEND_TEXT_MAX)
-        return { error: `Payload is ${body.length} characters, over the ${SEND_TEXT_MAX} limit — select less` };
-      return { text: body };
+      // No length check. A transferred selection is code or a diff and is routinely past one
+      // message's worth; the composer splits it (`chunkText`) rather than refusing it, and telling
+      // someone to "select less" was never advice about their work — it was the wire's limit
+      // wearing the shape of an editorial one.
+      return { text: (instruction ? instruction + '\n\n' : '') + `feedback from ${from}:\n${text}` };
     }
 
     // A ruler selection is a pair of line indices, and `pane read` returns the *last* N lines —
@@ -4775,8 +5270,28 @@
       // open pane is exempt from its own filter — a strip that cannot show the pane on screen is
       // worse than a long one. On the list screen nothing is open, so the strip stays complete.
       const scope = tabScope();
-      const open = scope === 'project' && activePane ? paneOf(activePane) : null;
-      if (open) live = live.filter(a => projectKey(a) === projectKey(open) || a.pane_id === activePane);
+      // The conversation's members, while its thread is on screen. A thread makes you want the
+      // other half of the conversation more than anything else on the machine — read what the
+      // architect said, switch to the implementer, reply — and this row is where a pane switch
+      // already lives. Not a second row: the same one, scoped, and read off the same members the
+      // thread drew so the two can never name different panes.
+      //
+      // It replaces the Project scope rather than narrowing it. A conversation is free to span
+      // projects — that is what makes it a conversation and not a directory — and a row that
+      // dropped a member for living somewhere else would be a switch that cannot reach the pane
+      // whose message is on screen.
+      const reading = activePane ? paneOf(activePane) : null;
+      const thread = reading && convViewOn(reading) ? convViewConv(reading) : null;
+      if (thread) {
+        const keys = new Set(pairedConvMembers(reading, thread).map(m => m.key));
+        // The open pane is exempt from its own filter, for the reason the Project scope is: a row
+        // that cannot show the pane on screen is worse than a long one.
+        live = live.filter(a => keys.has(convMemberKey(a)) || a.pane_id === activePane);
+      } else if (scope === 'project' && activePane) {
+        const open = paneOf(activePane);
+        if (open) live = live.filter(a =>
+          projectKey(a) === projectKey(open) || a.pane_id === activePane);
+      }
       if (scope === 'pairs') {
         live = pairedTabs(live);
       } else {
@@ -5057,7 +5572,13 @@
         if (window.cue) cue('ready');
         announceSubscription();
       };
-      ws.onclose = () => { setStatus('disconnected'); setTimeout(connect, 3000); };
+      ws.onclose = () => {
+        // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
+        // an hour offline reads as three seconds when the socket finally comes back.
+        if (!wsDownSince) wsDownSince = Date.now();
+        setStatus('disconnected');
+        setTimeout(connect, 3000);
+      };
       ws.onerror = () => setStatus('disconnected');
       ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
     }
@@ -5157,7 +5678,7 @@
           // First sight of a pane — the first snapshot after a reload, or an agent someone else
           // started. Nothing rings and nothing lands on the timeline, because none of that
           // happened while anyone was here to hear it. The recorder is the exception: a pane
-          // already sitting on `done` finished a turn that is still on screen and still readable,
+          // already sitting in an ending state finished a turn that is still on screen and readable,
           // and refusing to look at it would throw away a recording this browser can plainly see.
           if (!prev) {
             noteStatus(a.pane_id, a.status, true);
@@ -5185,6 +5706,10 @@
         // Which member is ended is a question only a snapshot answers, so the prune rides on one.
         // It writes nothing on the polls where nothing has outgrown the cap, which is all of them.
         convPruneAuto();
+        // After the auto-join, so a pane filed under a conversation on this very snapshot is a
+        // member by the time recovery looks for one. Declines on every snapshot but the first
+        // after an outage long enough to have missed turns.
+        convRecoverOutage();
         render();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.
@@ -6126,6 +6651,22 @@
     // line that agy itself printed. `opens` is that last clause and it is load-bearing — without
     // it the shell command line that launched agy opens a block and its startup banner is read as
     // the pane's first message.
+    //
+    // The column-0 line above is not always the marker, though: agy wraps its own tool-call lines
+    // and the continuation lands back in column 0 with no glyph on it —
+    //
+    //     ● Bash(git commit -m "Refactor frontend JS into functional...) (ctrl+o to
+    //     expand)
+    //
+    // — so the run of column-0 lines is walked back to the marker that opened it. Checking only
+    // the nearest one dropped every message agy wrapped a tool call above, including the closing
+    // one, which is the message the whole feature exists to find.
+    //
+    // The prompt gutter wraps too, and its continuation is indented rather than column-0, which
+    // makes it indistinguishable from a reply by shape alone. A blank line is what tells them
+    // apart: agy answers a prompt through a tool call or a thought, never off the next row, so an
+    // indented line touching a `>` is the rest of what the user typed. Without this the second
+    // line of every multi-line prompt is read as an agent message and taken out of the blue rule.
     function startsBlock(rows, g, i) {
       const row = rows[i] || '';
       if (g.speaker) return gutterOf(row, g) === g.speaker;
@@ -6133,7 +6674,14 @@
       for (let j = i - 1; j >= 0; j--) {
         const above = rows[j] || '';
         if (!above.trim()) continue;
-        return /^\S/.test(above) && (!g.opens || g.opens.includes(above[0]));
+        if (!g.opens) return /^\S/.test(above);
+        const gap = j < i - 1;
+        for (let k = j; k >= 0; k--) {
+          const line = rows[k] || '';
+          if (!line.trim() || !/^\S/.test(line)) return false;
+          if (g.opens.includes(line[0])) return gap || !(g.user || []).includes(line[0]);
+        }
+        return false;
       }
       return false;     // nothing above it, so nothing opened it
     }
@@ -6492,7 +7040,11 @@
     // twice. The one place text is still compared is the menu's duplicate repair, on records
     // written by the version that did fold windows together.
 
-    const CONV_TEXT_MAX = 4000, CONV_DEDUPE_WINDOW = 200;
+    // How much of one message a transcript stores. Not the wire's cap and never was: D1 says the
+    // record is what was said, and a record that cut a transferred diff at the length of one
+    // `send_text` could not answer "what did I send it". Still bounded — CONV_ENTRY_MAX counts
+    // entries, so an unbounded entry would make that ceiling mean nothing.
+    const CONV_TEXT_MAX = 16000, CONV_DEDUPE_WINDOW = 200;
     const CONV_OUTBOX_MAX = 50, CONV_OUTBOX_TTL = 30 * 60 * 1000;
 
     // Gutter glyph, the box side it may sit inside, and the leading space. Same characters as
@@ -6562,7 +7114,7 @@
     // about the message itself, and `at_src` says how good that answer is:
     //
     //   sent      exact — the user pressed send in this browser and the outbox stamped it
-    //   state     within one relay poll — the pane's own done/blocked transition ended this turn
+    //   state     within one relay poll — the pane's own ending transition ended this turn
     //   read      the fold's clock, for a turn still being written: now is the honest answer
     //   backfill  unknown, but older than everything live — scrollback that predates the first read
     //
@@ -6584,9 +7136,13 @@
     // nothing is compared: everything on screen was said before this browser was watching, and the
     // order plus "older than now" is all that can honestly be said about it. This is the one write
     // that is not an event, and it happens once per pane (§5.2).
-    function backfillEntries(fresh, now) {
-      const ms = fresh || [];
-      return ms.map((m, i) => convEntry(m, now, { at: now - (ms.length - i), at_src: 'backfill' }));
+    // `base` is what the run has to sit under: `now` for a first read, and the oldest entry already
+    // stored for a run recovered from above it (§2.1). Ordering is the whole of what these stamps
+    // claim, and a joint thread sorts by them — so a prepend dated in the seconds before `now` would
+    // sort *after* the history it was prepended to.
+    function backfillEntries(fresh, now, base) {
+      const ms = fresh || [], end = base || now;
+      return ms.map((m, i) => convEntry(m, now, { at: end - (ms.length - i), at_src: 'backfill' }));
     }
 
     // A send can win the race to the store before the pane's first read, and more than one can:
@@ -6685,8 +7241,65 @@
       return ms;
     }
 
+    // What a window holds on either side of what the transcript already holds.
+    //
+    // This is not the fold that was removed in `ac28992`. The fold matched the stored tail against
+    // every 3s read and appended whatever did not match, which is a comparison it had to win on
+    // every tick. This asks one question per side — where in this window does the record's own
+    // newest (or oldest) message sit — and takes what falls beyond it. It runs only on a window
+    // deeper than any this transcript was recorded from, and it is idempotent on the same window:
+    // the anchor is found, nothing is beyond it, nothing is written.
+    //
+    // **A window that cannot locate the record's end contributes nothing on that side.** That is a
+    // `/clear`, a scrollback shallower than the record, or a message whose text changed — none of
+    // them a reason to guess, and all of them cases where guessing writes the record twice.
+    //
+    // Where the anchor's text appears more than once, the occurrence chosen is always the one that
+    // recovers *less*: the newest for the append, the oldest for the prepend. A run that is short by
+    // a few messages is a smaller wrong than a run that duplicates what is already recorded, because
+    // the record is permanent and the duplicate is in it forever.
+    function deepEntries(fresh, stored, now) {
+      const ms = fresh || [], entries = stored || [];
+      const out = { before: [], add: [], gap: false };
+      if (!ms.length || !entries.length) return out;
+
+      // Above the record: the newest agent entry, because an agent message is the one thing a pane
+      // says that this app never wrote itself — a prompt it sent is in the record before any read.
+      let newest = -1;
+      for (let i = entries.length - 1; i >= 0 && newest < 0; i--) {
+        if (entries[i].who === 'agent') newest = i;
+      }
+      if (newest >= 0) {
+        const key = convKey(entries[newest].text);
+        let at = -1;
+        for (let i = ms.length - 1; i >= 0 && at < 0; i--) {
+          if (ms[i].who === 'agent' && convKey(ms[i].text) === key) at = i;
+        }
+        if (at < 0) {
+          out.gap = true;
+        } else {
+          // A prompt committed at the send sits after that anchor already, and its echo is in the
+          // window. Same rule `sentTurnEntries` applies for the same reason, over the entries the
+          // record holds past the anchor rather than over the sends alone.
+          const said = new Set(entries.slice(newest + 1)
+            .filter(e => e.who === 'user').map(e => convKey(e.text)));
+          const add = ms.slice(at + 1).filter(m => !(m.who === 'user' && said.has(convKey(m.text))));
+          out.add = backfillEntries(add, now);
+        }
+      }
+
+      // Below it: the oldest entry of any kind, since a transcript can begin on either speaker.
+      const oldest = entries[0], okey = convKey(oldest.text);
+      let first = -1;
+      for (let i = 0; i < ms.length && first < 0; i++) {
+        if (ms[i].who === oldest.who && convKey(ms[i].text) === okey) first = i;
+      }
+      if (first > 0) out.before = backfillEntries(ms.slice(0, first), now, convAt(oldest));
+      return out;
+    }
+
     // One turn appended. `end` is the transition that ended it, which is also what dates the
-    // closing message — the relay pushes done/blocked for every pane, so this is a real clock and
+    // closing message — the relay pushes ending states for every pane, so this is a real clock and
     // not the fold's own. A recovered turn passes no `end`: the reconnect is not when the agent
     // finished, and `read` is the honest stamp for "this is when it was found".
     function turnEntries(fresh, stored, now, end, recover) {
@@ -6793,6 +7406,25 @@
     function capEntries(entries, max) {
       const cap = max || CONV_ENTRY_MAX;
       return entries.length > cap ? entries.slice(entries.length - cap) : entries;
+    }
+
+    // How much of a *prepend* fits, given what it must not displace.
+    //
+    // `capEntries` keeps the newest, so the front of the array it trims is exactly where backfilled
+    // history goes. Handing it the union unfitted would delete the recovered messages and part of
+    // the stored record in the same statement — history destroyed in the name of recovering it. So
+    // the prepend takes only the room left over, keeping its newest end: the entry it joins is the
+    // transcript's current oldest, and trimming the other end would open a hole between them.
+    //
+    // An *append* is deliberately not treated this way. Messages at the end slide the window forward
+    // the way every turn already does, and a recovered turn must not behave differently from a live
+    // one because the words arrived late.
+    function fitPrepend(before, kept, add, max) {
+      const room = (max || CONV_ENTRY_MAX) - kept - add;
+      if (room <= 0) return [];
+      // Same array when it fits, which is every ordinary read: this runs on the first read of every
+      // pane, not only on a recovery.
+      return room >= before.length ? before : before.slice(before.length - room);
     }
 
     // What to drop when there are too many transcripts, and what may never be dropped at all.
@@ -7209,15 +7841,57 @@
       // Once per transcript, and not once per *empty* transcript: a prompt committed at the send
       // can reach a new record before its pane has ever been read, and that must not cost the pane
       // its history. Records written before this flag existed were all written from reads.
+      let initialized = false;
       if (held.backfilled === undefined) {
+        initialized = true;
         held.backfilled = held.entries.some(e => e.at_src !== 'sent');
+        // The one moment a record written by the *previous* recorder is met by this one. That
+        // recorder folded every read against the stored tail, and a pane read as a `visible` frame
+        // came back with the terminal's breaks mid-word — so the same sentence normalized to a
+        // string the match had never seen and the whole screen was appended again. Those records
+        // still carry the copies; nothing written since can, because nothing since compares text.
+        //
+        // Repaired here and nowhere else, which is what keeps a lossy rule off a sound record:
+        // `convDedupe` calls a repeat within 200 entries a duplicate, and an agent that says
+        // "Done." twice inside 200 entries said it twice. Past this branch `backfilled` is set, so
+        // no transcript this recorder wrote is ever offered to it.
+        if (convTidyOn() && held.entries.length) {
+          const out = convDedupe(held.entries);
+          if (out.removed) {
+            held.entries = out.entries;
+            showToast(`Tidied an older transcript — removed ${out.removed} duplicate message`
+              + (out.removed > 1 ? 's' : ''));
+          }
+        }
       }
-      let before = [], add = [];
+      // A pane mid-turn has an unfinished block at the end of it, and that is a draft rather than
+      // history — it goes to the draft slot below with everything else live. A record only ever
+      // extends, so a half-written message committed here would stay half-written forever.
+      const body = working && fresh.length && fresh[fresh.length - 1].who === 'agent'
+        ? fresh.slice(0, -1) : fresh;
+      // A window deeper than any this transcript has been recorded from — Load more, or the button
+      // (§2.2). Not a comparison against the last read: it is a watermark, so the 3s poll can never
+      // reach this branch however many times it runs.
+      //
+      // An explicit request is never declined for being a repeat. Idempotence is what makes that
+      // safe, and it is not merely a nicety: a pane sitting at herdr's own scrollback ceiling comes
+      // back the same length every time, so a watermark alone would refuse every recovery after the
+      // first — on exactly the panes with the most history to lose. Hence `>=` while one is pending
+      // and `>` otherwise.
+      //
+      // What the watermark still refuses, pending or not, is a window *shallower* than one this
+      // transcript has already been read from: a 200-line turn-end read in flight when a recovery
+      // was issued is not the reply being waited for, whatever else it is (§2.4). Answering it as
+      // one is not merely a mis-counted toast — a window too shallow to hold the record's newest
+      // message misses the anchor, and a miss is written down as a gap in history that never
+      // happened. Below the watermark the read takes the ordinary turn path instead, and the deep
+      // reply behind it still reports.
+      const asked = convRecovering.has(key);
+      const depth = held.depth || 0;
+      const deep = held.backfilled && (asked ? rows.length >= depth : rows.length > depth);
+      let before = [], add = [], noteGap = false;
       if (!held.backfilled) {
-        // The first read. A pane mid-turn has an unfinished block at the end of it, and that is a
-        // draft rather than history — it goes to the draft slot below with everything else live.
-        const body = working && fresh.length && fresh[fresh.length - 1].who === 'agent'
-          ? fresh.slice(0, -1) : fresh;
+        // The first read.
         const first = splitFirstRead(body, held.entries);
         before = backfillEntries(first.history, now);
         // A local send has its own event and timestamp. Its pane echo opens the current turn,
@@ -7225,6 +7899,17 @@
         if (first.turn.length) add = sentTurnEntries(first.turn, held.entries, now, end);
         if (body.length) held.backfilled = true;
         if (add.length) held.lastTurn = end;
+      } else if (deep) {
+        // History this browser was not connected for, out of a read it already paid for. Ahead of
+        // the turn branch and not beside it: what a deep window holds past the record's own newest
+        // message *includes* the turn that just ended, so running both would write it twice.
+        const found = deepEntries(body, held.entries, now);
+        before = found.before;
+        add = found.add;
+        // Noticed here, drawn above whatever is recorded next — which may be days away and a reload
+        // later, so it is committed on its own rather than riding a write that never comes.
+        if (found.gap && !held.gap) { held.gap = true; noteGap = true; }
+        if (add.length && end) held.lastTurn = end;
       } else if (end > (held.lastTurn || 0)) {
         // A turn ended since the last one this transcript recorded. Reads of the same turn after
         // this one find `lastTurn` already at `end` and append nothing, so the turn-end read and
@@ -7234,15 +7919,49 @@
         if (add.length) held.lastTurn = end;
       }
       convNoteDraft(key, working ? fresh[fresh.length - 1] : null, a, now);
+      // The watermark moves on the read, not on what the read produced: a deeper window that added
+      // nothing has still been recorded from, and asking it again would add nothing again.
+      if (deep || held.backfilled) held.depth = Math.max(held.depth || 0, rows.length);
+      let wrote = 0, dropped = 0;
       if (before.length || add.length) {
         const old = tagUserEntries(convStamped(before, label, a.agent || ''), loadOutbox(), now);
         const tagged = tagUserEntries(convStamped(add, label, a.agent || ''), old.outbox, now);
         saveOutbox(tagged.outbox);
-        held.entries = capEntries(old.entries.concat(held.entries, tagged.entries));
+        // A break the deep read could not close is drawn above the next thing recorded after it —
+        // the window that missed the anchor had nothing to hang it on (§2.1).
+        if (held.gap && tagged.entries.length) {
+          tagged.entries[0] = Object.assign({}, tagged.entries[0], { gap: true });
+          held.gap = false;
+        }
+        // The prepend is fitted to the room the record leaves it, rather than handed to `capEntries`
+        // — which trims from the front, which is where a prepend lands (§2.8).
+        const fitted = fitPrepend(old.entries, held.entries.length, tagged.entries.length);
+        dropped = old.entries.length - fitted.length;
+        wrote = fitted.length + tagged.entries.length;
+        held.entries = capEntries(fitted.concat(held.entries, tagged.entries));
         held.label = label;
         held.touched = now;
         held.spawn = convSpawn(a, now);
         await convCommit(key);
+      } else if (noteGap || initialized) {
+        await convCommit(key);
+      }
+      // Answered on the first record after the press, whatever it found. A button that adds nothing
+      // and says nothing reads as broken (§2.6).
+      // Resolved on a *deep* write and no other. `pane_content` echoes no request id — that is a
+      // wire change this spec refuses (§2.5) — so "deep" is the whole of what distinguishes the
+      // reply being waited for from any other read of the same pane. The reads that could race it
+      // are held off instead: the 3s poll cannot run above `POLL_MAX_LINES`, which a recovery puts
+      // the pane past on its first line, and `convReadTurnEnd` declines while one is pending.
+      const pending = deep ? convRecovering.get(key) : null;
+      if (pending) {
+        clearTimeout(pending.timer);
+        convRecovering.delete(key);
+        // The background sweep is invisible by construction — no toast, no redraw. Capacity is the
+        // one thing it may not stay quiet about: history the transcript had no room for is a fact
+        // about the ceiling, and a recovery that kept less than it found would look like one that
+        // found less.
+        if (pending.loud || dropped) convRecoverReport(wrote, dropped, held.gap);
       }
       // The thread draws the draft as well as the record, so a poll that added nothing can still
       // have changed what is on screen.
@@ -7309,6 +8028,38 @@
         : 'No duplicates found in this transcript');
     }
 
+    // `Recover history` (§2.6). Every automatic trigger is bounded by a gate that can be wrong — a
+    // gap too short to count, a pane the sweep has not reached yet — and the answer to a heuristic
+    // that can miss is a button, not a looser heuristic.
+    //
+    // It issues no read of its own kind: it is `convRecoverStart` with every gate skipped. No
+    // staleness test, because the user can see the gap; no watermark, because a pane sitting at
+    // herdr's own scrollback ceiling comes back the same length every time and would otherwise be
+    // refused every recovery after the first.
+    function recoverConvHistory() {
+      const a = activePane ? paneOf(activePane) : null;
+      if (!a) return;
+      convRecoverStart(a, true, READ_LINES_ASK);
+    }
+
+    // What the recovery did, in the pane's own words. `wrote` counts entries added on both sides;
+    // `dropped` is history the transcript had no room for (§2.8), which is a fact about the ceiling
+    // and not a failure of the read.
+    function convRecoverReport(wrote, dropped, gap) {
+      const many = n => `${n} message${n === 1 ? '' : 's'}`;
+      if (gap && !wrote) {
+        showToast('Could not find where the record left off — the gap is marked in the thread');
+      } else if (!wrote && dropped) {
+        showToast('This transcript is full — older messages could not be added');
+      } else if (!wrote) {
+        showToast('Nothing new to recover');
+      } else if (dropped) {
+        showToast(`Recovered ${many(wrote)}; ${many(dropped)} did not fit`);
+      } else {
+        showToast(`Recovered ${many(wrote)}`);
+      }
+    }
+
     async function convDedupeNow(key) {
       const held = convHeld.get(key) || (await convGet([key]))[0];
       const out = convDedupe(held && held.entries);
@@ -7322,7 +8073,7 @@
       return out.removed;
     }
 
-    // The end of a turn is announced: the relay polls herdr itself and pushes done/blocked for
+    // The end of a turn is announced: the relay polls herdr itself and pushes ending states for
     // every pane, whether or not anyone is reading it. That is what the recorder writes on, so this
     // is the read behind every append — one per turn, for every pane in a conversation, wherever
     // the app happens to be looking.
@@ -7333,13 +8084,203 @@
     // not you were watching it.
     function convReadTurnEnd(paneId, status) {
       if (!ws || !paneId) return;
-      if (status !== 'done' && status !== 'blocked') return;
+      if (!endsTurn(status)) return;
       const a = paneOf(paneId);
       if (!a || !profileFor(a.agent) || !convReferenced().has(convMemberKey(a))) return;
+      // Not while a recovery is in flight for this transcript. `pane_content` carries no request
+      // id, so a 200-line reply landing first is indistinguishable from the deep one it would be
+      // reporting on — and this is the only other read anything sends for a pane nobody has open.
+      // Nothing is lost by skipping it: the deep read is a superset of it and lands moments later.
+      if (convRecovering.has(convMemberKey(a))) return;
       // Fixed source and length. `visible` is the live frame with the terminal's own breaks left in
       // and they land mid-word, so a turn read that way records a message no reader would recognise.
       ws.send(JSON.stringify(
         { type: 'read_pane', pane_id: paneId, lines: 200, source: 'recent-unwrapped' }));
+    }
+
+    // T2 — the recovery nobody asks for (§2.4).
+    //
+    // T1 covers the pane in front of you, because the read that closes its gap is a read the user
+    // already made. It covers nothing else: the other members of a conversation are panes nobody
+    // opened this session, and the one-turn recovery on reconnect is all their transcripts get.
+    //
+    // So one read has to be issued, and both gates on it are about cost. A healthy connected
+    // session buys nothing — there is no gap to close. A three-second flap buys nothing — nothing
+    // was missed. What buys a read is a gap in coverage *and* a member whose record is old enough
+    // for that gap to have cost it something.
+    const DEEP_AWAY_MS = 15 * 60 * 1000;
+    // A request, not a bound: the relay clamps it (§2.7). Flat rather than `paneHistoryMax()` —
+    // that setting is how much scrollback to *draw in the pane*, and a T2 read is never drawn.
+    const DEEP_LINES = 5000;
+    // Or everything the relay will give, for someone who would rather pay the read once than find
+    // the gap later and press the button. Automatic reads are small by default; the setting lets
+    // someone choose the relay's full allowance instead. §2.7's sentinel means "full" tracks the
+    // relay's own ceiling rather than naming a number here.
+    const CONV_DEEP_KEY = 'herdr_conv_deep';
+
+    function convDeepAll() {
+      try { return localStorage.getItem(CONV_DEEP_KEY) === 'full'; } catch (e) { return false; }
+    }
+
+    function setConvDeepAll(on) {
+      try { localStorage.setItem(CONV_DEEP_KEY, on ? 'full' : 'day'); }
+      catch (e) { /* private mode: session-only */ }
+      document.getElementById('deepPick').value = on ? 'full' : 'day';
+    }
+
+    function convDeepLines() { return convDeepAll() ? READ_LINES_ASK : DEEP_LINES; }
+
+    // Whether a transcript written by the previous recorder is repaired the first time this one
+    // opens it. On by default: those records carry duplicates by construction, and a record nobody
+    // repairs is one the duplicates stay in forever. Off is for anyone who would rather look at
+    // what is stored before anything edits it — `Remove duplicates` in the pane menu is then the
+    // same repair, on demand.
+    const CONV_TIDY_KEY = 'herdr_conv_tidy';
+
+    function convTidyOn() {
+      try { return localStorage.getItem(CONV_TIDY_KEY) !== 'off'; } catch (e) { return true; }
+    }
+
+    function setConvTidy(on) {
+      try { localStorage.setItem(CONV_TIDY_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      document.getElementById('tidyPick').value = on ? 'on' : 'off';
+    }
+
+    // How often a member nobody has opened is caught up on. Dormant panes are the only ones no
+    // other trigger reaches — you are not looking at them, so nothing you do can pay for them —
+    // and an hour is the cadence at which a background read stops being a cost anyone notices.
+    const CONV_SWEEP_KEY = 'herdr_conv_sweep';
+    const CONV_SWEEP_MS = { off: 0, '1h': 60 * 60 * 1000, '4h': 4 * 60 * 60 * 1000 };
+
+    function convSweepEvery() {
+      let v;
+      try { v = localStorage.getItem(CONV_SWEEP_KEY); } catch (e) { v = null; }
+      return CONV_SWEEP_MS[v] === undefined ? CONV_SWEEP_MS['1h'] : CONV_SWEEP_MS[v];
+    }
+
+    function setConvSweep(v) {
+      const pick = CONV_SWEEP_MS[v] === undefined ? '1h' : v;
+      try { localStorage.setItem(CONV_SWEEP_KEY, pick); } catch (e) { /* session-only */ }
+      document.getElementById('sweepPick').value = pick;
+      convArmSweep();
+    }
+
+    let convSweepTimer = null;
+    function convArmSweep() {
+      clearInterval(convSweepTimer);
+      convSweepTimer = null;
+      const every = convSweepEvery();
+      // Armed, never fired immediately: a reload must cost nothing. The panes you open pay for
+      // themselves, and the ones you do not can wait an hour.
+      if (every) convSweepTimer = setInterval(convRecoverSweep, every);
+    }
+
+    // A recovery in flight, by transcript. `loud` is whether anyone is watching it happen: the
+    // button and the pane you just opened say what they are doing, the background sweep says
+    // nothing. Held so the write it lands on can report, and so a second trigger for the same pane
+    // does not issue a second read.
+    const convRecovering = new Map();
+    // Long enough that a 50000-line read over SSH is not called a failure, short enough that a
+    // toast which will never be answered does not sit there for the rest of the session.
+    const CONV_RECOVER_WAIT = 45000;
+
+    // One recovery, whoever asked for it. Every automatic trigger below and the manual button all
+    // arrive here, and the only difference between them is who is watching.
+    function convRecoverStart(a, loud, depth) {
+      const key = a ? convMemberKey(a) : '';
+      if (!key || !convReferenced().has(key)) return false;
+      if (convRecovering.has(key)) return false;
+      if (!ws || ws.readyState !== 1) {
+        if (loud) showToast('Not connected — history cannot be recovered right now');
+        return false;
+      }
+      const now = Date.now();
+      // The setting is what the *automatic* triggers ask for. The button is not one of them: it
+      // always asks for everything, because that is what pressing it means.
+      const lines = depth || convDeepLines();
+      // Stamped whether or not the read produces anything, or a recovery that finds nothing would
+      // be re-issued for as long as the transcript stays quiet. `touched` cannot answer this on its
+      // own: it moves only when something is written.
+      convQueue(key, async () => {
+        const held = await convHold(key, now);
+        held.recovered = now;
+        await convCommit(key);
+      });
+      convRecovering.set(key, {
+        loud: loud,
+        // A read the relay never answers — the pane died, the socket went down mid-flight, the SSH
+        // hop hung. Nothing else in the app would ever say so, because a read that produces no
+        // reply produces no error either.
+        timer: setTimeout(() => {
+          convRecovering.delete(key);
+          if (loud) showToast('No answer from the relay — history was not recovered');
+        }, CONV_RECOVER_WAIT),
+      });
+      if (loud) showToast(lines === READ_LINES_ASK
+        ? 'Catching up on this pane — reading as far back as the relay allows…'
+        : 'Catching up on this pane’s history…');
+      // The open pane cannot take the silent path: its reply lands on the draw branch, which would
+      // replace the rows under the reader's finger. It gets Load more to the same depth instead
+      // (§2.5), and the recorder does not care which of the two brought the rows.
+      if (a.pane_id === activePane) { paneLines = lines; refreshPane(); }
+      else ws.send(JSON.stringify(
+        { type: 'read_pane', pane_id: a.pane_id, lines: lines, source: 'recent-unwrapped' }));
+      return true;
+    }
+
+    // Whether this member has been away long enough for a read to be worth issuing. One question,
+    // asked by every trigger, so "stale" means one thing in this app.
+    async function convStale(key, now) {
+      const held = convHeld.get(key) || (await convGet([key]))[0];
+      // No record is not stale: there is no history to catch up on, and the pane's first ordinary
+      // read backfills the whole window anyway.
+      if (!held) return false;
+      return now - Math.max(held.touched || 0, held.recovered || 0) > DEEP_AWAY_MS;
+    }
+
+    // T2a — you opened a pane and its record is old. The read is paid for by the one thing that
+    // makes it worth paying: you are about to read it. Loud, because you are looking at the pane
+    // when it happens and a pane that suddenly grows ten thousand lines of scrollback should say
+    // why.
+    // A pane the app moved to on the user's behalf rather than one they tapped. Set for exactly one
+    // activation, and read below: the trigger is loud because someone opened a pane to read it, and
+    // nobody opened this one.
+    let convQuietPane = '';
+
+    async function convRecoverPane(paneId) {
+      const quiet = convQuietPane === paneId;
+      convQuietPane = '';
+      const a = paneId ? paneOf(paneId) : null;
+      if (!a || !profileFor(a.agent)) return;
+      const key = convMemberKey(a);
+      if (!convReferenced().has(key)) return;
+      if (!(await convStale(key, Date.now()))) return;
+      // Opened and closed again while IndexedDB answered: the read would land on a pane nobody is
+      // looking at and redraw the one they moved to.
+      if (activePane !== paneId) return;
+      convRecoverStart(a, !quiet);
+    }
+
+    // T2b — the socket was down long enough to have missed turns, and the pane it was down over is
+    // still open. No activation will fire for it, because it never went away.
+    async function convRecoverOutage() {
+      const down = wsDownSince;
+      wsDownSince = 0;
+      if (!down || Date.now() - down <= DEEP_AWAY_MS) return;
+      if (activePane) await convRecoverPane(activePane);
+    }
+
+    // T2c — the members nobody has opened. Every other trigger is tied to something the user did;
+    // this one is a clock, so it is the one that has to be cheap: quiet, skipping the open pane,
+    // and off entirely for anyone who would rather it were.
+    async function convRecoverSweep() {
+      const referenced = convReferenced(), now = Date.now();
+      const panes = agents.filter(a => a && a.pane_id !== activePane && profileFor(a.agent)
+        && referenced.has(convMemberKey(a)));
+      for (const a of panes) {
+        if (await convStale(convMemberKey(a), now)) convRecoverStart(a, false);
+      }
     }
 
     // Whether a transcript that just changed is one the view on screen is rendering: the open
@@ -7549,6 +8490,13 @@
     // a pane being watched as a terminal and one being followed as a thread are two different
     // jobs, and a global switch would keep answering the wrong one.
     const CONV_VIEW_KEY = 'herdr_conv_view';
+
+    // Set by a pane switch, consumed by the next render that completes. `stick` below is measured
+    // against the box as it stands, and on a switch that box still holds the thread you left — so
+    // arriving at a pane you had scrolled up in lands you in the middle of a different pane's
+    // history. Not measured, because there is nothing yet to measure: the answer is decided by the
+    // switch, not by where the last thread happened to sit.
+    let convStickNext = false;
 
     function convViews() {
       try {
@@ -7804,6 +8752,9 @@
       // Which conversation the pane is reading is what the strip marks current, when the strip is
       // holding conversations. Diffed by its own signature, so this costs nothing when it is not.
       renderConvStrip();
+      // And the pane strip is scoped to the conversation's members while its thread is up, so
+      // turning the thread on and off is a change to what the strip holds.
+      renderAgentTabs();
     }
 
     // A render can be overtaken by the next one while it waits on the database, and the loser
@@ -7816,9 +8767,15 @@
       const conv = a ? convViewConv(a) : null;
       const on = !!conv && convViewOn(a);
       wrap.classList.toggle('conv-on', on);
+      // The same fact one level up, where the composer can see it: `conv-on` is on the wrap and CSS
+      // has no ancestor selector, so the fold rule — which lives on the view — could not read it.
+      document.getElementById('terminalView').classList.toggle('conv-view', on);
       box.hidden = !on;
       if (!on) {
         box.innerHTML = '';
+        // The pane switched to reads as rows, so nothing will consume this. Left armed it would
+        // yank the next thread to its end under a reader who had scrolled up in it.
+        convStickNext = false;
         hideConvPaneRoster();
         convViewToken++;
         // Picks were bubbles, and they filled the same selection bar the rows fill, so they leave
@@ -7850,8 +8807,11 @@
       if (token !== convViewToken) return;
       const recs = composed.recs;
       // Following the newest message is the default, and a reader who has scrolled up keeps their
-      // place: the same rule the pane rows follow.
-      const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+      // place: the same rule the pane rows follow. Consumed here rather than where it is set, so
+      // that the render which actually finishes is the one that spends it — two renders can be in
+      // flight and only the newest token draws.
+      const stick = convStickNext || box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+      convStickNext = false;
       // Filtered in the composer rather than in the renderer: picks, Summary and the count are all
       // positions in the list that was drawn, so the list that was drawn has to be the list they
       // index.
@@ -7895,25 +8855,35 @@
       if (stick) box.scrollTop = box.scrollHeight;
     }
 
-    // What the pane is doing right now, on the newest bubble. Written in place rather than by
-    // re-rendering the thread: the status arrives on every poll, and rebuilding the thread three
-    // times a minute would take the reader's text selection with it mid-copy.
+    // What each pane is doing right now, on that pane's newest bubble. Written in place rather
+    // than by re-rendering the thread: the status arrives on every poll, and rebuilding the thread
+    // three times a minute would take the reader's text selection with it mid-copy.
     function syncConvBadge() {
       const box = document.getElementById('convThread');
       if (!box || box.hidden) return;
-      const msgs = box.querySelectorAll('.conv-msg');
-      const last = msgs[msgs.length - 1];
-      if (!last) return;
-      const live = agents.find(x => convMemberKey(x) === last.dataset.key);
-      // 'idle' is not a state worth a badge — it is what a pane is nearly all of the time, and a
-      // badge that is always on says nothing. blocked is here because it is the one this whole app
-      // exists to surface.
-      const status = live && ['working', 'done', 'blocked'].includes(live.status) ? live.status : '';
-      let badge = last.querySelector('.conv-badge');
-      if (!status) { if (badge) badge.remove(); return; }
-      if (!badge) { badge = document.createElement('span'); last.appendChild(badge); }
-      badge.className = 'conv-badge ' + status;
-      badge.textContent = status;
+      const msgs = Array.from(box.querySelectorAll('.conv-msg'));
+      // The newest bubble of each member, not the newest bubble of the thread. In a joint thread
+      // the two are only the same for whoever spoke last, and a partner working while someone else
+      // spoke is the case the joint thread exists to show.
+      const newest = new Map();
+      msgs.forEach(el => newest.set(el.dataset.key, el));
+      msgs.forEach(el => {
+        const live = newest.get(el.dataset.key) === el
+          && agents.find(x => convMemberKey(x) === el.dataset.key);
+        // 'idle' is not a state worth a badge — it is what a pane is nearly all of the time, and a
+        // badge that is always on says nothing. blocked is here because it is the one this whole
+        // app exists to surface.
+        const status = live && ['working', 'done', 'blocked'].includes(live.status)
+          ? live.status : '';
+        let badge = el.querySelector('.conv-badge');
+        if (!status) { if (badge) badge.remove(); return; }
+        if (!badge) { badge = document.createElement('span'); el.appendChild(badge); }
+        // Assigned rather than compared away: writing the same string to the same node is what
+        // makes this safe to run on every poll, and a badge that only changed when the status did
+        // would still have to find that out by reading the node.
+        badge.className = 'conv-badge ' + status;
+        badge.textContent = status;
+      });
     }
 
     // This session's copies first, so the common case — a thread re-rendered on every read of the
@@ -8057,9 +9027,12 @@
         // against a wall of washed ones is unmistakable at a glance, on any of the eleven themes,
         // and it needs no colour of its own to say "this is not settled yet".
         const state = convProvisional(e) ? ` provisional${e.draft ? ' draft' : ''}` : '';
+        // `pick` is false for no ticks at all, or the name of the handler that owns them: the
+        // pane's thread and the conversation window each keep their own set of picked messages,
+        // and a bubble in one must not toggle a bubble in the other.
         const tick = pick === false ? '' :
-          `<button class="conv-pick" onclick="toggleConvPick(${i})" aria-pressed="false" ` +
-          `aria-label="Select this message">✓</button>`;
+          `<button class="conv-pick" onclick="${pick === true || !pick ? 'toggleConvPick' : pick}(${i})" ` +
+          `aria-pressed="false" aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
         return rule + `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-text="${text}" style="--conv-agent:${color}">${tick}${head}${text}</div>`;
@@ -8114,13 +9087,17 @@
         // messages that arrives out of order is not the conversation the reader saw.
         if (on) texts.push(el.dataset.text || '');
       }
-      if (!texts.length) { bar.hidden = true; return; }
+      if (!texts.length) {
+        bar.hidden = true;
+        return;
+      }
       selText = texts.join('\n\n');
       bar.hidden = false;
       document.getElementById('selCount').textContent =
         texts.length + (texts.length === 1 ? ' message' : ' messages');
       // Learn teaches a gutter glyph and a trim from pane lines. A bubble has neither.
       document.getElementById('selLearn').hidden = true;
+      // The sheet's own gate: it is the prefill-and-stop path, and that path is built on a pair.
       const pair = pairFor(pairs, activePane);
       document.getElementById('selTransfer').hidden =
         !pair || pairHealth(pair, agents).state !== 'healthy';
@@ -8537,14 +9514,18 @@
       const joint = document.getElementById('menuConvJoint');
       const convFont = document.getElementById('menuConvFont');
       const dedupe = document.getElementById('menuConvDedupe');
+      const recover = document.getElementById('menuConvRecover');
       const final = document.getElementById('menuConvFinal');
       joint.hidden = true;
       convFont.hidden = true;
       dedupe.hidden = true;
+      recover.hidden = true;
       final.hidden = true;
       if (!conv.hidden) {
         const mine = convsForPane(a);
         dedupe.hidden = !mine.length;
+        // Same test: both repair a transcript, and neither means anything on a pane that has none.
+        recover.hidden = !mine.length;
         conv.textContent = mine.length ? `In "${mine[0].name}"…`
           : (loadConvIndex().length ? 'Add to a conversation…' : 'Start conversation…');
         // A conversation of one has no joint thread to show, so the preference is not offered.
@@ -9076,18 +10057,32 @@
 
     let transferSource = '';
 
-    function openTransfer() {
+    // Who is being quoted, and what. Shared by the sheet and by the chips so that a chip and the
+    // sheet behind it can never disagree about either — and because `transferSelection` is what
+    // doTransfer reads, so anything that reaches it has to come through here.
+    //
+    // Returns the source pane, or null with the reason already on screen.
+    //
+    function claimTransfer() {
       const picked = convThreadOn() ? Array.from(document.querySelectorAll('#convThread .conv-msg.picked')) : [];
       const keys = new Set(picked.map(el => el.dataset.key));
-      if (keys.size > 1) { showToast('Select messages from one agent to transfer.'); return; }
+      if (keys.size > 1) { showToast('Select messages from one agent to transfer.'); return null; }
       const source = keys.size ? agents.find(a => convMemberKey(a) === keys.values().next().value) : paneOf(activePane);
-      const pair = source && pairFor(pairs, source.pane_id);
-      if (!pair || pairHealth(pair, agents).state !== 'healthy') return;
+      if (!source) return null;
+      const pair = pairFor(pairs, source.pane_id);
+      if (!pair || pairHealth(pair, agents).state !== 'healthy') return null;
       // The ruler's range wins when there is one: it is the deliberate selection, and on a phone
       // the native one is usually empty anyway. Capture before anything can steal it — switching
       // panes clears both.
       transferSelection = selText || String(window.getSelection() || '').trim();
       transferSource = source.pane_id;
+      return source;
+    }
+
+    function openTransfer() {
+      const source = claimTransfer();
+      if (!source) return;
+      const pair = pairFor(pairs, source.pane_id);
       const partner = partnerOf(pair, transferSource);
       const live = agents.find(a => a.pane_id === partner.pane_id);
       document.getElementById('transferTarget').textContent =
@@ -9122,7 +10117,7 @@
     }
 
     // Prefill and stop. This is the last checkpoint before one agent's output enters another's
-    // context, so it must never end in a send.
+    // context, so it must never end in a send. The sheet's path, and the pane view's.
     function doTransfer(shortcutIndex) {
       const source = paneOf(transferSource || activePane);
       const pair = source && pairFor(pairs, source.pane_id);
@@ -9130,34 +10125,56 @@
         document.getElementById('transferPreview').textContent = 'Pair is no longer live; reopen it after choosing a live partner.';
         return;
       }
-      const mine = memberOf(pair, source.pane_id), partner = partnerOf(pair, source.pane_id);
-      // The partner's agent, not this pane's: the instruction is about to be typed over there.
-      const instruction = shortcutIndex >= 0
-        ? agentSlash(SHORTCUTS[shortcutIndex].text, agentOf(partner.pane_id)) : '';
-      const out = composeTransfer(instruction, mine.role, transferSelection);
-      if (out.error) { document.getElementById('transferPreview').textContent = out.error; return; }
+      const partner = partnerOf(pair, source.pane_id);
+      return prefillTransfer(source, partner.pane_id,
+        transferInstruction(shortcutIndex >= 0 ? [shortcutIndex] : [], partner.pane_id),
+        err => { document.getElementById('transferPreview').textContent = err; });
+    }
+
+    // The instructions, in the order they were chosen, each rewritten for the agent about to read
+    // them. The order is the user's sentence: "@review @test" is review then test, and sorting it
+    // back into the shortcut list's order would be the app rewriting what they said.
+    function transferInstruction(picks, targetPaneId) {
+      return picks.map(i => agentSlash(SHORTCUTS[i].text, agentOf(targetPaneId))).join('\n');
+    }
+
+    // Everything both paths share, and the only place that writes the composer. `onError` is how
+    // the two differ: the sheet has a preview to put the reason in, a chip has a toast.
+    function prefillTransfer(source, targetPaneId, instruction, onError) {
+      const pair = pairFor(pairs, source.pane_id);
+      const mine = pair ? memberOf(pair, source.pane_id) : null;
+      // The role when the pair sheet was given one, the pane's live label when it was not. A pair
+      // built by the Start dialog carries a bare fingerprint with no role at all
+      // (recentFingerprint), and the receiving agent was being told the text came from "undefined".
+      const from = (mine && mine.role) || paneLabel(source) || source.pane_id;
+      const out = composeTransfer(instruction, from, transferSelection);
+      if (out.error) { onError(out.error); return; }
       // What the next send will be measured against. Captured here because this is the last moment
-      // the source pane is the open one — openTerminal below moves to the partner — and because
-      // this function prefills and stops, so the send that classifies against it has not happened.
-      const src = source;
+      // the source pane is the open one — openTerminal below moves to the target — and because the
+      // sheet's path prefills and stops, so the send that classifies against it has not happened.
       pendingTransfer = {
-        key: convMemberKey(src), label: (src && paneLabel(src)) || mine.role || '',
+        key: convMemberKey(source), label: paneLabel(source) || from,
         body: transferSelection, payload: out.text,
         hash: convHash(transferSelection), at: Date.now(),
       };
-      // Before openTerminal moves activePane to the partner: the range being transferred belongs
-      // to this pane, and this is the point at which the user has committed to it.
+      // Before openTerminal moves activePane to the target: the range being transferred belongs to
+      // this pane, and this is the point at which the user has committed to it.
       learnFromSelection();
       closeTransfer();
-      openTerminal(partner.pane_id);
+      openTerminal(targetPaneId);
       const input = document.getElementById('termInput');
-      input.value = out.text;
+      // Whatever was already typed is kept, under the quote: a transfer that overwrote it would
+      // throw away a message someone was in the middle of writing, and a payload with a note of
+      // your own on the end is what `classifyVia` already calls `mixed`.
+      const kept = input.value.trim();
+      input.value = kept ? out.text + '\n\n' + kept : out.text;
       autoGrow(input);
       input.focus();
       // Show the top of the payload, not its tail — reading it is the checkpoint.
       input.setSelectionRange(0, 0);
       input.scrollTop = 0;
       if (window.cue) cue('page');
+      return true;
     }
 
     function insertShortcut(i) {
@@ -9444,6 +10461,7 @@
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv) return;
       convViewId = id;
+      clearConvDock();
       convStandaloneHtml = '';
       convRosterHtmlLast = '';
       convStripSig = '';
@@ -10004,7 +11022,10 @@
       if (rosterHtml !== convRosterHtmlLast) { convRosterHtmlLast = rosterHtml; panel.innerHTML = rosterHtml; }
       panel.hidden = !convRosterOpen;
       const html = (entries.length
-        ? convEntriesHtml(entries, null, false, false)
+        // Same fallback the visibility filter above uses: a single-member thread's entries carry no
+        // key, and the dock reads a bubble's key to know who wrote it — an unkeyed bubble has no
+        // source and so no target to exclude.
+        ? convEntriesHtml(entries, {key: keys[0]}, false, 'toggleConvDockPick')
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional. Turn "final ' +
             'messages only" off in the pane menu to see it.</p>'
@@ -10015,6 +11036,10 @@
       // The snapshot redraws this view every three seconds, and rewriting innerHTML would take the
       // reader's text selection with it mid-copy. Only a thread that actually changed is written.
       if (html !== convStandaloneHtml) { convStandaloneHtml = html; box.innerHTML = html; }
+      // After the thread is on screen: the picks are painted onto its bubbles, and the dock's row
+      // says who is live and what is picked.
+      syncDockPicks(entries.length);
+      renderConvDock();
       renderConvStrip();
       if (bottom) view.scrollTop = view.scrollHeight;
     }
@@ -10083,7 +11108,10 @@
       renderQuickActions();
       renderPairStrip();
       // The view this pane was last read in, restored with it — after activePane is set, which is
-      // what it reads.
+      // what it reads. At its end, whatever the thread being left was doing: the rows already land
+      // there by way of `userScrolledUp`, and a thread that did not would be the only half of a
+      // pane switch that remembered somewhere else.
+      convStickNext = true;
       renderConvView();
       closeFireMenu();
       disarmClear();  // an arm belongs to the pane it was made on, not to the next one opened
@@ -10092,6 +11120,10 @@
       disarmShortcut();
       disarmCtrl();
       refreshPane();
+      // A pane whose record went stale while nobody was looking at it catches up now, on the one
+      // event that makes the read worth paying for: someone is about to read it. Asynchronous and
+      // deliberately after the ordinary 200-line read — that one is what puts the pane on screen.
+      convRecoverPane(paneId);
       refreshInterval = setInterval(() => refreshPane(true), 3000);
     }
 
@@ -10119,6 +11151,369 @@
       document.getElementById('agentListView').style.display = '';
       paneStampAt = null;
       renderStatusBar();
+    }
+
+  </script>
+  <script>
+    // --- The conversation window's dock ---
+    //
+    // The standalone conversation view is a record of several agents talking, and this is the half
+    // that talks back: who you are addressing, what is added to what you send, and the composer it
+    // all modifies. It floats over the thread rather than sitting under it, so the conversation
+    // runs behind the message being written.
+    //
+    // Deliberately not the pane's thread. There the composer already knows where it is typing —
+    // into the pane on screen — and a range dragged across pane rows is a guess at where a message
+    // starts, which is why the pane view keeps the prefilled composer as its checkpoint. Here every
+    // payload is a whole recorded bubble and there is no open pane to default to, so addressing is
+    // something the reader does explicitly and one tap is enough to send.
+
+    // Who you are talking to, and what is being added to it. The target is sticky — it is not a
+    // property of a selection, it is who you are talking to, and having chosen an agent you go on
+    // talking to it. The picks are not: an instruction is attached to one message, so it is spent
+    // by the send that carries it.
+    let dockTarget = '', dockPicks = [], dockPicked = new Set(), dockPickedOf = 0;
+
+    function convDockOn() {
+      const view = document.getElementById('convView');
+      return !!view && view.style.display !== 'none';
+    }
+
+    // Every member of this conversation that is a live pane, in roster order — which is the order
+    // they joined. A member that has exited is still in the record and still in the roster panel;
+    // it is not here, because there is nothing to send to.
+    function dockMembers() {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv) return [];
+      const hidden = convHidden(conv.id);
+      return (conv.members || []).filter(m => !hidden.has(m.key))
+        .map(m => agents.find(a => convMemberKey(a) === m.key)).filter(Boolean);
+    }
+
+    // Whoever wrote the picked messages. Two agents' messages are two conversations being quoted as
+    // one, which is what the transfer sheet has always refused, so the row stands down rather than
+    // guessing which of them the payload belongs to.
+    function dockSource() {
+      if (!dockPicked.size) return null;
+      const keys = new Set(Array.from(document.querySelectorAll('#convViewThread .conv-msg.picked'))
+        .map(el => el.dataset.key));
+      if (keys.size !== 1) return null;
+      return agents.find(a => convMemberKey(a) === keys.values().next().value) || null;
+    }
+
+    // With a bubble picked the source is excluded — a message cannot be transferred to the pane that
+    // said it. Otherwise everyone is a candidate: the composer is addressing the conversation, and
+    // any member of it is someone you might be talking to.
+    function dockTargets() {
+      const source = dockSource();
+      const all = dockMembers();
+      return source ? all.filter(a => a.pane_id !== source.pane_id) : all;
+    }
+
+    // Kept honest against the row it is drawn from: a target that has exited, or that turns out to
+    // be the source of what is being transferred, falls back to the first member rather than
+    // silently sending somewhere else.
+    function dockTargetOf(list) {
+      return list.some(a => a.pane_id === dockTarget) ? dockTarget : ((list[0] || {}).pane_id || '');
+    }
+
+    // Who the composer is talking to: the row's lit member. Falls back to the whole membership when
+    // a pick has excluded everyone, so that typing still has somewhere to go — the same list the row
+    // draws in that case.
+    function dockAddressed() {
+      const list = dockTargets();
+      return dockTargetOf(list.length ? list : dockMembers());
+    }
+
+    function setDockTarget(paneId) {
+      dockTarget = paneId;
+      renderConvDock();
+      if (window.cue) cue('tick');
+    }
+
+    // Additive. Two chips are two instructions, in the order they were tapped, and tapping one
+    // again takes it back out — so the row is the sentence being built rather than a menu of
+    // mutually exclusive ones.
+    function toggleDockChip(i) {
+      const at = dockPicks.indexOf(i);
+      if (at >= 0) dockPicks.splice(at, 1); else dockPicks.push(i);
+      renderConvDock();
+      // The list is the same picks drawn twice, so a tap in either place has to reach both. Left
+      // open, it would keep showing the ticks it had when it opened.
+      if (dockMenuOpen()) openDockMenu();
+      if (window.cue) cue('tick');
+    }
+
+    function toggleConvDockPick(i) {
+      if (dockPicked.has(i)) dockPicked.delete(i); else dockPicked.add(i);
+      drawDockPicks();
+      renderConvDock();
+    }
+
+    // Painted in place rather than by re-rendering the thread: the snapshot redraws this view every
+    // three seconds and a rebuild would take the reader's text selection with it mid-copy.
+    function drawDockPicks() {
+      for (const el of document.querySelectorAll('#convViewThread .conv-msg')) {
+        const on = dockPicked.has(Number(el.dataset.i));
+        el.classList.toggle('picked', on);
+        const tick = el.querySelector('.conv-pick');
+        if (tick) tick.setAttribute('aria-pressed', String(on));
+      }
+    }
+
+    // A render that only appended leaves the picks where they are; anything else moved them, and a
+    // pick on the wrong message is worse than none. Same rule the pane's thread follows.
+    function syncDockPicks(count) {
+      if (count < dockPickedOf) dockPicked.clear();
+      dockPickedOf = count;
+      drawDockPicks();
+    }
+
+    function clearDockPicks() {
+      if (!dockPicked.size) return;
+      dockPicked.clear();
+      drawDockPicks();
+      renderConvDock();
+    }
+
+    // Leaving the conversation. Who you were talking to and what you were about to say belong to
+    // it, and neither means anything in the next one.
+    function clearConvDock() {
+      dockTarget = ''; dockPicks = []; dockPicked.clear(); dockPickedOf = 0;
+      closeDockMenu();
+      const input = document.getElementById('convInput');
+      if (input) { input.value = ''; autoGrow(input); syncConvCursor(); }
+    }
+
+    function renderConvDock() {
+      const dock = document.getElementById('convDock');
+      const row = document.getElementById('xferRow');
+      if (!dock || !row) return;
+      const all = dockMembers();
+      const list = dockTargets();
+      // Every candidate excluded — a bubble picked in a conversation of one — leaves the row still
+      // addressing the conversation, with nothing to transfer the pick to. Dropping it instead would
+      // take the composer's target away over a pick that is about to be undone.
+      const html = all.length ? dockRowHtml(list.length ? list : all, !list.length) : '';
+      row.hidden = !html;
+      if (!html) { closeDockMenu(); row.dataset.sig = ''; }
+      // Rebuilt only when what it says changed. This runs on every snapshot, and replacing the row
+      // wholesale three times a minute would take a chip out from under a finger already on it.
+      else if (row.dataset.sig !== html) { row.innerHTML = html; row.dataset.sig = html; }
+      // Nobody live to send to is the ordinary end state of a record, not a failure: the thread is
+      // still readable, and a composer that could only fail is worse than none.
+      dock.hidden = !all.length;
+      paintDockAccent();
+      syncDockHeight();
+    }
+
+    // The bubble wears the colour of the agent it is addressed to. The row says who in words; this
+    // says it on the thing being written, which is where the eye already is while typing — and it
+    // is the same colour that agent's bubbles carry in the thread above.
+    function paintDockAccent() {
+      const bubble = document.getElementById('convBubble');
+      if (!bubble) return;
+      const c = agentColor((paneOf(dockAddressed()) || {}).agent);
+      bubble.style.setProperty('--dock-accent', c || 'var(--border)');
+      bubble.style.setProperty('--dock-wash',
+        c ? `color-mix(in srgb, ${c} 6%, transparent)` : 'transparent');
+      // The cursor takes the accent when there is one and the text colour when there is not: a
+      // harness the app has no colour for must not leave the caret drawn in the border's grey.
+      bubble.style.setProperty('--dock-cursor', c || 'var(--text)');
+    }
+
+    // The block cursor. A textarea's own caret is a hairline that disappears with focus, and this
+    // is a box that types into terminals — so the caret is painted instead, on a ghost copy of the
+    // text sitting exactly under the field. The character at the caret goes inside the block, and a
+    // caret at the end of the text gets a space to sit on, so the block has a width either way.
+    function syncConvCursor() {
+      const input = document.getElementById('convInput');
+      const ghost = document.getElementById('convGhost');
+      if (!input || !ghost) return;
+      const at = input.selectionStart ?? input.value.length;
+      const head = input.value.slice(0, at), tail = input.value.slice(at);
+      ghost.innerHTML = escapeHtml(head) +
+        `<span class="cur">${escapeHtml(tail.slice(0, 1) || ' ')}</span>` +
+        escapeHtml(tail.slice(1));
+      // Follows the field rather than being scrolled on its own: past 40vh the textarea scrolls,
+      // and a ghost that stayed at the top would paint the block on the wrong line.
+      ghost.scrollTop = input.scrollTop;
+      input.parentElement.classList.toggle('on', document.activeElement === input);
+    }
+
+    function dockRowHtml(list, noSend) {
+      const target = dockTargetOf(list);
+      // One lit, the rest dimmed rather than hidden: which agents are in this conversation is
+      // information, and a row that showed only the chosen one would answer a different question.
+      // Named the way the pane header names one: the live dot, the label, and the harness badge.
+      // Which agent is about to receive another agent's output is the fact worth being sure of, and
+      // "scratch" alone does not say whether that is a codex or a claude.
+      const who = list.map(a =>
+        `<button class="xfer-who${a.pane_id === target ? ' on' : ''}" ` +
+        `style="--who-accent:${agentColor(a.agent) || 'var(--text)'}" ` +
+        `onclick="setDockTarget('${a.pane_id}')" aria-pressed="${a.pane_id === target}" ` +
+        `title="Talk to ${escapeHtml(paneLabel(a))}" aria-label="Talk to ${escapeHtml(paneLabel(a))}">` +
+        `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
+        `${escapeHtml(paneLabel(a))}${agentBadge(a.agent)}</button>`).join('');
+      // Numbered by the order they were chosen, because that order is what will be written and two
+      // lit chips otherwise say nothing about which comes first.
+      const chips = SHORTCUTS.map((s, i) => {
+        const at = dockPicks.indexOf(i);
+        return `<button class="xfer-chip${at >= 0 ? ' on' : ''}" onclick="toggleDockChip(${i})" ` +
+          `aria-pressed="${at >= 0}" title="${escapeHtml(s.label)}" ` +
+          `aria-label="Add the instruction ${escapeHtml(s.label)}">` +
+          `@${escapeHtml(s.at)}${at >= 0 && dockPicks.length > 1 ? `<sub>${at + 1}</sub>` : ''}` +
+          `</button>`;
+      }).join('');
+      const n = dockPicked.size;
+      // Send belongs to the bubbles. With nothing picked there is nothing for it to carry and the
+      // composer's own send is what fires, so the row would be offering a second button for a
+      // message it does not hold.
+      const send = n && !noSend
+        ? `<button class="xfer-send" onclick="convDockSend()" ` +
+          `title="Send the picked message${n === 1 ? '' : 's'} to ` +
+          `${escapeHtml(paneLabel(paneOf(target)) || target)}" ` +
+          `aria-label="Send the picked messages">Send (${n}) ›</button>`
+        : '';
+      // Only the chips scroll. @+ and Send are pinned, because a row of instructions long enough to
+      // push the send button off a phone would hide the one control the row is for — and @+ is the
+      // way back to the instructions that scrolled away, so it cannot scroll away itself.
+      return `<div class="xfer-who-row">${who}</div>` +
+        `<div class="xfer-act"><div class="xfer-chip-row">${chips}</div>` +
+        `<button class="xfer-chip more" onclick="openDockMenu()" ` +
+        `title="Every instruction, as a list" aria-label="Every instruction, as a list">@+</button>` +
+        send + `</div>`;
+    }
+
+    // The same instructions as a list, for a row that has scrolled past the edge of a phone and for
+    // reading the full label rather than its @name. It writes the same picks the chips do.
+    function openDockMenu() {
+      const box = document.getElementById('chipMenu');
+      box.innerHTML = SHORTCUTS.map((s, i) =>
+        `<button class="menu-item" role="menuitemcheckbox" ` +
+        `aria-checked="${dockPicks.includes(i)}" onclick="toggleDockChip(${i})">` +
+        `<span class="tick">${dockPicks.includes(i) ? '✓' : ''}</span>` +
+        `@${escapeHtml(s.at)} — ${escapeHtml(s.label)}</button>`).join('') +
+        `<button class="menu-item" role="menuitem" onclick="closeDockMenu()">Done</button>`;
+      box.hidden = false;
+      syncDockHeight();
+    }
+
+    function dockMenuOpen() {
+      const box = document.getElementById('chipMenu');
+      return !!box && !box.hidden;
+    }
+
+    function closeDockMenu() {
+      const box = document.getElementById('chipMenu');
+      if (box && !box.hidden) { box.hidden = true; syncDockHeight(); }
+    }
+
+    // What the lit chips say, rewritten for the agent about to read them, in the order they were
+    // tapped. The order is the user's sentence: "@review @test" is review then test, and sorting it
+    // back into the shortcut list's order would be the app rewriting what they said.
+    function dockInstruction(targetPaneId) {
+      return transferInstruction(dockPicks, targetPaneId);
+    }
+
+    // Typed text, to whoever the row has lit. No checkpoint and no prefill: there is no pane on
+    // screen to prefill *into*, and what is being sent is what the composer already shows.
+    function convSend() {
+      const input = document.getElementById('convInput');
+      const body = input.value.trim();
+      if (!body) return;
+      const target = dockAddressed();
+      const live = agents.find(a => a.pane_id === target);
+      if (!live) { showToast('That agent is no longer running.'); return; }
+      const lead = dockInstruction(target);
+      if (!sendTextTo(target, lead ? lead + '\n\n' + body : body)) return;
+      input.value = ''; autoGrow(input); syncConvCursor();
+      // The instruction was attached to this message, so it goes with it. Who you are talking to
+      // stays — that is the point of having chosen them.
+      dockPicks = [];
+      closeDockMenu();
+      renderConvDock();
+      showToast(`Sent to ${paneLabel(live) || target}`);
+      burstPoll(target);
+    }
+
+    // Ctrl/Cmd+Enter sends, Enter writes a newline. Never a bare Enter: there is no shell behind
+    // this composer to make a line end at one, and the message being written is a paragraph.
+    function convInputKey(e) {
+      if (enterAction(e, {enterSends: false, shell: false}) !== 'send') return;
+      e.preventDefault();
+      convSend();
+    }
+
+    // The picked bubbles into another member's session, in one tap.
+    //
+    // This is the app's one send with no checkpoint behind it, and it is scoped here for a reason:
+    // in the pane view a payload is a *selection* — a guess at where a message starts and ends,
+    // which is why the ruler exists and why the prefilled composer is where you find out you took
+    // the prompt as well as the answer. Here the payload is a bubble, which *is* the message. There
+    // is no boundary to get wrong, and the checkpoint would be re-reading something just read.
+    //
+    // Not armed like CLS and Esc either. Those fire on one tap of a button that sits under the
+    // thumb; this needs a message picked and a target standing, and the pick is the deliberate act
+    // the arm would be duplicating. The toast names where it went, because a mis-tap is otherwise
+    // silent.
+    function convDockSend() {
+      const source = dockSource();
+      if (!source) { showToast('Select messages from one agent to transfer.'); return; }
+      const picked = Array.from(document.querySelectorAll('#convViewThread .conv-msg.picked'))
+        .map(el => el.dataset.text || '').filter(Boolean);
+      if (!picked.length) return;
+      const targets = dockTargets();
+      if (!targets.length) { showToast('Nobody else in this conversation to send it to.'); return; }
+      const target = dockTargetOf(targets);
+      const live = agents.find(a => a.pane_id === target);
+      if (!live) { showToast('That agent is no longer running.'); return; }
+      // Read in thread order rather than in the order they were tapped: a pair of messages that
+      // arrives out of order is not the conversation the reader saw.
+      const quoted = picked.join('\n\n');
+      const out = composeTransfer(dockInstruction(target), paneLabel(source) || source.pane_id, quoted);
+      if (out.error) { showToast(out.error); return; }
+      // Whatever was already typed goes under the quote. The composer here is always open, so a
+      // send that dropped it would throw away a message someone was in the middle of writing — and
+      // a payload with a note of your own on the end is what `classifyVia` already calls `mixed`.
+      const input = document.getElementById('convInput');
+      const kept = input.value.trim();
+      // What the send is measured against, so the target's transcript records where the text came
+      // from rather than claiming the reader typed another agent's words.
+      pendingTransfer = {
+        key: convMemberKey(source), label: paneLabel(source) || source.pane_id,
+        body: quoted, payload: out.text, hash: convHash(quoted), at: Date.now(),
+      };
+      if (!sendTextTo(target, kept ? out.text + '\n\n' + kept : out.text)) return;
+      input.value = ''; autoGrow(input); syncConvCursor();
+      dockPicks = [];
+      dockPicked.clear();
+      drawDockPicks();
+      closeDockMenu();
+      renderConvDock();
+      showToast(`Sent ${picked.length} message${picked.length === 1 ? '' : 's'} ` +
+        `to ${paneLabel(live) || target}`);
+      burstPoll(target);
+    }
+
+    // How much of the thread the floating dock covers. It changes with the address row, the chip
+    // list and a composer being typed into, so it is measured rather than guessed — a guessed
+    // number is either a gap under the last bubble or a bubble that cannot be scrolled to.
+    function syncDockHeight() {
+      const dock = document.getElementById('convDock');
+      const view = document.getElementById('convView');
+      if (!dock || !view) return;
+      view.style.setProperty('--dock-h', (dock.hidden ? 0 : dock.offsetHeight) + 'px');
+    }
+
+    function watchDockHeight() {
+      const dock = document.getElementById('convDock');
+      // The cursor is drawn before anything is typed, because it is what says the box is a place to
+      // type — that is the whole reason it is always on.
+      syncConvCursor();
+      if (!dock || !window.ResizeObserver) return;
+      new ResizeObserver(syncDockHeight).observe(dock);
+      syncDockHeight();
     }
 
   </script>
@@ -10276,13 +11671,23 @@
         `title="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}" ` +
         `aria-label="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}">💬</button>`
         : '';
+      // Offered only where there is something to repeat, for the reason Summary is conditional. An
+      // agent that dropped a prompt on a full context, a transfer that landed while the pane was
+      // mid-tool-call: the answer is the same text again, and retyping it on a phone is the part
+      // that does not happen. Per pane — the last thing sent to *this* one.
+      const again = lastSentText[activePane];
+      const resend = again
+        ? `<button class="qa-resend" onclick="resendLast(this)" ` +
+        `title="Send this pane the last thing you sent it: ${escapeHtml(again.slice(0, 80))}" ` +
+        `aria-label="Send this pane the last thing you sent it">Resend</button>`
+        : '';
       const navRow = `<div class="qa-nav"><div class="qa-left">` +
         `<button class="qa-fold" onclick="toggleBottomDock()" aria-expanded="${open}" ` +
         `title="${open ? 'Fold the composer away' : 'Bring the composer back'}" ` +
         `aria-label="${open ? 'Fold the composer away' : 'Bring the composer back'}">` +
         `${open ? 'v' : '^'}</button>${conv}</div>` +
         `<div class="qa-mid">${nav(-1, '‹', 'Previous session')}${nav(1, '›', 'Next session')}</div>` +
-        `<div class="qa-right">${summary}` +
+        `<div class="qa-right">${resend}${summary}` +
         `<button class="qa-last" onclick="scrollPaneToBottom()" title="Jump to the newest line" ` +
         `aria-label="Jump to the newest line">Last</button></div></div>`;
       let middle = '';
@@ -10316,6 +11721,12 @@
       const v = parseInt(localStorage.getItem(HISTORY_KEY), 10);
       return HISTORY_MAX.includes(v) ? v : HISTORY_DEFAULT;
     }
+    // "As deep as you allow." The relay clamps every request at its own `READ_LINES_MAX`, so asking
+    // for more than any ceiling is answered with the ceiling — which is how the app tracks an
+    // operator raising or lowering it without being edited, and why no constant here may name a
+    // maximum. `HISTORY_MAX`'s top entry equalling today's is a coincidence, not a contract.
+    // Recovery is the only caller: a standing read is a repeated cost and is bounded by the picker.
+    const READ_LINES_ASK = 1e9;
     // A tenth of the ceiling, so reaching a deep one does not take fifty taps. 500 at the default,
     // which is the step this had before the ceiling was adjustable.
     function historyStep() { return Math.max(500, Math.round(paneHistoryMax() / 10)); }
@@ -10491,20 +11902,51 @@
       paneLines = Math.min(paneLines + historyStep(), paneHistoryMax());
       refreshPane();
     }
+    // One text into one pane, from whichever composer had it. The pane's own composer is one
+    // caller; the conversation window's is the other, and it can be pointed at a pane nobody has
+    // open — which is why this takes the pane rather than reading `activePane`.
+    function sendTextTo(paneId, text) {
+      if (!text || !ws || !paneId) return false;
+      // Before the send, while the composer still holds what is being sent: a transcript that
+      // cannot tell a transfer from typing claims the user said what another agent said. The whole
+      // text, not a chunk of it — what was sent is one message, however many the wire took.
+      noteSent(text, paneId);
+      lastSentText[paneId] = text;
+      // One message per chunk, then the single Enter that submits all of them. Nothing between the
+      // chunks submits, so they land in the agent's composer as one text; the relay handles a
+      // connection's messages in order and already sleeps SEND_SETTLE after each `send_text`, which
+      // is what makes the Enter behind them late enough to count.
+      for (const part of chunkText(text))
+        ws.send(JSON.stringify({ type: 'send_text', pane_id: paneId, text: part }));
+      ws.send(JSON.stringify({ type: 'send_keys', pane_id: paneId, keys: ['Enter'] }));
+      return true;
+    }
+
     function sendText() {
       const i = document.getElementById('termInput');
       if (!i.value || !ws || !activePane) return;
-      if (i.value.length > SEND_TEXT_MAX) {
-        showToast(`Text must be ${SEND_TEXT_MAX} characters or fewer.`); return;
-      }
       const paneId = activePane;
-      // Before the send, while the composer still holds what is being sent: a transcript that
-      // cannot tell a transfer from typing claims the user said what another agent said.
-      noteSent(i.value, paneId);
-      ws.send(JSON.stringify({ type: 'send_text', pane_id: paneId, text: i.value }));
-      ws.send(JSON.stringify({ type: 'send_keys', pane_id: paneId, keys: ['Enter'] }));
+      if (!sendTextTo(paneId, i.value)) return;
       i.value = ''; autoGrow(i);
+      renderQuickActions();   // the pane has a last send now, so Resend has something to offer
       if (isShell(paneId)) burstPoll(paneId); else setTimeout(refreshPane, 500);
+    }
+
+    // The same text again, through the same path — so it is chunked, recorded and classified like
+    // anything else typed. Two taps, because a duplicate prompt in a live agent is not undoable and
+    // this button sits where a thumb already is. `armFire` is the app's answer to that everywhere
+    // else it is true.
+    function resendLast(btn) {
+      const again = lastSentText[activePane];
+      if (!again) return;
+      // armButton and not armFire: this one is drawn by renderQuickActions from innerHTML, so it
+      // has no stable id for the header's table to key on.
+      armButton(btn, 'Resend?', () => {
+        const i = document.getElementById('termInput');
+        i.value = again;
+        autoGrow(i);
+        sendText();
+      });
     }
     function sendKey(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: [k] })); setTimeout(refreshPane, 300); }
     function sendKeys(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: k })); setTimeout(refreshPane, 300); }
@@ -11119,10 +12561,14 @@
     setConvFont(currentConvFont());
     applyWrapMode();
     placePairStrip();
+    watchDockHeight();   // the conversation window's floating dock measures itself from here on
     syncQaBtn();
     syncBottomDock();
     setDictationEnabled(dictationOn());  // hidden unless asked for, and where there is no speech recognition
     document.getElementById('historyPick').value = String(paneHistoryMax());
+    setConvDeepAll(convDeepAll());
+    setConvTidy(convTidyOn());
+    setConvSweep(localStorage.getItem('herdr_conv_sweep') || '1h');
     loadTermShortcuts();
     syncPromptsBtn();  // no pane is open yet, so this labels the button for an agent
   
