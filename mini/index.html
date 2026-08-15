@@ -316,9 +316,35 @@
       min-height: 1.2em;
     }
 
+    /* Equal halves either side of the button, so it is centred on the screen rather than on
+       whatever is left over — the left text changes on every read, and a control that drifted with
+       it would not be findable without looking. */
     .status-bar .left {
+      flex: 1 1 0;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    /* Sized like the Esc chip beside it and always present, so the bar's height is what it was —
+       the reserved heights above exist because this row must never change size. */
+    .status-bar .recent-btn {
+      flex: 0 0 auto;
+      padding: 2px 10px;
+      font: inherit;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .status-bar .recent-btn:hover {
+      color: var(--text);
+      border-color: var(--text);
     }
 
     .status-bar .right {
@@ -338,9 +364,10 @@
     }
 
     .status-bar .state {
-      margin-left: auto;
+      flex: 1 1 0;
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 7px;
     }
 
@@ -649,6 +676,62 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
+    }
+
+    /* Activity keeps its event log readable while the local wire summary stays pinned below it. */
+    #timelineView {
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    #timelineList {
+      flex: 1 1 50%;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .bandwidth {
+      flex: 0 0 auto;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .bandwidth h2 {
+      margin: 0 0 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .bandwidth-row {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      margin-top: 5px;
+      font: 0.62rem monospace;
+    }
+
+    .bandwidth-label { color: var(--muted); }
+
+    .bandwidth-chips {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 4px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .bandwidth-chip {
+      flex: 0 0 auto;
+      min-width: 38px;
+      padding: 3px 4px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      text-align: center;
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 4%, var(--bg));
     }
 
     /* Settings */
@@ -1338,6 +1421,16 @@
     .pair-pick.on {
       background: var(--bg);
       box-shadow: inset 3px 0 0 var(--blue);
+    }
+
+    /* The live dot every list draws, on the right where the tick sits in the sheets that pick
+       something. This list opens a pane rather than choosing one, so the row's right edge says what
+       the pane is doing instead of whether it is selected. */
+    .pair-pick .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
 
     .pair-pick .pair-tick {
@@ -3905,6 +3998,12 @@
     </div>
 
     <div class="setting-group">
+      <label class="toggle-option"><input type="checkbox" id="bandwidthOn" onchange="setBandwidthOn(this.checked)"> Track WebSocket payload data</label>
+      <div class="hint">Shows sent, received and total payload bytes in Activity, in five-minute buckets
+        for this browser session. WebSocket frame and TLS overhead are not available to the page.</div>
+    </div>
+
+    <div class="setting-group">
       <label for="micPick">Dictation</label>
       <select id="micPick" onchange="setDictationEnabled(this.value === 'on')">
         <option value="off">Off</option>
@@ -3935,6 +4034,10 @@
 
   <div class="view" id="timelineView" style="display:none;padding:12px;">
     <div id="timelineList" style="font-family:monospace;font-size:0.75rem;line-height:1.8;"></div>
+    <section class="bandwidth" id="bandwidth" hidden aria-label="WebSocket payload data">
+      <h2>Data exchange · last hour</h2>
+      <div id="bandwidthRows"></div>
+    </section>
   </div>
 
   <!-- A conversation read as itself. Its own view and not the pane's thread panel, because the
@@ -4001,6 +4104,10 @@
        curve as for what it says. -->
   <div class="status-bar" id="statusBar">
     <span class="left" id="statusBarLeft"></span>
+    <!-- The one control in the app's last row. Centred because it belongs to no view: the bar is
+         on screen whatever is above it, and so is the question it answers. -->
+    <button class="recent-btn" id="recentBtn" onclick="openRecentSheet()" aria-haspopup="dialog"
+      aria-label="Recent panes">Recent ▴</button>
     <span class="state"><button class="abort" id="abortBtn" onclick="abortWorking()" hidden
       aria-label="Stop working agent">Esc</button><span class="right" id="statusBarRight"></span></span>
   </div>
@@ -4452,6 +4559,20 @@
     </div>
   </div>
 
+  <!-- Recent — every live pane, agents and terminals, in the order this device opened them. -->
+  <div id="recentSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closeRecentSheet()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div role="dialog" aria-label="Recent panes"
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Recent</span>
+        <button onclick="closeRecentSheet()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="recentList"></div>
+    </div>
+  </div>
+
   <!-- Transfer — picks the instruction, then prefills the partner's composer. Never sends. -->
   <div id="transferSheet" style="display:none;position:fixed;inset:0;z-index:100;">
     <div onclick="closeTransfer()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
@@ -4515,6 +4636,54 @@
     // off, which sends no `shells` key at all — its presence is the feature gate.
     let shells = [];
     let timeline = [], prevStatuses = {};
+
+    // WebSocket payload bytes the browser can observe. Frame, TLS and transport overhead live below
+    // this API and are deliberately not guessed at. Kept for this session only, like the activity
+    // log it is shown beside: turning collection on starts a fresh hour rather than claiming to
+    // know traffic from before this page was open.
+    const BANDWIDTH_KEY = 'herdr_bandwidth', BANDWIDTH_BUCKET_MS = 5 * 60 * 1000,
+      BANDWIDTH_BUCKETS = 12;
+    let bandwidth = [];
+
+    function bandwidthOn() {
+      try { return localStorage.getItem(BANDWIDTH_KEY) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function setBandwidthOn(on) {
+      try { localStorage.setItem(BANDWIDTH_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      if (!on) bandwidth = [];
+      const input = document.getElementById('bandwidthOn');
+      if (input) input.checked = !!on;
+      renderBandwidth();
+    }
+
+    function bandwidthBytes(data) {
+      if (typeof data === 'string') return new TextEncoder().encode(data).length;
+      if (data && typeof data.byteLength === 'number') return data.byteLength;
+      if (data && typeof data.size === 'number') return data.size;
+      return 0;
+    }
+
+    function noteBandwidth(direction, data, now) {
+      if (!bandwidthOn()) return;
+      const at = Math.floor((now || Date.now()) / BANDWIDTH_BUCKET_MS) * BANDWIDTH_BUCKET_MS;
+      let bucket = bandwidth.find(b => b.at === at);
+      if (!bucket) { bucket = {at: at, sent: 0, received: 0}; bandwidth.push(bucket); }
+      bucket[direction] += bandwidthBytes(data);
+      const cutoff = at - (BANDWIDTH_BUCKETS - 1) * BANDWIDTH_BUCKET_MS;
+      bandwidth = bandwidth.filter(b => b.at >= cutoff);
+      if (document.getElementById('timelineView')?.style.display === 'flex') renderBandwidth();
+    }
+
+    function bandwidthBuckets(now) {
+      const end = Math.floor((now || Date.now()) / BANDWIDTH_BUCKET_MS) * BANDWIDTH_BUCKET_MS;
+      return Array.from({length: BANDWIDTH_BUCKETS}, (_, i) => {
+        const at = end - (BANDWIDTH_BUCKETS - 1 - i) * BANDWIDTH_BUCKET_MS;
+        return bandwidth.find(b => b.at === at) || {at: at, sent: 0, received: 0};
+      });
+    }
 
     // When each pane last did anything. herdr reports no timestamps, so this is kept here and
     // persisted — without that, a reload would make every pane look untouched, which is the one
@@ -5146,7 +5315,7 @@
     // Every panel that takes the list's place, against the display mode it wants — adding one is a
     // line here rather than a line in each of the four functions below. Settings is display:none in
     // its class, so an empty string would hide it; the conversation view is a flex column.
-    const PANELS = { settingsView: 'block', timelineView: 'block', convView: 'flex' };
+    const PANELS = { settingsView: 'block', timelineView: 'flex', convView: 'flex' };
 
     function hidePanels() {
       for (const id in PANELS) document.getElementById(id).style.display = 'none';
@@ -5627,6 +5796,10 @@
       let wsUrl = url;
       if (token) wsUrl += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
       ws = new WebSocket(wsUrl);
+      // Central wire accounting. Every caller goes through this socket, so instrumenting it here
+      // catches polls, sends, pushes and commands without duplicating counters at each call site.
+      const send = ws.send.bind(ws);
+      ws.send = data => { noteBandwidth('sent', data); return send(data); };
       // Re-announcing the push subscription here rather than only at subscribe time is what makes
       // it survive the socket being down at the wrong moment — on a phone that is most of the time.
       ws.onopen = () => {
@@ -5642,7 +5815,7 @@
         setTimeout(connect, 3000);
       };
       ws.onerror = () => setStatus('disconnected');
-      ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+      ws.onmessage = (e) => { noteBandwidth('received', e.data); handleMessage(JSON.parse(e.data)); };
     }
 
     // One update path for every status dot: the app header's and the term header's, so the
@@ -6458,6 +6631,61 @@
         : recentFingerprint(live[0]);
       const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, MAX_RECENTS);
       localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    }
+
+    // --- The recent switcher ---
+    //
+    // Every live pane, agents and terminals together, in the order this device last opened them.
+    // Reached from the status bar, which is the one row on screen in every view: "put me back where
+    // I was" is not a question about the screen you are asking it from, and the landing page's
+    // Recents section can only answer it from the landing page.
+
+    // Panes herdr is ambiguous about are dropped, the same rule the landing section follows: an ID
+    // that is an agent in one list and a shell in the other is one the relay will refuse.
+    function livePanes() {
+      return agents.concat(shells).filter(p => agents.filter(x => x.pane_id === p.pane_id).length
+        + shells.filter(x => x.pane_id === p.pane_id).length === 1);
+    }
+
+    function recentPanes() {
+      const log = loadRecents();
+      const rank = p => {
+        const i = log.findIndex(r => recentMatchesPane(r, p, isShell(p.pane_id)));
+        return i < 0 ? log.length : i;
+      };
+      // Visited panes first, in visit order. The rest follow by when they last moved, which keeps
+      // the list a recent list rather than making it a second copy of the agent list — and a pane
+      // this device has never opened still has to be reachable from here.
+      return livePanes().map((p, i) => [p, i])
+        .sort((a, b) => rank(a[0]) - rank(b[0]) ||
+          (lastSeen[b[0].pane_id] || 0) - (lastSeen[a[0].pane_id] || 0) || a[1] - b[1])
+        .map(pair => pair[0]);
+    }
+
+    function openRecentSheet() {
+      const box = document.getElementById('recentList');
+      const list = recentPanes();
+      // Same row as the pair and conversation sheets: a list of things to pick reads as one when
+      // every list in the app is picked from the same way.
+      box.innerHTML = list.length ? list.map(p => {
+        const shell = isShell(p.pane_id);
+        const seen = lastSeen[p.pane_id];
+        const meta = [p.project, shell ? (p.cwd || 'shell') : p.status,
+          seen ? fmtAgo(new Date(seen)) : ''].filter(Boolean).join(' · ');
+        return `<button class="pair-pick${p.pane_id === activePane ? ' on' : ''}" ` +
+          `onclick="closeRecentSheet(); jumpToPane('${escapeHtml(p.pane_id)}')">` +
+          `<span class="kind" aria-hidden="true">${shell ? '⬛' : '🤖'}</span>` +
+          `<span class="info"><span class="name">${escapeHtml(paneLabel(p))}` +
+          `${shell ? '' : agentBadge(p.agent)}</span>` +
+          `<span class="meta">${escapeHtml(meta)}</span></span>` +
+          `<span class="dot" style="background:${statusColor(p)}" aria-hidden="true"></span>` +
+          `</button>`;
+      }).join('') : '<p class="pair-empty">Nothing is running.</p>';
+      document.getElementById('recentSheet').style.display = 'block';
+    }
+
+    function closeRecentSheet() {
+      document.getElementById('recentSheet').style.display = 'none';
     }
 
     // Only live panes are offered. A dead pane_id is dropped rather than shown greyed: herdr reuses
@@ -11676,6 +11904,24 @@
       setDockTarget(paneId);
     }
 
+    // A bubble double-tapped is that agent addressed. Double rather than single: a single tap in a
+    // thread is already how text is selected and how a bubble is picked for transfer, and a gesture
+    // that has to share with those two would fire on both of them.
+    //
+    // Only the conversation window's thread, because it is the only one with a target to change —
+    // the pane's own composer types into the pane on screen.
+    function addressConvAuthor(key) {
+      const live = dockTargets().find(a => convMemberKey(a) === key);
+      // No target: the author has exited, is folded out of the thread, or is the source of what is
+      // picked — a message cannot be transferred back into its own session.
+      if (!live) return;
+      // The word the double-click selected is not a selection anybody asked for.
+      const sel = window.getSelection && window.getSelection();
+      if (sel && sel.removeAllRanges) sel.removeAllRanges();
+      setDockTarget(live.pane_id);
+      showToast(`Talking to ${paneLabel(live) || live.pane_id}`);
+    }
+
     // Into the addressed pane's terminal, not into its thread. The thread is what this window
     // already is, and a reader leaving it is leaving it for the rows — the live frame, the
     // keyboard, the approval buttons — so the pane's thread panel is turned off on the way.
@@ -11836,6 +12082,11 @@
         if (dockMenuOpen() && !e.target.closest('#chipMenu, .xfer-chip')) closeDockMenu('chipMenu');
         if (whoMenuOpen() && !e.target.closest('#whoMenu, .xfer-who-more')) closeDockMenu('whoMenu');
       }, true);
+      const thread = document.getElementById('convViewThread');
+      if (thread) thread.addEventListener('dblclick', e => {
+        const msg = e.target.closest && e.target.closest('.conv-msg');
+        if (msg) addressConvAuthor(msg.dataset.key);
+      });
       if (!dock || !window.ResizeObserver) return;
       new ResizeObserver(syncDockHeight).observe(dock);
       syncDockHeight();
@@ -12894,6 +13145,7 @@
     setConvDeepAll(convDeepAll());
     setConvTidy(convTidyOn());
     setDockMru(dockMruOn());
+    setBandwidthOn(bandwidthOn());
     setConvSweep(localStorage.getItem('herdr_conv_sweep') || '1h');
     loadTermShortcuts();
     syncPromptsBtn();  // no pane is open yet, so this labels the button for an agent
