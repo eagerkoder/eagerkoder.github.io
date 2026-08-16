@@ -1071,6 +1071,17 @@
       font-weight: 600;
     }
 
+    /* Ahead of the dot and tighter to it than the row's gap: the two together are one badge —
+       what this is, and how it is doing — rather than two things spaced like two. */
+    .conversation-title .conv-kind {
+      flex: 0 0 auto;
+      margin-right: -4px;
+      font-size: 0.95rem;
+      /* Restated: the row sets color for the name, and a descendant selector beats the .conv-kind
+         rule that gives the mark its green. */
+      color: var(--green);
+    }
+
     /* The agent list's dot, at the agent list's size: this card stands in for the panes in it,
        so it says what they say and it pulses when they are working. */
     .conversation-title .dot {
@@ -1456,8 +1467,17 @@
       font-size: 0.75rem;
     }
 
-    /* Text presentation makes the chat glyph obey the shared green in every browser. */
-    .conv-kind { color: var(--green); font-family: Arial, sans-serif; }
+    /* The conversation mark. An SVG that takes currentColor, so the green is this rule's to give
+       rather than the emoji font's to refuse. */
+    .conv-kind {
+      color: var(--green);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.05rem;
+    }
+
+    .conv-glyph { display: block; }
 
     .order-row .info,
     .pair-pick .info {
@@ -1660,10 +1680,11 @@
       cursor: pointer;
     }
 
-    /* CLS and QUIT sit in the header next to Refresh, which is the one they are easiest to mean
+    /* CLS and QUIT sit in the f() menu next to Refresh, which is the one they are easiest to mean
        instead. Text and not icons: they send a line into a live pane, and a glyph nobody
        recognises is not the thing to put next to a button that is safe to press. Two taps
-       each — see armFire. The 42px floor keeps arming from shuffling the row. */
+       each — see armFire. Resend borrows the look without the arm: it only fills the composer.
+       The 42px floor is what is left for a header that stops folding them away. */
     .term-header .cls-btn {
       font-family: 'SF Mono', 'Menlo', monospace;
       font-size: 0.7rem;
@@ -1705,26 +1726,97 @@
       }
     }
 
-    /* Wide enough, and the three sit in the header exactly as they always did: display:contents
-       takes the wrapper out of the flex line so the header's own gap spaces them. */
-    .fire-wrap { display: contents; }
-    .fire-menu { display: flex; gap: 8px; }
-    .fire-toggle,
-    .fire-label { display: none; }
+    /* One control at every width. These used to unfold into the header on a desktop and hide
+       behind f() only on a phone — two layouts to keep right, and on the wide one QUIT and CLS sat
+       a mouse-slip from Refresh, which is the button they are easiest to mean instead. None of
+       them is frequent: two take two taps, one throws the agent's context away, and the pane
+       re-reads itself anyway. A deliberate tap to reach them is the right price everywhere. */
+    .fire-wrap {
+      display: flex;
+      position: relative;
+      flex-shrink: 0;
+    }
 
-    /* Narrow, and they fold behind one control. None is frequent — two take two taps, one throws
-       away the agent's context, and the pane re-reads itself anyway — so a tap to reach them is
-       the right price for a header that fits. Same breakpoint as the rest of the layout. */
+    /* Shaped like what it is. A bare glyph in a row of icon buttons reads as one more action;
+       the border and the caret say a menu opens, which is the same promise .who-btn makes two
+       buttons to the left of it. */
+    .term-header .fire-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 0.7rem;
+      padding: 4px 8px;
+      min-height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .fire-toggle::after {
+      content: '▾';
+      font-family: system-ui, sans-serif;
+      font-size: 0.8rem;
+      line-height: 1;
+    }
+
+    .term-header .fire-toggle[aria-expanded="true"] {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .fire-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 20;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .fire-menu.open { display: flex; }
+
+    /* One column of rows rather than four icons in a popup: a menu is read down its left edge,
+       and the armed label needs the width anyway. */
+    .term-header .fire-menu button {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      min-width: 128px;
+      min-height: 34px;
+      padding: 4px 10px;
+      text-align: left;
+    }
+
+    .fire-label { display: inline; font-size: 0.7rem; }
+
+    /* Narrow, and the rest of the header folds too. Same breakpoint as the rest of the layout. */
     @media (max-width: 767px) {
       /* Phone thumbs reach the edges, while the home indicator lives under the centre. Keep the
-         walk's arrows out at the safe edges and leave Recent in the middle; time and state stay in
-         the DOM but do not spend this row's height. Esc remains beside Back when it is needed. */
+         walk's arrows out at the safe edges and leave Recent in the middle.
+         Two rows, not one: the change stamp and the Esc chip were absolutely positioned into the
+         bar's bottom padding, and that padding is 5px — so both landed on top of the arrows they
+         were meant to sit under. A stamp under the ‹ and an Esc chip over the › are not a footer,
+         they are a collision.
+         The arrows take the upper row and the captions the lower one. On a phone the last 30px of
+         the screen are the home indicator's, and a control sitting in them is one the thumb has to
+         aim past the gesture bar to reach — so what goes down there is the 8px stamp, which is
+         read and never pressed. The bar is the same height either way, so the pane above it keeps
+         every pixel it had. */
       .status-bar {
-        position: relative;
         display: grid;
         grid-template-columns: 68px minmax(0, 1fr) 68px;
-        grid-template-areas: 'back recent forward';
-        gap: 0;
+        grid-template-areas:
+          'back  recent forward'
+          'stamp stamp  state';
+        column-gap: 0;
+        row-gap: 2px;
         padding-left: max(8px, env(safe-area-inset-left, 0px));
         padding-right: max(8px, env(safe-area-inset-right, 0px));
       }
@@ -1734,11 +1826,13 @@
       .status-bar #recentBtn { grid-area: recent; justify-self: center; }
       .status-bar #navFwd { grid-area: forward; justify-self: end; width: 68px; min-height: 34px; margin-right: 10vw; }
 
-      /* Reuse the reserved safe-area padding as a tiny footer rather than adding a second row. */
+      /* Both ends of the top row, at the size of a caption rather than of a control — neither is
+         pressed, and the row exists so the arrows below it can have the whole width. Spanning two
+         columns each, meeting in the middle: the stamp grows to the right and the state grows to
+         the left, so the longer of the two takes the room the other is not using. */
       .status-bar .left {
-        position: absolute;
-        left: max(8px, env(safe-area-inset-left, 0px));
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+        grid-area: stamp;
+        align-self: center;
         flex: none;
         min-height: 0;
         font-size: 0.5rem;
@@ -1747,80 +1841,13 @@
       .status-bar #statusBarRight { display: block; font-size: 0.5rem; }
 
       .status-bar .state {
-        position: absolute;
-        left: auto;
-        right: max(8px, env(safe-area-inset-right, 0px));
-        top: auto;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
-        transform: none;
-        display: flex;
+        grid-area: state;
+        grid-column: 2 / 4;
+        align-self: center;
+        justify-content: flex-end;
         flex: none;
-        min-height: 0;
       }
 
-      .fire-wrap {
-        display: flex;
-        position: relative;
-        flex-shrink: 0;
-      }
-
-      /* Shaped like what it is. A bare glyph in a row of icon buttons reads as one more action;
-         the border and the caret say a menu opens, which is the same promise .who-btn makes two
-         buttons to the left of it. */
-      .term-header .fire-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-family: 'SF Mono', 'Menlo', monospace;
-        font-size: 0.7rem;
-        padding: 4px 8px;
-        min-height: 28px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-      }
-
-      .fire-toggle::after {
-        content: '▾';
-        font-family: system-ui, sans-serif;
-        font-size: 0.8rem;
-        line-height: 1;
-      }
-
-      .term-header .fire-toggle[aria-expanded="true"] {
-        border-color: var(--blue);
-        color: var(--blue);
-      }
-
-      .fire-menu {
-        display: none;
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        z-index: 20;
-        flex-direction: column;
-        gap: 6px;
-        padding: 8px;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        background: var(--surface);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-      }
-
-      .fire-menu.open { display: flex; }
-
-      /* One column of rows rather than three icons in a popup: a menu is read down its left edge,
-         and the armed label needs the width anyway. */
-      .term-header .fire-menu button {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 8px;
-        min-width: 128px;
-        min-height: 34px;
-        padding: 4px 10px;
-        text-align: left;
-      }
-      .fire-label { display: inline; font-size: 0.7rem; }
     }
 
     /* Pane menu — anchored to its gear button, so it needs a positioned ancestor of its own
@@ -2271,6 +2298,14 @@
       padding: 8px 12px;
       background: var(--bg);
       border-bottom: 1px solid var(--border);
+    }
+
+    /* Beside the name and out of the row's gap arithmetic: it is a mark, not a control, and a
+       64-character name still gets the width the ellipsis rule below assumes. */
+    .conv-view-head .conv-kind {
+      flex: 0 0 auto;
+      margin-right: -2px;
+      font-size: 0.95rem;
     }
 
     .conv-view-head .count {
@@ -3494,11 +3529,16 @@
       width: 34px;
       height: 22px;
       padding: 0;
+      /* The glyph inside is an SVG at 1em, so the button has to say what an em is here and centre
+         it — a bare text line-height leaves it sitting low in a 22px pill. */
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       border-radius: 11px;
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--green);
-      font-size: 0.7rem;
+      font-size: 0.85rem;
       font-weight: 400;
       filter: none;
       opacity: 1;
@@ -4225,6 +4265,9 @@
           stroke-linejoin="round">
           <path d="m15 18-6-6 6-6" />
         </svg></button>
+      <!-- The same mark the card carries, so the window and the card it was opened from say the
+           same thing about what is being read. -->
+      <span class="conv-kind" id="convViewMark"></span>
       <span class="title" id="convViewTitle"></span>
       <span class="count" id="convViewCount"></span>
       <button class="who-btn" id="convViewWho" onclick="toggleConvRoster()" aria-expanded="false"
@@ -4283,7 +4326,7 @@
          conversation window had nothing — one walk deserves one control, in the row that is
          always there. -->
     <span class="walk">
-      <button class="nav-btn" id="navBack" onclick="navGo(-1)" aria-label="Back">‹</button>
+      <button class="nav-btn" id="navBack" onclick="goBack()" aria-label="Back">‹</button>
       <button class="recent-btn" id="recentBtn" onclick="openRecentSheet()" aria-haspopup="dialog"
         aria-label="Recent panes">Recent ▴</button>
       <button class="nav-btn" id="navFwd" onclick="navGo(1)" aria-label="Forward">›</button>
@@ -4309,11 +4352,9 @@
       <button class="who-btn" id="paneConvWho" onclick="toggleConvPaneRoster()" hidden
         aria-expanded="false" aria-controls="convPaneRoster"
         aria-label="Who is in this conversation, and what to do with it"></button>
-      <!-- Left of Refresh, and armed by the first tap: the three sit a thumb apart and two of
-           them are not undoable. See armFire.
-           One pair of buttons, two layouts: side by side where the header has the room, and behind
-           f() where it does not. Moved rather than duplicated, because arming is state on the
-           element — two copies of QUIT would be two arms, and only one of them counting down. -->
+      <!-- Armed by the first tap: two of these are not undoable. See armFire.
+           Behind f() at every width. The room a desktop header has is not a reason to put QUIT
+           next to Refresh, which is the button a slip was aiming for. -->
       <div class="fire-wrap">
         <button class="refresh-btn fire-toggle" id="fireBtn" onclick="toggleFireMenu()"
           aria-haspopup="true" aria-expanded="false"
@@ -4323,13 +4364,15 @@
             aria-label="Quit what is running in this pane">QUIT</button>
           <button class="refresh-btn cls-btn" id="clsBtn" onclick="armClear()"
             aria-label="Clear this pane">CLS</button>
-          <button class="refresh-btn" id="resendBtn" onclick="resendLast()" hidden
+          <!-- Styled like QUIT and CLS, but one tap: it only loads the text back into the
+               composer, and the composer's own send is the gate. Nothing leaves on this tap. -->
+          <button class="refresh-btn cls-btn" id="resendBtn" onclick="resendLast()" hidden
             aria-label="Load this pane's last message into the composer">Resend</button>
           <!-- Refresh rides with them. The pane polls itself every few seconds, so this is the
                button for the one state where it does not: past POLL_MAX_LINES the poll stops and
                a manual read is the only way to update. The icon alone says nothing in a menu, so
                the word appears with the fold. -->
-          <button class="refresh-btn" id="refreshBtn" onclick="closeFireMenu(); refreshPane()"
+          <button class="refresh-btn cls-btn" id="refreshBtn" onclick="closeFireMenu(); refreshPane()"
             aria-label="Refresh pane"><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
               stroke-linejoin="round">
@@ -5729,8 +5772,10 @@
     // Which panel is up, or '' for none. Read off the screen rather than tracked, so it cannot go
     // stale against a view someone hid directly.
     function openPanelId() {
+      // Computed, not inline: settingsView is hidden by a stylesheet rule and carries no inline
+      // display until it has been opened once, so an inline read calls it open at boot.
       return Object.keys(PANELS)
-        .find(id => document.getElementById(id).style.display !== 'none') || '';
+        .find(id => getComputedStyle(document.getElementById(id)).display !== 'none') || '';
     }
 
     function panelIsOpen() { return !!openPanelId(); }
@@ -5910,9 +5955,14 @@
       // has one row for tabs, and a second saying the same kind of thing is how a bar stops being
       // read. On the landing page there is nothing to leave, so the pane strip is not drawn there
       // either and this changes nothing.
-      const convTabs = tabScope() === 'convs' && !!activePane;
+      // …and only while it has something to hold. The strip draws the landing list, which hides the
+      // auto conversations behind a toggle — so a reader on this setting whose conversations are
+      // all auto, in a pane that is not reading one, got an empty strip *and* no pane tabs, because
+      // the class below hides those. An empty conversation strip falls back to the pane tabs rather
+      // than leaving the header with no way out of the pane at all.
+      const convTabs = tabScope() === 'convs' && !!activePane && !!renderConvStrip();
       document.body.classList.toggle('conv-tabs', convTabs);
-      if (convTabs) { renderConvStrip(); return; }
+      if (convTabs) return;
       // Terminals belong here too: the strip is the live panes, and an open terminal with no tab
       // of its own reads as the strip having lost it.
       // One order for agents and terminals, not an agent block followed by a terminal block. The
@@ -5923,24 +5973,12 @@
       // open pane is exempt from its own filter — a strip that cannot show the pane on screen is
       // worse than a long one. On the list screen nothing is open, so the strip stays complete.
       const scope = tabScope();
-      // The conversation's members, while its thread is on screen. A thread makes you want the
-      // other half of the conversation more than anything else on the machine — read what the
-      // architect said, switch to the implementer, reply — and this row is where a pane switch
-      // already lives. Not a second row: the same one, scoped, and read off the same members the
-      // thread drew so the two can never name different panes.
-      //
-      // It replaces the Project scope rather than narrowing it. A conversation is free to span
-      // projects — that is what makes it a conversation and not a directory — and a row that
-      // dropped a member for living somewhere else would be a switch that cannot reach the pane
-      // whose message is on screen.
-      const reading = activePane ? paneOf(activePane) : null;
-      const thread = reading && convViewOn(reading) ? convViewConv(reading) : null;
-      if (thread) {
-        const keys = new Set(pairedConvMembers(reading, thread).map(m => m.key));
-        // The open pane is exempt from its own filter, for the reason the Project scope is: a row
-        // that cannot show the pane on screen is worse than a long one.
-        live = live.filter(a => keys.has(convMemberKey(a)) || a.pane_id === activePane);
-      } else if (scope === 'project' && activePane) {
+      // The scope is the Tabs setting and only that, whichever view is on screen. Reading a pane as
+      // a thread used to narrow this row to the conversation's members, which quietly overrode the
+      // setting: with the ordinary auto conversations that is one pane plus its pair partner, so
+      // switching to the thread cost the reader every other tab on the machine. The row is how you
+      // get anywhere from here, and it must answer to one thing.
+      if (scope === 'project' && activePane) {
         const open = paneOf(activePane);
         if (open) live = live.filter(a =>
           projectKey(a) === projectKey(open) || a.pane_id === activePane);
@@ -6224,6 +6262,19 @@
       // send a reader who had scrolled back to an earlier bucket to the left edge again, three
       // times a minute. Same rule the dock's chip row follows.
       const panes = panesOn ? agents.filter(a => a.agent) : [];
+      // What the pane rows cannot account for: snapshots and pushes name no pane, and a pane that
+      // has exited keeps its bytes but loses its row. Without this the split silently fails to add
+      // up to the total above it, which reads as one of the two numbers being wrong.
+      const other = panes.length
+        ? `<div class="bandwidth-row" id="otherBandwidthRow">` +
+          `<span class="bandwidth-label">Shared</span>` +
+          `<div class="bandwidth-chips">${buckets.map(b => {
+            const range = b.empty ? 'No data' : '';
+            return `<span class="bandwidth-chip${b.at && b.at === liveAt ? ' now' : ''}" ` +
+              `title="${paneKind[1]}, not attributable to one pane${range ? ` — ${range}` : ''}">` +
+              `</span>`;
+          }).join('')}</div></div>`
+        : '';
       const sig = buckets.map(b => b.at || 'empty').concat(liveAt ? 'live' : [], metric,
         panes.map(a => a.pane_id)).join(',');
       if (rows.dataset.sig !== sig) {
@@ -6263,7 +6314,7 @@
             `<div class="bandwidth-chips">${buckets.map(b => { const t = at(b);
               return `<span class="bandwidth-chip${t.live ? ' now' : ''}" ` +
                 `title="${paneKind[1]}, ${t.range}${t.live ? ' (in progress)' : ''}"></span>`;
-            }).join('')}</div></div>`).join('');
+            }).join('')}</div></div>`).join('') + other;
         rows.dataset.sig = sig;
       }
       // The numbers, written into the chips that are already there.
@@ -6272,6 +6323,8 @@
         const chips = bars[r].querySelectorAll('.bandwidth-chip');
         buckets.forEach((b, i) => { chips[i].textContent = b.empty ? '' : formatBandwidth(value(b)); });
       });
+      // Filled as the pane rows are read, so what is left over is exactly what they did not claim.
+      const claimed = buckets.map(() => 0);
       panes.forEach((a, i) => {
         const row = bars[i + kinds.length];
         const b = paneBandwidth[a.pane_id];
@@ -6282,8 +6335,17 @@
         const byAt = Object.fromEntries((b ? b.buckets : []).map(entry => [entry.at, entry]));
         const chips = row.querySelectorAll('.bandwidth-chip');
         buckets.forEach((bucket, j) => { const entry = byAt[bucket.at];
+          if (entry) claimed[j] += paneKind[2](entry);
           chips[j].textContent = entry ? formatBandwidth(paneKind[2](entry)) : ''; });
       });
+      const otherRow = panes.length ? bars[kinds.length + panes.length] : null;
+      if (otherRow) {
+        const chips = otherRow.querySelectorAll('.bandwidth-chip');
+        // Clamped: a pane row is written from its own record and the total from another, and a
+        // number below zero would be the panel reporting a rounding difference as traffic.
+        buckets.forEach((b, j) => { chips[j].textContent = b.empty ? '' :
+          formatBandwidth(Math.max(0, paneKind[2](b) - claimed[j])); });
+      }
     }
 
     // What lands in this box is almost never a bare URL. start.sh fences the address as a code
@@ -7265,7 +7327,7 @@
         `</button>`;
     }
 
-    // The same row, saying what a conversation is instead of what a pane is doing: the 💬 the
+    // The same row, saying what a conversation is instead of what a pane is doing: the mark the
     // conversation sheet uses, the name, and how many panes wrote it. No status dot — a record has
     // no status, and the members that do have their own rows here.
     function recentConvRow(c) {
@@ -7274,7 +7336,7 @@
       const meta = `${n} pane${n === 1 ? '' : 's'}` + (live ? ` · ${live} live` : '');
       return `<button class="pair-pick${c.id === convViewId ? ' on' : ''}" ` +
         `onclick="closeRecentSheet(); openConversation('${escapeHtml(c.id)}')">` +
-        `<span class="kind conv-kind" aria-hidden="true">💬︎</span>` +
+        `<span class="kind conv-kind">${convGlyph()}</span>` +
         `<span class="info"><span class="name">${escapeHtml(c.name)}</span>` +
         `<span class="meta">${escapeHtml(meta)}</span></span>` +
         `</button>`;
@@ -8456,6 +8518,18 @@
     //
     // No library and no build step: what follows is the browser's own database behind about sixty
     // lines of promise wrappers.
+    // The mark a conversation is shown by, drawn rather than typed. As an emoji it was whatever the
+    // platform's font decided — colour on Apple, monochrome elsewhere — and a variation selector
+    // does not reliably change that, so `color: var(--green)` was a request the font could refuse
+    // and on a phone it simply did. An inline SVG has no font in it: it is green because it takes
+    // currentColor, on every platform, and it is still markup rather than an image to load.
+    function convGlyph() {
+      return '<svg class="conv-glyph" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+        'aria-hidden="true"><path d="M20.5 11.5a8 8 0 0 1-8.5 8 8.6 8.6 0 0 1-3.9-.9L3.5 20l1.4-4.2' +
+        'A7.7 7.7 0 0 1 3.5 11.5a8 8 0 0 1 8.5-8 8 8 0 0 1 8.5 8z"/></svg>';
+    }
+
     const CONV_DB_NAME = 'herdr', CONV_DB_STORE = 'transcripts';
     const CONV_INDEX_KEY = 'herdr_conversations', CONV_FALLBACK_KEY = 'herdr_transcripts';
     // What the fallback keeps instead. It is sharing one 5 MB cap with everything else this app
@@ -9320,7 +9394,7 @@
         const msgs = (c.members || []).reduce((t, m) => t + (m.messages || 0), 0);
         const meta = `${n} member${n > 1 ? 's' : ''}` + (msgs ? ` · ${msgs} messages` : '');
         return `<button class="pair-pick${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleConvMember('${escapeHtml(c.id)}')">
-      <span class="kind conv-kind" aria-hidden="true">💬︎</span>
+      <span class="kind conv-kind">${convGlyph()}</span>
       <span class="info"><span class="name">${escapeHtml(c.name)}</span><span class="meta">${meta}</span></span>
       <span class="pair-tick" aria-hidden="true">${on ? '✓' : ''}</span>
     </button>`;
@@ -9415,7 +9489,14 @@
       const mine = convsForPane(a);
       if (!mine.length) return null;
       const want = convViews()[convMemberKey(a)];
-      return mine.find(c => c.id === want) || mine[0];
+      // With nothing chosen, the widest record the user named. This used to be mine[0], which is
+      // index order — and a new conversation is prepended, so an auto pair record filed after a
+      // named one took the thread from it: the pane opened on its pair and every other member of
+      // the work was simply absent, with nothing on screen to say a wider thread existed.
+      // A named conversation is a statement and an auto one is a guess; among either, the one with
+      // more members is the one that says more. Ties keep index order, because sort is stable.
+      return mine.find(c => c.id === want) || mine.slice().sort((x, y) =>
+        (!!x.auto - !!y.auto) || ((y.members || []).length - (x.members || []).length))[0];
     }
 
     function convSetView(a, id) {
@@ -10435,10 +10516,13 @@
         dedupe.hidden = !mine.length;
         // Same test: both repair a transcript, and neither means anything on a pane that has none.
         recover.hidden = !mine.length;
-        conv.textContent = mine.length ? `In "${mine[0].name}"…`
+        // The one the thread is on, not the first in the index. The menu naming a conversation the
+        // thread is not showing is the same off-by-one bug in words.
+        const shown = convViewConv(a);
+        conv.textContent = shown ? `In "${shown.name}"…`
           : (loadConvIndex().length ? 'Add to a conversation…' : 'Start conversation…');
         // A conversation of one has no joint thread to show, so the preference is not offered.
-        joint.hidden = !(mine.length && pairedConvMembers(a, mine[0]).length > 1);
+        joint.hidden = !(shown && pairedConvMembers(a, shown).length > 1);
         joint.textContent = convJointOn()
           ? 'Show this pane alone' : 'Show paired conversation';
         convFont.hidden = !(mine.length && convViewOn(a));
@@ -11346,8 +11430,13 @@
         `<div class="conversation-card" role="button" tabindex="0" data-conv-id="${escapeHtml(r.c.id)}"` +
         ` onclick="openConversation(this.dataset.convId)"` +
         ` onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openConversation(this.dataset.convId); }">` +
+        // The mark, then the live dot: what this card is, then how its panes are doing. The dot
+        // alone was doing both jobs, which is why a conversation card and an agent card opened the
+        // same way but did not read as different things.
+        // Dot, mark, name — the dot is the row's live state and reads first on every card in the
+        // list; the mark says what kind of thing the name belongs to.
         `<div class="conversation-title"><span class="dot${r.pulse}" style="background:${r.dot}"` +
-        ` aria-hidden="true"></span>` +
+        ` aria-hidden="true"></span><span class="conv-kind">${convGlyph()}</span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
         // The tier, on the card rather than in the name: promotion is a rename the user makes,
         // not a marker the app writes into what they typed (D4).
@@ -11373,10 +11462,12 @@
     function openConversation(id) {
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv) return;
+      stashConvDraft();   // before the id moves, or the draft is filed under where it is going
       convViewId = id;
       noteConvVisit(id);   // the Recent switcher's log, which is MRU
       noteConvNav(id);     // and the ‹ › walk, which is order of visit
       clearConvDock();
+      restoreConvDraft();   // whatever was left half-written to *this* conversation earlier
       convStandaloneHtml = '';
       convRosterHtmlLast = '';
       convStripSig = '';
@@ -11839,9 +11930,11 @@
     // sideways scroll and the tab they were about to press.
     let convStripSig = '';
 
+    // Returns how many tabs it is holding. The caller in the pane-tabs slot needs that: an empty
+    // strip there hides itself and would leave the header with no tabs at all — see renderAgentTabs.
     function renderConvStrip() {
       const el = document.getElementById('convStrip');
-      if (!el) return;
+      if (!el) return 0;
       const shown = convLandingList().shown;
       // The open conversation is always a tab, even when the reader has the auto ones hidden — a
       // strip that cannot show what is on screen is worse than one carrying an extra tab, which is
@@ -11861,7 +11954,7 @@
       const now = convCurrentId();
       const sig = rows.map(r => `${r.c.id}|${r.c.name}|${r.c.auto ? 'a' : '-'}|${r.dot}|${r.pulse}`)
         .join(' /// ') + ` @@ ${now}`;
-      if (sig === convStripSig) return;
+      if (sig === convStripSig) return rows.length;
       convStripSig = sig;
       el.innerHTML = rows.map(r =>
         `<button class="conv-tab" data-conv-id="${escapeHtml(r.c.id)}"` +
@@ -11872,6 +11965,7 @@
         (r.c.auto ? '<span class="tier">auto</span>' : '') + '</span></button>').join('');
       const open = el.querySelector('[aria-current="true"]');
       if (open) open.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      return rows.length;
     }
 
     // Which tab is the one you are looking at. Two views ask it: the standalone one is showing a
@@ -11909,6 +12003,10 @@
       const conv = loadConvIndex().find(c => c.id === convViewId);
       if (!conv) { closePanel(); return; }
       document.getElementById('convViewTitle').textContent = conv.name;
+      // Written once per open rather than on every redraw: it never changes, and this runs on every
+      // recorded read of every member.
+      const mark = document.getElementById('convViewMark');
+      if (mark && !mark.firstChild) mark.innerHTML = convGlyph();
       const members = conv.members || [], hidden = convHidden(conv.id);
       const shown = members.filter(m => !hidden.has(m.key));
       const open = document.getElementById('convViewOpen');
@@ -12310,12 +12408,40 @@
     }
 
     // Leaving the conversation. Who you were talking to and what you were about to say belong to
-    // it, and neither means anything in the next one.
+    // it, and neither means anything in the next one — so the picks go, and the half-written
+    // message goes with the conversation it was being written to rather than into the next one's
+    // box.
     function clearConvDock() {
       dockTarget = ''; dockPicks = []; dockPicked.clear(); dockPickedOf = 0;
       closeDockMenu();
       const input = document.getElementById('convInput');
       if (input) { input.value = ''; autoGrow(input); syncConvCursor(); }
+    }
+
+    // Half-written messages, one per conversation, for as long as the page is open. Switching tabs
+    // to read what somebody else said is part of writing a reply, and losing the reply to it made
+    // the strip something to avoid mid-sentence. Deliberately in memory and not in storage: a
+    // draft is a thing in flight, and a reload is a session ending — see D4's tiering for the same
+    // line drawn between what is asserted and what is passing.
+    const convComposerDrafts = new Map();
+
+    // Called before convViewId moves, so what is in the box is filed under the conversation it was
+    // written to. An empty box drops the entry rather than storing '': "nothing written" and
+    // "nothing kept" are the same state, and a stale empty draft would survive a Send.
+    function stashConvDraft() {
+      const input = document.getElementById('convInput');
+      if (!input || !convViewId) return;
+      if (input.value.trim()) convComposerDrafts.set(convViewId, input.value);
+      else convComposerDrafts.delete(convViewId);
+    }
+
+    function restoreConvDraft() {
+      const input = document.getElementById('convInput');
+      const text = convViewId ? convComposerDrafts.get(convViewId) : '';
+      if (!input || !text) return;
+      input.value = text;
+      autoGrow(input);
+      syncConvCursor();
     }
 
     function renderConvDock() {
@@ -12899,7 +13025,8 @@
         const btn = document.getElementById(id);
         if (!btn) return;
         const label = navLabel(step);
-        btn.disabled = navTarget(step) < 0;
+        // ‹ is live wherever there is anywhere behind, and the list is behind everything.
+        btn.disabled = navTarget(step) < 0 && !(step < 0 && navHere() !== NAV_LANDING);
         btn.title = btn.disabled ? '' : label;
         btn.setAttribute('aria-label', btn.disabled ? (step < 0 ? 'Back' : 'Forward') : label);
       });
@@ -12929,7 +13056,10 @@
     // where the button is disabled anyway.
     function navLabel(step) {
       const i = navTarget(step);
-      if (i < 0) return step < 0 ? 'Back' : 'Forward';
+      // Behind the first destination is the list the document was loaded on — the browser's own
+      // Back leaves to it, so ‹ has to say the same thing rather than going dead one step early.
+      if (i < 0) return step < 0 ? (navHere() === NAV_LANDING ? 'Back' : 'Back to the agent list')
+        : 'Forward';
       return `${step < 0 ? 'Back to' : 'Forward to'} ${navName(navHistory[i])}`;
     }
 
@@ -13021,9 +13151,19 @@
       btn.title = on ? 'Hide the quick actions bar' : 'Show the quick actions bar';
     }
 
+    // Rebuilt only when what it says changed. This runs on every snapshot, and replacing the row
+    // wholesale a few times a minute takes the fold button out from under the finger already on it —
+    // the tap then lands on a node that has left the document, which is a control that "does not
+    // always work". The conversation dock guards its own row the same way.
+    function setQuickActions(qa, html) {
+      if (qa.dataset.sig === html) return;
+      qa.innerHTML = html;
+      qa.dataset.sig = html;
+    }
+
     function renderQuickActions() {
       const qa = document.getElementById('quickActions');
-      if (!activePane) { qa.innerHTML = ''; return; }
+      if (!activePane) { setQuickActions(qa, ''); return; }
       syncResend();
       const a = agents.find(x => x.pane_id === activePane);
       const blocked = a && a.status === 'blocked';
@@ -13033,7 +13173,7 @@
       // An approval prompt is not a quick action the user chose to hide. Turning the bar off
       // leaves the phone able to approve — otherwise the setting would quietly cost it the one
       // thing this app exists to do.
-      if (!blocked && !showNav) { qa.innerHTML = ''; return; }
+      if (!blocked && !showNav) { setQuickActions(qa, ''); return; }
       const open = bottomDockOpen();
       // Offered only when there is one to select. A button that does nothing on most panes would
       // teach people to stop pressing it on the panes where it works.
@@ -13056,7 +13196,7 @@
         ? `<button class="qa-conv${threaded ? ' on' : ''}" onclick="toggleConvView()" ` +
         `aria-pressed="${threaded}" ` +
         `title="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}" ` +
-        `aria-label="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}"><span class="conv-kind">💬︎</span></button>`
+        `aria-label="${threaded ? 'Read this pane as a terminal' : 'Read this pane as a conversation'}">${convGlyph()}</button>`
         : '';
       const navRow = `<div class="qa-nav"><div class="qa-left">` +
         `<button class="qa-fold" onclick="toggleBottomDock()" aria-expanded="${open}" ` +
@@ -13081,7 +13221,7 @@
       }
       // Approvals first and on their own line, nav underneath: the row order is what puts the
       // thing that needs answering closest to the terminal it is about.
-      qa.innerHTML = middle + (showNav ? navRow : '');
+      setQuickActions(qa, middle + (showNav ? navRow : ''));
     }
 
     let paneLines = 200;
@@ -13627,13 +13767,21 @@
         if (stepTab(e.shiftKey ? -1 : 1)) { e.preventDefault(); e.stopPropagation(); }
       }
 
-      // Desktop only: < and > walk the same history as the footer arrows. Never steal text input
-      // or a modified shortcut; Shift is already part of producing these two characters.
+      // Desktop only: , and . walk the same history as the footer arrows — the keys the arrows are
+      // printed on, without the Shift that turns them into < and >. Both forms are taken, because
+      // the arrows are what the keys are labelled with and a held Shift should not go dead.
+      // Never steal text input or a modified shortcut.
+      const WALK_KEYS = {',': -1, '<': -1, '.': 1, '>': 1};
       if (window.innerWidth < 768 || e.altKey || e.metaKey || e.ctrlKey ||
-          (e.key !== '<' && e.key !== '>') ||
+          !(e.key in WALK_KEYS) ||
           (e.target && typeof e.target.closest === 'function' &&
             e.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
-      if (navGo(e.key === '<' ? -1 : 1)) e.preventDefault();
+      // Back is goBack, not navGo(-1): the footer ‹ leaves to the list where the walk has nothing
+      // behind it, and so does the browser's own Back. A key that went dead there instead would be
+      // the third control in the row disagreeing with the other two — and from the first pane
+      // opened, which is the only entry most sessions have, it would look like it does nothing.
+      if (WALK_KEYS[e.key] < 0) { goBack(); e.preventDefault(); }
+      else if (navGo(1)) e.preventDefault();
     }, true);
     document.getElementById('termContent').addEventListener('scroll', function () {
       const el = this;
