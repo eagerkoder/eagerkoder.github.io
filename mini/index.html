@@ -1203,6 +1203,31 @@
       white-space: nowrap;
     }
 
+    /* A badge that is also a choice: the agent, the role and the Project are picked in the shape
+       they are read in everywhere else — the pane header's [name @project agent] — rather than in
+       a second vocabulary of pills that means the same things. Bigger than the header's badge only
+       by what a finger needs; the picked one lights in its own colour, set inline by badgeHtml. */
+    .badge.pick {
+      padding: 5px 10px;
+      font-size: 0.7rem;
+      line-height: 1.5;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    /* display:inline-block would otherwise outrank the attribute and leave an empty outline. */
+    .badge[hidden] {
+      display: none;
+    }
+
+    .badge.pick:hover {
+      border-color: color-mix(in srgb, var(--text) 32%, transparent);
+    }
+
+    .badge.pick.on {
+      font-weight: 700;
+    }
+
     .workspace-card {
       border-color: color-mix(in srgb, var(--text) 10%, transparent);
     }
@@ -1366,6 +1391,24 @@
       opacity: 0.5;
     }
 
+    /* Beside a field's label, saying what the field expects rather than what it is. */
+    .field-note {
+      opacity: 0.7;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    /* A row of pickable badges inside a field: wraps rather than scrolls, because every choice in
+       these rows is worth seeing at once, and sits flush with the fields above and below it. */
+    .badge-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+    }
+
     .start-field textarea {
       font-family: monospace;
       resize: vertical;
@@ -1384,31 +1427,30 @@
       padding: 8px 10px;
     }
 
-    /* The dialog picks with the app's own chips — the same pill the workspace and status filters
-       use, active in the same blue. Two shapes of the one strip: `wrap` for the rows where every
-       choice should be visible at once, and the plain strip, which scrolls, for the Project line. */
-    .chip-strip.wrap {
-      flex-wrap: wrap;
-      overflow: visible;
-    }
-
-    .new-agent-body .chip-strip {
-      padding: 0;
+    /* The Project row is the one that does not wrap: there is usually one Project in play, and the
+       rest are behind the @+ beside it rather than three lines down. */
+    .badge-strip.one-line {
       flex: 1;
       min-width: 0;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .badge-strip.one-line::-webkit-scrollbar {
+      display: none;
     }
 
     /* A scrolling strip and the button that lists what scrolled off, side by side. */
     .chip-line {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       min-width: 0;
     }
 
-    .chip-line .chip.more {
+    .chip-line .badge.more {
       flex: 0 0 auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
     #startSubmit:disabled {
@@ -2839,6 +2881,15 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+    }
+
+    /* One speaker in the thread — "show this pane only", or a conversation with a single member.
+       The 86% exists to leave the other side of a two-column thread visible; with no other side
+       it is a strip of empty surface down the right of every bubble, and a diff or a plan is the
+       thing paying for it. */
+    .conv-thread.conv-solo .conv-msg,
+    .conv-thread.conv-solo .conv-slot {
+      width: 100%;
     }
 
     .conv-msg.user {
@@ -4990,8 +5041,11 @@
     <div
       style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1"><span id="startTitle">Start session</span> · <span
-            id="startProject"></span></span>
+        <!-- The Project is a fact about what is being started, so it is the same @badge it is on a
+             pane header and in the row below — not a title joined to another title by a dot. -->
+        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px;min-width:0">
+          <span id="startTitle">Start session</span>
+          <span id="startProject" class="badge proj"></span></span>
         <button onclick="closeStart()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
@@ -4999,8 +5053,15 @@
         <!-- Hidden whole for a terminal: there is no agent to choose and no role for it to play.
              Everything below this — where it goes, what it is called — is the same question. -->
         <div id="startAgentRows" style="display:flex;flex-direction:column;gap:12px">
-          <label class="start-field">Role<select id="startRole"></select></label>
-          <label class="start-field">Agent<select id="startAgent"></select></label>
+          <!-- Badges rather than a select, and the same four the conversation's New agent dialog
+               offers: a role is how a session is started here, so it is picked the same way in
+               both places. Leaving the row empty is a start with no role — allowed, not advised. -->
+          <div class="start-field">Role <span class="field-note">optional · recommended</span>
+            <div id="startRoles" class="badge-strip"></div>
+          </div>
+          <div class="start-field">Agent
+            <div id="startAgents" class="badge-strip"></div>
+          </div>
         </div>
         <label class="start-field">Where<select id="startPlacement" onchange="renderStartTarget()"></select></label>
         <label class="start-field">Name<input id="startName" type="text" maxlength="32" autocapitalize="none"
@@ -5103,20 +5164,20 @@
            filled in, and a column of selects would be four taps and a scroll for the same answer. -->
       <div class="new-agent-body">
         <div class="start-field">Agent
-          <div id="newAgentKinds" class="chip-strip wrap"></div>
+          <div id="newAgentKinds" class="badge-strip"></div>
         </div>
         <!-- What it is started as. The badge carries both halves: the role the relay names the pane
              for, and the @ prompt that opens the session — see START_ROLES. -->
         <div class="start-field">Role
-          <div id="newAgentRoles" class="chip-strip wrap"></div>
+          <div id="newAgentRoles" class="badge-strip"></div>
         </div>
         <label class="start-field">Name<input id="newAgentName" type="text" maxlength="32" autocapitalize="none"
             autocomplete="off" placeholder="Auto — Role N" /></label>
         <!-- One line, because there is usually one Project in play and the rest are a tap away. -->
         <div class="start-field">Project
           <div class="chip-line">
-            <div id="newAgentProjects" class="chip-strip"></div>
-            <button class="chip more" onclick="toggleNewAgentProjects()"
+            <div id="newAgentProjects" class="badge-strip one-line"></div>
+            <button class="badge pick proj more" onclick="toggleNewAgentProjects()"
               aria-label="Every project, as a list">@+</button>
           </div>
           <div class="chip-menu" id="newAgentProjMenu" role="menu" hidden></div>
@@ -5757,6 +5818,20 @@
       return ((SHORTCUTS.find(s => s.at === (r || {}).at) || {}).text || '').trim();
     }
 
+    // `at` is the badge's name on disk as well as in SHORTCUTS: a conversation records which role a
+    // session was started as so a respawn can start as the same one, and a name is the one part of
+    // this list that will still mean something after the list has been reordered.
+    function startRoleOf(at) {
+      return START_ROLES.find(r => r.at === at) || null;
+    }
+
+    // The badge a live pane was started as, read back off its label — every started pane is named
+    // for its role ("Architect 1", "Arbitrator"), by the relay or by the dialog. A pane renamed
+    // since matches nothing, which is right: what it is called is all there is left to go on.
+    function startRoleFromLabel(label) {
+      return startRoleOf(String(label || '').trim().split(/\s+/)[0].toLowerCase());
+    }
+
     // The terminal half of the same idea, and the opposite verb: an agent prompt is inserted into
     // the composer to be read before it is sent, a terminal command is the thing being sent.
     const TERM_KEY = 'herdr_term_shortcuts';
@@ -6175,9 +6250,15 @@
     // The agent list is an exit, not a history entry. Header back buttons always land here — and
     // the browser is rewound to the entry the document was loaded on, so its own Back gesture does
     // not still think it is standing on the pane that was just left.
+    // The agent list is an exit, not a history entry, and not a step either: it lands *now* and
+    // then rewinds the browser behind it. It used to do only the rewind and leave the landing to
+    // the popstate that came back — so whenever the two cursors disagreed (the walk drops its
+    // oldest entry at NAV_MAX while the browser's stack keeps every push, and a detached or
+    // clamped `go` never arrives at all) the chevron opened whatever was parked at that depth
+    // instead of leaving. Home is not a destination the walk can be wrong about.
     function showLanding() {
-      if (navRewind()) return;   // asynchronous; popstate calls landNow below
       landNow();
+      navRewind();
     }
 
     function landNow() {
@@ -7296,6 +7377,49 @@
     // the tax. Browser-local, like the rest of the per-device preferences.
     const START_AGENT_KEY = 'herdr_start_agent';
     const START_PLACE_KEY = 'herdr_start_placement';
+    const START_ROLE_KEY = 'herdr_start_role';
+
+    // The app's own badge, the one a pane header wears — `[name @project agent]` — offered as a
+    // choice. Same shape, same colours, same rule about which of them is coloured: the harness
+    // carries agentBadge's kind colour, and the role and the Project stay uncoloured beside it,
+    // because colour in that row already means the kind. Shared with the conversation's New agent
+    // dialog, which asks the same three questions in a smaller box.
+    //
+    // opts: {agent} colours it by kind, {proj} takes the Project badge's weight, {title} explains.
+    function badgeHtml(label, on, call, opts) {
+      const o = opts || {};
+      const own = o.agent ? agentColor(o.agent) : '';
+      // Picked wears its colour outright, over a wash of it; unpicked keeps the header's own
+      // treatment — the kind tinted at the border, everything else neutral.
+      const c = own || 'var(--blue)';
+      const tint = on
+        ? `color:${c};border-color:${c};background:color-mix(in srgb, ${c} 16%, transparent)`
+        : (own ? `color:${own};border-color:color-mix(in srgb, ${own} 55%, transparent)` : '');
+      return `<button type="button" class="badge pick${o.proj ? ' proj' : ''}${on ? ' on' : ''}" ` +
+        `onclick="${call}" aria-pressed="${on}"` + (tint ? ` style="${tint}"` : '') +
+        (o.title ? ` title="${escapeHtml(o.title)}"` : '') + `>${escapeHtml(label)}</button>`;
+    }
+
+    // Only the roles this relay will actually accept. A badge whose wire role it does not know
+    // would be a refusal after the tap rather than a choice that was never offered.
+    function startRoles() {
+      const known = (startOptions && startOptions.roles) || [];
+      return START_ROLES.filter(r => known.includes(r.role));
+    }
+
+    // What a starter role puts on the wire. The relay names a pane for the role it was given, and
+    // it knows only its own three; a badge riding on one of those carries its own name as the label
+    // instead, or an Arbitrator would come up called "Agent 1". A typed name always wins, and no
+    // badge at all is a start with no role asked for — the field is a recommendation, not a gate.
+    function startRoleFields(role, typed) {
+      const known = (startOptions && startOptions.roles) || [];
+      const wire = role && known.includes(role.role) ? role.role
+        : (known.includes('agent') ? 'agent' : known[0]);
+      const label = typed || (role && role.at !== role.role ? role.name : '');
+      const out = wire ? {role: wire} : {};
+      if (label) out.label = label;
+      return out;
+    }
 
     // A session the relay just started, waiting for the poll to catch up so it can be opened.
     let pendingStart = null;
@@ -7304,8 +7428,12 @@
     // chosen. null — every other route in — keeps the old deferring behaviour. Set at request
     // time and cleared when it is acted on, so an abandoned dialog cannot claim a later start.
     let startIntent = null;
+    // What the next successful start opens with: the starter role's prompt, or '' for a start made
+    // without one. Kept apart from startIntent because it is a different question — where the new
+    // pane lands versus what it is told first — and every route in can ask both.
+    let startPrompt = '';
 
-    function openPendingStart() {
+    async function openPendingStart() {
       if (!pendingStart) return;
       // Both lists: an opened terminal arrives in `shells`, and looking only at `agents` would
       // leave the pending id set for good, reopening nothing on every poll from then on.
@@ -7316,6 +7444,10 @@
       pendingStart = null;
       const intent = startIntent;
       startIntent = null;
+      // Read once here for the same reason: a start that never came up must not leave its opening
+      // words to be said to whatever is started next.
+      const prompt = startPrompt;
+      startPrompt = '';
       // The pair dialog reopens on the pane it was left from, with the session that was started
       // for it already chosen, and saves itself. "Start a session and pair with it" already said
       // what the pair is; stopping at a filled-in form asks the user to confirm a decision they
@@ -7330,17 +7462,32 @@
         // Nor when saving refuses — at the pair ceiling the dialog stays up holding the reason.
         if (![intent.pair, a.pane_id].some(id => pairFor(pairs, id))) savePair();
         const paired = !pairSource;   // savePair closes the dialog; a refusal leaves it open
+        if (prompt) sendTextTo(a.pane_id, prompt);
         showSpawnStatus(`${a.label || a.agent || 'Session'} started` +
           (paired ? ' and paired.' : ' — confirm the pair.'), 'success');
         return;
       }
-      // A respawn asked from a conversation: the new session joins it as a new member, and the
-      // pane opens on the thread — continuing a conversation is asking to say the next thing in it.
+      // A respawn asked from a conversation replaces the ended member in that conversation. The
+      // old terminal is gone, but its local thread is continued under this new pane's key.
       if (intent && intent.conv) {
+        const next = convMemberKey(a);
+        // The copy happens before the index is read, and the index is read again after it. The
+        // recorder writes members' previews on every poll, so an index loaded before an await and
+        // saved after it puts back a snapshot taken seconds ago — and the copy is the one step here
+        // that waits on a database. A refusal (quota, a blocked store) falls back to joining as a
+        // new member rather than dropping the pane out of the conversation altogether.
+        const replacing = ((loadConvIndex().find(c => c.id === intent.conv) || {}).members || [])
+          .find(m => m.key === intent.replace);
+        const continued = replacing &&
+          await convContinueTranscript(replacing.key, next, replacing.label).catch(() => false);
         const items = loadConvIndex();
         const conv = items.find(c => c.id === intent.conv);
         if (conv) {
-          conv.members = (conv.members || []).concat(convMemberOf(a));
+          const prior = (conv.members || []).find(m => m.key === (replacing || {}).key);
+          conv.members = continued && prior
+            ? conv.members.map(m => m.key === prior.key
+              ? Object.assign({}, m, {key: next, label: prior.label || paneLabel(a)}) : m)
+            : (conv.members || []).concat(convMemberOf(a));
           saveConvIndex(items);
           // This conversation and not merely "on": the new pane is a member of exactly one so far,
           // but a respawn into a grouping the user chose must open on that grouping.
@@ -7349,9 +7496,10 @@
         openTerminal(a.pane_id);
         // Started with something to say to it. The send goes through the same path a typed message
         // does, so the conversation records it as the user's — it is, and a first instruction that
-        // was missing from the thread would be a turn nobody could see the start of.
-        if (intent.prompt) sendTextTo(a.pane_id, intent.prompt);
-        showSpawnStatus(conv ? `${a.label || a.agent || 'Session'} joined "${conv.name}".`
+        // was missing from the thread would be a turn nobody could see the start of. After the
+        // membership above, so the thread it is recorded into is the one it was started for.
+        if (prompt) sendTextTo(a.pane_id, prompt);
+        showSpawnStatus(conv ? `${a.label || a.agent || 'Session'} continued "${conv.name}".`
           : `${a.label || a.agent || 'Session'} started.`, 'success');
         return;
       }
@@ -7359,6 +7507,7 @@
       // phone terms, and yanking them out of what they are reading is worse than not landing.
       // Unless the start was a Duplicate, which is a request made from that very pane.
       if (intent === 'open' || !activePane) openTerminal(a.pane_id);
+      if (prompt) sendTextTo(a.pane_id, prompt);
       showSpawnStatus(`${a.label || a.agent || 'Session'} started.`, 'success');
     }
 
@@ -7405,6 +7554,43 @@
       const a = agents.find(x => x.pane_id === activePane);
       if (!a || !a.project_id) return;
       openStartDialog(a.project_id);
+    }
+
+    // Which starter role the sheet is holding, as the badge's `at`, or '' for none. A session is
+    // better started as something, and the standard four are how this project works — but a start
+    // with no role is still a start, so the badges are a row that can be left empty rather than a
+    // select that always has an answer.
+    let startRolePick = '';
+
+    function renderStartRoles() {
+      document.getElementById('startRoles').innerHTML = startRoles().map(r =>
+        badgeHtml(`# ${r.name}`, r.at === startRolePick, `pickStartRole('${r.at}')`,
+          {proj: true, title: roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet'}))
+        .join('');
+    }
+
+    // The harness, in the same row of badges rather than in a select beside them: the sheet asks
+    // three questions about what a session *is*, and one of them reading as a form control while
+    // the other two read as badges was the whole inconsistency.
+    let startAgentPick = '';
+
+    function renderStartAgents() {
+      document.getElementById('startAgents').innerHTML = ((startOptions || {}).agents || []).map(k =>
+        badgeHtml(k, k === startAgentPick, `pickStartAgent('${k}')`, {agent: k})).join('');
+    }
+
+    function pickStartAgent(kind) {
+      startAgentPick = kind;
+      renderStartAgents();
+      if (window.cue) cue('tick');
+    }
+
+    // Tapping the one already on takes it off: the row is the only way back to no role, and a
+    // choice that cannot be unmade is not optional.
+    function pickStartRole(at) {
+      startRolePick = startRolePick === at ? '' : at;
+      renderStartRoles();
+      if (window.cue) cue('tick');
     }
 
     function restoreStartChoice(id, key, fallback) {
@@ -7467,15 +7653,25 @@
       if (terminal && !startOptions.terminal) return;
       startProjectId = projectId;
       const p = projects.find(x => x.id === projectId);
-      document.getElementById('startProject').textContent = p ? p.label : '';
+      const badge = document.getElementById('startProject');
+      badge.textContent = p ? `@${p.label}` : '';
+      badge.hidden = !p;   // an empty badge is a stray outline, not a Project
       document.getElementById('startTitle').textContent = terminal ? 'New terminal' : 'Start session';
       document.getElementById('startAgentRows').style.display = terminal ? 'none' : '';
       document.getElementById('startSubmit').textContent = terminal ? 'Open terminal' : 'Start session';
       document.getElementById('startName').placeholder = terminal ? 'Auto — Terminal N' : 'Auto — Role N';
-      fillSelect('startRole', startOptions.roles.map(r => [r, r.charAt(0).toUpperCase() + r.slice(1)]));
-      fillSelect('startAgent', startOptions.agents.map(a => [a, a]));
+      // Reopens on the role it last started as, which is usually the one being started again —
+      // and on none when that badge is gone, rather than silently on a different way of working.
+      startRolePick = startRoles().some(r => r.at === localStorage.getItem(START_ROLE_KEY))
+        ? localStorage.getItem(START_ROLE_KEY) : '';
+      renderStartRoles();
+      // The harness is not optional, so unlike the role it falls back to the first offered rather
+      // than to none — a remembered kind the relay has since dropped picks nothing otherwise.
+      const kinds = startOptions.agents || [];
+      const remembered = localStorage.getItem(START_AGENT_KEY);
+      startAgentPick = kinds.includes(remembered) ? remembered : (kinds[0] || '');
+      renderStartAgents();
       fillSelect('startPlacement', [['new_tab', 'New tab'], ['new_workspace', 'New workspace'], ['split', 'Split']]);
-      restoreStartChoice('startAgent', START_AGENT_KEY);
       restoreStartChoice('startPlacement', START_PLACE_KEY, 'new_tab');
       document.getElementById('startName').value = '';  // blank means "let the relay name it"
       setStartError('');
@@ -7541,26 +7737,30 @@
       if (!ws || !startProjectId) return;
       const terminal = startMode === 'terminal';
       const placement = document.getElementById('startPlacement').value;
+      const role = startRoleOf(startRolePick);
+      const typed = document.getElementById('startName').value.trim();
       // Agent fields are omitted rather than blanked: the relay refuses an open_terminal carrying
       // a name or a role as an unexpected field, which is what keeps the two messages distinct.
       const msg = terminal
         ? { type: 'open_terminal', project_id: startProjectId, placement: placement }
-        : {
+        : Object.assign({
           type: 'start_agent',
-          name: document.getElementById('startAgent').value,
-          role: document.getElementById('startRole').value,
+          name: startAgentPick,
           project_id: startProjectId,
           placement: placement,
-        };
+        }, startRoleFields(role, typed));
+      // A relay that offers no harness has nothing to start; the row is empty and the press would
+      // reach the relay only to be refused for a missing name.
+      if (!terminal && !msg.name) { setStartError('This relay starts no agents'); return; }
       // Spawn at the width of the screen doing the spawning, so a session started from a phone is
       // readable on it without a second round trip. Not for a split: "beside that pane" is already
       // a statement about width, and a desktop asking for "wide" would move the new session
       // straight back out of the split the user picked.
       if (placement !== 'split') msg.slot = slotFor();
-      // Omitted, not empty: the relay derives "Role N" when the field is absent, and an empty
-      // string is a label it would reject.
-      const name = document.getElementById('startName').value.trim();
-      if (name) msg.label = name;
+      // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
+      // answered that for an agent, this answers it for the other message. Omitted, not empty — the
+      // relay derives "Terminal N" from an absent label and refuses a blank one.
+      if (terminal && typed) msg.label = typed;
       if (placement !== 'new_workspace') {
         const target = document.getElementById('startTarget');
         if (!target || !target.value) { setStartError('Select a target first'); return; }
@@ -7574,7 +7774,13 @@
       try {
         if (msg.name) localStorage.setItem(START_AGENT_KEY, msg.name);
         localStorage.setItem(START_PLACE_KEY, placement);
+        if (!terminal) localStorage.setItem(START_ROLE_KEY, startRolePick);
       } catch (e) { /* private mode: session-only */ }
+      // Said to it as soon as it comes up, so the session starts as the thing it was started as
+      // rather than waiting to be told. Set here and not above the target check: a submit that
+      // refused must leave nothing behind for the next start to open with. Nothing to say for a
+      // terminal, or for a role whose prompt is still to be written.
+      startPrompt = terminal ? '' : roleStarter(role);
       ws.send(JSON.stringify(msg));
     }
 
@@ -9187,6 +9393,31 @@
       }
     }
 
+    // A deliberate conversation restart is the one safe exception to per-pane identity: the user
+    // chose the dead member and asked its replacement to continue the same thread. Copy its record
+    // under the new physical pane key; the old key remains for any other conversation that still
+    // names that ended session.
+    async function convContinueTranscript(oldKey, newKey, label) {
+      if (!oldKey || !newKey || oldKey === newKey) return true;
+      const old = convHeld.get(oldKey) || (await convGet([oldKey]))[0];
+      if (!old) return true;
+      // herdr recycles pane IDs, and a key is [host, pane_id, agent, cwd] — so the replacement can
+      // land on a key some *other* ended session already recorded under. Copying over it would
+      // delete a transcript a conversation still names. Refused instead: the caller falls back to
+      // joining as a new member, which is what a restart did before it could continue anything.
+      const taken = convHeld.get(newKey) || (await convGet([newKey]))[0];
+      if (taken && (taken.entries || []).length && convReferenced().has(newKey)) return false;
+      const next = Object.assign({}, old, {
+        key: newKey, label: label || old.label || '', entries: (old.entries || []).slice(),
+        // The new pane cannot be aligned to the old pane's output. Keep the continuation boundary
+        // until its first completed turn, then append that whole turn after this history.
+        continued: true, backfilled: true, depth: 0, lastTurn: 0,
+      });
+      if (!(await convPut(next))) return false;
+      convHeld.set(newKey, next);
+      return true;
+    }
+
     // Which keys any conversation still names. Read from the index, which is why the index is the
     // synchronous half: eviction must not wait on a database to know what is protected.
     function convReferenced() {
@@ -9361,7 +9592,14 @@
       const depth = held.depth || 0;
       const deep = held.backfilled && (asked ? rows.length >= depth : rows.length > depth);
       let before = [], add = [], noteGap = false;
-      if (!held.backfilled) {
+      if (held.continued) {
+        // A replacement pane starts with a fresh terminal. Its first finished turn belongs after
+        // the copied record, not before it as scrollback and not against it as an overlap anchor.
+        if (end) {
+          add = sentTurnEntries(body, held.entries, now, end);
+          if (add.length) { held.lastTurn = end; held.continued = false; }
+        }
+      } else if (!held.backfilled) {
         // The first read.
         const first = splitFirstRead(body, held.entries);
         before = backfillEntries(first.history, now);
@@ -9822,6 +10060,10 @@
     function convSpawn(a, now) {
       return {
         agent: a.agent || '', role: roleOf(a) || '', label: paneLabel(a) || '',
+        // Which of the standard starter roles it was begun as, so starting it again begins it the
+        // same way — including the opening prompt, which `role` alone cannot say: Arbitrator and
+        // Orchestrator both go on the wire as `agent`.
+        starter: (startRoleFromLabel(paneLabel(a)) || {}).at || '',
         project_id: a.project_id || '', project: a.project || '', cwd: a.cwd || '',
         host: a.host || '', workspace_id: a.workspace_id || '', tab_id: a.tab_id || '',
         captured: now,
@@ -10349,6 +10591,8 @@
       const all = hidden.size ? composed.all.filter(shows) : composed.all;
       const thread = members === conv.members ? conv : Object.assign({}, conv, {members});
       const paired = joint && (conv.pair_id || pairFor(pairs, a.pane_id)) && members.length === 2;
+      // Nobody else is speaking here, so the bubbles take the width back off the empty column.
+      box.classList.toggle('conv-solo', !joint);
       // While the panel is open it is this conversation the actions act on. convViewId is "the
       // conversation being managed" and not "the one the standalone view is showing" — the two
       // views are never on screen at once, so one variable answers for both.
@@ -11872,8 +12116,8 @@
         return;
       }
       disarmShortcut();
+      if (!submitText(activePane, s.text)) return;
       if (window.cue) cue('success');
-      submitText(activePane, s.text);
       closePalette();
       burstPoll();
     }
@@ -12338,10 +12582,13 @@
         && projects.some(p => p.id === spawn.project_id) && respawnRole(spawn));
     }
 
-    // Continuing is adding a member, and a respawn is a **new** one — a new pane means a new
-    // convMemberKey, which means a new transcript (D3). That is what stops a recycled pane id
-    // inheriting a dead session's words, and the joint view's time merge is what makes the two
-    // read as one thread across the seam.
+    // A restart replaces the member it was asked for rather than joining beside it: same name,
+    // same row, and the dead session's transcript copied under the new pane's key so the thread
+    // reads on across the seam. D3 said a respawn is always a new member — that rule was about a
+    // *recycled pane id* silently inheriting a dead session's words, which this is not: the reader
+    // picked the member and asked for it. Where the two do meet — a replacement landing on a key
+    // some other conversation still records under — convContinueTranscript refuses the copy and
+    // this falls back to D3's new member.
     // What the first tap says, because the second one starts a real session on a real host and a
     // drain cannot carry a sentence. The relay takes a new session's cwd from the Project and
     // never from the client, so the recorded cwd is *shown* rather than sent: if the Project has
@@ -12372,13 +12619,23 @@
       // session was in. New tab only where that workspace is live on that host right now.
       const tab = !!spawn.workspace_id && agents.some(x => x.workspace_id === spawn.workspace_id
         && (x.host || 'local') === (spawn.host || 'local'));
-      const msg = {
-        type: 'start_agent', name: spawn.agent, role: respawnRole(spawn),
-        project_id: spawn.project_id,
+      // The starter role it was begun as, from the record or — for a record that predates it — from
+      // the name it was given, which is derived from the same badge. A session started as an
+      // Architect is started again as one, opening prompt and all; one that matches no badge keeps
+      // the old behaviour of its bare wire role.
+      const starter = startRoleOf(spawn.starter) || startRoleFromLabel(spawn.label);
+      const msg = Object.assign({
+        type: 'start_agent', name: spawn.agent, project_id: spawn.project_id,
         placement: tab ? 'new_tab' : 'new_workspace', slot: slotFor(),
-      };
+      }, starter ? startRoleFields(starter, '') : {role: respawnRole(spawn)});
+      // This is continuation, not duplicate: keep the exact name the user recognises in the thread.
+      // Only where the relay will take it — a label over 32 characters is refused outright, and a
+      // restart that fails over the name is worse than one that comes up as "Architect 2".
+      const same = String(rec.label || spawn.label || '').trim();
+      if (same && same.length <= 32) msg.label = same;
       if (tab) msg.workspace_id = spawn.workspace_id;
-      startIntent = { conv: conv.id };
+      startIntent = { conv: conv.id, replace: key };
+      startPrompt = roleStarter(starter);
       showSpawnStatus(`Continuing "${conv.name}"…`, 'busy');
       ws.send(JSON.stringify(msg));
     }
@@ -12664,6 +12921,9 @@
       // the second one in its tint.
       // A single-member thread is read straight off its one record and its entries carry no key —
       // there was never another member to tell them from. That member is keys[0].
+      // Same rule as the pane's own thread: one member on screen is one speaker, and a bubble that
+      // stops at 86% is leaving room for a column nothing is drawn in.
+      box.classList.toggle('conv-solo', shown.length <= 1);
       const visible = e => !hidden.has(e.key || keys[0]);
       const entries = hidden.size ? composed.entries.filter(visible) : composed.entries;
       const all = hidden.size ? composed.all.filter(visible) : composed.all;
@@ -13401,13 +13661,6 @@
       return !!(startOptions && (startOptions.agents || []).length && projects.length);
     }
 
-    // Only the roles this relay will actually accept. A badge whose wire role it does not know
-    // would be a refusal after the tap rather than a choice that was never offered.
-    function newAgentRoles() {
-      const known = (startOptions && startOptions.roles) || [];
-      return START_ROLES.filter(r => known.includes(r.role));
-    }
-
     function openNewAgent() {
       closeDockMenu();
       if (!canStartFromConv()) { showToast('This relay does not start sessions.'); return; }
@@ -13441,26 +13694,21 @@
       el.style.display = text ? 'block' : 'none';
     }
 
-    // The app's own chip, the one the workspace and status filters are picked with — active in the
-    // same blue, so a choice made here looks like a choice made anywhere else.
-    function badgeHtml(label, on, call, title) {
-      return `<button class="chip${on ? ' active' : ''}" onclick="${call}" aria-pressed="${on}"` +
-        (title ? ` title="${escapeHtml(title)}"` : '') + `>${escapeHtml(label)}</button>`;
-    }
-
     // Three rows of badges, in the order the decision is made. The Project row is one line that
     // scrolls: there is usually one Project in play, and the rest are behind @+ beside it.
     function renderNewAgent() {
       document.getElementById('newAgentKinds').innerHTML = (startOptions.agents || [])
-        .map(k => badgeHtml(k, k === newAgentKind, `pickNewAgentKind('${k}')`)).join('');
-      document.getElementById('newAgentRoles').innerHTML = newAgentRoles().map((r, i) =>
+        .map(k => badgeHtml(k, k === newAgentKind, `pickNewAgentKind('${k}')`, {agent: k})).join('');
+      document.getElementById('newAgentRoles').innerHTML = startRoles().map((r, i) =>
         badgeHtml(`# ${r.name}`, i === newAgentRole, `pickNewAgentRole(${i})`,
-          roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet')).join('');
+          {proj: true, title: roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet'}))
+        .join('');
       document.getElementById('newAgentProjects').innerHTML = projects.map(p =>
-        badgeHtml(`@${p.label}`, p.id === newAgentProject, `pickNewAgentProject('${p.id}')`)).join('');
+        badgeHtml(`@${p.label}`, p.id === newAgentProject, `pickNewAgentProject('${p.id}')`,
+          {proj: true})).join('');
       // Kept on screen when the row is longer than the line, so the chosen Project is never the one
       // that scrolled off.
-      const on = document.querySelector('#newAgentProjects .chip.active');
+      const on = document.querySelector('#newAgentProjects .badge.pick.on');
       if (on && on.scrollIntoView) on.scrollIntoView({block: 'nearest', inline: 'nearest'});
     }
 
@@ -13498,28 +13746,27 @@
 
     function submitNewAgent() {
       if (!ws) return;
-      const role = newAgentRoles()[newAgentRole];
+      const role = startRoles()[newAgentRole];
       if (!newAgentProject || !newAgentKind || !role) { setNewAgentError('Pick a project first'); return; }
-      const msg = {
-        type: 'start_agent', name: newAgentKind, role: role.role,
+      // Omitted, not empty: the relay derives "Role N" from an absent label and refuses a blank one.
+      // A badge the relay has no role for is named here instead, or the pane would come up called
+      // "Agent 1" when what was asked for was an Arbitrator. Same rule the Start sheet follows.
+      const typed = document.getElementById('newAgentName').value.trim();
+      const msg = Object.assign({
+        type: 'start_agent', name: newAgentKind,
         project_id: newAgentProject, slot: slotFor(),
-      };
+      }, startRoleFields(role, typed));
       // Where is not asked: beside what this Project is already running, which is what a new member
       // of an ongoing conversation wants. A Project with nothing live has nowhere to be beside, and
       // gets a workspace of its own.
       const beside = agents.find(a => a.project_id === newAgentProject && a.workspace_id);
       msg.placement = beside ? 'new_tab' : 'new_workspace';
       if (beside) msg.workspace_id = beside.workspace_id;
-      // Omitted, not empty: the relay derives "Role N" from an absent label and refuses a blank one.
-      // A badge the relay has no role for is named here instead, or the pane would come up called
-      // "Agent 1" when what was asked for was an Arbitrator.
-      const typed = document.getElementById('newAgentName').value.trim();
-      const label = typed || (role.role === role.name.toLowerCase() ? '' : role.name);
-      if (label) msg.label = label;
       // Joins this conversation when it comes up, and is opened with the role's prompt — the same
-      // intent a respawn uses, which is what makes the new pane open on the thread.
-      startIntent = {conv: convViewId, prompt: roleStarter(role)};
-      showSpawnStatus(`Starting ${label || newAgentKind}…`, 'busy');
+      // pair a respawn sets, which is what makes the new pane open on the thread and speak into it.
+      startIntent = {conv: convViewId};
+      startPrompt = roleStarter(role);
+      showSpawnStatus(`Starting ${msg.label || newAgentKind}…`, 'busy');
       ws.send(JSON.stringify(msg));
       closeNewAgent();
     }
@@ -13750,6 +13997,10 @@
     // Carried in the state object, so a Back that jumps several entries at once still reports where
     // it landed.
     let navSerials = [], navSerial = 0, navDetached = false, navDepth = 0;
+    // Set while a rewind to the landing page is in flight. The screen is already home by then, so
+    // whatever entry the browser actually arrives on must not open itself — a depth that has
+    // drifted would otherwise put a pane back up one tick after the user left it.
+    let navLanding = false;
     function navBrowserHistory() {
       return typeof window === 'object' && window && window.history &&
         typeof window.history.pushState === 'function' ? window.history : null;
@@ -13775,6 +14026,18 @@
     // Guarded because these modules are also run as slices in a vm context, which has no window.
     if (typeof addEventListener === 'function') addEventListener('popstate', e => {
       const at = e.state && e.state.herdrNav;
+      // The tail of a rewind we asked for. Wherever it landed, the walk stands before its first
+      // entry — the screen is the landing page — and nothing is opened.
+      if (navLanding) {
+        navLanding = false;
+        navIndex = -1;
+        navDepth = e.state && typeof e.state.depth === 'number' ? e.state.depth : 0;
+        // Still detached if it landed on somebody else's entry: navDetached is about whether our
+        // deltas can be trusted, and this says nothing either way about that.
+        landNow();
+        syncNavBtns();
+        return;
+      }
       // No state at all is the entry the document was loaded on, which is the landing page. It is
       // not a stop on the walk — nothing is behind the first destination — so the cursor sits
       // before entry 0, from where Forward is a step of one and Back is nothing. Without this the
@@ -13899,7 +14162,14 @@
     // lands directly instead.
     function navRewind() {
       const api = navBrowserHistory();
-      if (!api || navDetached || navIndex < 0 || navDepth < 1) return false;
+      if (!api || navDetached || navIndex < 0 || navDepth < 1) {
+        // Nothing to rewind, so the cursor is where it is and the walk simply steps off its list:
+        // the caller has already put the landing page up.
+        navIndex = -1;
+        syncNavBtns();
+        return false;
+      }
+      navLanding = true;
       api.go(-navDepth);
       return true;
     }
@@ -14390,16 +14660,16 @@
     // here — the $ form is codex's way of reaching a *prompt or skill*, and its built-in commands
     // are slash commands like everyone else's.
     function sendLine(text) {
-      ws.send(JSON.stringify({ type: 'send_text', pane_id: activePane, text: text }));
-      ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: ['Enter'] }));
+      if (!submitText(activePane, text)) return false;
       burstPoll();
+      return true;
     }
 
     function armClear() {
       armFire('clsBtn', () => {
         closeFireMenu();
         const line = isShell(activePane) ? 'clear' : '/clear';
-        sendLine(line);
+        if (!sendLine(line)) return;
         // The screen the pane repaints after a clear is the live frame; the backlog behind it is
         // history the user did not ask to keep looking at. Undone by Load more or reopening it.
         paneSource = 'visible';
@@ -14411,7 +14681,7 @@
       armFire('quitBtn', () => {
         closeFireMenu();
         const line = isShell(activePane) ? 'exit' : '/quit';
-        sendLine(line);
+        if (!sendLine(line)) return;
         showToast(`Sent ${line}`);
       });
     }
