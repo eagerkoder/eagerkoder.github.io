@@ -694,6 +694,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      row-gap: 6px;
       margin: 0 0 8px;
       font-size: 0.75rem;
       color: var(--muted);
@@ -764,13 +765,12 @@
       background: color-mix(in srgb, var(--green) 8%, var(--bg));
     }
 
+    /* Named in full. The column is sized to the longest of them (see renderBandwidth), so the
+       buckets scroll under this rather than the name being cut to fit beside them. */
     .pane-bandwidth-name {
       position: sticky;
       left: 0;
       z-index: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
       text-align: left;
       color: var(--text);
@@ -780,7 +780,11 @@
     .pane-bandwidth-name .dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; }
     .pane-bandwidth-ping { color: var(--muted); font-size: 0.56rem; }
 
-    .bandwidth-metrics { display: inline-flex; gap: 3px; margin-left: 6px; }
+    /* The title owns the first line, and everything that is a control drops to the second. Sharing
+       one line put four chips and a running total behind a heading that already wraps on a phone. */
+    #bandwidthTitle { flex: 1 1 100%; }
+
+    .bandwidth-metrics { display: inline-flex; gap: 3px; }
     .bandwidth-metric { padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); background: transparent; font: 0.6rem monospace; }
     .bandwidth-metric[aria-pressed="true"] { color: var(--text); border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--bg)); }
     #bandwidthPanes { margin-left: auto; }
@@ -1238,6 +1242,19 @@
       border-radius: 4px;
       background: color-mix(in srgb, var(--text) 8%, transparent);
       font-size: 0.65rem;
+    }
+
+    /* Filter belongs on the existing agent heading, not in a second strip above the cards. */
+    .section-header .agent-kind-filter {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .section-header .agent-kind-filter .badge.pick {
+      padding: 1px 5px;
+      font-size: 0.6rem;
+      line-height: 1.4;
     }
 
     .chip-strip {
@@ -2567,13 +2584,6 @@
       min-width: 0;
     }
 
-    .conv-member .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex: none;
-    }
-
     .conv-member.gone {
       opacity: 0.6;
     }
@@ -2629,13 +2639,6 @@
 
     .conv-roster-row.gone {
       opacity: 0.65;
-    }
-
-    .conv-roster-row .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex: none;
     }
 
     /* The name gives up the width, and Remove keeps its place at the end of every row. */
@@ -3520,7 +3523,8 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
       font-weight: 600;
-      opacity: 0.55;
+      opacity: 0.8;
+      cursor: pointer;
     }
 
     /* Lit in the agent's own colour, the same one the bubble's border takes and the same one that
@@ -3530,14 +3534,6 @@
       border-color: var(--who-accent, var(--text));
       color: var(--text);
       opacity: 1;
-    }
-
-    /* The member whose message is picked. Still named, still in the row, but not somewhere this
-       message can go — a transfer back into the session that wrote it is not a transfer. */
-    .xfer-row .xfer-who.from {
-      opacity: 0.35;
-      border-style: dashed;
-      cursor: default;
     }
 
     /* Measured in the pill's own ems, so the pill scales as one piece — the same rule the thread's
@@ -5791,6 +5787,8 @@
       { at: 'test-min', label: 'Test, minimally',
         text: 'Dont rerun passing tests. Only tests relevant to code changes you make or ' +
           'essential for you.' },
+      { at: 'no-test', label: 'No tests, just finish',
+        text: 'Dont test, just finish implementation.' },
       { at: 'status-now', label: 'Status of what was asked',
         text: 'At the end also list out the features requested with brief status of each.' },
       { at: 'architect', label: 'Architect prompt', text: '/ponytail\n/caveman\n@.agent/prompts/System_Prompt_2_Architect.md\n' },
@@ -6701,7 +6699,14 @@
       // that lands, which with the poll is three times a minute. An innerHTML rebuild there would
       // send a reader who had scrolled back to an earlier bucket to the left edge again, three
       // times a minute. Same rule the dock's chip row follows.
-      const panes = panesOn ? agents.filter(a => a.agent) : [];
+      // By name, because a reader looking for one pane's row scans for its name and the snapshot's
+      // own order is whatever herdr listed. Shared stays under them all: it is what the named rows
+      // did not account for, which only reads as that when it comes last.
+      const panes = panesOn
+        ? agents.filter(a => a.agent)
+          .sort((x, y) => String(paneLabel(x)).localeCompare(String(paneLabel(y)),
+            undefined, {sensitivity: 'base', numeric: true}))
+        : [];
       // What the pane rows cannot account for: snapshots and pushes name no pane, and a pane that
       // has exited keeps its bytes but loses its row. Without this the split silently fails to add
       // up to the total above it, which reads as one of the two numbers being wrong.
@@ -6721,7 +6726,10 @@
         // One grid for the header and all three rows, so the columns line up and the whole table
         // scrolls as one — three scrollers of their own would let a reader compare Sent at 3:05
         // against Received at 2:40 and never see that they had.
-        rows.style.gridTemplateColumns = `minmax(110px, 1fr) repeat(${buckets.length}, minmax(46px, 1fr))`;
+        // The name column takes exactly what the longest name and its badge need — a pane called
+        // "Architect 1 [claude]" is not worth abbreviating, and the buckets are the half that can
+        // afford to scroll under it.
+        rows.style.gridTemplateColumns = `max-content repeat(${buckets.length}, minmax(46px, 1fr))`;
         const at = b => {
           if (b.empty) return {range: 'No data', live: false, clock: '—'};
           const start = new Date(b.at), end = new Date(b.at + size);
@@ -7160,6 +7168,7 @@
 
     // One insertion point for the independently rendered landing-page sections.
     function renderBody() {
+      syncAgentKind();
       renderBodyMain();
       // Once, here, rather than at each of the three places that write #agents: every one of them
       // is reached through renderBodyMain, and a fourth added later would otherwise be a list that
@@ -7189,7 +7198,7 @@
         renderAgentList(agents);
         return;
       }
-      let html = hoistHtml(agents) + layoutHtml(agents);
+      let html = hoistHtml(ofKind(agents)) + layoutHtml(agents);
       if (!agents.length) html = '<div class="empty">Waiting for agents…</div>';
       document.getElementById('agents').innerHTML = html;
     }
@@ -7197,7 +7206,7 @@
     // Outer Project layer. Native workspaces and tabs stay beneath it, unchanged.
     function renderProjects() {
       if (activeProject && !projects.some(p => p.id === activeProject)) activeProject = null;
-      let html = hoistHtml(agents);
+      let html = hoistHtml(ofKind(agents));
       html += `<div class="chip-strip"><span class="chip-label">Projects</span>`;
       html += `<button class="chip${activeProject === null ? ' active' : ''}" onclick="selectProject(null)">All</button>`;
       for (const p of projects) {
@@ -7210,8 +7219,9 @@
         // Every agent, flat, exactly the way Terminals are listed below it. A Project card is a
         // filter, not the only door in: a session visible in a card's count was two taps away and
         // is now one. Whatever needs you is already hoisted to the top, so it is not repeated.
-        const rest = agents.filter(a => !hoisted(a));
+        const rest = ofKind(agents).filter(a => !hoisted(a));
         if (rest.length) html += section('Agents', rest);
+        else if (agentKind) html += section('Agents', [], `No ${agentKind} sessions`);
       } else {
         if (startOptions) {
           // + New terminal only when the relay says both of open_terminal's gates are open —
@@ -7225,7 +7235,8 @@
         // Terminals below it kept a heading. It gets a separator of its own, saying why it is
         // empty in the header rather than under it.
         const mine = agents.filter(a => a.project_id === activeProject);
-        html += mine.length ? layoutHtml(mine) : section('Agents', [], 'No sessions');
+        html += ofKind(mine).length ? layoutHtml(mine)
+          : section('Agents', [], agentKind ? `No ${agentKind} sessions` : 'No sessions');
       }
       document.getElementById('agents').innerHTML = html;
     }
@@ -7256,6 +7267,41 @@
     ${start}
     <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
   </div>`;
+    }
+
+    // Which harness the landing page is showing, or '' for all of them. A view, not a setting:
+    // it is answered by what is running right now, so it is not kept across a reload — a filter
+    // that survives a restart is a page that looks empty for a reason nobody remembers.
+    let agentKind = '';
+
+    // The last pane of a kind exiting takes the filter with it, rather than leaving the page
+    // filtered to a harness that is no longer here. Read before anything draws: the badges are
+    // hung on the list *after* it is built, so clearing it there would leave one frame of cards
+    // filtered to a kind that is already gone.
+    function syncAgentKind() {
+      if (agentKind && !agents.some(a => a.agent === agentKind)) agentKind = '';
+    }
+
+    // The harnesses in this list, as the badges they wear everywhere else. Only when there is more
+    // than one: a machine running nothing but claude has no choice to offer, and a lone badge that
+    // filters to what is already on screen is a control that does nothing.
+    function agentKindsHtml(list) {
+      const kinds = [...new Set(list.map(a => a.agent).filter(Boolean))].sort();
+      if (kinds.length < 2) return '';
+      return `<span class="agent-kind-filter">` +
+        kinds.map(k => badgeHtml(k, k === agentKind, `pickAgentKind('${k}')`,
+          {agent: k, title: `Show only the ${k} sessions`})).join('') + `</span>`;
+    }
+
+    function ofKind(list) {
+      return agentKind ? list.filter(a => a.agent === agentKind) : list;
+    }
+
+    // Tapping the lit badge takes the filter off, the same as every other badge in this app.
+    function pickAgentKind(k) {
+      agentKind = agentKind === k ? '' : k;
+      renderBody();
+      if (window.cue) cue('tick');
     }
 
     // Blocked only. A finished pane is not lifted out of its section — it keeps its blue badge
@@ -7304,7 +7350,9 @@
       }
       // Agent list (filtered). Only what the hoist took is dropped here, so a done pane appears
       // exactly once — under Done, where it belongs — instead of being lifted into Needs you.
-      let filtered = list.filter(a => !hoisted(a));
+      // The harness filter narrows the cards and never the Spaces and Tabs above them: those are
+      // navigation, and a strip that shed a tab because of a filter would be a second filter.
+      let filtered = ofKind(list).filter(a => !hoisted(a));
       if (activeWorkspace) filtered = filtered.filter(a => a.workspace_id === activeWorkspace);
       if (activeTab) filtered = filtered.filter(a => a.tab_id === activeTab);
       const working = filtered.filter(a => a.status === 'working');
@@ -7313,23 +7361,30 @@
       if (working.length) html += section('Working', working);
       if (done.length) html += section('Done', done);
       if (idle.length) html += section('Idle', idle);
+      // A filter that matches nothing still needs its heading: the badges are hung on the first
+      // one, so a page with no headings is a page filtered to nothing with no way back.
+      if (agentKind && !ofKind(list).length) html += section('Agents', [], `No ${agentKind} sessions`);
       return html;
     }
 
     function renderAgentList(list) {
+      const shown = ofKind(list);
       // Same rule as layoutHtml: the hoist owns the blocked panes you have not looked at, and the
       // sections below get everything else. Blocked still keeps a section for the acked ones —
       // a pane you have seen is blocked is not news, but it is still stuck.
-      const rest = list.filter(a => !hoisted(a));
+      const rest = shown.filter(a => !hoisted(a));
       const blocked = rest.filter(a => a.status === 'blocked');
       const working = rest.filter(a => a.status === 'working');
       const done = rest.filter(a => a.status === 'done');
       const idle = rest.filter(a => a.status === 'idle' || a.status === 'unknown');
-      let html = hoistHtml(list);
+      let html = hoistHtml(shown);
       if (blocked.length) html += section('Blocked', blocked);
       if (working.length) html += section('Working', working);
       if (done.length) html += section('Done', done);
       if (idle.length) html += section('Idle', idle);
+      // A filter that matches nothing says so under its own strip, rather than dropping the page
+      // to a bare line with no way back to the rest of the sessions.
+      if (!shown.length && list.length) html += section('Agents', [], `No ${agentKind} sessions`);
       if (!list.length) html = '<div class="empty">Waiting for agents…</div>';
       document.getElementById('agents').innerHTML = html;
     }
@@ -10220,10 +10275,16 @@
   </script>
   <script>
     // --- Conversation view ---
-    // The same pane read as a thread. Which view a pane was last read in is remembered per pane:
-    // a pane being watched as a terminal and one being followed as a thread are two different
-    // jobs, and a global switch would keep answering the wrong one.
+    // The same pane read as a thread. Rows or thread is one switch for the whole app: a reader who
+    // is following threads means it for the next pane too, and remembering it per pane meant every
+    // pane opened in whatever mode it happened to be left in a week ago — including the pane a
+    // conversation's own 🖥 button opens, which arrived as a thread on top of the thread it was
+    // opened from.
+    //
+    // *Which* conversation a pane is showing stays per pane. That is a fact about the pane, not a
+    // preference about how to read.
     const CONV_VIEW_KEY = 'herdr_conv_view';
+    const CONV_MODE_KEY = 'herdr_conv_mode';
 
     // Set by a pane switch, consumed by the next render that completes. `stick` below is measured
     // against the box as it stands, and on a switch that box still holds the thread you left — so
@@ -10239,9 +10300,22 @@
       } catch (e) { return {}; }
     }
 
+    // Off until it has been turned on, except for a browser that was already reading threads before
+    // the switch became one: a pane filed under the old per-pane key stands in for the answer that
+    // was never stored.
+    function convMode() {
+      const v = localStorage.getItem(CONV_MODE_KEY);
+      return v === null ? Object.keys(convViews()).length > 0 : v === 'on';
+    }
+
+    function setConvMode(on) {
+      try { localStorage.setItem(CONV_MODE_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
+    // A pane with nothing recorded has no thread to be in, whatever the switch says.
     function convViewOn(a) {
-      const key = convMemberKey(a);
-      return !!(key && convViews()[key]);
+      return convMode() && !!convsForPane(a).length;
     }
 
     // Which of a pane's conversations its thread is showing. The stored value is the conversation's
@@ -10292,11 +10366,18 @@
       convSetView(to, conv.id);
     }
 
+    // The switch itself, thrown for every pane at once. Which conversation this one lands on is
+    // still its own: turning the thread on here names the record the fallback would have picked, so
+    // the pane keeps it when the reader comes back to it under a different one.
     function toggleConvView() {
       const a = activePane ? paneOf(activePane) : null;
       if (!a) return;
-      const on = convViewOn(a), conv = on ? null : convViewConv(a);
-      convSetView(a, on ? '' : ((conv && conv.id) || 1));
+      const on = convViewOn(a);
+      setConvMode(!on);
+      if (!on) {
+        const conv = convViewConv(a);
+        if (conv) convSetView(a, conv.id);
+      }
       renderConvBar();
       if (window.cue) cue('page');
     }
@@ -10763,26 +10844,24 @@
         `<span class="count">${n} message${n === 1 ? '' : 's'}</span></div>`;
     }
 
-    // Colour carries "who", so it reuses what the tab strip already assigns: one PAIR_TINTS hue
-    // per member, in member order. The user keeps --blue, which is why nothing here is near it.
-    function convTint(i) {
-      return `hsl(${PAIR_TINTS[i % PAIR_TINTS.length]} 60% 55%)`;
-    }
-
     // Who is in this conversation, and which of them are still running. Collapsed to one row until
     // tapped: a conversation whose panes have all exited is still readable, and this is where it
     // says what it was.
+    //
+    // Named the way every other list of panes names one — label then agent badge. The harness is a
+    // fact about the session, so it is the badge the rest of the UI uses and not a word in the
+    // spawn line.
     function convMembersHtml(conv, recs) {
-      const live = new Set(agents.map(x => convMemberKey(x)));
+      const live = new Map(agents.map(x => [convMemberKey(x), x]));
       return `<button class="conv-members" onclick="this.classList.toggle('open')"
-        aria-label="Who is in this conversation">` + (conv.members || []).map((m, i) => {
+        aria-label="Who is in this conversation">` + (conv.members || []).map(m => {
         const rec = recs.find(r => r.key === m.key);
         const spawn = (rec && rec.spawn) || {};
         const on = live.has(m.key);
-        const facts = [spawn.agent, spawn.role, spawn.project || spawn.cwd].filter(Boolean);
+        const facts = [spawn.role, spawn.project || spawn.cwd].filter(Boolean);
         return `<span class="conv-member${on ? '' : ' gone'}">` +
-          `<span class="dot" style="background:${convTint(i)}"></span>` +
           `<span class="who">${escapeHtml((rec && rec.label) || m.label || '')}</span>` +
+          agentBadge(spawn.agent || (live.get(m.key) || {}).agent || '') +
           `${on ? '' : '<span class="tag">no longer live</span>'}` +
           `<span class="spawn">${escapeHtml(facts.join(' · '))}</span></span>`;
       }).join('') + '</button>';
@@ -12219,7 +12298,10 @@
     // knowing which of its calls came first.
     function addOrderButton() {
       const header = document.querySelector('#agents .section-header');
-      if (header) header.insertAdjacentHTML('beforeend',
+      if (!header) return;
+      const filter = agentKindsHtml(agents);
+      if (filter) header.insertAdjacentHTML('beforeend', filter);
+      header.insertAdjacentHTML('beforeend',
         '<button class="section-action" onclick="openOrder()" aria-label="Reorder tabs">Reorder</button>');
     }
 
@@ -12489,9 +12571,12 @@
     // of the thread and stops its transcript being referenced, so it is worded as what it does and
     // asked twice.
     function convRosterHtml(conv, recs, hidden, reading) {
-      const live = new Set(agents.map(x => convMemberKey(x)));
+      // The live pane behind each member, not merely whether there is one: a conversation assembled
+      // out of panes this browser did not start has no spawn to read the harness off, and the pane
+      // itself is still saying what it runs.
+      const live = new Map(agents.map(x => [convMemberKey(x), x]));
       const off = hidden || new Set();
-      const rows = (conv.members || []).map((m, i) => {
+      const rows = (conv.members || []).map(m => {
         const rec = recs.find(r => r.key === m.key) || {};
         const on = live.has(m.key);
         const out = off.has(m.key);
@@ -12505,9 +12590,8 @@
             : `<button class="conv-eye" data-key="${escapeHtml(m.key)}" aria-pressed="${out ? 'true' : 'false'}"` +
               ` onclick="toggleConvHidden(this.dataset.key)"` +
               ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>`) +
-          `<span class="dot" style="background:${convTint(i)}"></span>` +
           `<span class="who">${escapeHtml(rec.label || m.label || 'Former pane')}</span>` +
-          agentBadge((rec.spawn || {}).agent || '') +
+          agentBadge((rec.spawn || {}).agent || (live.get(m.key) || {}).agent || '') +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'no longer live')}</span>` +
           // Every live member, not only whichever one the header's button would pick: the header
           // opens the first, and a conversation of four is exactly where that is the wrong one.
@@ -12873,19 +12957,9 @@
       return conv ? conv.id : '';
     }
 
-    // A tab is a conversation, and where it opens depends on whether the pane on screen is in it.
-    // Switching the pane's own thread beats leaving the pane: the composer, the rows and the
-    // ruler are all still there, and the reader asked for a different grouping, not a different
-    // screen.
+    // Bottom tabs are destinations, not a pane-thread selector. From any screen they open the
+    // conversation itself, so a tab never changes the reader's current pane behind their back.
     function convTabPick(id) {
-      const a = document.body.classList.contains('conversation-open') || !activePane
-        ? null : paneOf(activePane);
-      const conv = loadConvIndex().find(c => c.id === id);
-      if (a && conv && (conv.members || []).some(m => m.key === convMemberKey(a))) {
-        convSetView(a, id);
-        renderConvBar();
-        return;
-      }
       openConversation(id);
     }
 
@@ -12924,6 +12998,16 @@
       // Same rule as the pane's own thread: one member on screen is one speaker, and a bubble that
       // stops at 86% is leaving room for a column nothing is drawn in.
       box.classList.toggle('conv-solo', shown.length <= 1);
+      // A pair reads as two columns here as well: one agent's words down the left, the other's
+      // indented to the right, which is the shape the pane's own thread has always drawn a pair in.
+      // The right side is the pane the reader has open when that is one of the two — the same rule
+      // the pane thread follows — and the second member otherwise, so the columns are stable for a
+      // reader who has no pane open at all.
+      const shownKeys = shown.map(m => m.key);
+      const openKey = activePane ? convMemberKey(paneOf(activePane)) : '';
+      const twoCol = shownKeys.length === 2 && !!(conv.pair_id ||
+        agents.some(x => shownKeys.includes(convMemberKey(x)) && pairFor(pairs, x.pane_id)));
+      const rightKey = shownKeys.includes(openKey) ? openKey : shownKeys[1];
       const visible = e => !hidden.has(e.key || keys[0]);
       const entries = hidden.size ? composed.entries.filter(visible) : composed.entries;
       const all = hidden.size ? composed.all.filter(visible) : composed.all;
@@ -12957,7 +13041,7 @@
         // Same fallback the visibility filter above uses: a single-member thread's entries carry no
         // key, and the dock reads a bubble's key to know who wrote it — an unkeyed bubble has no
         // source and so no target to exclude.
-        ? convEntriesHtml(entries, {key: keys[0]}, false, 'toggleConvDockPick')
+        ? convEntriesHtml(entries, {key: twoCol ? rightKey : keys[0]}, twoCol, 'toggleConvDockPick')
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional. Turn "final ' +
             'messages only" off in the pane menu to see it.</p>'
@@ -13189,16 +13273,10 @@
       return agents.find(a => convMemberKey(a) === keys.values().next().value) || null;
     }
 
-    // Who a message may be sent to. With a bubble picked that is everyone but the pane that said it
-    // — a message cannot be transferred back into its own session. The row still *draws* the whole
-    // membership (see dockRowHtml): a pick is a passing state, and a conversation that shed its
-    // members every time one was quoted would keep answering "who is in this" differently.
-    function dockTargets() {
-      const source = dockSource();
-      const all = dockMembers();
-      return source ? all.filter(a => a.pane_id !== source.pane_id) : all;
-    }
-
+    // Who a message may be sent to is the whole membership, the author of the picked bubble
+    // included. Handing an agent its own words back is a real move — "redo this", "you said this,
+    // now check it" — and the row is not the place to decide it is a mistake.
+    //
     // The pane this one is paired with, when it is in the conversation. A default, never a rule:
     // membership is still what makes an agent a target (4.2), and a conversation with no pair
     // recorded anywhere is served exactly as before. But when a message has been picked and nobody
@@ -13211,21 +13289,18 @@
       return partner && list.some(a => a.pane_id === partner.pane_id) ? partner.pane_id : '';
     }
 
-    // Kept honest against the row it is drawn from: a target that has exited, or that turns out to
-    // be the source of what is being transferred, falls back — to the source's partner if it is
-    // here, and to the first member if it is not — rather than silently sending somewhere else.
-    // A target the reader chose always wins, including one chosen before the pick was made.
+    // Kept honest against the row it is drawn from: a target that has exited falls back — to the
+    // source's partner if it is here, and to the first member if it is not — rather than silently
+    // sending somewhere else. A target the reader chose always wins, including one chosen before
+    // the pick was made.
     function dockTargetOf(list, source) {
       if (list.some(a => a.pane_id === dockTarget)) return dockTarget;
       return dockPairTarget(source, list) || ((list[0] || {}).pane_id || '');
     }
 
-    // Who the composer is talking to: the row's lit member. Falls back to the whole membership when
-    // a pick has excluded everyone, so that typing still has somewhere to go — the same list the row
-    // draws in that case.
+    // Who the composer is talking to: the row's lit member.
     function dockAddressed() {
-      const list = dockTargets();
-      return list.length ? dockTargetOf(list, dockSource()) : dockTargetOf(dockMembers());
+      return dockTargetOf(dockMembers(), dockSource());
     }
 
     function setDockTarget(paneId) {
@@ -13398,11 +13473,9 @@
       const row = document.getElementById('xferRow');
       if (!dock || !row) return;
       const all = dockMembers();
-      // Always the whole membership. A pick narrows who may *receive* the message, never who is in
-      // the conversation, and a row that dropped the others while a bubble was picked took the
-      // reader's other choices away over a state one tap undoes. With every candidate excluded — a
-      // bubble picked in a conversation of one — there is simply nothing left to send it to.
-      const html = all.length ? dockRowHtml(all, !dockTargets().length) : '';
+      // Always the whole membership. A pick decides what is being sent, never who is in the
+      // conversation or who may have it.
+      const html = all.length ? dockRowHtml(all) : '';
       row.hidden = !html;
       if (!html) { closeDockMenu(); row.dataset.sig = ''; }
       // Rebuilt only when what it says changed. This runs on every snapshot, and replacing the row
@@ -13511,18 +13584,16 @@
       input.addEventListener('keydown', () => requestAnimationFrame(keepConvCaret));
     }
 
-    function dockRowHtml(list, noSend) {
+    function dockRowHtml(list) {
       const target = dockAddressed();
-      const source = dockSource();
       // One lit, the rest dimmed rather than hidden: which agents are in this conversation is
       // information, and a row that showed only the chosen one would answer a different question.
       // Named the way the pane header names one: the live dot, the label, and the harness badge.
       // Which agent is about to receive another agent's output is the fact worth being sure of, and
       // "scratch" alone does not say whether that is a codex or a claude.
       //
-      // The member whose message is picked stays in the row, marked as the one it came from rather
-      // than removed: it is still in the conversation, it is still who you were reading, and a row
-      // that lost a pill on every pick would flicker its own membership.
+      // Every member is choosable, the author of the picked bubble included: sending an agent its
+      // own words back is a thing people do on purpose.
       // Addressed first. Only in the row that is drawn — dockMembers stays roster order, because
       // the fallback target is read off its first entry and a list that reordered itself around
       // the current choice could never fall back to anything else. Stable, so the rest keep the
@@ -13530,16 +13601,12 @@
       const who = list.slice()
         .sort((a, b) => (b.pane_id === target) - (a.pane_id === target))
         .map(a => {
-        // Not marked when it is the only member there is: a conversation of one still types into
-        // the pane it is reading, and a pill drawn dead beside a composer that works would be lying.
-        const from = !!source && a.pane_id === source.pane_id && !noSend;
         const name = escapeHtml(paneLabel(a));
-        return `<button class="xfer-who${a.pane_id === target ? ' on' : ''}${from ? ' from' : ''}" ` +
+        return `<button class="xfer-who${a.pane_id === target ? ' on' : ''}" ` +
           `style="--who-accent:${agentColor(a.agent) || 'var(--text)'}" ` +
-          (from ? 'disabled ' : `onclick="setDockTarget('${a.pane_id}')" `) +
+          `onclick="setDockTarget('${a.pane_id}')" ` +
           `aria-pressed="${a.pane_id === target}" ` +
-          `title="${from ? `${name} wrote the picked message` : `Talk to ${name}`}" ` +
-          `aria-label="${from ? `${name}, who wrote the picked message` : `Talk to ${name}`}">` +
+          `title="Talk to ${name}" aria-label="Talk to ${name}">` +
           `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
           `${name}${agentBadge(a.agent)}</button>`;
       }).join('');
@@ -13565,7 +13632,7 @@
       // Send belongs to the bubbles. With nothing picked there is nothing for it to carry and the
       // composer's own send is what fires, so the row would be offering a second button for a
       // message it does not hold.
-      const send = n && !noSend
+      const send = n
         ? `<button class="xfer-send" onclick="convDockSend()" ` +
           `title="Send the picked message${n === 1 ? '' : 's'} to ` +
           `${escapeHtml(paneLabel(paneOf(target)) || target)}" ` +
@@ -13616,20 +13683,15 @@
 
     // The same members as a list, for a row that has scrolled past the edge of a phone and for
     // reading a name that the pill cut off. It chooses the same target the pills do — the lit one is
-    // ticked, and the member whose message is picked is named but not choosable, exactly as in the
-    // row.
+    // ticked, and everyone in the row is choosable here too.
     function openWhoMenu() {
       const box = document.getElementById('whoMenu');
       const target = dockAddressed();
-      const source = dockSource();
-      const noSend = !dockTargets().length;
       box.innerHTML = dockMembers().map(a => {
-        const from = !!source && a.pane_id === source.pane_id && !noSend;
         const on = a.pane_id === target;
         const name = escapeHtml(paneLabel(a));
         return `<button class="menu-item" role="menuitemradio" aria-checked="${on}" ` +
-          (from ? 'disabled ' : `onclick="pickDockTarget('${a.pane_id}')" `) +
-          `aria-label="${from ? `${name}, who wrote the picked message` : `Talk to ${name}`}">` +
+          `onclick="pickDockTarget('${a.pane_id}')" aria-label="Talk to ${name}">` +
           `<span class="tick">${on ? '✓' : ''}</span>` +
           `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
           `${name}${agentBadge(a.agent)}</button>`;
@@ -13785,9 +13847,8 @@
     // Only the conversation window's thread, because it is the only one with a target to change —
     // the pane's own composer types into the pane on screen.
     function addressConvAuthor(key) {
-      const live = dockTargets().find(a => convMemberKey(a) === key);
-      // No target: the author has exited, is folded out of the thread, or is the source of what is
-      // picked — a message cannot be transferred back into its own session.
+      const live = dockMembers().find(a => convMemberKey(a) === key);
+      // No target: the author has exited or is folded out of the thread.
       if (!live) return;
       // The word the double-click selected is not a selection anybody asked for.
       const sel = window.getSelection && window.getSelection();
@@ -13852,7 +13913,7 @@
       // With bubbles picked there is one message being written, and the row's Send is a labelled
       // second view of this button rather than a different one. Sending only the typed half here
       // would quietly drop the quote the pick put on the message.
-      if (dockPicked.size && dockTargets().length) return convDockSend();
+      if (dockPicked.size && dockMembers().length) return convDockSend();
       const input = document.getElementById('convInput');
       const body = input.value.trim();
       if (!body) return;
@@ -13898,8 +13959,8 @@
       const picked = Array.from(document.querySelectorAll('#convViewThread .conv-msg.picked'))
         .map(el => el.dataset.text || '').filter(Boolean);
       if (!picked.length) return;
-      const targets = dockTargets();
-      if (!targets.length) { showToast('Nobody else in this conversation to send it to.'); return; }
+      const targets = dockMembers();
+      if (!targets.length) { showToast('Nobody in this conversation to send it to.'); return; }
       const target = dockTargetOf(targets, source);
       const live = agents.find(a => a.pane_id === target);
       if (!live) { showToast('That agent is no longer running.'); return; }
