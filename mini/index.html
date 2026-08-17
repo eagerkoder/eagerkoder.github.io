@@ -675,12 +675,13 @@
     #timelineView {
       flex-direction: column;
       gap: 10px;
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     #timelineList {
-      flex: 1 1 50%;
-      min-height: 0;
+      flex: 0 1 auto;
+      min-height: 80px;
+      max-height: 220px;
       overflow-y: auto;
     }
 
@@ -789,6 +790,166 @@
     .bandwidth-metric[aria-pressed="true"] { color: var(--text); border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--bg)); }
     #bandwidthPanes { margin-left: auto; }
 
+    /* Conversation storage analytics in Activity */
+    .conv-analytics {
+      flex: 0 0 auto;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .conv-analytics h2 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      row-gap: 6px;
+      margin: 0 0 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    #convAnalyticsTitle {
+      flex: 1 1 auto;
+    }
+
+    .conv-analytics-refresh {
+      margin-left: auto;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 0.85rem;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, border-color 0.15s, transform 0.2s;
+    }
+
+    .conv-analytics-refresh:hover {
+      color: var(--text);
+      border-color: var(--green);
+    }
+
+    .conv-analytics-refresh.spinning {
+      animation: conv-spin 0.35s ease;
+    }
+
+    @keyframes conv-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(180deg); }
+    }
+
+    .conv-analytics-wrap {
+      max-height: 220px;
+      overflow-y: auto;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--surface) 40%, var(--bg));
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .conv-analytics-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+    }
+
+    .conv-analytics-table th,
+    .conv-analytics-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+      white-space: nowrap;
+    }
+
+    .conv-analytics-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 0;
+    }
+
+    .conv-analytics-th-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      height: 100%;
+      padding: 6px 8px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-transform: inherit;
+      letter-spacing: inherit;
+      cursor: pointer;
+      text-align: inherit;
+    }
+
+    .conv-analytics-th-btn:hover {
+      color: var(--text);
+    }
+
+    .conv-analytics-table th .sort-arrow {
+      font-size: 0.58rem;
+      color: var(--green);
+    }
+
+    .conv-analytics-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .conv-analytics-table tbody tr:hover {
+      background: color-mix(in srgb, var(--text) 4%, transparent);
+    }
+
+    .conv-analytics-name-btn {
+      border: none;
+      background: transparent;
+      padding: 0;
+      color: var(--blue);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 500;
+      text-align: left;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .conv-analytics-name-btn:hover {
+      text-decoration: underline;
+    }
+
+    .conv-analytics-auto-badge {
+      display: inline-block;
+      font-size: 0.56rem;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0 3px;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    .conv-analytics-num {
+      text-align: right;
+      font-family: monospace;
+      font-size: 0.7rem;
+      color: var(--text);
+    }
+
     /* Settings */
     .settings {
       display: none;
@@ -824,6 +985,41 @@
       border: 1px solid var(--border);
       background: var(--bg);
       color: var(--text);
+    }
+
+    /* A text field with its own ✕. The button sits over the field's right edge, and the field
+       gives up the width so the caret never runs under it. */
+    .field-clearable {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .field-clearable input {
+      padding-right: 32px;
+    }
+
+    .field-clear {
+      position: absolute;
+      right: 4px;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .field-clear:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 8%, transparent);
     }
 
     .setting-group .toggle-option {
@@ -4359,9 +4555,16 @@
            else here — its sanitiser only drops newlines, and backticks and prose came through it
            untouched. Cleaned on the way out of the box as well as on Connect, so the tidy-up is
            visible before anything is stored. -->
-      <input id="relayUrl" type="text" inputmode="url" spellcheck="false" autocapitalize="none"
-        autocomplete="off" onchange="this.value = cleanRelayUrl(this.value)"
-        placeholder="wss://your-tunnel.trycloudflare.com" />
+      <!-- The ✕ is in the field rather than beside it: replacing one tunnel URL with the next is
+           what this box is for, and selecting 60 characters of wss:// on a phone to type over them
+           is the part that was hard. -->
+      <div class="field-clearable">
+        <input id="relayUrl" type="text" inputmode="url" spellcheck="false" autocapitalize="none"
+          autocomplete="off" onchange="this.value = cleanRelayUrl(this.value)"
+          placeholder="wss://your-tunnel.trycloudflare.com" />
+        <button type="button" class="field-clear" onclick="clearRelayUrl()"
+          title="Clear the relay URL" aria-label="Clear the relay URL">✕</button>
+      </div>
       <label for="relayToken" style="margin-top:8px">Token (optional)</label>
       <input id="relayToken" type="password" placeholder="shared secret" />
       <button onclick="saveAndConnect()">Connect</button>
@@ -4559,6 +4762,11 @@
       </span><span class="bandwidth-total now" id="bandwidthTotal"></span>
       <button class="bandwidth-metric" id="bandwidthPanes" aria-pressed="false" onclick="setBandwidthPanes(!bandwidthPanesOn())">Agents</button></h2>
       <div id="bandwidthRows"></div>
+    </section>
+    <section class="conv-analytics" id="convAnalytics" aria-label="Conversation storage">
+      <h2><span id="convAnalyticsTitle">Conversations by storage</span><span class="bandwidth-total" id="convAnalyticsTotal">0 convs · 0.00 MB</span>
+      <button class="conv-analytics-refresh" id="convAnalyticsRefresh" onclick="refreshConvAnalytics()" title="Re-measure what the conversations are using" aria-label="Refresh conversation storage">⟳</button></h2>
+      <div class="conv-analytics-wrap" id="convAnalyticsWrap"></div>
     </section>
   </div>
 
@@ -6644,6 +6852,7 @@
         }).join('');
       }
       renderBandwidth();
+      renderConvAnalytics();
     }
 
     function formatBandwidth(bytes) {
@@ -6796,6 +7005,127 @@
       }
     }
 
+    // --- Conversation storage analytics ---
+    let convAnalyticsSort = { col: 'size', dir: 'desc' };
+    let convAnalyticsData = [];
+
+    async function fetchConvAnalytics() {
+      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      if (!convs.length) return [];
+      const recordsMap = new Map();
+      if (typeof openConvDB === 'function') {
+        const db = await openConvDB();
+        if (db) {
+          try {
+            const read = db.transaction(CONV_DB_STORE, 'readonly').objectStore(CONV_DB_STORE);
+            const all = await idbReq(read.getAll());
+            for (const r of all) if (r && r.key) recordsMap.set(r.key, r);
+          } catch (e) { /* use fallbacks */ }
+        }
+      }
+      if (typeof convFallbackAll === 'function') {
+        const fallback = convFallbackAll();
+        for (const [k, r] of Object.entries(fallback)) {
+          if (!recordsMap.has(k) && r) recordsMap.set(k, r);
+        }
+      }
+      if (typeof convHeld !== 'undefined' && convHeld instanceof Map) {
+        for (const [k, r] of convHeld.entries()) {
+          if (r) recordsMap.set(k, r);
+        }
+      }
+      return typeof calcConvAnalytics === 'function' ? calcConvAnalytics(convs, recordsMap) : [];
+    }
+
+    async function renderConvAnalytics() {
+      const section = document.getElementById('convAnalytics');
+      const tableWrap = document.getElementById('convAnalyticsWrap');
+      if (!section || !tableWrap) return;
+
+      const view = document.getElementById('timelineView');
+      if (view && view.style.display === 'none') return;
+
+      convAnalyticsData = await fetchConvAnalytics();
+      drawConvAnalyticsTable();
+    }
+
+    function sortConvAnalytics(col) {
+      if (convAnalyticsSort.col === col) {
+        convAnalyticsSort.dir = convAnalyticsSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        convAnalyticsSort.col = col;
+        convAnalyticsSort.dir = (col === 'name' ? 'asc' : 'desc');
+      }
+      drawConvAnalyticsTable();
+    }
+
+    function drawConvAnalyticsTable() {
+      const tableWrap = document.getElementById('convAnalyticsWrap');
+      const totalEl = document.getElementById('convAnalyticsTotal');
+      if (!tableWrap) return;
+
+      const totalBytes = convAnalyticsData.reduce((acc, c) => acc + (c.totalBytes || 0), 0);
+      if (totalEl) {
+        const n = convAnalyticsData.length;
+        totalEl.textContent = `Total: ${n} ${n === 1 ? 'conversation' : 'conversations'} · ` +
+          formatConvSize(totalBytes);
+        totalEl.title = `${totalBytes.toLocaleString()} bytes on this device`;
+      }
+
+      if (!convAnalyticsData.length) {
+        tableWrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px;font-size:0.75rem;">No conversations stored yet</div>';
+        return;
+      }
+
+      const sorted = typeof sortConvAnalyticsRows === 'function'
+        ? sortConvAnalyticsRows(convAnalyticsData, convAnalyticsSort.col, convAnalyticsSort.dir)
+        : convAnalyticsData.slice();
+
+      const arrow = col => convAnalyticsSort.col === col ? `<span class="sort-arrow">${convAnalyticsSort.dir === 'asc' ? '▲' : '▼'}</span>` : '';
+      const ariaSort = col => convAnalyticsSort.col === col ? (convAnalyticsSort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+
+      const th = (col, label, alignRight) =>
+        `<th scope="col" aria-sort="${ariaSort(col)}" onclick="sortConvAnalytics('${col}')" style="${alignRight ? 'text-align:right;' : ''}">` +
+        `<button type="button" class="conv-analytics-th-btn" style="${alignRight ? 'justify-content:flex-end;margin-left:auto;' : ''}">${escapeHtml(label)}${arrow(col)}</button></th>`;
+
+      const rowsHtml = sorted.map(c => {
+        // Rounded the way the rest of the app rounds bytes: a conversation of four messages is
+        // kilobytes, and "0.00 MB" beside it read as a row that had failed to measure itself.
+        const size = formatConvSize(c.totalBytes);
+        const titleTip = `${escapeHtml(c.name)} · ${c.totalBytes.toLocaleString()} bytes`;
+        // The id rides in a data attribute rather than inside the handler's quotes: a name or an
+        // id with an apostrophe in it would otherwise end the string and break the row.
+        return `<tr>` +
+          `<td><button type="button" class="conv-analytics-name-btn" data-id="${escapeHtml(c.id)}" ` +
+          `onclick="openConversation(this.dataset.id)" title="Open ${escapeHtml(c.name)}">` +
+          `${escapeHtml(c.name)}</button>${c.auto ? ' <span class="conv-analytics-auto-badge">auto</span>' : ''}</td>` +
+          `<td class="conv-analytics-num">${c.msgCount.toLocaleString()}</td>` +
+          `<td class="conv-analytics-num">${c.panes.toLocaleString()}</td>` +
+          `<td class="conv-analytics-num" title="${titleTip}">${size}</td>` +
+          `</tr>`;
+      }).join('');
+
+      tableWrap.innerHTML = `<table class="conv-analytics-table" aria-label="Conversations by local storage size">` +
+        `<thead><tr>` +
+        th('name', 'Conversation', false) +
+        th('msgCount', 'Messages', true) +
+        th('panes', 'Panes', true) +
+        th('size', 'Size', true) +
+        `</tr></thead>` +
+        `<tbody>${rowsHtml}</tbody>` +
+        `</table>`;
+    }
+
+    async function refreshConvAnalytics() {
+      const btn = document.getElementById('convAnalyticsRefresh');
+      if (btn) btn.classList.add('spinning');
+      try {
+        await renderConvAnalytics();
+      } finally {
+        if (btn) setTimeout(() => btn.classList.remove('spinning'), 350);
+      }
+    }
+
     // What lands in this box is almost never a bare URL. start.sh fences the address as a code
     // block so it is copyable on a phone, chat clients add their own backticks and newlines, and
     // the line above it in the terminal is "Tunnel:  wss://…". The link start.sh prints for the
@@ -6820,6 +7150,17 @@
       // cloudflared's own banner — so the scheme people copy is often the wrong one of the pair.
       s = s.replace(/^https:\/\//i, 'wss://').replace(/^http:\/\//i, 'ws://');
       return s.replace(/\/+$/, '');
+    }
+
+    // Empties the box and leaves the caret in it, ready for the next tunnel's address. Nothing is
+    // saved and nothing disconnects: what is stored is still what Connect last stored, so a cleared
+    // box that is never submitted costs the reader nothing.
+    function clearRelayUrl() {
+      const input = document.getElementById('relayUrl');
+      if (!input) return;
+      input.value = '';
+      input.focus();
+      if (window.cue) cue('tick');
     }
 
     function saveAndConnect() {
@@ -7526,6 +7867,10 @@
       // old terminal is gone, but its local thread is continued under this new pane's key.
       if (intent && intent.conv) {
         const next = convMemberKey(a);
+        // The pair goes with it. A restart is the same colleague in a new pane, and the pair record
+        // names panes by id — so without this the strip in the surviving partner reported the pair
+        // stale and dropped the switch, the name and the badge.
+        if (intent.replace) repointPair(convKeyPaneId(intent.replace), a);
         // The copy happens before the index is read, and the index is read again after it. The
         // recorder writes members' previews on every poll, so an index loaded before an await and
         // saved after it puts back a snapshot taken seconds ago — and the copy is the one step here
@@ -8014,6 +8359,56 @@
     function loadPairs() { pairs = parsePairs(localStorage.getItem(PAIRS_KEY) || ''); }
     function savePairs() {
       localStorage.setItem(PAIRS_KEY, JSON.stringify({ version: PAIRS_VERSION, pairs: pairs }));
+    }
+
+    // A restart is the same colleague in a new pane, so the pair that named the dead one follows it
+    // across. Members are pinned by pane_id (memberMatches), which a restart always changes — so a
+    // pair went stale the moment its member was restarted, which is what took the switch button,
+    // the partner's name and its badge off the strip and left a "no longer running" line instead.
+    //
+    // The same repair, for every way a pane can come back that this browser did not ask for: herdr
+    // restarted, the workspace was reopened, the agent was launched again from the terminal. A
+    // pane_id is herdr's and not ours, and a pair pinned to one that no longer exists simply stops
+    // being found — the strip vanishes from both panes with nothing said about why, which is what
+    // "some panes show it and others do not" looks like from the outside.
+    //
+    // A dead member is re-pointed at the pane that is unmistakably the same seat: same host, same
+    // harness, same cwd, and exactly one such pane not already spoken for. Ambiguity is left alone
+    // — two claude panes in one directory are two colleagues, and guessing between them would put
+    // one agent's work in the other's terminal.
+    function healPairs() {
+      const claimed = new Set();
+      for (const p of pairs) for (const m of p.members) {
+        const live = agents.find(a => memberMatches(m, a));
+        if (live) claimed.add(live.pane_id);
+      }
+      let moved = false;
+      for (const pair of pairs) {
+        pair.members = pair.members.map(m => {
+          if (agents.some(a => memberMatches(m, a))) return m;
+          const same = agents.filter(a => !claimed.has(a.pane_id) &&
+            (a.host || 'local') === (m.host || 'local') &&
+            a.agent === m.agent && (a.cwd || '') === (m.cwd || ''));
+          if (same.length !== 1) return m;
+          claimed.add(same[0].pane_id);
+          moved = true;
+          return Object.assign({}, m, recentFingerprint(same[0]));
+        });
+      }
+      if (moved) savePairs();
+      return moved;
+    }
+
+    // Never over a pane that is already in a pair of its own: that is a pairing the user made, and
+    // a restart elsewhere is not a reason to rewrite it.
+    function repointPair(oldPaneId, next) {
+      if (!oldPaneId || !next || oldPaneId === next.pane_id) return false;
+      const pair = pairFor(pairs, oldPaneId);
+      if (!pair || pairFor(pairs, next.pane_id)) return false;
+      pair.members = pair.members.map(m => m.pane_id === oldPaneId
+        ? Object.assign({}, m, recentFingerprint(next)) : m);
+      savePairs();
+      return true;
     }
 
     // --- Line width ---
@@ -9034,6 +9429,16 @@
       return a ? JSON.stringify([a.host || '', a.pane_id || '', a.agent || '', a.cwd || '']) : '';
     }
 
+    // The pane a member key was made from. Only the pane_id is recoverable as a fact about a live
+    // terminal — the rest of the key describes a session that has usually ended by the time anyone
+    // asks. Used by a restart, to find what the dead pane was still named in.
+    function convKeyPaneId(key) {
+      try {
+        const parts = JSON.parse(key);
+        return Array.isArray(parts) ? String(parts[1] || '') : '';
+      } catch (e) { return ''; }
+    }
+
     // When a conversation last had anything said in it, across its members. `convNoteCounts` stamps
     // each member as it records, so this is the record's own clock and not the browser's. Asked by
     // the landing list, by the tab strip's order, and by which thread a pane opens on.
@@ -9235,6 +9640,76 @@
         const next = `${base} (copy${n > 1 ? ' ' + n : ''})`.slice(0, 64);
         if (!used.has(next)) return next;
       }
+    }
+
+    // Total storage footprint and statistics per conversation across index and transcripts.
+    function calcConvAnalytics(convs, recordsMap) {
+      const list = convs || [];
+      const records = (recordsMap && typeof recordsMap.get === 'function')
+        ? recordsMap
+        : new Map(Object.entries(recordsMap || {}));
+      return list.map(c => {
+        const members = c.members || [];
+        let msgCount = 0;
+        let transcriptBytes = 0;
+        const seenKeys = new Set();
+        for (const m of members) {
+          if (!m || !m.key || seenKeys.has(m.key)) continue;
+          seenKeys.add(m.key);
+          const rec = records.get(m.key);
+          if (rec) {
+            const entries = rec.entries || [];
+            msgCount += entries.length;
+            try {
+              transcriptBytes += JSON.stringify(rec).length;
+            } catch (e) { /* ignore */ }
+          }
+        }
+        let indexBytes = 0;
+        try {
+          indexBytes = JSON.stringify(c).length;
+        } catch (e) { /* ignore */ }
+
+        const totalBytes = transcriptBytes + indexBytes;
+        const sizeMb = totalBytes / (1024 * 1024);
+
+        return {
+          id: c.id,
+          name: c.name || 'Untitled',
+          auto: !!c.auto,
+          panes: members.length,
+          msgCount: msgCount,
+          totalBytes: totalBytes,
+          sizeMb: sizeMb,
+          touched: c.touched || 0,
+        };
+      });
+    }
+
+    function sortConvAnalyticsRows(rows, col, dir) {
+      const d = dir === 'asc' ? 1 : -1;
+      const list = (rows || []).slice();
+      return list.sort((a, b) => {
+        if (col === 'name') {
+          return d * (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
+        }
+        if (col === 'msgCount') {
+          return d * ((a.msgCount || 0) - (b.msgCount || 0));
+        }
+        if (col === 'panes') {
+          return d * ((a.panes || 0) - (b.panes || 0));
+        }
+        return d * ((a.totalBytes || 0) - (b.totalBytes || 0));
+      });
+    }
+
+    function formatConvSize(bytes) {
+      const b = bytes || 0;
+      if (b === 0) return '0 MB';
+      const mb = b / (1024 * 1024);
+      if (mb >= 0.01) return mb.toFixed(2) + ' MB';
+      if (b < 1024) return b + ' B';
+      return (b / 1024).toFixed(1) + ' KB';
     }
     // --- Conversation recorder (pure) --- end
 
@@ -11917,17 +12392,36 @@
       renderPairStrip();
     }
 
-    // The strip is absent, not disabled, when there is no pair — and the transfer control is
-    // absent whenever the pair is stale, so the UI can never offer an unverified target.
+    // Who you are reading, always; the pair controls only when there is a healthy pair to work.
+    // The transfer control is absent whenever the pair is stale, so the UI can never offer an
+    // unverified target.
     function renderPairStrip() {
       const strip = document.getElementById('pairStrip');
       const menu = document.getElementById('termMenuPair');
+      // Before the lookup: a pair whose panes have been restarted is found by this and by nothing
+      // else, and being asked "is this pane paired" is the moment to answer it honestly.
+      healPairs();
       const pair = activePane ? pairFor(pairs, activePane) : null;
+      const mineLive = activePane ? agents.find(a => a.pane_id === activePane) : null;
+      // Which pane you are in, by name and harness. Not a pair fact — the answer is the same
+      // whether this pane is paired, whether the pair is healthy, and whether the composer is
+      // unfolded, so it is shown on all of them. Pairing state is told by the controls beside it.
+      // The pair's own name moves to the title, where a reader who wants it can still find it.
+      const title = [pair && pair.name, bottomDockOpen() && mineLive && `typing to ${paneLabel(mineLive)}`]
+        .filter(Boolean).join(' — ');
+      const center = mineLive
+        ? `<span class="pair-target" title="${escapeHtml(title || paneLabel(mineLive))}">` +
+          `<span class="dot${mineLive.status === 'working' ? ' pulse' : ''}" ` +
+          `style="background:${statusColor(mineLive)}" aria-hidden="true"></span>` +
+          `<span class="label">${escapeHtml(paneLabel(mineLive))}</span>${agentBadge(mineLive.agent)}</span>`
+        : pair ? `<span class="pair-name">${escapeHtml(pair.name)}</span>` : '';
       if (!pair) {
-        strip.style.display = 'none';
-        strip.innerHTML = '';
-        // No strip without a pair — but the menu still has to offer making one, or an unpaired
-        // pane has no route to pairing from inside the pane at all.
+        // Nothing to switch to and nothing to transfer, so the strip is the name alone — and
+        // nothing at all when there is no live pane to name. The menu still has to offer pairing,
+        // or an unpaired pane has no route to it from inside the pane.
+        strip.className = 'pair-strip' + (currentPairPlace() === 'bottom' ? ' at-bottom' : '');
+        strip.innerHTML = center;
+        strip.style.display = center ? 'flex' : 'none';
         menu.innerHTML = activePane
           ? `<button class="menu-item" role="menuitem" onclick="closeTermMenu(); openPairDialog(activePane)">Pair with…</button>`
           : '';
@@ -11935,21 +12429,12 @@
       }
       const health = pairHealth(pair, agents);
       const partner = partnerOf(pair, activePane);
-      const mine = memberOf(pair, activePane);
       const ok = health.state === 'healthy';
       // Read the partner's name from the live snapshot, not from the pair record: the record holds
       // the name captured at pin time, so renaming a pane would leave a stale name on this button.
       // Falls back to the pinned name, then the pane ID, so the button is never blank.
       const live = agents.find(a => a.pane_id === partner.pane_id);
       const partnerName = (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
-      const mineLive = agents.find(a => a.pane_id === activePane);
-      const targetShown = ok && bottomDockOpen() && mineLive;
-      const center = targetShown
-        ? `<span class="pair-target" title="Typing to ${escapeHtml(paneLabel(mineLive))}">` +
-          `<span class="dot${mineLive.status === 'working' ? ' pulse' : ''}" ` +
-          `style="background:${statusColor(mineLive)}" aria-hidden="true"></span>` +
-          `<span class="label">${escapeHtml(paneLabel(mineLive))}</span>${agentBadge(mineLive.agent)}</span>`
-        : `<span class="pair-name">${escapeHtml(pair.name)}</span>`;
       // Rebuilt wholesale, so the placement class has to be reapplied with it.
       strip.className = 'pair-strip' + (ok ? '' : ' stale') +
         (currentPairPlace() === 'bottom' ? ' at-bottom' : '');
