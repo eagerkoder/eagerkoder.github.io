@@ -1488,6 +1488,15 @@
       font-weight: 700;
     }
 
+    /* Every agent badge wears its own harness colour, so a picked one is only bolder than the rest
+       — four lit pills where one is chosen. Once there is a choice the others step back, the way
+       the composer's chips do. Only while something is picked: a row of dimmed badges with nothing
+       chosen would read as disabled. */
+    #startAgents:has(.badge.pick.on) .badge.pick:not(.on),
+    #newAgentKinds:has(.badge.pick.on) .badge.pick:not(.on) {
+      opacity: 0.4;
+    }
+
     .workspace-card {
       border-color: color-mix(in srgb, var(--text) 10%, transparent);
     }
@@ -1911,6 +1920,110 @@
       padding: 12px 16px;
       color: var(--muted);
       font-size: 0.75rem;
+    }
+
+    /* A session that has already ended. Dimmer than a live pane, and it has to stay legible: this
+       is a real choice, not a disabled one. */
+    .pair-pick.past {
+      opacity: 0.85;
+    }
+
+    /* The pane picker's frame. Three bands: the heading and its search stay put, the rows scroll
+       between them, and the action sits at the foot where a thumb is and where the keyboard cannot
+       cover it. The panel is what has the height, so only the list is given the overflow. */
+    .pick-panel {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 420px;
+      max-height: 80dvh;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom, 8px);
+    }
+
+    .pick-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .pick-title {
+      flex: 1;
+      font-size: 0.8rem;
+      font-weight: 600;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .pick-x {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    .pick-search {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .pick-search[hidden] {
+      display: none;
+    }
+
+    .pick-search input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      /* 16px, like every other field here: anything smaller and iOS zooms the page on focus. */
+      font-size: 16px;
+    }
+
+    #pickList {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .pick-foot {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    #pickSubmit {
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--blue);
+      color: var(--bg);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    #pickSubmit:disabled {
+      opacity: 0.45;
+      cursor: default;
     }
 
     .agent .project {
@@ -2952,8 +3065,7 @@
     .conv-roster .conv-drop,
     .conv-roster .conv-again,
     .conv-roster .conv-open,
-    .conv-roster-actions button,
-    .conv-roster-add .conv-chip {
+    .conv-roster-actions button {
       font-size: 0.65rem;
       /* Not the menu's 44px floor — a roster of eight members at 44px a row is a screen of
          buttons and no thread. 32px is a thumb, and every one of these is either reversible or
@@ -2989,14 +3101,6 @@
       color: var(--blue);
     }
 
-    .conv-roster-add {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding-top: 6px;
-    }
-
-    .conv-roster-add .conv-chip,
     .conv-roster .conv-open,
     .conv-roster .conv-again {
       color: var(--blue);
@@ -3080,40 +3184,6 @@
        is a reading state, and nothing about it is a deletion. */
     .conv-roster-row.hidden-member .who {
       opacity: 0.55;
-    }
-
-    .conv-roster-add .conv-none {
-      font-size: 0.65rem;
-      color: var(--muted);
-    }
-
-    /* The ended sessions in the picker, under their own heading — "which pane is running" and
-       "which recording exists" are different questions, and a flat list of chips would ask them as
-       one. */
-    .conv-roster-add .conv-pick-head {
-      flex-basis: 100%;
-      margin: 4px 0 0;
-      font-size: 0.6rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    .conv-roster-add .conv-chip {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .conv-roster-add .conv-chip.past {
-      /* Dimmer than a live pane, and it has to stay legible: this is a real choice, not a disabled
-         one. */
-      opacity: 0.85;
-    }
-
-    .conv-roster-add .conv-chip .ago {
-      font-size: 0.6rem;
-      color: var(--muted);
     }
 
     .conv-roster .conv-tier-note {
@@ -5872,29 +5942,37 @@
     style="display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(52px + env(safe-area-inset-top,0px));z-index:200;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
   </div>
 
-  <!-- Pair editor — pins two live same-host panes. Frontend only; the relay knows nothing of pairs. -->
-  <div id="pairSheet" style="display:none;position:fixed;inset:0;z-index:100;">
-    <div onclick="closePair()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
-    <div
-      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">Pair · <span id="pairSource"></span></span>
-        <button onclick="closePair()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+  <!-- The pane picker. Pinning a partner and adding members to a conversation ask the same
+       question — which other pane — so they are one sheet, and only the words on the button at the
+       bottom and what it does with the answer differ. Frontend only; the relay knows nothing of
+       pairs or of conversations. -->
+  <div id="pickSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closePicker()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="pick-panel">
+      <div class="pick-head">
+        <span class="pick-title" id="pickTitle"></span>
+        <button class="pick-x" onclick="closePicker()" aria-label="Close">✕</button>
+      </div>
+      <!-- Hidden until there is enough to search; renderPicker owns that. -->
+      <div class="pick-search" hidden>
+        <input id="pickSearch" type="search" placeholder="Search panes…" aria-label="Search panes"
+          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+          oninput="renderPicker()" />
       </div>
       <!-- Edge to edge and outside the padding, the same as the reorder sheet's rows: a list of
-           panes reads as a list when the rows run the full width of the sheet. -->
-      <div id="pairCandidates"></div>
-      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+           panes reads as a list when the rows run the full width of the sheet. It is also the only
+           part that scrolls, so the search box and the action stay put while it does. -->
+      <div id="pickList"></div>
+      <div class="pick-foot">
+        <!-- What a pair still needs once its partner is chosen. Nothing else the sheet is used for
+             asks anything more than "which one", so nothing else puts anything here. -->
         <div id="pairFields" style="display:none;flex-direction:column;gap:12px">
           <label class="start-field">Pair name<input id="pairName" maxlength="64" type="text" /></label>
           <label class="start-field">This pane's name<input id="pairRoleA" maxlength="32" type="text" /></label>
           <label class="start-field">Partner's name<input id="pairRoleB" maxlength="32" type="text" /></label>
         </div>
-        <p id="pairError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
-        <button id="pairSubmit" onclick="savePair()"
-          style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:var(--bg);font-weight:600;font-size:0.85rem;cursor:pointer">Save
-          pair</button>
+        <p id="pickError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
+        <button id="pickSubmit" onclick="pickSubmit()"></button>
       </div>
     </div>
   </div>
@@ -6472,6 +6550,29 @@
 
   </script>
   <script>
+    // The shell is sized to the *visual* viewport, not the layout one, so anything docked at the
+    // bottom — the conversation composer, the terminal input — rides above the on-screen keyboard
+    // instead of behind it. `interactive-widget=resizes-content` in the meta tag does this on
+    // Chrome for Android; Safari ignores it and leaves the page at full height with the keyboard
+    // drawn over the last 300px of it, which is where the composer lives.
+    (() => {
+      const vv = window.visualViewport;
+      if (!vv) return;
+      const fit = () => {
+        // Pinch-zoom shrinks the visual viewport too, and that is the user looking closer rather
+        // than a widget taking space. Resizing the page to the zoomed frame would reflow it under
+        // their fingers; zooming back out fires this again and restores the fit.
+        if (vv.scale > 1.01) return;
+        document.body.style.height = vv.height + 'px';
+        // Safari also scrolls the layout viewport up to reveal the focused field, taking the
+        // header off screen. With the body already short enough to fit, there is nothing to reveal.
+        if (vv.offsetTop) window.scrollTo(0, 0);
+      };
+      vv.addEventListener('resize', fit);
+      vv.addEventListener('scroll', fit);
+      fit();
+    })();
+
     // How recently a pane moved, in the three bands the colours are drawn from. One function so
     // the dot and the tab strip's cache signature cannot disagree about which band a pane is in.
     function activityBucket(paneId) {
@@ -13722,14 +13823,20 @@
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.term-menu-wrap')) closeTermMenu();
       if (!e.target.closest('.fire-wrap')) closeFireMenu();
+      // A sheet these panels open sits *above* them with its own backdrop, so a tap in it is not a
+      // tap on the thread behind — dismissing the panel under it would leave the sheet acting on a
+      // roster the user can no longer see.
+      const inSheet = !!e.target.closest('#pickSheet');
       // The pane's roster panel is a disclosure hung off the header, and a tap on the thread
       // behind it is a tap on the thing it is covering.
-      if (convPaneRoster && !e.target.closest('#convPaneRoster') && !e.target.closest('#paneConvWho')) {
+      if (convPaneRoster && !inSheet &&
+          !e.target.closest('#convPaneRoster') && !e.target.closest('#paneConvWho')) {
         toggleConvPaneRoster();
       }
       // The conversation window's copy of that panel, on the same terms. It had no dismiss of its
       // own, so it stayed open over the thread until the button that opened it was found again.
-      if (convRosterOpen && !e.target.closest('#convViewRoster') && !e.target.closest('#convViewWho')) {
+      if (convRosterOpen && !inSheet &&
+          !e.target.closest('#convViewRoster') && !e.target.closest('#convViewWho')) {
         toggleConvRoster();
       }
     }, true);
@@ -13982,69 +14089,59 @@
       });
     })();
 
-    // warn=true for "this will replace X" — it is a caution, not a refusal, and colouring it like
-    // a failure teaches the user to ignore the colour.
+    // The pair's own name for the picker's error line. Kept because the pair flow is the only
+    // caller that has anything to warn about, and it warns from three places.
     function setPairError(text, warn) {
-      const el = document.getElementById('pairError');
-      el.textContent = text || '';
-      el.style.color = warn ? 'var(--orange)' : 'var(--red)';
-      el.style.display = text ? 'block' : 'none';
+      setPickError(text, warn);
     }
 
     function openPairDialog(paneId, ev) {
       if (ev) ev.stopPropagation();
-      pairSource = agents.find(a => a.pane_id === paneId);
-      if (!pairSource) return;
+      const source = agents.find(a => a.pane_id === paneId);
+      if (!source) return;
+      // Before the sheet, not after: its first render reads the candidate list off these.
+      pairSource = source;
       pairPartner = null;
-      document.getElementById('pairSource').textContent = paneTitle(pairSource);
+      openPanePicker({
+        title: `Pair · ${paneTitle(source)}`,
+        empty: `No other live session on ${source.host || 'local'}. ` +
+          'A pair needs two live panes on one host.',
+        // Read fresh on every keystroke, so a pane that lands while the sheet is open is in it. The
+        // right edge carries what only matters here — the pair this pane is already in, which is
+        // what makes choosing it a replacement rather than an addition.
+        groups: () => [{head: 'Partner', rows: pairCandidates(agents, pairSource).map(a => {
+          const existing = pairFor(pairs, a.pane_id);
+          return pickPaneRow(a, existing ? {note: `in "${existing.name}"`} : null);
+        })}],
+        extra: pairStartRow,
+        choose: chosen => chosen.length ? choosePartner(chosen[0]) : clearPartner(),
+        label: () => 'Save pair',
+        submit: savePair,
+      });
+    }
+
+    // The way out of "there is nobody to pair with": start the partner from here. Offered alongside
+    // a full list too — the partner wanted is often one that does not exist yet. Gated on the start
+    // dialog being usable at all, not on this pane's agent: which agent the new session runs is
+    // answered in that dialog, not inherited from here.
+    function pairStartRow() {
+      if (!pairSource || !startOptions || !pairSource.project_id) return '';
+      return `<button class="pair-pick pair-add" onclick="startAndPair()">
+      <span class="kind" aria-hidden="true">＋</span>
+      <span class="info"><span class="name">Start a session and pair with it</span><span class="meta">A new session in this project, paired the moment it lands</span></span>
+    </button>`;
+    }
+
+    // Unticking the partner takes the form back down with it: the fields name a pair that is no
+    // longer being made, and leaving them up invites a save that has nothing to save.
+    function clearPartner() {
+      pairPartner = null;
       document.getElementById('pairFields').style.display = 'none';
       setPairError('');
-      renderPairCandidates();
-      document.getElementById('pairSheet').style.display = 'block';
     }
 
     function closePair() {
-      document.getElementById('pairSheet').style.display = 'none';
-      pairSource = null; pairPartner = null;
-    }
-
-    function renderPairCandidates() {
-      const box = document.getElementById('pairCandidates');
-      const submit = document.getElementById('pairSubmit');
-      const candidates = pairCandidates(agents, pairSource);
-      // The way out of "there is nobody to pair with": start the partner from here. Offered
-      // alongside a full list too — the partner wanted is often one that does not exist yet.
-      // Gated on the dialog being usable at all, not on this pane's agent: which agent the new
-      // session runs is answered in that dialog, not inherited from here.
-      const spawn = (startOptions && pairSource.project_id)
-        ? `<button class="pair-pick pair-add" onclick="startAndPair()">
-      <span class="kind" aria-hidden="true">＋</span>
-      <span class="info"><span class="name">Start a session and pair with it</span><span class="meta">A new session in this project, paired the moment it lands</span></span>
-    </button>`
-        : '';
-      if (!candidates.length) {
-        box.innerHTML = `<p class="pair-empty">No other live session on ${escapeHtml(pairSource.host || 'local')}. A pair needs two live panes on one host.</p>` + spawn;
-        submit.disabled = true;
-        return;
-      }
-      // The reorder sheet's row, without the handle: same dot, same kind glyph, same name over a
-      // badge and a short path. The right edge carries what only matters here — the pair this pane
-      // is already in, which is what makes choosing it a replacement rather than an addition.
-      box.innerHTML = '<div class="pair-head">Partner</div>' +
-        candidates.map(a => {
-          const existing = pairFor(pairs, a.pane_id);
-          const note = existing ? `<span class="pair-note">in "${escapeHtml(existing.name)}"</span>` : '';
-          const on = pairPartner && pairPartner.pane_id === a.pane_id;
-          const cwd = a.cwd ? escapeHtml(a.cwd.split('/').slice(-2).join('/')) : '';
-          const meta = a.agent ? `${agentBadge(a.agent)} ${cwd}` : cwd;
-          return `<button class="pair-pick${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" onclick="choosePartner('${escapeHtml(a.pane_id)}')">
-      <span class="dot" style="background:${a.agent ? statusColor(a) : shellColor(a.pane_id)}" aria-hidden="true"></span>
-      <span class="kind" aria-hidden="true">${a.agent ? agentGlyph() : '⬛'}</span>
-      <span class="info"><span class="name">${escapeHtml(paneLabel(a))}</span><span class="meta">${meta}</span></span>
-      ${note}<span class="pair-tick" aria-hidden="true">${on ? '✓' : ''}</span>
-    </button>`;
-        }).join('') + spawn;
-      submit.disabled = !pairPartner;
+      closePicker();
     }
 
     // A pair needs a second live pane and there is not always one. Hands off to the start dialog —
@@ -14062,6 +14159,9 @@
     function choosePartner(paneId) {
       pairPartner = agents.find(a => a.pane_id === paneId);
       if (!pairPartner) return;
+      // The picker's own choice too, so a partner chosen from outside the sheet is ticked in it —
+      // which is how the start dialog comes back from "start a session and pair with it".
+      if (pickerOpen()) picker.chosen = [paneId];
       document.getElementById('pairName').value =
         `${paneLabel(pairSource)} ↔ ${paneLabel(pairPartner)}`.slice(0, 64);
       // Default to the pane's own name — "Architect 1", "Reviewer 2" — which is what the
@@ -14074,7 +14174,7 @@
       const clashes = [pairSource, pairPartner].map(p => pairFor(pairs, p.pane_id)).filter(Boolean);
       const names = [...new Set(clashes.map(p => p.name))];
       setPairError(names.length ? `Saving replaces the existing pair ${names.map(n => `"${n}"`).join(' and ')}.` : '', true);
-      renderPairCandidates();
+      renderPicker();
     }
 
     function savePair() {
@@ -14094,17 +14194,26 @@
       closePair();
       render();
       renderPairStrip();
+      // A pair is what draws a conversation's two members as two columns, so a thread on screen is
+      // reading a layout this just changed.
+      renderConvManage();
     }
 
-    function unpair() {
-      const pair = pairFor(pairs, activePane);
+    // The pane is named because the composer's own menu unpairs the agent it is addressed to, which
+    // is not always the pane being read. Unset means the open pane, which is what the pane menu asks
+    // about.
+    function unpair(paneId) {
+      const pair = pairFor(pairs, paneId || activePane);
       if (!pair) return;
-      // The arm is what asked; the menu it was armed in is still open behind it.
+      // The arm is what asked; the menu it was armed in is still open behind it. Both menus, because
+      // either can be the one holding the armed button.
       closeTermMenu();
+      closeDockMenu('optMenu');
       pairs = pairs.filter(p => p.id !== pair.id);
       savePairs();
       render();
       renderPairStrip();
+      renderConvManage();
     }
 
     // Who you are reading, always; the pair controls only when there is a healthy pair to work.
@@ -14201,6 +14310,162 @@
       openTerminal(to);
       if (keepComposer) document.getElementById('termInput').focus();
       if (window.cue) cue('page');
+    }
+
+  </script>
+  <script>
+    // One sheet for every "which other pane?" question.
+    //
+    // Pinning a partner and adding members to a conversation were two pickers that differed only in
+    // what they did with the answer: one list of live panes, one row shape, one tick. They are one
+    // sheet now — search at the head because a roster of twenty is otherwise a scroll, the action at
+    // the foot so it is on screen with the keyboard up, and multi-select where adding four panes
+    // used to be four round trips through a closing dialog.
+    //
+    // What differs between the two is a spec, passed to openPanePicker:
+    //
+    //   title        the sheet's heading
+    //   multi        true to tick several rows; one replaces the other otherwise
+    //   groups()     [{head, rows}] — read on every keystroke, so it reflects live panes
+    //   empty        what to say when there is nothing to choose at all
+    //   extra()      html appended under the rows: the way out of an empty list
+    //   choose(ids)  called after every tick, for a form that opens on the choice
+    //   label(ids)   the submit button's words
+    //   submit(ids)  what the answer is for
+    //
+    // A row is {id, name, meta, note, color, glyph, dim}. `meta` is html — the caller escapes it,
+    // because it carries an agent badge — and everything else is text.
+    let picker = null;
+
+    function openPanePicker(spec) {
+      picker = Object.assign({multi: false, chosen: []}, spec);
+      document.getElementById('pickTitle').textContent = spec.title || '';
+      document.getElementById('pickSearch').value = '';
+      document.getElementById('pairFields').style.display = 'none';
+      setPickError('');
+      renderPicker();
+      document.getElementById('pickSheet').style.display = 'block';
+    }
+
+    function pickerOpen() {
+      return !!picker;
+    }
+
+    function closePicker() {
+      document.getElementById('pickSheet').style.display = 'none';
+      picker = null;
+      // The pair's own working state lives outside this sheet — start_dialog reads it to tell a
+      // saved pair from a refused one — so closing the sheet is what clears it.
+      pairSource = null;
+      pairPartner = null;
+    }
+
+    // warn=true for "this will replace X" — it is a caution, not a refusal, and colouring it like
+    // a failure teaches the user to ignore the colour.
+    function setPickError(text, warn) {
+      const el = document.getElementById('pickError');
+      el.textContent = text || '';
+      el.style.color = warn ? 'var(--orange)' : 'var(--red)';
+      el.style.display = text ? 'block' : 'none';
+    }
+
+    // Every word typed has to be found, and each one inside a single field: as a substring, or
+    // failing that as a subsequence, so "cdx" reaches codex and "arch 1" reaches Architect 1.
+    // Per field rather than over the row's whole text, because a subsequence allowed to wander
+    // across fields matches almost everything at two or three characters — "sc" picking up the
+    // s in charts and the c in claude is not a search, it is a list that never shrinks.
+    function pickMatch(fields, query) {
+      return query.split(/\s+/).filter(Boolean)
+        .every(w => fields.some(f => f.includes(w) || subsequence(f, w)));
+    }
+
+    function subsequence(hay, word) {
+      let at = 0;
+      for (const ch of word) {
+        at = hay.indexOf(ch, at) + 1;
+        if (!at) return false;
+      }
+      return true;
+    }
+
+    // What a row shows, plus what it *is*: its name, its harness, its project, and the path in its
+    // meta. Tags are stripped rather than the field excluded — `meta` arrives as html and its badge
+    // holds the agent's name, which is exactly the word someone types to find "the codex one".
+    function pickHay(row) {
+      return [row.name, row.agent, row.project,
+        String(row.meta || '').replace(/<[^>]*>/g, ' '), row.note]
+        .map(f => String(f || '').toLowerCase()).filter(Boolean);
+    }
+
+    function pickRowHtml(row) {
+      const on = picker.chosen.includes(row.id);
+      return `<button class="pair-pick${on ? ' on' : ''}${row.dim ? ' past' : ''}" ` +
+        `aria-pressed="${on ? 'true' : 'false'}" data-id="${escapeHtml(row.id)}" ` +
+        `onclick="pickChoose(this.dataset.id)">` +
+        `<span class="dot" style="background:${row.color || 'var(--muted)'}" aria-hidden="true"></span>` +
+        `<span class="kind" aria-hidden="true">${row.glyph || '⬛'}</span>` +
+        `<span class="info"><span class="name">${escapeHtml(row.name || '')}</span>` +
+        `<span class="meta">${row.meta || ''}</span></span>` +
+        (row.note ? `<span class="pair-note">${escapeHtml(row.note)}</span>` : '') +
+        `<span class="pair-tick" aria-hidden="true">${on ? '✓' : ''}</span></button>`;
+    }
+
+    function renderPicker() {
+      if (!picker) return;
+      const q = document.getElementById('pickSearch').value.trim().toLowerCase();
+      let shown = 0, all = 0;
+      const html = picker.groups().map(g => {
+        const rows = q ? g.rows.filter(r => pickMatch(pickHay(r), q)) : g.rows;
+        all += g.rows.length;
+        shown += rows.length;
+        // A heading over nothing reads as a group that has emptied rather than one that was
+        // filtered away, so a group with no matches is not drawn at all.
+        if (!rows.length) return '';
+        return `<div class="pair-head">${escapeHtml(g.head)}</div>` + rows.map(pickRowHtml).join('');
+      }).join('');
+      // Two different nothings: nothing matches what was typed, and there was nothing to begin
+      // with. The first is answered by clearing the box and the second is not, so they are not the
+      // same sentence.
+      const none = all ? `Nothing here matches "${q}".` : (picker.empty || 'Nothing to choose.');
+      document.getElementById('pickList').innerHTML =
+        (shown ? html : `<p class="pair-empty">${escapeHtml(none)}</p>`) +
+        (picker.extra ? picker.extra() : '');
+      // The search box appears once there is enough to search. Below that it is a control that can
+      // only ever filter a list already entirely on screen.
+      document.getElementById('pickSearch').parentElement.hidden = all < 5 && !q;
+      const submit = document.getElementById('pickSubmit');
+      submit.textContent = picker.label ? picker.label(picker.chosen) : 'Save';
+      submit.disabled = !picker.chosen.length;
+    }
+
+    function pickChoose(id) {
+      if (!picker) return;
+      const at = picker.chosen.indexOf(id);
+      if (!picker.multi) picker.chosen = at < 0 ? [id] : [];
+      else if (at < 0) picker.chosen.push(id);
+      else picker.chosen.splice(at, 1);
+      if (picker.choose) picker.choose(picker.chosen);
+      renderPicker();
+      if (window.cue) cue('tick');
+    }
+
+    function pickSubmit() {
+      if (picker && picker.chosen.length) picker.submit(picker.chosen.slice());
+    }
+
+    // The row every live pane gets, wherever it is being chosen: the reorder sheet's shape without
+    // the handle. Same dot, same kind glyph, same name over a badge and a short path.
+    function pickPaneRow(a, extra) {
+      const cwd = a.cwd ? escapeHtml(a.cwd.split('/').slice(-2).join('/')) : '';
+      return Object.assign({
+        id: a.pane_id,
+        name: paneLabel(a),
+        agent: a.agent || '',
+        project: a.project || a.project_id || '',
+        meta: a.agent ? `${agentBadge(a.agent)} ${cwd}` : cwd,
+        color: a.agent ? statusColor(a) : shellColor(a.pane_id),
+        glyph: a.agent ? agentGlyph() : '⬛',
+      }, extra || {});
     }
 
   </script>
@@ -14645,7 +14910,7 @@
       renderConversations();
       openConversation(conv.id);
       convRosterOpen = true;
-      await convToggleAdd();   // which renders the roster, and again once the records are read
+      await convToggleAdd();   // straight to the picker: an empty conversation has one thing to do
     }
 
     // "New conversation", then the first number that is free. Numbered and not stamped: two of
@@ -14678,7 +14943,6 @@
       convRosterHtmlLast = '';
       convStripSig = '';
       convRosterOpen = false;
-      convAdding = false;
       openPanel('convView');
       syncNavBtns();   // the walk is standing somewhere new, and its arrows are on screen here too
       // Tabs come from the index and live snapshot, not transcript storage. Draw them before the
@@ -14718,7 +14982,7 @@
       jumpToPane(live.pane_id);
     }
 
-    let convStandaloneToken = 0, convStandaloneHtml = '', convAdding = false;
+    let convStandaloneToken = 0, convStandaloneHtml = '';
     // The roster panel's disclosure state, and which members the reader has folded out of the
     // thread. Both are about looking, not about the record: hiding a member changes no membership,
     // deletes no words, and stops no recording — it is the reading equivalent of turning a page
@@ -14886,32 +15150,6 @@
           ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button></div>`;
       }).join('');
-      // Candidates are the live panes this conversation does not already name — including panes
-      // already recording elsewhere, which bring their own transcript with them (D3).
-      const taken = new Set((conv.members || []).map(m => m.key));
-      const free = agents.filter(x => convMemberKey(x) && !taken.has(convMemberKey(x)));
-      // And the sessions that have already ended, which is what a conversation assembled after the
-      // fact is made of. Newest first: a picker is ordered by what you are most likely to want.
-      const now = Date.now();
-      const past = convPickRecs
-        .filter(r => !taken.has(r.key) && !live.has(r.key) && (r.entries || []).length)
-        .sort((a, b) => (b.touched || 0) - (a.touched || 0))
-        .slice(0, CONV_PICK_MAX);
-      // Both groups are the same kind of choice — a session, by name, with the harness it runs —
-      // so they are the same chip. What differs is the heading above them and, for one that has
-      // ended, how long ago it last said anything.
-      const chips = !convAdding ? '' : `<div class="conv-roster-add">` +
-        `<span class="conv-pick-head">Running</span>` + (free.length
-        ? free.map(x => `<button class="conv-chip" data-key="${escapeHtml(convMemberKey(x))}"` +
-            ` onclick="convJoinPane(this.dataset.key)">${escapeHtml(paneLabel(x))}` +
-            agentBadge(x.agent || '') + '</button>').join('')
-        : '<span class="conv-none">Every live pane is already in this conversation.</span>') +
-        (past.length ? `<span class="conv-pick-head">Recorded</span>` + past.map(r =>
-          `<button class="conv-chip past" data-key="${escapeHtml(r.key)}"` +
-          ` onclick="convJoinRecord(this.dataset.key)">${escapeHtml(r.label || 'Former pane')}` +
-          agentBadge((r.spawn || {}).agent || '') +
-          `<span class="ago">${escapeHtml(convSpan(now - (r.touched || now)))}</span></button>`
-        ).join('') : '') + '</div>';
       // The tier, said where the button that changes it is. "How do I make this one mine" is the
       // question an auto record raises, and the answer is one word on the button below it.
       const tier = conv.auto
@@ -14926,9 +15164,14 @@
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
         `Duplicate</button>` +
         `<button onclick="renameConversation()">Rename</button>` +
-        `<button aria-pressed="${convAdding ? 'true' : 'false'}"` +
-        ` onclick="convToggleAdd()">Add pane</button>` +
-        `</div>${chips}${tier}</div>`;
+        `<button onclick="convToggleAdd()">Add pane</button>` +
+        // Starting one is offered next to adding one, not only inside the picker: from a pane's
+        // roster the picker is two taps away, and "there is nobody to add yet" is exactly the
+        // moment the answer is a new agent.
+        (canStartFromConv()
+          ? `<button onclick="openNewAgent()" aria-label="Start a new agent in this conversation">` +
+            `New agent</button>` : '') +
+        `</div>${tier}</div>`;
     }
 
     // A pane does not carry the role it was started with, and neither does a record that predates
@@ -15102,39 +15345,91 @@
     let convPickRecs = [];
     const CONV_PICK_MAX = 60;
 
+    // "Which other pane" is the pair sheet's question too, so it is asked in the pair sheet — with
+    // the tick left on, because adding four panes to a conversation used to be four trips through a
+    // dialog that closed itself after each one.
     async function convToggleAdd() {
-      convAdding = !convAdding;
-      if (!convAdding) { convPickRecs = []; renderConvManage(); return; }
-      renderConvManage();
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv) return;
       convPickRecs = await convAll();
-      if (convAdding) renderConvManage();
-    }
-
-    // A member built from a record instead of from a pane: the session has ended, so there is no
-    // paneLabel to ask and the record's own label is the only name it has left.
-    function convJoinRecord(key) {
-      const rec = convPickRecs.find(r => r.key === key);
-      if (!rec) return;
-      convAdding = false;
-      convPickRecs = [];
-      // No CONV_MEMBER_MAX check: that caps panes *recording* at once, and this one has stopped.
-      convEdit(conv => {
-        conv.members = (conv.members || []).concat(
-          { key: key, added: Date.now(), label: rec.label || '' });
+      const taken = new Set((conv.members || []).map(m => m.key));
+      const live = new Set(agents.map(convMemberKey));
+      // The live panes this conversation does not already name — including panes already recording
+      // elsewhere, which bring their own transcript with them (D3). And the sessions that have
+      // already ended, which is what a conversation assembled after the fact is made of. Newest
+      // first: a picker is ordered by what you are most likely to want.
+      const now = Date.now();
+      const free = () => agents.filter(x => convMemberKey(x) && !taken.has(convMemberKey(x)));
+      const past = convPickRecs
+        .filter(r => !taken.has(r.key) && !live.has(r.key) && (r.entries || []).length)
+        .sort((a, b) => (b.touched || 0) - (a.touched || 0))
+        .slice(0, CONV_PICK_MAX);
+      openPanePicker({
+        title: `Add to · ${conv.name}`,
+        multi: true,
+        empty: 'Every live pane is already in this conversation.',
+        // Both groups are the same kind of choice — a session, by name, with the harness it runs —
+        // so they are the same row. What differs is the heading above it and, for one that has
+        // ended, how long ago it last said anything. A pane is chosen by its member key rather than
+        // its pane id: a record has no pane behind it to name.
+        groups: () => [
+          {head: 'Running', rows: free().map(x =>
+            pickPaneRow(x, {id: convMemberKey(x)}))},
+          {head: 'Recorded', rows: past.map(r => ({
+            id: r.key,
+            name: r.label || 'Former pane',
+            agent: (r.spawn || {}).agent || '',
+            project: r.project || (r.spawn || {}).project || (r.spawn || {}).project_id || '',
+            meta: agentBadge((r.spawn || {}).agent || ''),
+            note: convSpan(now - (r.touched || now)),
+            color: 'var(--muted)',
+            glyph: agentGlyph(),
+            dim: true,
+          }))},
+        ],
+        // The pane that does not exist yet, under the ones that do. Answering "add a pane" by
+        // sending the reader out to Projects to start a session and back in here to join it is the
+        // same answer in three steps.
+        extra: () => canStartFromConv()
+          ? `<button class="pair-pick pair-add" onclick="closePicker(); openNewAgent()">
+      <span class="kind" aria-hidden="true">＋</span>
+      <span class="info"><span class="name">Start a session and add it</span><span class="meta">A new agent in this conversation, recording from the moment it lands</span></span>
+    </button>` : '',
+        label: chosen => chosen.length > 1 ? `Add ${chosen.length} panes` : 'Add pane',
+        submit: keys => { closePicker(); convJoinKeys(keys); },
       });
     }
 
-    function convJoinPane(key) {
-      const pane = agents.find(x => convMemberKey(x) === key);
-      if (!pane) return;
-      convAdding = false;
+    // Every chosen member in one edit. One at a time would save, re-render and re-file the
+    // conversation once per pane, and the ceiling would be counted against a roster that the
+    // previous save had already grown.
+    function convJoinKeys(keys) {
+      const recs = convPickRecs;
       convPickRecs = [];
+      if (!keys.length) return;
       convEdit(conv => {
-        if (convRecordingMembers(conv).length >= CONV_MEMBER_MAX) {
-          showToast(`"${conv.name}" already has ${CONV_MEMBER_MAX} live panes.`);
-          return false;
+        let recording = convRecordingMembers(conv).length;
+        const add = [];
+        for (const key of keys) {
+          const pane = agents.find(x => convMemberKey(x) === key);
+          if (pane) {
+            // The cap is on panes *recording* at once, which is why a record is never counted
+            // against it: that session has stopped.
+            if (recording >= CONV_MEMBER_MAX) {
+              showToast(`"${conv.name}" already has ${CONV_MEMBER_MAX} live panes.`);
+              continue;
+            }
+            recording++;
+            add.push(convMemberOf(pane));
+            continue;
+          }
+          // A member built from a record instead of from a pane: the session has ended, so there is
+          // no paneLabel to ask and the record's own label is the only name it has left.
+          const rec = recs.find(r => r.key === key);
+          if (rec) add.push({key: key, added: Date.now(), label: rec.label || ''});
         }
-        conv.members = (conv.members || []).concat(convMemberOf(pane));
+        if (!add.length) return false;
+        conv.members = (conv.members || []).concat(add);
       });
     }
 
@@ -15725,11 +16020,34 @@
         `<button class="menu-item" role="menuitemcheckbox" aria-checked="${on}" ` +
         `onclick="${call}" title="${escapeHtml(why)}">` +
         `<span class="tick">${on ? '✓' : ''}</span>${escapeHtml(label)}</button>`).join('') +
+        dockPairItems() +
         `<button class="menu-item" role="menuitem" onclick="closeDockMenu('optMenu')">Done</button>`;
       closeDockMenu('chipMenu');
       closeDockMenu('whoMenu');
       box.hidden = false;
       syncDockHeight();
+    }
+
+    // The addressed agent's pair, managed from the box that talks to it. It used to be reachable
+    // only from that pane's own gear menu, which meant leaving the conversation to answer a question
+    // about one of its members — and a pair is what draws two of them as two columns here, so it is
+    // a question this window raises.
+    function dockPairItems() {
+      const to = paneOf(dockAddressed());
+      if (!to) return '';
+      const name = escapeHtml(paneLabel(to));
+      const pair = pairFor(pairs, to.pane_id);
+      const open = `closeDockMenu('optMenu'); openPairDialog('${escapeHtml(to.pane_id)}')`;
+      if (!pair) {
+        return `<button class="menu-item" role="menuitem" onclick="${open}" ` +
+          `aria-label="Pair ${name} with another pane">Pair ${name} with…</button>`;
+      }
+      return `<button class="menu-item" role="menuitem" onclick="${open}" ` +
+        `aria-label="Edit the pair ${escapeHtml(pair.name)}">Edit pair · ${escapeHtml(pair.name)}</button>` +
+        `<button class="menu-item danger arm-btn" role="menuitem" ` +
+        `data-pane="${escapeHtml(to.pane_id)}" ` +
+        `onclick="armButton(this, 'Unpair?', () => unpair(this.dataset.pane))" ` +
+        `aria-label="Unpair ${name}">Unpair…</button>`;
     }
 
     function optMenuOpen() {
