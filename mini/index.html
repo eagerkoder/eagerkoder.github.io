@@ -3271,6 +3271,128 @@
       opacity: 0.75;
     }
 
+    /* Where the work landed, drawn as events between the messages — the same furniture as the
+       rule that marks a break in the recording, because it is the same kind of fact: something
+       that happened in the gap between two things that were said. */
+    /* Which branch the addressed agent is on, floating over the bottom of whatever is being read.
+       The thread's branch rules say when it *changed*; this says what is true now, which is a
+       different question and the one a reader has while writing the next message. Centred and
+       over the content rather than in a row of its own: a permanent strip would cost the thread
+       a line of height for a fact that rarely changes.
+
+       Per agent, not per view: in a conversation two members can be on two branches, so this
+       follows whoever the composer is addressing. */
+    .branch-badge {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 4;
+      max-width: 70%;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--branch-color, var(--blue)) 45%, var(--border));
+      background: color-mix(in srgb, var(--branch-color, var(--blue)) 12%, var(--surface));
+      color: var(--branch-color, var(--blue));
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.62rem;
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+      /* It hangs over the thread, and the thread is what the finger is for. */
+      pointer-events: none;
+    }
+
+    .branch-badge[hidden] {
+      display: none;
+    }
+
+    /* Inside the pane's box, which clips — so it sits just above its own bottom edge. */
+    #paneBranch {
+      bottom: 8px;
+    }
+
+    /* Above the dock rather than inside it: the dock is the composer, and this is not part of what
+       is being written. */
+    #convBranch {
+      bottom: 100%;
+      margin-bottom: 6px;
+      /* `.conv-dock > *` hands every child its taps back; this one wants none of them. */
+      pointer-events: none;
+    }
+
+    .conv-rule.git.branch {
+      color: var(--blue);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .conv-rule.git.branch::before,
+    .conv-rule.git.branch::after {
+      border-top-color: var(--blue);
+      opacity: 0.4;
+    }
+
+    /* A list, so the dashes either side of a one-line rule would have nothing to sit beside. A
+       left rule instead: it reads as a run of things that happened, in order, at this point. */
+    /* What this turn committed, hung under the bubble that did it rather than drawn as a rule
+       across the thread. A rule is a divider — it says the thread moved on — and these are not
+       between two messages, they belong to the one above them: the agent said it finished and
+       these are what it finished. So they take the bubble's width and its side and sit tight
+       against its underside, the way a caption belongs to its picture. */
+    .conv-commits {
+      width: 86%;
+      box-sizing: border-box;
+      align-self: flex-start;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 3px 0 8px;
+      padding: 0 4px;
+    }
+
+    .conv-thread.conv-solo .conv-commits {
+      width: 100%;
+    }
+
+    /* Under the right-hand column's bubbles, and packed from the right so the strip ends where the
+       bubble does. */
+    .conv-commits.conv-right {
+      align-self: flex-end;
+      justify-content: flex-end;
+    }
+
+    /* One commit. A badge and not a line: they arrive in twos and threes, and three lines of prose
+       under every turn is a thread nobody can skim. */
+    /* Neutral fill, agent-coloured text — the same division the branch badge makes. The colour
+       says whose commit it is; the fill stays out of the way, because a wall of washed pills under
+       every turn competes with the bubbles they belong to, and the bubble above has already said
+       whose it is in its own wash. */
+    .conv-commit {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      max-width: 100%;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--muted) 10%, var(--surface));
+      color: color-mix(in srgb, var(--conv-agent, var(--muted)) 75%, var(--text));
+      font-size: max(7px, calc(var(--conv-font, 13px) * 0.72));
+      line-height: 1.5;
+      /* A subject is a line of prose that may be long, and the thread's width is the reader's line
+         length. One badge wraps its own text rather than making the thread scroll sideways. */
+      overflow-wrap: anywhere;
+    }
+
+    /* The sha is the identifier and reads at full strength; the subject beside it is prose and is
+       already carrying the colour at three quarters. */
+    .conv-commit code {
+      flex: none;
+      color: var(--conv-agent, var(--muted));
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
     .conv-who .dot {
       width: 0.75em;
       height: 0.75em;
@@ -3755,6 +3877,7 @@
        macOS gives a chunky arrow at 13px, iOS a hairline one about half the size, which is why the
        same button read as tiny on a phone and fine on a desktop. Same reasoning as convGlyph. */
     .hang-live svg,
+    .hang-commits svg,
     .hang-tidy svg,
     .conv-analytics-refresh svg {
       display: block;
@@ -3763,6 +3886,13 @@
     .hang-live.live {
       color: var(--green);
       border-color: var(--green);
+    }
+
+    /* Lit in the branch colour rather than the record's green: two buttons side by side in the
+       same green would read as one state with two switches. */
+    .hang-commits.live {
+      color: var(--blue);
+      border-color: var(--blue);
     }
 
     /* The jump to the end, in the corner the end is in. The pane is not a scroller itself — its
@@ -5210,6 +5340,12 @@
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />
         </svg></button>
+      <button class="hang-btn hang-commits" id="convCommits" onclick="toggleConvCommits()"
+        aria-pressed="false" aria-label="Show commits in the thread">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.5" /><path d="M12 2v6.5M12 15.5V22" />
+        </svg></button>
       <button class="hang-btn hang-live" id="convLive" onclick="toggleConvLive()"
         aria-pressed="false" aria-label="Read the relay’s record">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
@@ -5228,6 +5364,9 @@
     <!-- The dock: who you are talking to, what is added to what you send, and the composer it all
          modifies. Sits statically at the bottom of the conversation view. -->
     <div class="conv-dock" id="convDock">
+      <!-- The addressed member's branch, hanging above the dock. Its members can be on different
+           branches, so it follows the target chip rather than the conversation. -->
+      <div class="branch-badge" id="convBranch" hidden></div>
       <div class="chip-menu" id="whoMenu" role="menu" hidden></div>
       <div class="chip-menu" id="chipMenu" role="menu" hidden></div>
       <!-- How the composer behaves: standing switches, not a mode of the moment. -->
@@ -5456,6 +5595,8 @@
       <!-- A pane opened a moment ago still holds the last one's text until its own first read
            lands, so this hangs over the middle of the pane rather than replacing it. -->
       <div class="term-loading" id="termLoading" hidden>Loading…</div>
+      <!-- Which branch this pane's work is landing on. See .branch-badge. -->
+      <div class="branch-badge" id="paneBranch" hidden></div>
       <div class="sel-band" id="selBand" hidden></div>
       <div class="ruler" id="ruler" hidden aria-hidden="true">
         <div class="ruler-handle" id="rulerTop" hidden></div>
@@ -5491,6 +5632,16 @@
             <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
             <path d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13" />
             <path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3" />
+          </svg></button>
+        <!-- Whether the thread shows what was committed between the messages. Beside the record
+             toggle because it is only ever true of the relay's record — this browser's transcript
+             has no commits in it — and because the two are one question: how much of what happened
+             do you want to see. -->
+        <button class="hang-btn hang-commits" id="paneCommits" onclick="toggleConvCommits()"
+          aria-pressed="false" aria-label="Show commits in the thread">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.5" /><path d="M12 2v6.5M12 15.5V22" />
           </svg></button>
         <div class="block-nav" id="blockNav" hidden>
           <button onclick="stepBlock(1)" title="Next agent message" aria-label="Next agent message">↓</button>
@@ -6364,6 +6515,286 @@
     let startOptions = null, startProjectId = null, startMode = 'agent';
     // Pairs live only in this browser. The relay has no pair message and stores no pair data.
     let pairs = [], pairSource = null, pairPartner = null, transferSelection = '';
+
+  </script>
+  <script>
+    // --- Shared user state ---
+    //
+    // Four of this app's localStorage keys are not preferences about a device. A pair, a
+    // conversation's name and roster, which conversation a pane is read under, and which
+    // conversations are hidden are assertions about the *agents*, and a second browser that does
+    // not know them is showing a different fleet. Those four are mirrored to the relay.
+    //
+    // localStorage stays the working copy every render reads. This is a mirror, not a move — so
+    // the app is unchanged offline, unchanged against a relay built before this existed, and
+    // unchanged in the frame between a keystroke and an ack.
+    //
+    // The theme, the font sizes, the wrap mode, the dictation switch, the relay URL and the relay
+    // token are deliberately absent. They are answers to "how should this device behave", and a
+    // desktop that adopts a phone's font size is a bug. The allowlist below is the whole boundary:
+    // nothing outside it is read, written, or sent.
+
+    const STATE_DOCS = {
+      pairs:         { key: 'herdr_pairs' },
+      conversations: { key: 'herdr_conversations' },
+      conv_view:     { key: 'herdr_conv_view' },
+      conv_hidden:   { key: 'herdr_conv_hidden' },
+    };
+
+    // One message per document per burst. Renaming a pair is one edit to the user and several
+    // writes to the key, and the relay only needs the last of them.
+    const STATE_DEBOUNCE = 500;
+
+    // idle: no socket. pulling: state_get sent, nothing back yet. live: the relay answered.
+    // off: the relay is older than this client, or never answered — the app runs as it always did.
+    let stateMode = 'idle';
+    let stateSocket = null;
+    // name -> the revision the relay last told us. Memory only, and cleared on every connect: a
+    // reconnect re-learns them from state_get, which is cheaper than persisting a number whose
+    // only correct source is the relay we just reconnected to.
+    let stateRev = {};
+    let stateSeeded = false;
+    const stateDirty = new Set();
+    const stateTimers = {};
+    const stateInFlight = new Set();
+
+    // Pure. What to do with one document on the first answer after connect.
+    //   'adopt'  — the relay holds it; take it, whatever this browser had
+    //   'upload' — the relay holds nothing and this browser does; seed it
+    //   'idle'   — neither has anything, or they already agree
+    //
+    // 'adopt' is where this feature deletes something the user typed: the second browser to
+    // connect loses its own pairs to the first. That is what one shared answer means, and it is
+    // why stateSyncApply keeps a copy of what it overwrites.
+    function stateSyncPlan(serverRev, serverBody, localBody) {
+      if (serverRev > 0) return serverBody === localBody ? 'idle' : 'adopt';
+      return localBody ? 'upload' : 'idle';
+    }
+
+    function stateRead(name) {
+      try { return localStorage.getItem(STATE_DOCS[name].key); }
+      catch (e) { return null; }  // private mode: nothing stored, nothing to sync
+    }
+
+    // Everything still waiting on its timer, sent now.
+    //
+    // The debounce is a 500 ms window in which an edit exists in this browser and nowhere else,
+    // and a page that goes away inside it loses that edit — then adopts the relay's older document
+    // on the way back in, so a deleted conversation returns and a rename undoes itself. Reloading
+    // straight after an edit is ordinary, and on a phone every switch away from the browser is one
+    // of these.
+    function stateSyncFlushAll() {
+      for (const name of Array.from(stateDirty)) {
+        clearTimeout(stateTimers[name]);
+        delete stateTimers[name];
+        stateSyncFlush(name);
+      }
+    }
+
+    // Bound on first connect rather than at load: this module is evaluated in a vm context with no
+    // DOM by tests/test_state_sync.js, and reaching for one at load time is what that check exists
+    // to catch. Once only, however many times the socket comes back.
+    let stateUnloadBound = false;
+    function stateBindUnload() {
+      if (stateUnloadBound || typeof addEventListener !== 'function') return;
+      stateUnloadBound = true;
+      // pagehide covers reload and navigation; visibilitychange covers the phone case, where the
+      // page is not unloaded at all — it is backgrounded, and may be discarded much later without
+      // ever getting another event.
+      addEventListener('pagehide', stateSyncFlushAll);
+      addEventListener('visibilitychange', () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          stateSyncFlushAll();
+        }
+      });
+    }
+
+    function stateSyncOpen(socket = ws) {
+      stateBindUnload();
+      // Anything the previous socket accepted but never acknowledged, retried here — the one place
+      // that runs for every way a socket can be replaced. A socket that closed came through
+      // stateSyncClose; a socket replaced while still open (a manual reconnect) produces a close
+      // event that arrives late and is dropped as stale, so open is all that is left.
+      for (const name of stateInFlight) stateDirty.add(name);
+      stateInFlight.clear();
+      stateSocket = socket;
+      stateMode = 'pulling';
+      stateSeeded = false;
+      stateRev = {};
+      try { stateSocket.send(JSON.stringify({ type: 'state_get' })); }
+      catch (e) { stateMode = 'off'; }
+    }
+
+    function stateSyncClose(socket) {
+      // Closing socket A after socket B has opened must not take B's sync offline. WebSocket
+      // events are asynchronous, and `connect()` replaces the global before A's close arrives.
+      if (socket && socket !== stateSocket) return;
+      stateMode = 'idle';
+      for (const name in stateTimers) { clearTimeout(stateTimers[name]); delete stateTimers[name]; }
+      // `send()` accepting a frame is not an ack: the socket may close after the browser handed it
+      // off but before the relay replied. Those documents stay in flight — deliberately not
+      // cleared here — and stateSyncOpen turns them back into dirty when a socket returns. While
+      // there is no socket the set blocks nothing: every flush is already gated on `live`.
+      stateSocket = null;
+    }
+
+    // Called by the four save paths. Records the intent; the send happens after the burst.
+    function stateSyncMark(name) {
+      if (!STATE_DOCS[name]) return;
+      stateDirty.add(name);
+      clearTimeout(stateTimers[name]);
+      stateTimers[name] = setTimeout(() => { delete stateTimers[name]; stateSyncFlush(name); },
+                                     STATE_DEBOUNCE);
+    }
+
+    function stateSyncFlush(name) {
+      if (stateMode !== 'live' || !stateDirty.has(name) || stateInFlight.has(name)) return;
+      // Read at flush time and not at mark time: a burst of edits sends the final state, and an
+      // edit that arrived while the timer was running is already included rather than queued.
+      const body = stateRead(name);
+      if (body === null) { stateDirty.delete(name); return; }
+      stateDirty.delete(name);
+      stateInFlight.add(name);
+      try {
+        // The socket this module learned its revisions from, never the global `ws`. `connect()`
+        // assigns the new socket before it opens, so a timer firing inside that gap would hand a
+        // CONNECTING socket a frame it cannot take — and the revision we are quoting belongs to
+        // the old socket's conversation anyway.
+        stateSocket.send(JSON.stringify({ type: 'state_put', name: name,
+                                          rev: stateRev[name] || 0, body: body }));
+      } catch (e) {
+        // The socket went while we were deciding. Still dirty, so the reconnect's state_get learns
+        // the revision and this edit goes out then — dropping it here is the silent loss the
+        // in-flight retry in stateSyncClose exists to prevent, reached by the other door.
+        stateInFlight.delete(name);
+        stateDirty.add(name);
+      }
+    }
+
+    // Write an incoming document over the local one. Returns whether anything changed.
+    function stateSyncApply(name, body) {
+      const key = STATE_DOCS[name].key;
+      let had = null;
+      try { had = localStorage.getItem(key); } catch (e) { /* private mode */ }
+      if (had === body) return false;
+      try {
+        // Overwriting what the user typed is what "the same thing across browsers" costs. Losing
+        // it without a copy is not part of the deal — one slot, last overwrite only, written here
+        // and never read back by this app, so a first connect that discards a browser's pairs is
+        // recoverable by hand.
+        if (had) localStorage.setItem(key + '_local', had);
+        if (body === null) localStorage.removeItem(key); else localStorage.setItem(key, body);
+      } catch (e) { return false; }
+      stateSyncRerender(name);
+      return true;
+    }
+
+    // The same functions each document's own save path calls, so a change that arrived over the
+    // wire lands on screen exactly as a local one does.
+    //
+    // Applying is not editing: nothing here may call stateSyncMark, or adopting a document would
+    // immediately push it back and the two browsers would take turns writing forever. `loadPairs`
+    // is the one named for pairs precisely because it only reads.
+    const STATE_RERENDER = {
+      pairs:         ['loadPairs', 'render', 'renderPairStrip'],
+      conversations: ['renderConversations', 'renderConvBar', 'renderConvView'],
+      conv_view:     ['renderConvBar', 'renderConvView'],
+      conv_hidden:   ['renderConvManage', 'renderConvView'],
+    };
+
+    function stateSyncRerender(name) {
+      if (name === 'conversations' || name === 'conv_hidden') {
+        // The roster panel memoizes its own markup, and a roster that changed under it would
+        // otherwise redraw as the one it replaced.
+        try { convStandaloneHtml = ''; } catch (e) { /* shortcuts.js not loaded (vm slice) */ }
+      }
+      for (const fn of STATE_RERENDER[name] || []) {
+        // Every target is a function declaration, so `typeof` is safe even before its file ran.
+        // Each call is guarded on its own: one render throwing must not skip the rest.
+        try { if (typeof window[fn] === 'function') window[fn](); }
+        catch (e) { /* the page is not up yet; the next ordinary render picks the document up */ }
+      }
+    }
+
+    // `state` — the answer to state_get, and the message every other browser gets when one writes.
+    function stateSyncReceive(msg) {
+      const docs = (msg && msg.docs) || {};
+      const first = !stateSeeded;
+      stateSeeded = true;
+      stateMode = 'live';
+      for (const name in docs) {
+        if (!STATE_DOCS[name]) continue;
+        const doc = docs[name] || {};
+        const rev = doc.rev || 0;
+        stateRev[name] = rev;
+        if (stateDirty.has(name)) {
+          // Edited in this browser between state_get and its answer. The answer was already in
+          // flight when the user acted, so adopting it here would revert an edit made a moment
+          // ago with nothing said about why. Take the revision — which is what the write needs —
+          // and let the flush below push our body on top of it.
+          //
+          // Unless the relay already has exactly what we were going to send. That is the ordinary
+          // shape of a retry after a dropped socket: the write did reach the relay and only the
+          // ack was lost, so re-sending it would bump the revision and broadcast an identical
+          // document to every other browser — once per reconnect, which on a phone is often.
+          if (doc.body != null && doc.body === stateRead(name)) stateDirty.delete(name);
+          continue;
+        }
+        if (first) {
+          const plan = stateSyncPlan(rev, doc.body == null ? null : doc.body, stateRead(name));
+          if (plan === 'adopt') stateSyncApply(name, doc.body == null ? null : doc.body);
+          else if (plan === 'upload') { stateDirty.add(name); }
+        } else if (rev > 0 && !stateInFlight.has(name)) {
+          // A push from another browser. Not while our own write is in flight: the ack settles
+          // that document, and applying an older body underneath it would undo the edit we made.
+          stateSyncApply(name, doc.body == null ? null : doc.body);
+        }
+      }
+      // Edits made while the answer was in the air, plus anything the seed decided to upload.
+      for (const name of Array.from(stateDirty)) stateSyncFlush(name);
+    }
+
+    function stateSyncAck(msg) {
+      const name = msg && msg.name;
+      if (!STATE_DOCS[name]) return;
+      stateRev[name] = msg.rev || 0;
+      stateInFlight.delete(name);
+      if (stateDirty.has(name)) stateSyncFlush(name);
+    }
+
+    // Someone else wrote this document between our read and our write. Their version wins and ours
+    // is dropped — not retried. Retrying is exactly what turns a guarded last-write-wins back into
+    // an unguarded one, and the copy stateSyncApply leaves behind is what makes the loss survivable.
+    function stateSyncConflict(msg) {
+      const name = msg && msg.name;
+      if (!STATE_DOCS[name]) return;
+      stateRev[name] = msg.rev || 0;
+      stateInFlight.delete(name);
+      stateDirty.delete(name);
+      clearTimeout(stateTimers[name]);
+      delete stateTimers[name];
+      stateSyncApply(name, msg.body == null ? null : msg.body);
+    }
+
+    // A relay older than this client answers state_get with its unknown-message-type error. That is
+    // a fact about the relay, not a failure to put in front of the user — swallow it once, run
+    // local-only for the life of this socket, and never send a state_put it cannot answer.
+    function stateSyncNoteError(text) {
+      const s = String(text == null ? '' : text);
+      if (stateMode === 'pulling' && /unknown message type/i.test(s) && /state_get/.test(s)) {
+        stateMode = 'off';
+        return true;
+      }
+      return false;
+    }
+
+    window.stateSyncOpen = stateSyncOpen;
+    window.stateSyncClose = stateSyncClose;
+    window.stateSyncMark = stateSyncMark;
+    window.stateSyncReceive = stateSyncReceive;
+    window.stateSyncAck = stateSyncAck;
+    window.stateSyncConflict = stateSyncConflict;
+    window.stateSyncNoteError = stateSyncNoteError;
 
   </script>
   <script>
@@ -7770,10 +8201,11 @@
       let wsUrl = url;
       if (token) wsUrl += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
       ws = new WebSocket(wsUrl);
+      const socket = ws;
       // Central wire accounting. Every caller goes through this socket, so instrumenting it here
       // catches polls, sends, pushes and commands without duplicating counters at each call site.
-      const send = ws.send.bind(ws);
-      ws.send = data => {
+      const send = socket.send.bind(socket);
+      socket.send = data => {
         noteBandwidth('sent', data);
         try { const msg = JSON.parse(data); if (msg.type === 'read_pane') notePaneBandwidth(msg.pane_id, 'sent', data); }
         catch (e) { /* non-JSON wire payloads have no pane identity */ }
@@ -7781,12 +8213,16 @@
       };
       // Re-announcing the push subscription here rather than only at subscribe time is what makes
       // it survive the socket being down at the wrong moment — on a phone that is most of the time.
-      ws.onopen = () => {
+      socket.onopen = () => {
+        if (ws !== socket) return;
         setStatus('connected');
         if (window.cue) cue('ready');
         announceSubscription();
+        stateSyncOpen(socket);
       };
-      ws.onclose = () => {
+      socket.onclose = () => {
+        if (ws !== socket) return;
+        stateSyncClose(socket);
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -7794,8 +8230,9 @@
         setStatus('disconnected');
         setTimeout(connect, 3000);
       };
-      ws.onerror = () => setStatus('disconnected');
-      ws.onmessage = (e) => {
+      socket.onerror = () => { if (ws === socket) setStatus('disconnected'); };
+      socket.onmessage = (e) => {
+        if (ws !== socket) return;
         noteBandwidth('received', e.data);
         const msg = JSON.parse(e.data);
         if (msg.type === 'pane_content') notePaneBandwidth(msg.pane_id, 'received', e.data);
@@ -7829,11 +8266,22 @@
     }
     function handleMessage(msg) {
       if (msg.type === 'error') {
+        // A relay older than this client answers state_get with "unknown message type". That is a
+        // fact about the relay, not a failure to put in front of the user.
+        if (stateSyncNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
         showToast(msg.message || 'The relay refused that.');
       }
+      else if (msg.type === 'state') { stateSyncReceive(msg); }
+      else if (msg.type === 'state_ack') { stateSyncAck(msg); }
+      else if (msg.type === 'state_conflict') { stateSyncConflict(msg); }
       else if (msg.type === 'conv_log') {
         convLiveReceive(msg);
+      }
+      else if (msg.type === 'git_commits') {
+        // The answer to a range the thread asked about. Only the ranges it asked for come back, so
+        // there is nothing to filter here.
+        convCommitsReceive(msg);
       }
       else if (msg.type === 'projects') {
         projects = msg.projects || [];
@@ -7940,6 +8388,9 @@
         // blocked, or one that just ended, changes what the bar should offer.
         renderQuickActions();
         syncConvBadge();
+        // The branch rides on the snapshot, so the badge over the dock follows one. The pane's own
+        // badge is done by syncOpenPaneChrome below, which is the path a pane switch also takes.
+        if (typeof syncBranchBadges === 'function') syncBranchBadges();
         if (activePane) {
           // herdr reuses a pane_id once its pane closes, so an open pane that has left both lists
           // is not retargeted or polled on — it is let go.
@@ -7983,6 +8434,7 @@
         renderBandwidth();
         renderQuickActions();
         syncConvBadge();
+        if (typeof syncBranchBadges === 'function') syncBranchBadges();
       }
       else if (msg.type === 'blocked') {
         const a = agents.find(x => x.pane_id === msg.pane_id);
@@ -8940,6 +9392,9 @@
     function loadPairs() { pairs = parsePairs(localStorage.getItem(PAIRS_KEY) || ''); }
     function savePairs() {
       localStorage.setItem(PAIRS_KEY, JSON.stringify({ version: PAIRS_VERSION, pairs: pairs }));
+      // Outside any catch a quota error would land in: a browser that cannot store the pairs
+      // locally is still a browser whose pairs the rest of the fleet should see.
+      if (typeof stateSyncMark === 'function') stateSyncMark('pairs');
     }
 
     // A restart is the same colleague in a new pane, so the pair that named the dead one follows it
@@ -11210,6 +11665,7 @@
       // and every writer of the index comes through this function. Guarded because the dock's
       // script may not have loaded yet — at boot there is nothing held to forget.
       if (typeof forgetConvComposers === 'function') forgetConvComposers(kept);
+      if (typeof stateSyncMark === 'function') stateSyncMark('conversations');
     }
 
     // --- Conversation membership ---
@@ -11416,6 +11872,7 @@
       if (id) views[key] = id; else delete views[key];
       try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
       catch (e) { /* private mode: this session only */ }
+      if (typeof stateSyncMark === 'function') stateSyncMark('conv_view');
     }
 
     // Carry the thread across a pair switch. A pair is two panes on one job, so stepping between
@@ -12101,6 +12558,10 @@
     function convEntriesHtml(entries, self, paired, pick) {
       const me = self || {};
       let last = 0;
+      // Where each member's work stood at the last entry drawn for it — the branch it was on and
+      // the commit it was at. A branch is the same for twenty messages in a row, so what is drawn
+      // is the moment it changes, which cannot be decided from one entry alone.
+      const gitSeen = new Map();
       return entries.map((e, i) => {
         const at = convAt(e);
         // How long the thread was not being recorded for, when both ends of the break are known —
@@ -12168,12 +12629,22 @@
           `<button class="conv-pick" onclick="${pick === true || !pick ? 'toggleConvPick' : pick}(${i})" ` +
           `aria-pressed="false" aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
+        // Where the work landed, as lines between the messages rather than as a stamp on each of
+        // them: the branch when it changes, and the commits that happened between this entry and
+        // the last one from the same member. Built by conv_live, which owns the record's shape; a
+        // thread of drafts and pane reads has neither, and the guard is what keeps this file
+        // working in a slice that never loaded that one.
+        // `side` goes in because the commits hang under this bubble and have to take its column;
+        // the branch rule above is a divider across the whole thread and takes none.
+        const git = typeof convGitRules === 'function' ? convGitRules(e, gitSeen, side, color)
+          : {before: '', after: ''};
         // Who said it, for the composer's token to name: two bubbles of the same length from two
         // members read alike once they are cut to `[#1 …]`, and a quote is worth nothing if the
         // reader cannot tell whose it is without scrolling back to it.
-        return rule + `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
+        return rule + git.before +
+          `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-text="${text}" data-who="${name}"` +
-          ` style="--conv-agent:${color}">${tick}${head}${text}</div>`;
+          ` style="--conv-agent:${color}">${tick}${head}${text}</div>` + git.after;
       }).join('');
     }
 
@@ -12532,9 +13003,195 @@
           at_src: CONV_LIVE_AT_SRC[t.at_src] || 'read',
           key: key, member: at.has(key) ? at.get(key) : 0,
           label: t.label || '', agent: t.agent || '',
+          // Where the work landed. The record's own columns, carried through untouched — a turn
+          // that says what an agent did is worth much more next to the branch it did it on. The
+          // host and directory come with them because they are what a commit range is asked for
+          // in: the fingerprint has them, but the entry is what the thread renders from.
+          branch: t.branch || '', commit: t.commit || '',
+          commits: Array.isArray(t.commits) ? t.commits : [],
+          host: t.host || 'local', cwd: t.cwd || '',
           kind: t.kind, live: true,
         };
       }).filter(e => e.text);
+    }
+
+    // --- Where the work landed, as events in the thread ---
+    //
+    // Not as a footer on every bubble. A branch is the same for twenty messages in a row and
+    // stamping each of them says nothing; what a reader is looking for is the *moment it changed*,
+    // which is one line between two messages. Commits are the same shape of fact — something that
+    // happened between two things that were said — so they are drawn where they happened rather
+    // than hung off whichever message came after them.
+    //
+    // Both are the same rule the thread already uses for a gap in the recording.
+
+    // A commit is looked up by its first characters and read by its subject; the other 32 are noise
+    // in a thread. The whole sha stays in the title, because a sha nobody can copy is a lookup
+    // nobody can do.
+    const CONV_SHA_SHOWN = 8;
+
+    // Showing the commits is a per-device reading preference, like the record toggle beside it —
+    // not a fact about the work, so it is not one of the documents that follow the user between
+    // browsers.
+    const CONV_COMMITS_KEY = 'herdr_conv_commits';
+
+    function convCommitsOn() {
+      try { return localStorage.getItem(CONV_COMMITS_KEY) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function toggleConvCommits() {
+      const on = !convCommitsOn();
+      try { localStorage.setItem(CONV_COMMITS_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: this session only */ }
+      renderConvView();
+      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      if (typeof hangSync === 'function') hangSync();
+      showToast(on ? 'Showing commits in the thread' : 'Hiding commits');
+    }
+
+    // 'cwd|host|from|to' -> a list of commits, or 'asked' while the question is in the air. The
+    // relay stores the list only when HERDR_GIT_COMMITS is on, because it is the one part of this
+    // that can be recomputed from the two shas the record already keeps — so the ordinary case is
+    // that the thread asks for it, once per range, the first time a reader wants to see it.
+    const convCommitsCache = new Map();
+    const convCommitsKey = (host, cwd, from, to) => `${host}|${cwd}|${from}|${to}`;
+
+    function convCommitsAsk(host, cwd, from, to) {
+      const key = convCommitsKey(host, cwd, from, to);
+      if (convCommitsCache.has(key)) return;
+      convCommitsCache.set(key, 'asked');
+      try {
+        ws.send(JSON.stringify({type: 'git_commits', host: host, cwd: cwd, from: from, to: to}));
+      } catch (e) {
+        convCommitsCache.delete(key);   // no socket; the next render asks again
+      }
+    }
+
+    function convCommitsReceive(msg) {
+      if (!msg) return;
+      const key = convCommitsKey(msg.host || 'local', msg.cwd || '', msg.from || '', msg.to || '');
+      convCommitsCache.set(key, Array.isArray(msg.commits) ? msg.commits : []);
+      renderConvView();
+      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+    }
+
+    // The list for one range: stored on the turn if the relay was told to keep it, otherwise
+    // whatever the answer to our question was. `null` means "not known yet" — the question has just
+    // gone out and the next render draws it.
+    function convCommitsFor(e, fromSha) {
+      if ((e.commits || []).length) return e.commits;
+      if (!fromSha || !e.commit || fromSha === e.commit || !e.cwd) return [];
+      const host = e.host || 'local';
+      const key = convCommitsKey(host, e.cwd, fromSha, e.commit);
+      const hit = convCommitsCache.get(key);
+      if (Array.isArray(hit)) return hit;
+      convCommitsAsk(host, e.cwd, fromSha, e.commit);
+      return null;
+    }
+
+    // --- The branch the addressed agent is on, as a standing badge ---
+    //
+    // The rules above answer "when did this change"; this answers "where am I now", which is the
+    // question a reader has with their thumb over the composer. Per *agent* and not per view: a
+    // conversation's members can be in different checkouts on different branches, so this follows
+    // whoever the composer is addressing rather than the conversation as a whole.
+    //
+    // It rides on the snapshot and is asked for by nothing. The relay probes git at turn end and
+    // reads the rest back out of its own record, so by the time a pane is on screen the answer is
+    // already in the state this browser holds — one more round trip per selection would buy only
+    // the minutes between a branch switch and the next turn that mentions it.
+
+    function branchOf(pane) {
+      return (pane && pane.branch) || '';
+    }
+
+    function syncBranchBadge(id, pane) {
+      const box = document.getElementById(id);
+      if (!box) return;
+      const branch = branchOf(pane);
+      // innerHTML only when it changed: this runs on every snapshot, and rewriting a node under a
+      // finger is how a tap lands on nothing.
+      if (box.dataset.branch !== branch) {
+        box.dataset.branch = branch;
+        box.innerHTML = branch ? `⎇ ${escapeHtml(branch)}` : '';
+        box.title = branch ? `${branch} — the branch this agent's work is landing on` : '';
+      }
+      // The branch belongs to an agent, so use that agent's existing theme colour rather than a
+      // generic git colour. A Claude target reads orange; a Codex target reads blue.
+      box.style.setProperty('--branch-color',
+                            typeof agentColor === 'function' ? agentColor((pane || {}).agent) : 'var(--blue)');
+      box.hidden = !branch;
+    }
+
+    // Both badges from wherever the caller is. The pane view addresses the pane it has open; the
+    // conversation addresses whichever member the dock is pointed at.
+    function syncBranchBadges() {
+      const of = id => (typeof paneOf === 'function' && id) ? paneOf(id) : null;
+      syncBranchBadge('paneBranch', of(typeof activePane === 'undefined' ? '' : activePane));
+      syncBranchBadge('convBranch', of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+    }
+
+    const convGitRule = (cls, body) => `<div class="conv-rule git ${cls}">${body}</div>`;
+
+    // What goes above and below one entry, and the running state that makes it possible to tell.
+    //
+    // The two halves are not the same kind of thing, and they are drawn differently on purpose.
+    // `before` is a rule across the thread: it announces the state the *next* bubble is in, which
+    // is what a divider is for. `after` belongs to the bubble above it — the turn said it was
+    // finished and these are what it finished — so it takes that bubble's width and side and hangs
+    // under it as badges. `side` is the bubble's own alignment class, passed in because the view
+    // owns the layout and this file owns the record's shape.
+    //
+    // They are also counted differently, and this is the part that is easy to get wrong. A branch
+    // is tracked **per member**: a joint thread is several panes, and each of them deserves to be
+    // introduced once. A commit range is tracked **per checkout**, because a commit belongs to a
+    // repository's history and not to whoever happened to speak next. Two agents pairing in one
+    // directory, counted per member, would each carry the previous sha *they* last ended on — so
+    // the same commit would appear under a bubble from each of them, twice, once misattributed.
+    // Per checkout it appears exactly once, under the first turn to end after it was made. It is
+    // also the rule the relay already uses when it stores a list (last_commit is keyed by host and
+    // cwd), so the fetched range and the stored one now describe the same window.
+    const convGitWhere = e => `${e.host || 'local'}|${e.cwd || ''}`;
+
+    function convGitRules(e, seen, side, color) {
+      const none = {before: '', after: ''};
+      if (!e || (!e.branch && !e.commit)) return none;
+      const key = e.key || '';
+      const was = seen.get(key) || {};
+      // One map, two kinds of key. A member key is `[host, pane, agent, cwd]` and a checkout key is
+      // `host|cwd`, so neither can be mistaken for the other.
+      const where = convGitWhere(e);
+      const there = seen.get(where) || {};
+      let before = '';
+      if (e.branch && e.branch !== was.branch) {
+        // A first sighting is context and a change is an event, and they read differently: the
+        // first says where this is happening, the second says something happened.
+        before = convGitRule('branch', was.branch
+          ? `⎇ Branch changed to ${escapeHtml(e.branch)}`
+          : `⎇ ${escapeHtml(e.branch)}`);
+      }
+      let after = '';
+      if (convCommitsOn()) {
+        const commits = convCommitsFor(e, there.commit);
+        if (commits && commits.length) {
+          // The agent's own colour, carried on the strip rather than on each badge: the strip is a
+          // sibling of the bubble and not a child of it, so it inherits nothing from the bubble's
+          // own `--conv-agent`. The fill stays neutral — a wall of washed pills under every turn
+          // competes with the bubbles, and the colour has already been said by the bubble above.
+          after = `<div class="conv-commits${side || ''}"` +
+            `${color ? ` style="--conv-agent:${color}"` : ''}>` + commits.map(c =>
+            `<span class="conv-commit" title="${escapeHtml(c.sha || '')}">` +
+            `<code>${escapeHtml(String(c.sha || '').slice(0, CONV_SHA_SHOWN))}</code>` +
+            `<span>${escapeHtml(c.subject || '')}</span></span>`).join('') + `</div>`;
+        }
+      }
+      // Both are carried forward when a later turn has neither: a pane that stepped out of the
+      // checkout for one turn has not changed branch, and announcing the same branch again when it
+      // steps back in would be an event that did not happen.
+      seen.set(key, {branch: e.branch || was.branch});
+      seen.set(where, {commit: e.commit || there.commit});
+      return {before: before, after: after};
     }
 
     // What the thread says when the relay's record is on screen and empty. Three different facts,
@@ -14086,6 +14743,7 @@
       if (have.size) all[convViewId] = Array.from(have); else delete all[convViewId];
       try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(all)); }
       catch (e) { /* private mode: this session only */ }
+      if (typeof stateSyncMark === 'function') stateSyncMark('conv_hidden');
       convStandaloneHtml = '';
       renderConvManage();
     }
@@ -14114,6 +14772,7 @@
       if (key && rest.length) all[id] = rest; else delete all[id];
       try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(all)); }
       catch (e) { /* private mode: this session only */ }
+      if (typeof stateSyncMark === 'function') stateSyncMark('conv_hidden');
       convStandaloneHtml = '';
       renderConvManage();
     }
@@ -14492,10 +15151,12 @@
       delete hidden[conv.id];
       try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(hidden)); }
       catch (e) { /* private mode: this session only */ }
+      if (typeof stateSyncMark === 'function') stateSyncMark('conv_hidden');
       const views = convViews();
       for (const key in views) if (views[key] === conv.id) delete views[key];
       try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
       catch (e) { /* private mode: this session only */ }
+      if (typeof stateSyncMark === 'function') stateSyncMark('conv_view');
       convStandaloneHtml = '';
       renderConversations();
       if (document.body.classList.contains('conversation-open')) {
@@ -14739,6 +15400,9 @@
       // The mic button is hidden over a terminal, and a live recogniser with no way to stop it
       // would keep writing into the composer.
       if (shell && dictation) dictation.stop();
+      // Which branch this pane's work is landing on — the snapshot carries it, and this is the
+      // one path every snapshot and every pane switch goes through.
+      if (typeof syncBranchBadges === 'function') syncBranchBadges();
     }
 
     function openTerminal(paneId) {
@@ -15331,6 +15995,10 @@
       const dock = document.getElementById('convDock');
       const row = document.getElementById('xferRow');
       if (!dock || !row) return;
+      // The addressed member's branch. Here rather than beside the snapshot handler because the
+      // target changes without a snapshot — picking another member is the commonest way this
+      // badge changes at all.
+      if (typeof syncBranchBadges === 'function') syncBranchBadges();
       const load = document.getElementById('xferLoad');
       if (load) {
         const html = dockLoadHtml();
@@ -16589,6 +17257,23 @@
       const thread = document.getElementById('convThread');
       hangSyncLive(document.getElementById('paneLive'), !!thread && !thread.hidden);
       hangSyncLive(document.getElementById('convLive'), !!convViewId);
+      // What was committed between the messages. Offered only where the relay's record is being
+      // read: this browser's own transcript has no commits in it, and a toggle that changes
+      // nothing is worse than one that is not there.
+      const live = typeof convLiveOn === 'function' && convLiveOn();
+      hangSyncCommits(document.getElementById('paneCommits'),
+                      live && !!thread && !thread.hidden);
+      hangSyncCommits(document.getElementById('convCommits'), live && !!convViewId);
+    }
+
+    function hangSyncCommits(btn, offered) {
+      if (!btn) return;
+      const on = typeof convCommitsOn === 'function' && convCommitsOn();
+      btn.classList.toggle('on', offered);
+      btn.classList.toggle('live', on);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.title = on ? 'Showing commits between messages — tap to hide them'
+        : 'Show what was committed between messages';
     }
 
     function hangSyncLive(btn, offered) {
