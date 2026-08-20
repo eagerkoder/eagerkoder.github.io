@@ -972,6 +972,13 @@
       background: color-mix(in srgb, var(--text) 4%, transparent);
     }
 
+    .conv-analytics-table tfoot td {
+      border-top: 1px solid var(--border);
+      border-bottom: none;
+      font-weight: 600;
+      background: color-mix(in srgb, var(--text) 3%, transparent);
+    }
+
     .conv-analytics-name-btn {
       border: none;
       background: transparent;
@@ -8143,7 +8150,9 @@
           if (r) recordsMap.set(k, r);
         }
       }
-      return typeof calcConvAnalytics === 'function' ? calcConvAnalytics(convs, recordsMap) : [];
+      return typeof calcConvAnalytics === 'function'
+        ? calcConvAnalytics(convs, recordsMap, typeof agents !== 'undefined' ? agents : [])
+        : [];
     }
 
     async function renderConvAnalytics() {
@@ -8173,12 +8182,16 @@
       const totalEl = document.getElementById('convAnalyticsTotal');
       if (!tableWrap) return;
 
-      const totalBytes = convAnalyticsData.reduce((acc, c) => acc + (c.totalBytes || 0), 0);
+      const totalMsgs = convAnalyticsData.reduce((acc, c) => acc + (c.msgCount || 0), 0);
+      const totalLiveBytes = convAnalyticsData.reduce((acc, c) => acc + (c.liveBytes || 0), 0);
+      const totalRecordedBytes = convAnalyticsData.reduce((acc, c) => acc + (c.recordedBytes || 0), 0);
+      const totalBytes = totalLiveBytes + totalRecordedBytes;
+
       if (totalEl) {
         const n = convAnalyticsData.length;
         totalEl.textContent = `Total: ${n} ${n === 1 ? 'conversation' : 'conversations'} · ` +
-          formatConvSize(totalBytes);
-        totalEl.title = `${totalBytes.toLocaleString()} bytes on this device`;
+          `${formatConvSize(totalBytes)} (Live: ${formatConvSize(totalLiveBytes)} · Recorded: ${formatConvSize(totalRecordedBytes)})`;
+        totalEl.title = `${totalBytes.toLocaleString()} bytes in IndexedDB (Live: ${totalLiveBytes.toLocaleString()} B · Recorded: ${totalRecordedBytes.toLocaleString()} B)`;
       }
 
       if (!convAnalyticsData.length) {
@@ -8198,30 +8211,39 @@
         `<button type="button" class="conv-analytics-th-btn" style="${alignRight ? 'justify-content:flex-end;margin-left:auto;' : ''}">${escapeHtml(label)}${arrow(col)}</button></th>`;
 
       const rowsHtml = sorted.map(c => {
-        // Rounded the way the rest of the app rounds bytes: a conversation of four messages is
-        // kilobytes, and "0.00 MB" beside it read as a row that had failed to measure itself.
-        const size = formatConvSize(c.totalBytes);
-        const titleTip = `${escapeHtml(c.name)} · ${c.totalBytes.toLocaleString()} bytes`;
-        // The id rides in a data attribute rather than inside the handler's quotes: a name or an
-        // id with an apostrophe in it would otherwise end the string and break the row.
+        const liveSize = formatConvSize(c.liveBytes);
+        const recSize = formatConvSize(c.recordedBytes);
+        const totalSize = formatConvSize(c.totalBytes);
+        const titleTip = `${escapeHtml(c.name)} · Live: ${(c.liveBytes || 0).toLocaleString()} B · Recorded: ${(c.recordedBytes || 0).toLocaleString()} B · Total: ${(c.totalBytes || 0).toLocaleString()} B`;
         return `<tr>` +
           `<td><button type="button" class="conv-analytics-name-btn" data-id="${escapeHtml(c.id)}" ` +
           `onclick="openConversation(this.dataset.id)" title="Open ${escapeHtml(c.name)}">` +
           `${escapeHtml(c.name)}</button>${c.auto ? ' <span class="conv-analytics-auto-badge">auto</span>' : ''}</td>` +
           `<td class="conv-analytics-num">${c.msgCount.toLocaleString()}</td>` +
-          `<td class="conv-analytics-num">${c.panes.toLocaleString()}</td>` +
-          `<td class="conv-analytics-num" title="${titleTip}">${size}</td>` +
+          `<td class="conv-analytics-num" title="${(c.liveBytes || 0).toLocaleString()} bytes">${liveSize}</td>` +
+          `<td class="conv-analytics-num" title="${(c.recordedBytes || 0).toLocaleString()} bytes">${recSize}</td>` +
+          `<td class="conv-analytics-num" title="${titleTip}">${totalSize}</td>` +
           `</tr>`;
       }).join('');
+
+      const footHtml = `<tfoot><tr>` +
+        `<td><strong>Total (${convAnalyticsData.length})</strong></td>` +
+        `<td class="conv-analytics-num"><strong>${totalMsgs.toLocaleString()}</strong></td>` +
+        `<td class="conv-analytics-num" title="${totalLiveBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalLiveBytes)}</strong></td>` +
+        `<td class="conv-analytics-num" title="${totalRecordedBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalRecordedBytes)}</strong></td>` +
+        `<td class="conv-analytics-num" title="${totalBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalBytes)}</strong></td>` +
+        `</tr></tfoot>`;
 
       tableWrap.innerHTML = `<table class="conv-analytics-table" aria-label="Conversations by local storage size">` +
         `<thead><tr>` +
         th('name', 'Conversation', false) +
         th('msgCount', 'Messages', true) +
-        th('panes', 'Panes', true) +
-        th('size', 'Size', true) +
+        th('liveBytes', 'Live IDB', true) +
+        th('recordedBytes', 'Recorded IDB', true) +
+        th('totalBytes', 'Total IDB', true) +
         `</tr></thead>` +
         `<tbody>${rowsHtml}</tbody>` +
+        footHtml +
         `</table>`;
     }
 
@@ -10779,16 +10801,22 @@
       }
     }
 
-    // Total storage footprint and statistics per conversation across index and transcripts.
-    function calcConvAnalytics(convs, recordsMap) {
+    // Total IDB storage footprint and statistics per conversation across live and recorded pane transcripts.
+    function calcConvAnalytics(convs, recordsMap, liveAgents) {
       const list = convs || [];
       const records = (recordsMap && typeof recordsMap.get === 'function')
         ? recordsMap
         : new Map(Object.entries(recordsMap || {}));
+      const liveKeySet = new Set(
+        Array.isArray(liveAgents)
+          ? liveAgents.map(a => a ? (a.key || (typeof convMemberKey === 'function' ? convMemberKey(a) : '') || a.pane_id || '') : '').filter(Boolean)
+          : (liveAgents instanceof Set ? liveAgents : [])
+      );
       return list.map(c => {
         const members = c.members || [];
         let msgCount = 0;
-        let transcriptBytes = 0;
+        let liveBytes = 0;
+        let recordedBytes = 0;
         const seenKeys = new Set();
         for (const m of members) {
           if (!m || !m.key || seenKeys.has(m.key)) continue;
@@ -10797,17 +10825,18 @@
           if (rec) {
             const entries = rec.entries || [];
             msgCount += entries.length;
+            let bytes = 0;
             try {
-              transcriptBytes += JSON.stringify(rec).length;
+              bytes = JSON.stringify(rec).length;
             } catch (e) { /* ignore */ }
+            if (liveKeySet.has(m.key)) {
+              liveBytes += bytes;
+            } else {
+              recordedBytes += bytes;
+            }
           }
         }
-        let indexBytes = 0;
-        try {
-          indexBytes = JSON.stringify(c).length;
-        } catch (e) { /* ignore */ }
-
-        const totalBytes = transcriptBytes + indexBytes;
+        const totalBytes = liveBytes + recordedBytes;
         const sizeMb = totalBytes / (1024 * 1024);
 
         return {
@@ -10816,6 +10845,8 @@
           auto: !!c.auto,
           panes: members.length,
           msgCount: msgCount,
+          liveBytes: liveBytes,
+          recordedBytes: recordedBytes,
           totalBytes: totalBytes,
           sizeMb: sizeMb,
           touched: c.touched || 0,
@@ -10835,6 +10866,12 @@
         }
         if (col === 'panes') {
           return d * ((a.panes || 0) - (b.panes || 0));
+        }
+        if (col === 'liveBytes') {
+          return d * ((a.liveBytes || 0) - (b.liveBytes || 0));
+        }
+        if (col === 'recordedBytes') {
+          return d * ((a.recordedBytes || 0) - (b.recordedBytes || 0));
         }
         return d * ((a.totalBytes || 0) - (b.totalBytes || 0));
       });
