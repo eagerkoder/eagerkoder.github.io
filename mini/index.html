@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.5.0">
-  <meta name="app-built" content="2026-08-19">
+  <meta name="app-built" content="2026-08-20">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -1045,6 +1045,22 @@
       font-family: monospace;
       font-size: 0.7rem;
       color: var(--text);
+    }
+
+    /* A transcript in no conversation, and a pane still running. Both are ordinary states, so
+       neither is coloured as a warning — muted for the first, the live green for the second. */
+    .conv-analytics-unfiled-tag {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .conv-analytics-open {
+      color: var(--green);
+    }
+
+    /* A second source for the same conversation, drawn as the aside it is. */
+    .conv-analytics-cached {
+      color: var(--muted);
     }
 
     /* Settings */
@@ -3467,34 +3483,37 @@
        between two messages, they belong to the one above them: the agent said it finished and
        these are what it finished. So they take the bubble's width and its side and sit tight
        against its underside, the way a caption belongs to its picture. */
+    /* Full width and centred, like the branch rule above it: these are a fact about the checkout
+       and not about the pane that spoke last, so the strip must not read as belonging to the bubble
+       above it. Aligned to a bubble and painted in its colour, it read as authorship — which git
+       cannot support, since two agents in one repository commit as the same person. */
     .conv-commits {
-      width: 86%;
+      width: 100%;
       box-sizing: border-box;
-      align-self: flex-start;
+      align-self: center;
       display: flex;
       flex-wrap: wrap;
+      justify-content: center;
+      align-items: baseline;
       gap: 4px;
-      margin: 3px 0 8px;
+      margin: 6px 0 8px;
       padding: 0 4px;
     }
 
-    .conv-thread.conv-solo .conv-commits {
-      width: 100%;
-    }
-
-    /* Under the right-hand column's bubbles, and packed from the right so the strip ends where the
-       bubble does. */
-    .conv-commits.conv-right {
-      align-self: flex-end;
-      justify-content: flex-end;
+    /* What the badges beside it are. Says the claim out loud, so the strip does not have to be
+       guessed at from where it sits. */
+    .conv-commits-lede {
+      color: var(--muted);
+      font-size: max(7px, calc(var(--conv-font, 13px) * 0.68));
+      text-transform: lowercase;
+      letter-spacing: 0.02em;
     }
 
     /* One commit. A badge and not a line: they arrive in twos and threes, and three lines of prose
        under every turn is a thread nobody can skim. */
-    /* Neutral fill, agent-coloured text — the same division the branch badge makes. The colour
-       says whose commit it is; the fill stays out of the way, because a wall of washed pills under
-       every turn competes with the bubbles they belong to, and the bubble above has already said
-       whose it is in its own wash. */
+    /* Neutral throughout. The colour used to be the speaker's, which said "this agent made this" —
+       a claim the range cannot support: it is per checkout, and a commit merged in from another
+       agent's worktree lands in it too. */
     .conv-commit {
       display: inline-flex;
       align-items: baseline;
@@ -3504,7 +3523,7 @@
       border-radius: 999px;
       border: 1px solid var(--border);
       background: color-mix(in srgb, var(--muted) 10%, var(--surface));
-      color: color-mix(in srgb, var(--conv-agent, var(--muted)) 75%, var(--text));
+      color: color-mix(in srgb, var(--muted) 45%, var(--text));
       font-size: max(7px, calc(var(--conv-font, 13px) * 0.72));
       line-height: 1.5;
       /* A subject is a line of prose that may be long, and the thread's width is the reader's line
@@ -3512,11 +3531,10 @@
       overflow-wrap: anywhere;
     }
 
-    /* The sha is the identifier and reads at full strength; the subject beside it is prose and is
-       already carrying the colour at three quarters. */
+    /* The sha is the identifier and reads at full strength; the subject beside it is prose. */
     .conv-commit code {
       flex: none;
-      color: var(--conv-agent, var(--muted));
+      color: var(--muted);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
@@ -5375,6 +5393,19 @@
     </div>
 
     <div class="setting-group">
+      <label>The relay's record, kept here</label>
+      <div class="hint">The Live toggle reads the relay's own record — every turn it wrote, watched
+        or not. What this browser has read of it is now kept on this device, so it is there after a
+        refresh, after a week away, and while the relay is unreachable. Only what was already read
+        is kept: this fetches nothing on its own, and the pane's own transcript is separate and
+        untouched.</div>
+      <button class="nav-key" onclick="forgetLiveRecord()">Forget the kept record</button>
+      <div class="hint" id="liveKeptHint">Everything kept is on the relay too, so this costs history
+        only where the relay has since pruned it. It is read again the next time a thread is
+        opened.</div>
+    </div>
+
+    <div class="setting-group">
       <label class="toggle-option"><input type="checkbox" id="autocorrectOn" onchange="setAutocorrect(this.checked)"> Autocorrect in the composer</label>
       <div class="hint">Off by default. Both composers type into an agent's prompt, where a flag is
         not a typo and a path is not a sentence — a keyboard that capitalises the first word of one
@@ -5423,9 +5454,9 @@
       <button class="bandwidth-metric" id="bandwidthPanes" aria-pressed="false" onclick="setBandwidthPanes(!bandwidthPanesOn())">Agents</button></h2>
       <div id="bandwidthRows"></div>
     </section>
-    <section class="conv-analytics" id="convAnalytics" aria-label="Conversation storage">
-      <h2><span id="convAnalyticsTitle">Conversations by storage</span><span class="bandwidth-total" id="convAnalyticsTotal">0 convs · 0.00 MB</span>
-      <button class="conv-analytics-refresh" id="convAnalyticsRefresh" onclick="refreshConvAnalytics()" title="Re-measure what the conversations are using" aria-label="Refresh conversation storage"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg></button></h2>
+    <section class="conv-analytics" id="convAnalytics" aria-label="Transcript storage">
+      <h2><span id="convAnalyticsTitle">Transcripts by storage</span><span class="bandwidth-total" id="convAnalyticsTotal">0 transcripts · 0.00 MB</span>
+      <button class="conv-analytics-refresh" id="convAnalyticsRefresh" onclick="refreshConvAnalytics()" title="Re-measure what this browser is storing" aria-label="Refresh transcript storage"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg></button></h2>
       <div class="conv-analytics-wrap" id="convAnalyticsWrap"></div>
     </section>
   </div>
@@ -6708,7 +6739,7 @@
 
     const STATE_DOCS = {
       pairs:         { key: 'herdr_pairs' },
-      conversations: { key: 'herdr_conversations' },
+      conversations: { key: 'herdr_conversations', pendingKey: 'herdr_conversations_pending' },
       conv_view:     { key: 'herdr_conv_view' },
       conv_hidden:   { key: 'herdr_conv_hidden' },
     };
@@ -6729,23 +6760,85 @@
     const stateDirty = new Set();
     const stateTimers = {};
     const stateInFlight = new Set();
+    const stateSent = {};
 
     // Pure. What to do with one document on the first answer after connect.
-    //   'adopt'  — the relay holds it; take it, whatever this browser had
+    //   'adopt'  — the relay holds it; take it whole
     //   'upload' — the relay holds nothing and this browser does; seed it
     //   'idle'   — neither has anything, or they already agree
     //
-    // 'adopt' is where this feature deletes something the user typed: the second browser to
-    // connect loses its own pairs to the first. That is what one shared answer means, and it is
-    // why stateSyncApply keeps a copy of what it overwrites.
     function stateSyncPlan(serverRev, serverBody, localBody) {
-      if (serverRev > 0) return serverBody === localBody ? 'idle' : 'adopt';
+      if (serverRev > 0) {
+        if (serverBody === localBody) return 'idle';
+        return 'adopt';
+      }
       return localBody ? 'upload' : 'idle';
+    }
+
+    // The shape of each document, which is the whole of what this module knows about their
+    // contents. `list` names the key an envelope carries its id'd objects under; `map` is a plain
+    // object keyed by something already unique. Both merge without understanding a single field.
+    const STATE_SHAPE = {
+      pairs:         { list: 'pairs' },
+      conversations: { list: 'items' },
+      conv_view:     { map: true },
+      conv_hidden:   { map: true },
+    };
+
+    // Rebase only locally-created rows that have never been acknowledged. The relay wins every
+    // existing id, so stale cache cannot resurrect a deletion or replace a newer conversation.
+    function stateMerge(name, serverBody, localBody, mine, onlyExtras) {
+      const shape = STATE_SHAPE[name];
+      if (!shape || serverBody == null || localBody == null) return null;
+      let server, local;
+      try { server = JSON.parse(serverBody); local = JSON.parse(localBody); }
+      catch (e) { return null; }
+      if (!server || !local || typeof server !== 'object' || typeof local !== 'object') return null;
+      const win = mine ? local : server, lose = mine ? server : local;
+      const winBody = mine ? localBody : serverBody;
+      if (shape.list) {
+        const key = shape.list;
+        if (!Array.isArray(server[key]) || !Array.isArray(local[key])) return null;
+        const have = new Set(win[key].map(x => x && x.id).filter(Boolean));
+        // An entry with no id cannot be told apart from one already held, so it is not carried
+        // over: duplicating it on every connect is worse than losing a malformed row.
+        const extra = lose[key].filter(x => x && x.id && !have.has(x.id)
+          && (!onlyExtras || onlyExtras.has(x.id)));
+        // Nothing to add. Returned as the winning body itself, so the caller can tell "the union
+        // is one of the two I already have" from "the union is new and has to be written".
+        if (!extra.length) return winBody;
+        const out = Object.assign({}, win);
+        out[key] = win[key].concat(extra);
+        return JSON.stringify(out);
+      }
+      if (Array.isArray(server) || Array.isArray(local)) return null;
+      if (Object.keys(lose).every(k => k in win)) return winBody;
+      return JSON.stringify(Object.assign({}, lose, win));
     }
 
     function stateRead(name) {
       try { return localStorage.getItem(STATE_DOCS[name].key); }
       catch (e) { return null; }  // private mode: nothing stored, nothing to sync
+    }
+
+    function statePending(name) {
+      const key = STATE_DOCS[name] && STATE_DOCS[name].pendingKey;
+      if (!key) return null;
+      try {
+        const ids = JSON.parse(localStorage.getItem(key) || '[]');
+        return new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []);
+      } catch (e) { return new Set(); }
+    }
+
+    function stateClearPending(name, body) {
+      const pending = statePending(name);
+      if (!pending || !pending.size || body == null) return;
+      try {
+        const items = JSON.parse(body).items;
+        if (!Array.isArray(items)) return;
+        for (const item of items) if (item && item.id) pending.delete(item.id);
+        localStorage.setItem(STATE_DOCS[name].pendingKey, JSON.stringify(Array.from(pending)));
+      } catch (e) { /* local recovery metadata is best effort */ }
     }
 
     // Everything still waiting on its timer, sent now.
@@ -6787,7 +6880,10 @@
       // that runs for every way a socket can be replaced. A socket that closed came through
       // stateSyncClose; a socket replaced while still open (a manual reconnect) produces a close
       // event that arrives late and is dropped as stale, so open is all that is left.
-      for (const name of stateInFlight) stateDirty.add(name);
+      for (const name of stateInFlight) {
+        stateDirty.add(name);
+        delete stateSent[name];
+      }
       stateInFlight.clear();
       stateSocket = socket;
       stateMode = 'pulling';
@@ -6827,6 +6923,7 @@
       if (body === null) { stateDirty.delete(name); return; }
       stateDirty.delete(name);
       stateInFlight.add(name);
+      stateSent[name] = body;
       try {
         // The socket this module learned its revisions from, never the global `ws`. `connect()`
         // assigns the new socket before it opens, so a timer firing inside that gap would hand a
@@ -6839,6 +6936,7 @@
         // the revision and this edit goes out then — dropping it here is the silent loss the
         // in-flight retry in stateSyncClose exists to prevent, reached by the other door.
         stateInFlight.delete(name);
+        delete stateSent[name];
         stateDirty.add(name);
       }
     }
@@ -6899,6 +6997,32 @@
         const doc = docs[name] || {};
         const rev = doc.rev || 0;
         stateRev[name] = rev;
+        const body = doc.body == null ? null : doc.body;
+        if (first) {
+          const local = stateRead(name);
+          if (name === 'conversations' && rev > 0 && local) {
+            const merged = stateMerge(name, body, local, false, statePending(name));
+            if (merged !== null && merged !== body) {
+              stateSyncApply(name, merged);
+              stateDirty.add(name);
+            } else {
+              stateSyncApply(name, body);
+              stateDirty.delete(name);
+              stateClearPending(name, body);
+            }
+            continue;
+          }
+          const plan = stateSyncPlan(rev, body, local);
+          if (plan === 'upload') stateDirty.add(name);
+          else if (plan === 'adopt') {
+            stateSyncApply(name, body);
+            stateDirty.delete(name);
+            stateClearPending(name, body);
+          } else {
+            stateDirty.delete(name);   // 'idle': the relay already holds exactly this
+          }
+          continue;
+        }
         if (stateDirty.has(name)) {
           // Edited in this browser between state_get and its answer. The answer was already in
           // flight when the user acted, so adopting it here would revert an edit made a moment
@@ -6912,18 +7036,22 @@
           if (doc.body != null && doc.body === stateRead(name)) stateDirty.delete(name);
           continue;
         }
-        if (first) {
-          const plan = stateSyncPlan(rev, doc.body == null ? null : doc.body, stateRead(name));
-          if (plan === 'adopt') stateSyncApply(name, doc.body == null ? null : doc.body);
-          else if (plan === 'upload') { stateDirty.add(name); }
-        } else if (rev > 0 && !stateInFlight.has(name)) {
+        if (rev > 0 && !stateInFlight.has(name)) {
           // A push from another browser. Not while our own write is in flight: the ack settles
           // that document, and applying an older body underneath it would undo the edit we made.
-          stateSyncApply(name, doc.body == null ? null : doc.body);
+          stateSyncApply(name, body);
+          stateClearPending(name, body);
         }
       }
       // Edits made while the answer was in the air, plus anything the seed decided to upload.
       for (const name of Array.from(stateDirty)) stateSyncFlush(name);
+      // And the work that was held back until the index was real. A pane the relay's index has
+      // never heard of still deserves a conversation — it just has to be decided against the
+      // adopted document rather than against an empty one.
+      if (first) {
+        try { if (typeof convAutoJoin === 'function') convAutoJoin(); }
+        catch (e) { /* the view is not loaded (vm slice), or not up yet */ }
+      }
     }
 
     function stateSyncAck(msg) {
@@ -6931,22 +7059,42 @@
       if (!STATE_DOCS[name]) return;
       stateRev[name] = msg.rev || 0;
       stateInFlight.delete(name);
+      stateClearPending(name, stateSent[name]);
+      delete stateSent[name];
       if (stateDirty.has(name)) stateSyncFlush(name);
     }
 
-    // Someone else wrote this document between our read and our write. Their version wins and ours
-    // is dropped — not retried. Retrying is exactly what turns a guarded last-write-wins back into
-    // an unguarded one, and the copy stateSyncApply leaves behind is what makes the loss survivable.
+    // Someone else wrote first. Existing backend rows win; only locally-created, unacknowledged
+    // conversations are rebased onto the returned document.
     function stateSyncConflict(msg) {
       const name = msg && msg.name;
       if (!STATE_DOCS[name]) return;
+      const remote = msg.body == null ? null : msg.body;
+      const merged = stateMerge(name, remote, stateRead(name), false, statePending(name));
       stateRev[name] = msg.rev || 0;
       stateInFlight.delete(name);
-      stateDirty.delete(name);
+      delete stateSent[name];
       clearTimeout(stateTimers[name]);
       delete stateTimers[name];
-      stateSyncApply(name, msg.body == null ? null : msg.body);
+      if (merged !== null && merged !== remote) {
+        stateSyncApply(name, merged);
+        stateDirty.add(name);
+        stateSyncFlush(name);
+        return;
+      }
+      stateDirty.delete(name);
+      stateSyncApply(name, remote);
+      stateClearPending(name, remote);
     }
+
+    // Whether the first answer is still in the air. The app must not *invent* a document while
+    // this is true: a browser that has never connected reads its own empty localStorage, and
+    // anything built from that emptiness — an auto conversation per live pane, say — is then a
+    // local edit, which the dirty branch in stateSyncReceive protects from being adopted over.
+    // The result is a new browser overwriting the shared index with a fabricated copy of it.
+    // Editing is still fine here; what is not fine is manufacturing state from an absence that is
+    // about to be filled.
+    function stateSyncPending() { return stateMode === 'pulling'; }
 
     // A relay older than this client answers state_get with its unknown-message-type error. That is
     // a fact about the relay, not a failure to put in front of the user — swallow it once, run
@@ -6967,6 +7115,8 @@
     window.stateSyncAck = stateSyncAck;
     window.stateSyncConflict = stateSyncConflict;
     window.stateSyncNoteError = stateSyncNoteError;
+    window.stateSyncPending = stateSyncPending;
+    window.stateMerge = stateMerge;
 
   </script>
   <script>
@@ -8272,13 +8422,20 @@
       }
     }
 
-    // --- Conversation storage analytics ---
-    let convAnalyticsSort = { col: 'size', dir: 'desc' };
+    // --- Transcript storage analytics ---
+    // One row per pane transcript, which is what the database is keyed by. See calcPaneStorage for
+    // why this is not per conversation.
+    let convAnalyticsSort = { col: 'bytes', dir: 'desc' };
     let convAnalyticsData = [];
+    // The conversation index, which lives in localStorage rather than IndexedDB. Reported under the
+    // table because it is the rest of what this app stores, not because it is a transcript.
+    let convAnalyticsIndexBytes = 0;
 
     async function fetchConvAnalytics() {
       const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
-      if (!convs.length) return [];
+      // The database is read even with no conversations in the index. Deleting the last
+      // conversation does not delete the transcripts it named, and "no conversations stored yet"
+      // over a database holding a month of them is the panel's worst possible answer.
       const recordsMap = new Map();
       if (typeof openConvDB === 'function') {
         const db = await openConvDB();
@@ -8301,8 +8458,14 @@
           if (r) recordsMap.set(k, r);
         }
       }
-      return typeof calcConvAnalytics === 'function'
-        ? calcConvAnalytics(convs, recordsMap, typeof agents !== 'undefined' ? agents : [])
+      convAnalyticsIndexBytes = typeof calcConvIndexBytes === 'function'
+        ? calcConvIndexBytes(convs) : 0;
+      // The kept copy of the relay's record is on disk too, so the panel waits for it rather than
+      // reporting zero for a store it has not opened yet.
+      if (typeof convLiveHydrate === 'function') await convLiveHydrate();
+      const liveCache = typeof convLiveCacheBytes === 'function' ? convLiveCacheBytes() : new Map();
+      return typeof calcPaneStorage === 'function'
+        ? calcPaneStorage(convs, recordsMap, typeof agents !== 'undefined' ? agents : [], liveCache)
         : [];
     }
 
@@ -8333,25 +8496,36 @@
       const totalEl = document.getElementById('convAnalyticsTotal');
       if (!tableWrap) return;
 
-      const totalMsgs = convAnalyticsData.reduce((acc, c) => acc + (c.msgCount || 0), 0);
-      const totalLiveBytes = convAnalyticsData.reduce((acc, c) => acc + (c.liveBytes || 0), 0);
-      const totalRecordedBytes = convAnalyticsData.reduce((acc, c) => acc + (c.recordedBytes || 0), 0);
-      const totalIndexBytes = convAnalyticsData.reduce((acc, c) => acc + (c.indexBytes || 0), 0);
-      const totalBytes = totalLiveBytes + totalRecordedBytes + totalIndexBytes;
+      const totalMsgs = convAnalyticsData.reduce((acc, r) => acc + (r.msgCount || 0), 0);
+      const openBytes = convAnalyticsData.reduce((acc, r) => acc + (r.open ? r.bytes || 0 : 0), 0);
+      const transcriptBytes = convAnalyticsData.reduce((acc, r) => acc + (r.bytes || 0), 0);
+      const indexBytes = convAnalyticsIndexBytes || 0;
+      // A fingerprint's copy is shared by every pane of one agent in one directory, so summing the
+      // rows would count it once per pane. Summed over the distinct buckets instead.
+      const cachedBytes = Array.from(
+        new Map(convAnalyticsData.map(r => [r.fp || r.key, r.liveBytes || 0])).values())
+        .reduce((acc, n) => acc + n, 0);
+      // The database plus the index that names parts of it: everything this app has put on this
+      // device. The two are in different stores — IndexedDB and localStorage — and the tooltip is
+      // where that is said, because the reader's question is what it all costs.
+      const totalBytes = transcriptBytes + indexBytes + cachedBytes;
 
       if (totalEl) {
         const n = convAnalyticsData.length;
-        // The two transcript halves in the line, the index only in the tooltip: it is a rounding
-        // error beside them, and a third figure on a line read at a glance buys nothing.
-        totalEl.textContent = `Total: ${n} ${n === 1 ? 'conversation' : 'conversations'} · ` +
-          `${formatConvSize(totalBytes)} (Live: ${formatConvSize(totalLiveBytes)} · Recorded: ${formatConvSize(totalRecordedBytes)})`;
-        totalEl.title = `${totalBytes.toLocaleString()} bytes in IndexedDB (Live: ` +
-          `${totalLiveBytes.toLocaleString()} B · Recorded: ${totalRecordedBytes.toLocaleString()} B · ` +
-          `Index: ${totalIndexBytes.toLocaleString()} B)`;
+        totalEl.textContent = `Total: ${n} ${n === 1 ? 'transcript' : 'transcripts'} · ` +
+          `${formatConvSize(totalBytes)} stored` +
+          (cachedBytes ? ` (${formatConvSize(cachedBytes)} of it the relay's record)` : '');
+        totalEl.title = `${transcriptBytes.toLocaleString()} bytes of transcripts in IndexedDB ` +
+          `(Open panes: ${openBytes.toLocaleString()} B · Ended panes: ` +
+          `${(transcriptBytes - openBytes).toLocaleString()} B), plus ` +
+          `${indexBytes.toLocaleString()} B of conversation index in localStorage. ` +
+          `${cachedBytes.toLocaleString()} B is this browser's kept copy of the relay's own record, ` +
+          `in IndexedDB beside the transcripts.`;
       }
 
       if (!convAnalyticsData.length) {
-        tableWrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px;font-size:0.75rem;">No conversations stored yet</div>';
+        tableWrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px;font-size:0.75rem;">' +
+          'Nothing recorded in this browser yet' + '</div>';
         return;
       }
 
@@ -8362,50 +8536,71 @@
       const arrow = col => convAnalyticsSort.col === col ? `<span class="sort-arrow">${convAnalyticsSort.dir === 'asc' ? '▲' : '▼'}</span>` : '';
       const ariaSort = col => convAnalyticsSort.col === col ? (convAnalyticsSort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
 
-      const th = (col, label, alignRight) =>
-        `<th scope="col" aria-sort="${ariaSort(col)}" onclick="sortConvAnalytics('${col}')" style="${alignRight ? 'text-align:right;' : ''}">` +
+      // Every figure in this table is one transcript in IndexedDB. The tooltips are where that is
+      // said, and they are not optional: the columns this replaced were called Live and Recorded,
+      // and "Live" is already this app's word for the relay-backed thread (conv_live.js), which
+      // costs this browser nothing at all.
+      const th = (col, label, alignRight, tip) =>
+        `<th scope="col" aria-sort="${ariaSort(col)}" onclick="sortConvAnalytics('${col}')"` +
+        `${tip ? ` title="${escapeHtml(tip)}"` : ''} style="${alignRight ? 'text-align:right;' : ''}">` +
         `<button type="button" class="conv-analytics-th-btn" style="${alignRight ? 'justify-content:flex-end;margin-left:auto;' : ''}">${escapeHtml(label)}${arrow(col)}</button></th>`;
 
-      const rowsHtml = sorted.map(c => {
-        const liveSize = formatConvSize(c.liveBytes);
-        const recSize = formatConvSize(c.recordedBytes);
-        const idxSize = formatConvSize(c.indexBytes);
-        const totalSize = formatConvSize(c.totalBytes);
-        const titleTip = `${escapeHtml(c.name)} · Live: ${(c.liveBytes || 0).toLocaleString()} B · ` +
-          `Recorded: ${(c.recordedBytes || 0).toLocaleString()} B · ` +
-          `Index: ${(c.indexBytes || 0).toLocaleString()} B · ` +
-          `Total: ${(c.totalBytes || 0).toLocaleString()} B`;
+      const rowsHtml = sorted.map(r => {
+        // Where the pane's words are filed, and the answer is sometimes "nowhere" — a transcript in
+        // no conversation is an ended session the Add-pane picker still offers, not a leak.
+        const filed = (r.convs || []).length
+          ? escapeHtml((r.convs || []).join(', '))
+          : '<span class="conv-analytics-unfiled-tag" title="An ended session no conversation names.'
+            + ' Kept so a conversation can still be assembled from it.">unfiled</span>';
+        const state = r.open
+          ? '<span class="conv-analytics-open" title="This pane is running now — its transcript is'
+            + ' still growing.">open</span>'
+          : '<span title="This session has ended — its transcript is finished.">ended</span>';
         return `<tr>` +
-          `<td><button type="button" class="conv-analytics-name-btn" data-id="${escapeHtml(c.id)}" ` +
-          `onclick="openConversation(this.dataset.id)" title="Open ${escapeHtml(c.name)}">` +
-          `${escapeHtml(c.name)}</button>${c.auto ? ' <span class="conv-analytics-auto-badge">auto</span>' : ''}</td>` +
-          `<td class="conv-analytics-num">${c.msgCount.toLocaleString()}</td>` +
-          `<td class="conv-analytics-num" title="${(c.liveBytes || 0).toLocaleString()} bytes">${liveSize}</td>` +
-          `<td class="conv-analytics-num" title="${(c.recordedBytes || 0).toLocaleString()} bytes">${recSize}</td>` +
-          `<td class="conv-analytics-num" title="${(c.indexBytes || 0).toLocaleString()} bytes">${idxSize}</td>` +
-          `<td class="conv-analytics-num" title="${titleTip}">${totalSize}</td>` +
+          `<td title="${escapeHtml(r.key)}">${escapeHtml(r.name)}` +
+          `${r.agent ? ` <span class="conv-analytics-auto-badge">${escapeHtml(r.agent)}</span>` : ''}</td>` +
+          `<td>${filed}</td>` +
+          `<td class="conv-analytics-num">${state}</td>` +
+          `<td class="conv-analytics-num">${(r.msgCount || 0).toLocaleString()}</td>` +
+          `<td class="conv-analytics-num" title="${(r.bytes || 0).toLocaleString()} bytes">` +
+          `${formatConvSize(r.bytes)}</td>` +
+          `<td class="conv-analytics-num conv-analytics-cached" ` +
+          `title="${(r.liveBytes || 0).toLocaleString()} bytes of the relay's record, kept here">` +
+          `${r.liveBytes ? formatConvSize(r.liveBytes) : '—'}</td>` +
           `</tr>`;
       }).join('');
 
+      // The index is not a transcript and has no row of its own above; it is named here because the
+      // reader's question is what the app costs in total, and the three stores answer it together.
       const footHtml = `<tfoot><tr>` +
         `<td><strong>Total (${convAnalyticsData.length})</strong></td>` +
+        `<td title="${indexBytes.toLocaleString()} bytes of conversation index, in localStorage">` +
+        `+ index ${formatConvSize(indexBytes)}</td>` +
+        `<td class="conv-analytics-num"><strong>${formatConvSize(openBytes)}</strong></td>` +
         `<td class="conv-analytics-num"><strong>${totalMsgs.toLocaleString()}</strong></td>` +
-        `<td class="conv-analytics-num" title="${totalLiveBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalLiveBytes)}</strong></td>` +
-        `<td class="conv-analytics-num" title="${totalRecordedBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalRecordedBytes)}</strong></td>` +
-        `<td class="conv-analytics-num" title="${totalIndexBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalIndexBytes)}</strong></td>` +
-        `<td class="conv-analytics-num" title="${totalBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalBytes)}</strong></td>` +
+        `<td class="conv-analytics-num" title="${totalBytes.toLocaleString()} bytes, transcripts and index">` +
+        `<strong>${formatConvSize(totalBytes)}</strong></td>` +
+        `<td class="conv-analytics-num conv-analytics-cached" ` +
+        `title="${cachedBytes.toLocaleString()} bytes of the relay's record, kept on this device">` +
+        `${cachedBytes ? formatConvSize(cachedBytes) : '—'}</td>` +
         `</tr></tfoot>`;
 
-      tableWrap.innerHTML = `<table class="conv-analytics-table" aria-label="Conversations by local storage size">` +
+      tableWrap.innerHTML = `<table class="conv-analytics-table" aria-label="Pane transcripts by local storage size">` +
         `<thead><tr>` +
-        th('name', 'Conversation', false) +
-        th('msgCount', 'Messages', true) +
-        th('liveBytes', 'Live IDB', true) +
-        th('recordedBytes', 'Recorded IDB', true) +
-        // The row that names the conversation is in IndexedDB too, and the three columns have to
-        // add up to the fourth or the table reads as one of them being wrong.
-        th('indexBytes', 'Index', true) +
-        th('totalBytes', 'Total IDB', true) +
+        th('name', 'Pane', false, 'The pane this transcript was recorded from. One row per '
+          + 'transcript in IndexedDB — the database is keyed by pane, not by conversation.') +
+        th('convs', 'In', false, 'The conversations this pane is a member of. A pane can be in '
+          + 'several, or in none.') +
+        th('open', 'State', true, 'Whether the pane is running right now. An open pane\'s '
+          + 'transcript is still growing; an ended one is as big as it will ever be.') +
+        th('msgCount', 'Messages', true, 'Messages recorded in this transcript.') +
+        th('bytes', 'Stored (IDB)', true, 'What this transcript costs in IndexedDB — the words this '
+          + 'browser captured from the pane. Every byte the app stores on this device is one of '
+          + 'these rows, plus the index named in the footer.') +
+        th('liveBytes', 'Relay copy', true, 'What this browser has kept of the relay\'s own record '
+          + 'for this pane — read by the Live toggle and now stored, so it is there after a refresh '
+          + 'and while the relay is unreachable. A second source for the same conversation, never '
+          + 'folded into the transcript beside it.') +
         `</tr></thead>` +
         `<tbody>${rowsHtml}</tbody>` +
         footHtml +
@@ -10970,89 +11165,111 @@
       }
     }
 
-    // What a conversation costs in IndexedDB, split the way the reader can act on it: transcripts
-    // of panes still running, transcripts of panes that have ended, and the index row that names
-    // the conversation itself. The split matters because only one of the three is finished — a
-    // live pane's transcript is still growing, and a recorded one is exactly as big as it will
-    // ever be.
-    //
-    // `liveAgents` is whatever the caller has: the agents array, or a set of member keys already
-    // worked out. Anything else counts as nothing live rather than as an error — this measures
-    // storage, and a wrong split is better than a panel that will not draw.
-    function calcConvAnalytics(convs, recordsMap, liveAgents) {
-      const list = convs || [];
-      const records = (recordsMap && typeof recordsMap.get === 'function')
+    // What one stored thing costs, as the browser will store it. A record that will not serialise
+    // is counted as nothing rather than throwing: a panel that cannot draw tells the reader less
+    // about their storage than a figure that is short by one transcript.
+    function convStoredBytes(thing) {
+      try {
+        return JSON.stringify(thing).length;
+      } catch (e) { return 0; }
+    }
+
+    // Callers hold their records as a Map or as a plain object, and both are asked the same
+    // question here.
+    function convRecordsMap(recordsMap) {
+      return (recordsMap && typeof recordsMap.get === 'function')
         ? recordsMap
         : new Map(Object.entries(recordsMap || {}));
+    }
+
+    // The keys of the panes that are running right now. `liveAgents` is whatever the caller has:
+    // the agents array, or a set of member keys already worked out. Anything with `has` is taken as
+    // the set itself — duck-typed rather than `instanceof Set`, which is false for a Set made in
+    // another realm. Anything else counts as nothing live rather than as an error: this measures
+    // storage, and a wrong flag is better than a panel that will not draw.
+    function convLiveKeySet(liveAgents) {
+      if (liveAgents && typeof liveAgents.has === 'function') return liveAgents;
       const memberKey = a => a &&
         (a.key || (typeof convMemberKey === 'function' ? convMemberKey(a) : '') || a.pane_id || '');
-      // Anything with `has` is taken as the set of keys itself — duck-typed rather than
-      // `instanceof Set`, which is false for a Set made in another realm.
-      const liveKeySet = (liveAgents && typeof liveAgents.has === 'function')
-        ? liveAgents
-        : new Set(Array.from(liveAgents || [], memberKey).filter(Boolean));
-      return list.map(c => {
-        const members = c.members || [];
-        let msgCount = 0;
-        let liveBytes = 0;
-        let recordedBytes = 0;
-        const seenKeys = new Set();
-        for (const m of members) {
-          if (!m || !m.key || seenKeys.has(m.key)) continue;
-          seenKeys.add(m.key);
-          const rec = records.get(m.key);
-          if (rec) {
-            const entries = rec.entries || [];
-            msgCount += entries.length;
-            let bytes = 0;
-            try {
-              bytes = JSON.stringify(rec).length;
-            } catch (e) { /* ignore */ }
-            if (liveKeySet.has(m.key)) {
-              liveBytes += bytes;
-            } else {
-              recordedBytes += bytes;
-            }
-          }
-        }
-        // The index row is in IndexedDB too, and a column called Total that left it out would be
-        // under-reporting by exactly the thing it names. It is small — a name, a member list — but
-        // it is the only part a conversation with no transcripts at all still costs.
-        let indexBytes = 0;
-        try {
-          indexBytes = JSON.stringify(c).length;
-        } catch (e) { /* a cycle in the index row: the transcripts are still worth reporting */ }
-        const totalBytes = liveBytes + recordedBytes + indexBytes;
-        const sizeMb = totalBytes / (1024 * 1024);
+      return new Set(Array.from(liveAgents || [], memberKey).filter(Boolean));
+    }
 
-        return {
-          id: c.id,
-          name: c.name || 'Untitled',
-          auto: !!c.auto,
-          panes: members.length,
-          msgCount: msgCount,
-          liveBytes: liveBytes,
-          recordedBytes: recordedBytes,
-          indexBytes: indexBytes,
-          totalBytes: totalBytes,
-          sizeMb: sizeMb,
-          touched: c.touched || 0,
-        };
-      });
+    // What this browser is storing, one row per transcript — which is one row per pane that ever
+    // recorded, whether its session is running or long over.
+    //
+    // Per *pane* and not per conversation, because the pane is what the database is keyed by. A
+    // conversation is a name over some of those keys: it holds no words of its own, one pane can be
+    // in several of them, and a transcript in none of them is still on disk. Summed per
+    // conversation, those three facts make the figure unreadable — a pane's bytes counted twice,
+    // or not at all, and no row at all for the ended sessions that are most of a months-old
+    // database. Every record gets a row here, and the total is the database.
+    //
+    // The conversations a pane is in ride along as a label, so the grouping is still on screen —
+    // it is just no longer what the arithmetic is done over.
+    // `liveCache` is what the relay's record is costing in memory this session, by fingerprint —
+    // optional, and zero everywhere the Live toggle has never been used.
+    function calcPaneStorage(convs, recordsMap, liveAgents, liveCache) {
+      const records = convRecordsMap(recordsMap);
+      const live = convLiveKeySet(liveAgents);
+      const cached = convRecordsMap(liveCache);
+      const named = new Map();
+      for (const c of convs || []) {
+        for (const m of (c && c.members) || []) {
+          if (!m || !m.key) continue;
+          if (!named.has(m.key)) named.set(m.key, []);
+          named.get(m.key).push(c.name || 'Untitled');
+        }
+      }
+      const rows = [];
+      for (const [key, rec] of records) {
+        if (!rec) continue;
+        const entries = rec.entries || [];
+        const fp = typeof convKeyFingerprint === 'function' && typeof convFpKey === 'function'
+          ? convFpKey(convKeyFingerprint(key)) : key;
+        rows.push({
+          key: key,
+          // The label the recorder stamped, then the pane id the key carries. A transcript always
+          // has one or the other: the pane id is in the key by construction.
+          name: rec.label || (typeof convKeyPaneId === 'function' ? convKeyPaneId(key) : '') || 'Pane',
+          agent: rec.agent || '',
+          msgCount: entries.length,
+          bytes: convStoredBytes(rec),
+          fp: fp,
+          // The relay's record for the same pane, held in memory for this session. A fingerprint
+          // is per host+agent+cwd and a key is per pane, so two panes of one agent in one directory
+          // share a bucket: this is what the Live thread cost to fetch, not a second transcript.
+          liveBytes: cached.get(fp) || 0,
+          open: live.has(key),
+          convs: named.get(key) || [],
+          touched: rec.touched || 0,
+        });
+      }
+      return rows;
+    }
+
+    // What the conversation index costs, which is the other half of the answer to "how much is this
+    // app storing". It is in localStorage rather than IndexedDB and it is small beside the
+    // transcripts, but it is the part that is there even for a conversation whose panes never
+    // recorded a word.
+    function calcConvIndexBytes(convs) {
+      return convStoredBytes({ version: 1, items: convs || [] });
     }
 
     function sortConvAnalyticsRows(rows, col, dir) {
       const d = dir === 'asc' ? 1 : -1;
       const list = (rows || []).slice();
+      const text = (row, f) => f === 'convs' ? (row.convs || []).join(', ') : (row[f] || '');
       return list.sort((a, b) => {
-        if (col === 'name') {
-          return d * (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
+        if (col === 'name' || col === 'convs') {
+          return d * text(a, col).localeCompare(text(b, col), undefined,
+            { sensitivity: 'base', numeric: true });
         }
+        // `open` is a boolean, and boolean arithmetic is what sorts it: true - false is 1.
         // Every other column is a number on the row, so the column id is the field name and a new
-        // column needs a header rather than a branch here. Anything not on the list sorts by total,
+        // column needs a header rather than a branch here. Anything not on the list sorts by size,
         // which is the table's default and the one column a row always has.
-        const numeric = ['msgCount', 'panes', 'liveBytes', 'recordedBytes', 'indexBytes', 'totalBytes'];
-        const f = numeric.indexOf(col) === -1 ? 'totalBytes' : col;
+        const numeric = ['msgCount', 'bytes', 'touched', 'open'];
+        const f = numeric.indexOf(col) === -1 ? 'bytes' : col;
         return d * ((a[f] || 0) - (b[f] || 0));
       });
     }
@@ -11121,7 +11338,15 @@
     }
 
     const CONV_DB_NAME = 'herdr', CONV_DB_STORE = 'transcripts';
-    const CONV_INDEX_KEY = 'herdr_conversations', CONV_FALLBACK_KEY = 'herdr_transcripts';
+    // The relay's own record, kept beside the transcripts rather than mixed into them. They are two
+    // sources for one conversation and they must never be folded together: one is what this browser
+    // witnessed, the other is what the relay wrote for every pane whether anyone was watching. Its
+    // own store, keyed by fingerprint rather than by pane, because that is what the record is
+    // addressed by — see conv_live.js.
+    const CONV_LIVE_STORE = 'live';
+    const CONV_DB_VERSION = 2;
+    const CONV_INDEX_KEY = 'herdr_conversations', CONV_PENDING_KEY = 'herdr_conversations_pending',
+      CONV_FALLBACK_KEY = 'herdr_transcripts';
     // What the fallback keeps instead. It is sharing one 5 MB cap with everything else this app
     // stores, so it holds hours of history rather than months — and says so.
     const CONV_FALLBACK_ENTRIES = 400, CONV_FALLBACK_TRANSCRIPTS = 20;
@@ -11141,12 +11366,19 @@
       if (convDBOpened) return convDBOpened;
       convDBOpened = new Promise(res => {
         let req;
-        try { req = indexedDB.open(CONV_DB_NAME, 1); } catch (e) { return res(null); }
+        try { req = indexedDB.open(CONV_DB_NAME, CONV_DB_VERSION); } catch (e) { return res(null); }
+        // Runs for a fresh database and for one already holding transcripts at version 1, which is
+        // every browser that has used this app before today: both branches are guarded by name, so
+        // the upgrade adds the live store and touches nothing that is already there.
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(CONV_DB_STORE)) {
             const s = db.createObjectStore(CONV_DB_STORE, { keyPath: 'key' });
             s.createIndex('touched', 'touched');   // so eviction can range-scan by age
+          }
+          if (!db.objectStoreNames.contains(CONV_LIVE_STORE)) {
+            const s = db.createObjectStore(CONV_LIVE_STORE, { keyPath: 'fp' });
+            s.createIndex('touched', 'touched');
           }
         };
         req.onsuccess = () => res(req.result);
@@ -11976,6 +12208,11 @@
     function saveConvIndex(items) {
       const kept = convFit(items);
       try {
+        const before = new Set(loadConvIndex().map(c => c && c.id).filter(Boolean));
+        const pending = JSON.parse(localStorage.getItem(CONV_PENDING_KEY) || '[]');
+        const next = new Set(Array.isArray(pending) ? pending : []);
+        for (const c of kept) if (c && c.id && !before.has(c.id)) next.add(c.id);
+        localStorage.setItem(CONV_PENDING_KEY, JSON.stringify(Array.from(next)));
         localStorage.setItem(CONV_INDEX_KEY, JSON.stringify({ version: 1, items: kept }));
       } catch (e) { /* private mode: this session only */ }
       // A half-written message and the agent it was addressed to belong to a conversation, so they
@@ -12312,8 +12549,18 @@
     const CONV_AUTO_SEEN_MAX = 500;
     const CONV_LANDING_AUTO_KEY = 'herdr_conv_landing_auto', CONV_LANDING_AUTO_MAX = 10;
 
+    // The toggle exists so auto conversations cannot bury the named ones, which is a question
+    // about this reader's screen and not about the agents — so it is not one of the four synced
+    // documents. But its default was "hide", and a browser that has just adopted a wholly
+    // automatic index then draws an empty Conversations section: the sync worked, landed in
+    // localStorage, and showed nothing. That reads as the sync having failed. With no named
+    // conversation there is nothing to bury, so until the reader chooses, an all-auto index shows.
     function convLandingAutoOn() {
-      try { return localStorage.getItem(CONV_LANDING_AUTO_KEY) === 'on'; }
+      try {
+        const set = localStorage.getItem(CONV_LANDING_AUTO_KEY);
+        if (set) return set === 'on';
+        return !loadConvIndex().some(c => c && !c.auto);
+      }
       catch (e) { return false; }
     }
 
@@ -12357,13 +12604,24 @@
 
     function convAutoJoin() {
       if (!convAutoOn() || !agents.length) return;
+      // Not before the relay has answered with the shared index. A browser that has never
+      // connected reads an empty one, and filing every live pane against that emptiness mints a
+      // duplicate of a conversation the relay is about to hand over — which then wins, because a
+      // document edited before the answer arrives is not adopted over. That is one new browser
+      // replacing every conversation every other browser had. stateSyncReceive calls this again
+      // once the index is real.
+      if (typeof stateSyncPending === 'function' && stateSyncPending()) return;
       const seen = convAutoSeen(), had = new Set(seen);
+      const items = loadConvIndex();
+      // A pane the index already files is not fresh, whoever filed it. The seen list is this
+      // browser's own memory and a second browser has none of it, so membership is what survives
+      // being handed an index built somewhere else.
+      for (const c of items) for (const m of (c && c.members) || []) if (m && m.key) had.add(m.key);
       // Only a pane an agent is running in has messages to record — the same gate the menu item
       // uses, so a harness the app cannot read is not filed under a record it can never write to.
       const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
         && profileFor(a.agent));
       if (!fresh.length) return;
-      const items = loadConvIndex();
       const added = fresh.map(a => {
         const conv = {
           id: 'c_' + Math.random().toString(36).slice(2, 10),
@@ -12952,9 +13210,7 @@
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
         // thread of drafts and pane reads has neither, and the guard is what keeps this file
         // working in a slice that never loaded that one.
-        // `side` goes in because the commits hang under this bubble and have to take its column;
-        // the branch rule above is a divider across the whole thread and takes none.
-        const git = typeof convGitRules === 'function' ? convGitRules(e, gitSeen, side, color)
+        const git = typeof convGitRules === 'function' ? convGitRules(e, gitSeen)
           : {before: '', after: ''};
         // Who said it, for the composer's token to name: two bubbles of the same length from two
         // members read alike once they are cut to `[#1 …]`, and a quote is worth nothing if the
@@ -13097,6 +13353,123 @@
       return bucket;
     }
 
+    // What this browser is keeping of the relay's record, per fingerprint, for the storage panel.
+    //
+    // Measured off the in-memory buckets rather than by reading the store back: they are written
+    // through, so they are what is on disk, and the panel must not open a second transaction per
+    // draw to learn what it already has.
+    function convLiveCacheBytes() {
+      const out = new Map();
+      for (const [fpKey, bucket] of convLiveCache) {
+        try { out.set(fpKey, JSON.stringify(bucket.turns || []).length); } catch (e) { /* skip */ }
+      }
+      return out;
+    }
+
+    // --- Kept on disk ---
+    //
+    // The record survives a refresh, a closed tab, and a week away, and reads with the relay down.
+    // Two things follow from persisting it, and both are the point:
+    //
+    //   * the delta spans sessions. `syncedTo` was a session variable, so every reload re-asked for
+    //     the window this feature exists to avoid re-asking for.
+    //   * it outlives the relay's own pruning. The relay drops its oldest rows at
+    //     HERDR_CONV_LOG_MAX, and what a client already holds is not dropped with them.
+    //
+    // Kept in its own store and never folded into a transcript: the two are different sources for
+    // one conversation, and the whole value of the toggle is being able to tell them apart.
+    const CONV_LIVE_KEEP = 400;      // fingerprints kept on disk, oldest touched evicted first
+
+    // The buckets read back from disk, once per page. Everything that reads the cache awaits it, so
+    // a render arriving before the disk does draws the record rather than an empty thread.
+    let convLiveLoaded = null;
+    // Fingerprints this session has heard the relay answer for. The first ask for each is the whole
+    // window rather than a delta: a watermark restored from disk names an id in a database this
+    // session has never spoken to, and a relay whose record was reset or moved would answer that
+    // delta with silence forever. One window per fingerprint per session settles it.
+    const convLiveVerified = new Set();
+
+    function convLiveHydrate() {
+      if (convLiveLoaded) return convLiveLoaded;
+      convLiveLoaded = (async () => {
+        if (typeof openConvDB !== 'function') return;
+        const db = await openConvDB();
+        if (!db) return;
+        try {
+          const read = db.transaction(CONV_LIVE_STORE, 'readonly').objectStore(CONV_LIVE_STORE);
+          for (const rec of (await idbReq(read.getAll())) || []) {
+            if (!rec || !rec.fp || convLiveCache.has(rec.fp)) continue;
+            convLiveCache.set(rec.fp, {
+              turns: rec.turns || [], syncedTo: rec.syncedTo || 0, lastFetch: 0,
+              // Answered by the relay once, on a previous day. Without this the thread would say
+              // "Reading the relay's record…" over rows it is already drawing.
+              answered: true,
+            });
+          }
+        } catch (e) { /* the session keeps its own copy in memory */ }
+      })();
+      return convLiveLoaded;
+    }
+
+    // Write-through, per fingerprint, after the answer that changed it. Failures are silent by
+    // design: a full quota costs this session's durability and nothing else, and the thread on
+    // screen is already drawn from memory.
+    async function convLivePersist(fpKeys) {
+      if (typeof openConvDB !== 'function') return;
+      const db = await openConvDB();
+      if (!db) return;
+      const now = Date.now();
+      try {
+        const store = db.transaction(CONV_LIVE_STORE, 'readwrite').objectStore(CONV_LIVE_STORE);
+        await Promise.all(Array.from(fpKeys || [], fpKey => {
+          const bucket = convLiveCache.get(fpKey);
+          if (!bucket) return null;
+          return idbReq(store.put({ fp: fpKey, turns: bucket.turns || [],
+            syncedTo: bucket.syncedTo || 0, touched: now }));
+        }).filter(Boolean));
+      } catch (e) { return; }
+      await convLiveEvict(db);
+    }
+
+    // The store's own ceiling. The per-fingerprint cap (CONV_LIVE_ROWS) bounds one pane; this bounds
+    // how many panes are kept at all, so a machine that has run hundreds of sessions does not carry
+    // every one of them forever. Oldest touched first, which is the same rule the transcripts use.
+    async function convLiveEvict(db) {
+      try {
+        const read = db.transaction(CONV_LIVE_STORE, 'readonly').objectStore(CONV_LIVE_STORE);
+        const count = await idbReq(read.count());
+        if (count <= CONV_LIVE_KEEP) return;
+        const byAge = db.transaction(CONV_LIVE_STORE, 'readwrite').objectStore(CONV_LIVE_STORE);
+        const stale = (await idbReq(byAge.index('touched').getAllKeys())) || [];
+        for (const key of stale.slice(0, count - CONV_LIVE_KEEP)) byAge.delete(key);
+      } catch (e) { /* the cap is a tidy-up, not a correctness property */ }
+    }
+
+    // Everything this browser is keeping of the relay's record, dropped in one go. The transcripts
+    // are untouched: this is the copy that can always be fetched again.
+    async function convLiveForget() {
+      convLiveCache.clear();
+      convLiveVerified.clear();
+      if (typeof openConvDB !== 'function') return;
+      const db = await openConvDB();
+      if (!db) return;
+      try {
+        await idbReq(db.transaction(CONV_LIVE_STORE, 'readwrite')
+          .objectStore(CONV_LIVE_STORE).clear());
+      } catch (e) { /* nothing to do about it, and nothing lost that cannot be re-read */ }
+    }
+
+    // The Settings button. Confirmed, because it is a delete — and worded as what it costs, which
+    // is nothing except where the relay has pruned what this browser still had.
+    async function forgetLiveRecord() {
+      if (!confirm('Forget the relay record kept on this device? It is read again the next time a '
+        + 'thread is opened, except for anything the relay has since pruned.')) return;
+      await convLiveForget();
+      if (typeof renderConvView === 'function') renderConvView();
+      if (typeof renderConvAnalytics === 'function') renderConvAnalytics();
+      showToast('Forgot the kept copy of the relay’s record');
+    }
+
     function convLiveOn() {
       try { return localStorage.getItem(CONV_LIVE_KEY) === 'on'; } catch (e) { return false; }
     }
@@ -13127,6 +13500,11 @@
       } catch (e) { return null; }
     }
 
+    // The member keys the last roster ask was made for. A fingerprint is `[host, agent, cwd]` and
+    // several panes can share one — four claude panes in one repository do — so an answer that came
+    // back truncated has to be refilled pane by pane, and this is what says which panes those are.
+    let convLiveAsked = [];
+
     // "Ask the relay again on the way through." Called where something has happened that the record
     // already knows about and this cache does not — a turn ending, or a reader pressing ⟳. It drops
     // the cadence rather than the rows: the next render re-asks, and asks only for what is new.
@@ -13147,12 +13525,26 @@
       if (!convLiveOn()) return;
       const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
       if (!fps.length) return;
+      // Whatever is on disk, before deciding anything: the watermark that says what to ask for
+      // lives there now, and asking without it would re-fetch a window this browser already holds.
+      // The render that follows draws from the same buckets, so a thread is on screen either way.
+      if (!convLiveLoaded) { convLiveHydrate().then(() => renderConvView()); return; }
       if (!ws || ws.readyState !== 1) {
-        convLiveError = 'Not connected — the relay’s record cannot be read right now.';
+        // Only when there is nothing to show. With the record on disk, a relay that is down or a
+        // phone with no signal is a thread that is behind, not a thread that is empty — and saying
+        // "cannot be read right now" over rows the reader is looking at is simply false.
+        const held = fps.some(fp => (convLiveCache.get(convFpKey(fp)) || {}).turns?.length);
+        convLiveError = held ? '' : 'Not connected — the relay’s record cannot be read right now.';
         return;
       }
       const now = Date.now();
       let needsFetch = !!force;
+      // A fingerprint restored from disk carries a watermark from another session, possibly from
+      // another copy of the relay's database. Its first ask is the window, and it is a delta after
+      // that — see convLiveVerified.
+      for (const fp of fps) {
+        if (!convLiveVerified.has(convFpKey(fp))) { force = true; needsFetch = true; }
+      }
       // The floor over the roster, not the ceiling: the buckets were last answered by different
       // queries, so the only id every member is proven current through is the lowest of them. A
       // member with no bucket has been answered through nothing, and the query goes out whole.
@@ -13167,6 +13559,7 @@
 
       for (const fp of fps) convLiveBucket(convFpKey(fp)).lastFetch = now;
 
+      convLiveAsked = (keys || []).slice();
       const payload = { type: 'conv_log', fingerprints: fps, last: CONV_LIVE_ROWS };
       // A delta only when every member is proven current through the same id. `force` still asks
       // for the window, because the reader pressing ⟳ is asking for the record and not for the
@@ -13174,6 +13567,56 @@
       // by nothing else.
       if (!force && syncedTo > 0 && syncedTo !== Infinity) payload.since_id = syncedTo;
       ws.send(JSON.stringify(payload));
+    }
+
+    // The newest CONV_LIVE_ROWS of each pane, in reading order. Pure.
+    function convLiveTrim(turns) {
+      const kept = [];
+      const seen = new Map();
+      // Backwards: the newest end is the end that is kept, which is the same end the relay's own
+      // window keeps.
+      for (let i = turns.length - 1; i >= 0; i--) {
+        const t = turns[i];
+        const pane = t.pane_id || '';
+        const n = seen.get(pane) || 0;
+        if (n >= CONV_LIVE_ROWS) continue;
+        seen.set(pane, n + 1);
+        kept.push(t);
+      }
+      return kept.reverse();
+    }
+
+    // A window that did not reach the end, spent again on one pane at a time.
+    //
+    // The record is asked by fingerprint, because that is what survives herdr renumbering every
+    // pane on restart. But a fingerprint is an agent in a directory, not a pane: four claude panes
+    // in one repository are one fingerprint and 400 turns, and the relay answers the newest 200 of
+    // them — cut further by a 64 KB bound. Whoever spoke most recently takes the whole window, and
+    // a pane with 181 turns of its own renders a handful. Which is not "the relay has nothing for
+    // this pane"; it is this client asking a question whose answer it then throws most of away.
+    //
+    // So when the answer says it was truncated, ask again for each pane the roster actually names.
+    // `pane` narrows the same query, so each of those windows is spent on one pane. Once only, per
+    // fingerprint per cadence — a pane-scoped answer never triggers another round.
+    function convLiveRefill(fingerprints) {
+      if (!ws || ws.readyState !== 1) return;
+      const wanted = new Set((fingerprints || []).map(convFpKey));
+      const now = Date.now();
+      const sent = new Set();
+      for (const key of convLiveAsked) {
+        const fp = convKeyFingerprint(key);
+        if (!fp) continue;
+        const fpKey = convFpKey(fp);
+        if (!wanted.has(fpKey)) continue;
+        let pane = '';
+        try { pane = (JSON.parse(key) || [])[1] || ''; } catch (e) { continue; }
+        if (!pane || sent.has(pane)) continue;
+        sent.add(pane);
+        const bucket = convLiveBucket(fpKey);
+        bucket.refilled = now;
+        ws.send(JSON.stringify(
+          { type: 'conv_log', fingerprints: [fp], pane: pane, last: CONV_LIVE_ROWS }));
+      }
     }
 
     // The relay answering. Addressed to the client that asked and never broadcast, so this arrives
@@ -13202,10 +13645,20 @@
       // echoes the request back for exactly this: without it an empty answer is indistinguishable
       // from one that was never asked, and a quiet pane would never come up to date.
       for (const fp of (Array.isArray(msg.fingerprints) ? msg.fingerprints : [])) {
-        const bucket = convLiveBucket(convFpKey(fp));
-        bucket.lastFetch = now;
-        bucket.answered = true;
-        if (answeredThrough > bucket.syncedTo) bucket.syncedTo = answeredThrough;
+        const fpKey = convFpKey(fp);
+        const bucket = convLiveBucket(fpKey);
+        // Heard from, this session, against this relay: the next ask for it can be a delta.
+        // Not for a pane-scoped answer, which carries one pane out of the fingerprint's several —
+        // taking its highest id as the watermark would tell the next delta that every *other*
+        // pane sharing this fingerprint is current through an id it was never asked about, and
+        // their rows would never arrive at all.
+        if (!msg.pane) {
+          convLiveVerified.add(fpKey);
+          if (answeredThrough > bucket.syncedTo) bucket.syncedTo = answeredThrough;
+          bucket.lastFetch = now;
+          bucket.answered = true;
+        }
+        touched.add(fpKey);
       }
 
       for (const fpKey of touched) {
@@ -13213,10 +13666,22 @@
         bucket.turns.sort((a, b) => (a.at || 0) - (b.at || 0) || (a.seq || 0) - (b.seq || 0));
         // The same ceiling a single query carries, held across the deltas that follow it: without
         // this a session left open all day grows a bucket without bound.
-        if (bucket.turns.length > CONV_LIVE_ROWS) {
-          bucket.turns.splice(0, bucket.turns.length - CONV_LIVE_ROWS);
-        }
+        //
+        // Counted per pane rather than over the bucket, because the bucket is a fingerprint and the
+        // thread is a pane. Over the bucket, the busiest pane sharing a fingerprint evicts the
+        // quiet one's history down to nothing — the reader opens a pane with 181 turns behind it
+        // and is shown whatever is left of 200 after its neighbours took theirs.
+        bucket.turns = convLiveTrim(bucket.turns);
       }
+
+      // A roster answer that did not fit is asked again, pane by pane. Never off a pane-scoped
+      // answer: that one being truncated means the pane alone has more than a window, and there is
+      // no narrower question left to ask.
+      if (convLiveTruncated && !msg.pane) convLiveRefill(msg.fingerprints);
+
+      // Kept, so the next session starts where this one got to. Not awaited: the thread below is
+      // drawn from memory and a disk write is not something a reader should wait behind.
+      convLivePersist(touched);
 
       if (!convLiveOn()) return;
       renderConvView();
@@ -13456,10 +13921,9 @@
     //
     // The two halves are not the same kind of thing, and they are drawn differently on purpose.
     // `before` is a rule across the thread: it announces the state the *next* bubble is in, which
-    // is what a divider is for. `after` belongs to the bubble above it — the turn said it was
-    // finished and these are what it finished — so it takes that bubble's width and side and hangs
-    // under it as badges. `side` is the bubble's own alignment class, passed in because the view
-    // owns the layout and this file owns the record's shape.
+    // is what a divider is for. `after` is a rule too, and used not to be: it hung under the bubble
+    // above at that bubble's width and side, which said the turn that just ended made these
+    // commits. It did not necessarily — see below — so it is drawn across the thread as well.
     //
     // They are also counted differently, and this is the part that is easy to get wrong. A branch
     // is tracked **per member**: a joint thread is several panes, and each of them deserves to be
@@ -13470,9 +13934,14 @@
     // Per checkout it appears exactly once, under the first turn to end after it was made. It is
     // also the rule the relay already uses when it stores a list (last_commit is keyed by host and
     // cwd), so the fetched range and the stored one now describe the same window.
+    //
+    // What that ordering cannot say is *who* committed. The first turn to end after a commit is
+    // not the pane that made it — with two agents in one checkout it is whichever finished first —
+    // and git has no per-pane provenance to appeal to: both commit as the same person. So the strip
+    // is drawn as a fact about the repository and never in the speaker's colour.
     const convGitWhere = e => `${e.host || 'local'}|${e.cwd || ''}`;
 
-    function convGitRules(e, seen, side, color) {
+    function convGitRules(e, seen) {
       const none = {before: '', after: ''};
       if (!e || (!e.branch && !e.commit)) return none;
       const key = e.key || '';
@@ -13493,12 +13962,19 @@
       if (convCommitsOn()) {
         const commits = convCommitsFor(e, there.commit);
         if (commits && commits.length) {
-          // The agent's own colour, carried on the strip rather than on each badge: the strip is a
-          // sibling of the bubble and not a child of it, so it inherits nothing from the bubble's
-          // own `--conv-agent`. The fill stays neutral — a wall of washed pills under every turn
-          // competes with the bubbles, and the colour has already been said by the bubble above.
-          after = `<div class="conv-commits${side || ''}"` +
-            `${color ? ` style="--conv-agent:${color}"` : ''}>` + commits.map(c =>
+          // Neutral, and not aligned to the bubble above it. These are the commits this checkout
+          // gained during the turn that just ended — which is not the same claim as "this agent
+          // made them", and git cannot tell the difference: two agents working in one repository
+          // commit as the same person, and the range is per checkout precisely so a commit appears
+          // once rather than under each of them. Drawn in the agent's colour and tucked under its
+          // bubble, that once read as authorship, and a reader went looking for work in the wrong
+          // pane's history.
+          const where = (e.cwd || '').split('/').filter(Boolean).pop() || 'this checkout';
+          const tip = `Landed in ${where} while this turn was open. Commits are per checkout — `
+            + `another agent working here may have made them.`;
+          after = `<div class="conv-commits" title="${escapeHtml(tip)}">` +
+            `<span class="conv-commits-lede">landed in ${escapeHtml(where)}</span>` +
+            commits.map(c =>
             `<span class="conv-commit" title="${escapeHtml(c.sha || '')}">` +
             `<code>${escapeHtml(String(c.sha || '').slice(0, CONV_SHA_SHOWN))}</code>` +
             `<span>${escapeHtml(c.subject || '')}</span></span>`).join('') + `</div>`;
