@@ -7,6 +7,11 @@
   <meta name="theme-color" content="#1a1b26">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Stamped by scripts/build.py from the version in herdr-plugin.toml, which is the one place
+       this project's version is written down. Served unbuilt from the relay these keep saying
+       "dev", which is what the page then is: the working copy on disk, not a release. -->
+  <meta name="app-version" content="0.5.0">
+  <meta name="app-built" content="2026-08-19">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -810,7 +815,25 @@
     }
 
     .bandwidth-time.now { color: var(--green); }
-    .bandwidth-hist-head { font-weight: 600; color: var(--text); }
+
+    /* The historical total stays put alongside the name. It is the number every bucket is being
+       compared against, and a total that scrolls off the moment the reader goes looking for the
+       hour that produced it is a total nobody can use. Its offset is the name column's own width,
+       measured after layout (see renderBandwidth) because that column is sized to its contents.
+       Offset by exactly that width, so it lands flush against the name and covers the column gap
+       the buckets would otherwise be seen sliding through. */
+    .bandwidth-hist-head,
+    .bandwidth-chip.bandwidth-hist {
+      position: sticky;
+      left: var(--bandwidth-name-w, 0px);
+      z-index: 1;
+    }
+
+    .bandwidth-hist-head {
+      font-weight: 600;
+      color: var(--text);
+      background: var(--bg);
+    }
 
     .bandwidth-chip {
       padding: 3px 4px;
@@ -1050,6 +1073,26 @@
       color: var(--muted);
       display: block;
       margin-bottom: 6px;
+    }
+
+    /* Name and value on one line each, the values in a column of their own so three version
+       numbers can be compared down the page rather than hunted for in a sentence. Monospace for
+       the same reason a diff is: 0.5.0 against 0.5.10 is a character-by-character read. */
+    .version-list {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 2px 10px;
+      margin: 0;
+      font-size: 0.75rem;
+    }
+
+    .version-list dt { color: var(--muted); }
+
+    .version-list dd {
+      margin: 0;
+      color: var(--text);
+      font-family: monospace;
+      overflow-wrap: anywhere;
     }
 
     .setting-group input {
@@ -5176,6 +5219,20 @@
           guide →</a></div>
     </div>
 
+    <!-- Under Connect because it answers the question Connect raises: this page and the relay it
+         reached are two separately deployed things, and "which versions am I actually running"
+         is the first thing asked when one of them behaves unlike the other. The page knows its
+         own build; the other two come from the relay, so they read as unknown until connected. -->
+    <div class="setting-group">
+      <label>Versions</label>
+      <dl class="version-list">
+        <dt>App</dt><dd id="verApp">dev</dd>
+        <dt>Relay</dt><dd id="verRelay">—</dd>
+        <dt>herdr CLI</dt><dd id="verHerdr">—</dd>
+      </dl>
+      <div class="hint" id="versionHint"></div>
+    </div>
+
     <div class="setting-group">
       <label>Push Notifications</label>
       <div id="pushStatus" style="font-size:0.75rem;margin-bottom:6px"></div>
@@ -7321,6 +7378,53 @@
     document.getElementById('userHighlight').checked = highlightOn(USER_HIGHLIGHT_KEY);
     document.getElementById('summaryHighlight').checked = highlightOn(SUMMARY_HIGHLIGHT_KEY);
 
+    // What is running, and where each part of the answer comes from. The page knows its own build
+    // because the build stamped it into a meta tag; the relay and the herdr binary under it are
+    // only knowable from the relay, which sends both when a client connects. Two separately
+    // deployed halves, and a mismatch between them is the explanation for a whole class of "the
+    // app does not do that" — so it is said out loud rather than left to be worked out.
+    const appVersion = (document.querySelector('meta[name="app-version"]') || {}).content || 'dev';
+    const appBuilt = (document.querySelector('meta[name="app-built"]') || {}).content || '';
+    let relayVersions = {};
+
+    function setRelayVersions(msg) {
+      relayVersions = msg || {};
+      renderVersions();
+    }
+
+    function renderVersions() {
+      const app = document.getElementById('verApp');
+      if (!app) return;
+      // "dev" is what the page is when it was served from the working copy rather than built:
+      // there is no version to name, and naming the last release would be a lie about what is
+      // on screen.
+      app.textContent = appVersion + (appBuilt ? ` · ${appBuilt}` : '');
+      // Em dash, not "unknown": nothing has been asked yet. A relay too old to answer leaves it
+      // at that too, which is itself the answer — that relay predates this message.
+      document.getElementById('verRelay').textContent = relayVersions.relay || '—';
+      document.getElementById('verHerdr').textContent = relayVersions.herdr || '—';
+      const hint = document.getElementById('versionHint');
+      if (!hint) return;
+      const mismatch = !!relayVersions.relay && appVersion !== 'dev' &&
+        appVersion !== relayVersions.relay;
+      if (!relayVersions.relay) {
+        hint.textContent = 'Relay and herdr versions arrive when the relay connects.';
+      } else if (appVersion === 'dev') {
+        hint.textContent = 'This page is being served unbuilt from the working copy, so it has no ' +
+          'version of its own. Run make build to stamp one.';
+      } else if (mismatch) {
+        hint.textContent = `This page is ${appVersion} and the relay is ${relayVersions.relay}. ` +
+          'Rebuild and redeploy the app, or restart the relay, so the two match.';
+      } else {
+        hint.textContent = 'The app is built from the same version the relay reports.';
+      }
+      // The one case worth a colour: everything else here is a statement of fact, and this is the
+      // one that explains a bug the reader is probably already looking at.
+      hint.style.color = mismatch ? 'var(--orange)' : '';
+    }
+
+    renderVersions();
+
   </script>
   <script>
     // --- Sounds ---
@@ -8057,9 +8161,15 @@
         panes.map(a => a.pane_id)).join(',');
       if (rows.dataset.sig !== sig) {
         // One grid for the header and all rows, so the columns line up and the whole table
-        // scrolls as one.
-        // Column 1 is the name, column 2 is total historical completed usage, and columns 3..N are the time buckets.
-        rows.style.gridTemplateColumns = `max-content minmax(52px, max-content) repeat(${buckets.length}, minmax(46px, 1fr))`;
+        // scrolls as one — three scrollers of their own would let a reader compare Sent at 3:05
+        // against Received at 2:40 and never see that they had.
+        // The name column takes exactly what the longest name and its badge need — a pane called
+        // "Architect 1 [claude]" is not worth abbreviating, and the buckets are the half that can
+        // afford to scroll under it. Then the historical total, which is sticky beside the name:
+        // it is the one number a reader scrolling back through the hours is comparing against, and
+        // a summary that leaves the screen when the detail is reached is a summary nobody reads.
+        rows.style.gridTemplateColumns =
+          `max-content minmax(52px, max-content) repeat(${buckets.length}, minmax(46px, 1fr))`;
         const at = b => {
           if (b.empty) return {range: 'No data', live: false, clock: '—'};
           const start = new Date(b.at), end = new Date(b.at + size);
@@ -8067,6 +8177,10 @@
             start.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ';
           const range = day + `${start.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}–` +
             end.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+          // Live is the interval still being filled, which only the collector knows: a record starts
+          // at the message that opened it, not on a clock boundary, so its time cannot be compared
+          // against one. The stack survives a reload and can hold days, so a column outside today
+          // says which day — HH:MM alone would read as this morning.
           return {range: range, live: b.at === liveAt,
             clock: day + `${String(start.getHours()).padStart(2, '0')}:` +
               `${String(start.getMinutes()).padStart(2, '0')}`};
@@ -8098,7 +8212,11 @@
       const bars = rows.querySelectorAll('.bandwidth-row');
       kinds.forEach(([, , value], r) => {
         const histChip = bars[r].querySelector('.bandwidth-chip.bandwidth-hist');
-        const histSum = bandwidth.filter(b => b && !b.empty && b.at !== liveAt).reduce((sum, b) => sum + value(b), 0);
+        // Every closed interval the stack still holds, not only the ones with a column: the panel
+        // shows the last few hours and this is the whole of what was kept. `liveAt` is 0 when
+        // nothing is open, and no bucket is at 0, so that case excludes nothing — which is right.
+        const histSum = bandwidth.filter(b => b && !b.empty && b.at !== liveAt)
+          .reduce((sum, b) => sum + value(b), 0);
         if (histChip) histChip.textContent = formatBandwidth(histSum);
         const chips = bars[r].querySelectorAll('.bandwidth-chips .bandwidth-chip');
         buckets.forEach((b, i) => { chips[i].textContent = b.empty ? '' : formatBandwidth(value(b)); });
@@ -8140,6 +8258,17 @@
           chips[j].textContent = b.empty ? '' :
             formatBandwidth(Math.max(0, paneKind[2](b) - claimed[j]));
         });
+      }
+
+      // What the name column ended up being, handed back to the stylesheet so the Hist column can
+      // stick to its right edge. Only the browser knows it — the column is sized to its contents.
+      // Last, after every name is written: a pane's "last seen" is appended to its label above, and
+      // measured before that the column comes out narrower than it ends up. Re-read every draw
+      // rather than once per layout — a rename, or the panel first opened while it was hidden and
+      // measured as zero, both change it without changing the signature.
+      const nameW = getComputedStyle(rows).gridTemplateColumns.split(' ')[0];
+      if (parseFloat(nameW) > 0 && rows.style.getPropertyValue('--bandwidth-name-w') !== nameW) {
+        rows.style.setProperty('--bandwidth-name-w', nameW);
       }
     }
 
@@ -8207,13 +8336,18 @@
       const totalMsgs = convAnalyticsData.reduce((acc, c) => acc + (c.msgCount || 0), 0);
       const totalLiveBytes = convAnalyticsData.reduce((acc, c) => acc + (c.liveBytes || 0), 0);
       const totalRecordedBytes = convAnalyticsData.reduce((acc, c) => acc + (c.recordedBytes || 0), 0);
-      const totalBytes = totalLiveBytes + totalRecordedBytes;
+      const totalIndexBytes = convAnalyticsData.reduce((acc, c) => acc + (c.indexBytes || 0), 0);
+      const totalBytes = totalLiveBytes + totalRecordedBytes + totalIndexBytes;
 
       if (totalEl) {
         const n = convAnalyticsData.length;
+        // The two transcript halves in the line, the index only in the tooltip: it is a rounding
+        // error beside them, and a third figure on a line read at a glance buys nothing.
         totalEl.textContent = `Total: ${n} ${n === 1 ? 'conversation' : 'conversations'} · ` +
           `${formatConvSize(totalBytes)} (Live: ${formatConvSize(totalLiveBytes)} · Recorded: ${formatConvSize(totalRecordedBytes)})`;
-        totalEl.title = `${totalBytes.toLocaleString()} bytes in IndexedDB (Live: ${totalLiveBytes.toLocaleString()} B · Recorded: ${totalRecordedBytes.toLocaleString()} B)`;
+        totalEl.title = `${totalBytes.toLocaleString()} bytes in IndexedDB (Live: ` +
+          `${totalLiveBytes.toLocaleString()} B · Recorded: ${totalRecordedBytes.toLocaleString()} B · ` +
+          `Index: ${totalIndexBytes.toLocaleString()} B)`;
       }
 
       if (!convAnalyticsData.length) {
@@ -8235,8 +8369,12 @@
       const rowsHtml = sorted.map(c => {
         const liveSize = formatConvSize(c.liveBytes);
         const recSize = formatConvSize(c.recordedBytes);
+        const idxSize = formatConvSize(c.indexBytes);
         const totalSize = formatConvSize(c.totalBytes);
-        const titleTip = `${escapeHtml(c.name)} · Live: ${(c.liveBytes || 0).toLocaleString()} B · Recorded: ${(c.recordedBytes || 0).toLocaleString()} B · Total: ${(c.totalBytes || 0).toLocaleString()} B`;
+        const titleTip = `${escapeHtml(c.name)} · Live: ${(c.liveBytes || 0).toLocaleString()} B · ` +
+          `Recorded: ${(c.recordedBytes || 0).toLocaleString()} B · ` +
+          `Index: ${(c.indexBytes || 0).toLocaleString()} B · ` +
+          `Total: ${(c.totalBytes || 0).toLocaleString()} B`;
         return `<tr>` +
           `<td><button type="button" class="conv-analytics-name-btn" data-id="${escapeHtml(c.id)}" ` +
           `onclick="openConversation(this.dataset.id)" title="Open ${escapeHtml(c.name)}">` +
@@ -8244,6 +8382,7 @@
           `<td class="conv-analytics-num">${c.msgCount.toLocaleString()}</td>` +
           `<td class="conv-analytics-num" title="${(c.liveBytes || 0).toLocaleString()} bytes">${liveSize}</td>` +
           `<td class="conv-analytics-num" title="${(c.recordedBytes || 0).toLocaleString()} bytes">${recSize}</td>` +
+          `<td class="conv-analytics-num" title="${(c.indexBytes || 0).toLocaleString()} bytes">${idxSize}</td>` +
           `<td class="conv-analytics-num" title="${titleTip}">${totalSize}</td>` +
           `</tr>`;
       }).join('');
@@ -8253,6 +8392,7 @@
         `<td class="conv-analytics-num"><strong>${totalMsgs.toLocaleString()}</strong></td>` +
         `<td class="conv-analytics-num" title="${totalLiveBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalLiveBytes)}</strong></td>` +
         `<td class="conv-analytics-num" title="${totalRecordedBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalRecordedBytes)}</strong></td>` +
+        `<td class="conv-analytics-num" title="${totalIndexBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalIndexBytes)}</strong></td>` +
         `<td class="conv-analytics-num" title="${totalBytes.toLocaleString()} bytes"><strong>${formatConvSize(totalBytes)}</strong></td>` +
         `</tr></tfoot>`;
 
@@ -8262,6 +8402,9 @@
         th('msgCount', 'Messages', true) +
         th('liveBytes', 'Live IDB', true) +
         th('recordedBytes', 'Recorded IDB', true) +
+        // The row that names the conversation is in IndexedDB too, and the three columns have to
+        // add up to the fourth or the table reads as one of them being wrong.
+        th('indexBytes', 'Index', true) +
         th('totalBytes', 'Total IDB', true) +
         `</tr></thead>` +
         `<tbody>${rowsHtml}</tbody>` +
@@ -8372,6 +8515,9 @@
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
         resetBandwidthBucket();
+        // The versions belonged to the relay that just went away. Held rather than cleared: a
+        // reconnect is three seconds off, and a Settings card that empties on every phone-in-pocket
+        // drop reads as the relay having no version at all.
         setStatus('disconnected');
         setTimeout(connect, 3000);
       };
@@ -8428,6 +8574,7 @@
         // there is nothing to filter here.
         convCommitsReceive(msg);
       }
+      else if (msg.type === 'versions') { setRelayVersions(msg); }
       else if (msg.type === 'projects') {
         projects = msg.projects || [];
         render();
@@ -10823,17 +10970,27 @@
       }
     }
 
-    // Total IDB storage footprint and statistics per conversation across live and recorded pane transcripts.
+    // What a conversation costs in IndexedDB, split the way the reader can act on it: transcripts
+    // of panes still running, transcripts of panes that have ended, and the index row that names
+    // the conversation itself. The split matters because only one of the three is finished — a
+    // live pane's transcript is still growing, and a recorded one is exactly as big as it will
+    // ever be.
+    //
+    // `liveAgents` is whatever the caller has: the agents array, or a set of member keys already
+    // worked out. Anything else counts as nothing live rather than as an error — this measures
+    // storage, and a wrong split is better than a panel that will not draw.
     function calcConvAnalytics(convs, recordsMap, liveAgents) {
       const list = convs || [];
       const records = (recordsMap && typeof recordsMap.get === 'function')
         ? recordsMap
         : new Map(Object.entries(recordsMap || {}));
-      const liveKeySet = new Set(
-        Array.isArray(liveAgents)
-          ? liveAgents.map(a => a ? (a.key || (typeof convMemberKey === 'function' ? convMemberKey(a) : '') || a.pane_id || '') : '').filter(Boolean)
-          : (liveAgents instanceof Set ? liveAgents : [])
-      );
+      const memberKey = a => a &&
+        (a.key || (typeof convMemberKey === 'function' ? convMemberKey(a) : '') || a.pane_id || '');
+      // Anything with `has` is taken as the set of keys itself — duck-typed rather than
+      // `instanceof Set`, which is false for a Set made in another realm.
+      const liveKeySet = (liveAgents && typeof liveAgents.has === 'function')
+        ? liveAgents
+        : new Set(Array.from(liveAgents || [], memberKey).filter(Boolean));
       return list.map(c => {
         const members = c.members || [];
         let msgCount = 0;
@@ -10858,7 +11015,14 @@
             }
           }
         }
-        const totalBytes = liveBytes + recordedBytes;
+        // The index row is in IndexedDB too, and a column called Total that left it out would be
+        // under-reporting by exactly the thing it names. It is small — a name, a member list — but
+        // it is the only part a conversation with no transcripts at all still costs.
+        let indexBytes = 0;
+        try {
+          indexBytes = JSON.stringify(c).length;
+        } catch (e) { /* a cycle in the index row: the transcripts are still worth reporting */ }
+        const totalBytes = liveBytes + recordedBytes + indexBytes;
         const sizeMb = totalBytes / (1024 * 1024);
 
         return {
@@ -10869,6 +11033,7 @@
           msgCount: msgCount,
           liveBytes: liveBytes,
           recordedBytes: recordedBytes,
+          indexBytes: indexBytes,
           totalBytes: totalBytes,
           sizeMb: sizeMb,
           touched: c.touched || 0,
@@ -10883,19 +11048,12 @@
         if (col === 'name') {
           return d * (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
         }
-        if (col === 'msgCount') {
-          return d * ((a.msgCount || 0) - (b.msgCount || 0));
-        }
-        if (col === 'panes') {
-          return d * ((a.panes || 0) - (b.panes || 0));
-        }
-        if (col === 'liveBytes') {
-          return d * ((a.liveBytes || 0) - (b.liveBytes || 0));
-        }
-        if (col === 'recordedBytes') {
-          return d * ((a.recordedBytes || 0) - (b.recordedBytes || 0));
-        }
-        return d * ((a.totalBytes || 0) - (b.totalBytes || 0));
+        // Every other column is a number on the row, so the column id is the field name and a new
+        // column needs a header rather than a branch here. Anything not on the list sorts by total,
+        // which is the table's default and the one column a row always has.
+        const numeric = ['msgCount', 'panes', 'liveBytes', 'recordedBytes', 'indexBytes', 'totalBytes'];
+        const f = numeric.indexOf(col) === -1 ? 'totalBytes' : col;
+        return d * ((a[f] || 0) - (b[f] || 0));
       });
     }
 
@@ -16192,7 +16350,30 @@
       return `[#${seq} ${from ? from + ': ' : ''}${said.length > 40 ? said.slice(0, 40) + '…' : said}]`;
     }
 
-    // Written in at the caret, on its own line, with the caret left after it — the sketch is
+    // Where the thread has a quote *now*, rather than where it was when it was tapped. The thread
+    // re-renders under the composer while it is being written in, and a position remembered at tap
+    // time can be a different message by the time the next one is picked. A quote whose bubble has
+    // gone sorts last, which leaves the tokens still in the thread in their own order.
+    function dockQuoteAt(text) {
+      const el = Array.from(document.querySelectorAll('#convViewThread .conv-msg'))
+        .find(m => (m.dataset.text || '') === text);
+      return el ? Number(el.dataset.i) : Infinity;
+    }
+
+    // A new token goes in front of the first one already in the box that the thread says later —
+    // so the quotes read in the order they were said, whatever order they were tapped in. Three
+    // bubbles picked bottom-up are still one exchange, and an agent handed them reversed is being
+    // told a different conversation. With nothing later than it, it lands at the caret, which is
+    // what makes the common case — reading down, picking as you go — write at the end as before.
+    function dockTokenSpot(input, i) {
+      for (const m of input.value.matchAll(DOCK_TOKEN)) {
+        const q = dockTokens.get(Number(m[1]));
+        if (q && dockQuoteAt(q.text) > i) return m.index;
+      }
+      return input.selectionStart == null ? input.value.length : input.selectionStart;
+    }
+
+    // Written in on its own line, with the caret left after it — the sketch is
     // `[#1 …] - what I want done with it`, so the note the reader is about to type follows the
     // token rather than being pushed onto another line by the app.
     function toggleConvDockPick(i) {
@@ -16212,10 +16393,13 @@
       } else {
         const seq = ++dockTokenSeq;
         dockTokens.set(seq, {text, key: el.dataset.key || ''});
-        const at = input.selectionStart == null ? input.value.length : input.selectionStart;
+        const at = dockTokenSpot(input, i);
         const before = input.value.slice(0, at), after = input.value.slice(at);
+        // A line of its own at both ends now that a token can land in front of another one:
+        // appended at the caret there was never anything after it to run into.
         const token = (before && !before.endsWith('\n') ? '\n' : '') +
-          dockTokenText(seq, text, el.dataset.who);
+          dockTokenText(seq, text, el.dataset.who) +
+          (after && !after.startsWith('\n') ? '\n' : '');
         input.value = before + token + after;
         input.selectionStart = input.selectionEnd = (before + token).length;
       }
