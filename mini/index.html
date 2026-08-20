@@ -3869,6 +3869,89 @@
 
     .hang-solo[hidden] { display: none; }
 
+    /* Same shape and the same place as .hang-solo: both are one short sentence about the state of
+       the thread underneath, so they read as one kind of thing rather than two. */
+    .hang-pill {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 12px;
+      border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--border));
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--blue) 14%, var(--surface));
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 16px rgba(0, 0, 0, 0.35);
+      font-size: 0.72rem;
+      color: var(--text);
+      white-space: nowrap;
+      pointer-events: none;
+      animation: hang-pill-in 140ms ease-out;
+    }
+
+    /* Solo owns the centre when it is up, so the pill takes the line under it rather than the two
+       overlapping. One row of a hang button plus its gaps, the same step .hang-working uses. */
+    #convViewSolo:not([hidden]) ~ .hang-pill { top: calc(6px + 28px + 6px); }
+
+    .conv-view-top .hang-pill { top: 100%; margin-top: 6px; }
+    .conv-view-top #convViewSolo:not([hidden]) ~ .hang-pill {
+      top: 100%;
+      margin-top: calc(6px + 28px + 6px);
+    }
+
+    .hang-pill[hidden] { display: none; }
+
+    /* The way back through a record longer than one window, at the top of the thread rather than
+       floating over it: it is about the oldest bubble, so it sits above the oldest bubble. */
+    .conv-older {
+      display: flex;
+      justify-content: center;
+      padding: 4px 0 10px;
+    }
+
+    .conv-older-btn {
+      padding: 5px 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    .conv-older-btn:hover:not(:disabled) {
+      border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+      color: var(--text);
+    }
+
+    .conv-older-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    /* The end of the walk, said rather than left as a button that does nothing. */
+    .conv-older-end {
+      font-size: 0.7rem;
+      color: var(--muted);
+      opacity: 0.75;
+      text-align: center;
+    }
+
+    /* It appears for a few hundred milliseconds at a time. Fading in stops that reading as a flash
+       of chrome over the text. */
+    @keyframes hang-pill-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hang-pill { animation: none; }
+    }
+
     .solo-name {
       min-width: 0;
       overflow: hidden;
@@ -5504,6 +5587,10 @@
          with: solo hides most of a conversation on purpose, and the reader has to be able to see
          that it did and get back out in one tap. Hidden whenever the whole roster is on screen. -->
     <div class="hang-solo" id="convViewSolo" role="status" hidden></div>
+    <!-- Only while a question to the relay is in the air. It never says the opposite: the relay
+         answers a bounded window and reports no total, so "synced" is not a claim this app can
+         back. See convLiveSyncing. -->
+    <div class="hang-pill" id="convViewSyncing" role="status" hidden>Syncing…</div>
     <div class="hang-float">
       <button class="hang-btn hang-tidy" id="convTidy" onclick="hangRefreshConv()"
         title="Reload this conversation, then remove any duplicates its members picked up"
@@ -5785,6 +5872,7 @@
       <button class="hang-btn hang-last hang-corner" id="paneLast" onclick="hangToLast()"
         aria-label="Jump to the newest message">↓ Last</button>
       <div class="hang-working" id="paneWorking" aria-live="polite"></div>
+      <div class="hang-pill" id="paneSyncing" role="status" hidden>Syncing…</div>
       <div class="hang-float">
         <button class="hang-btn hang-tidy" id="paneTidy" onclick="hangRefresh()"
           title="Refresh, then remove any duplicates this transcript picked up"
@@ -6767,6 +6855,13 @@
     //   'upload' — the relay holds nothing and this browser does; seed it
     //   'idle'   — neither has anything, or they already agree
     //
+    // A document the relay holds is the one every other browser is already reading, so this one
+    // takes it whatever it had. That is what stopped a browser writing a list it had manufactured
+    // from an empty localStorage over the real one — the bug that destroyed every conversation
+    // name the user had typed. The cost is paid on the other side: an edit made in the round trip,
+    // and anything created offline, is adopted over. `stateSyncApply` keeps a copy of what it
+    // overwrites, and the pending-create outbox below is what carries offline work across instead
+    // of losing it.
     function stateSyncPlan(serverRev, serverBody, localBody) {
       if (serverRev > 0) {
         if (serverBody === localBody) return 'idle';
@@ -6785,25 +6880,29 @@
       conv_hidden:   { map: true },
     };
 
-    // Rebase only locally-created rows that have never been acknowledged. The relay wins every
-    // existing id, so stale cache cannot resurrect a deletion or replace a newer conversation.
-    function stateMerge(name, serverBody, localBody, mine, onlyExtras) {
+    // The relay's document with locally-created rows appended — never a general union. `onlyExtras`
+    // is the set of ids this browser made and the relay has never acknowledged; every other local
+    // row loses, which is what stops a stale cache resurrecting a deleted conversation or replacing
+    // a newer one. A required argument, and an empty set is a real answer meaning "append nothing":
+    // a document with no outbox must never fall through to appending everything local.
+    //
+    // Returns null when this cannot be done safely — a body that does not parse, or one without the
+    // shape the name says it has — and the caller then adopts the relay's document whole.
+    function stateMerge(name, serverBody, localBody, onlyExtras) {
       const shape = STATE_SHAPE[name];
       if (!shape || serverBody == null || localBody == null) return null;
       let server, local;
       try { server = JSON.parse(serverBody); local = JSON.parse(localBody); }
       catch (e) { return null; }
       if (!server || !local || typeof server !== 'object' || typeof local !== 'object') return null;
-      const win = mine ? local : server, lose = mine ? server : local;
-      const winBody = mine ? localBody : serverBody;
+      const win = server, lose = local, winBody = serverBody;
       if (shape.list) {
         const key = shape.list;
         if (!Array.isArray(server[key]) || !Array.isArray(local[key])) return null;
         const have = new Set(win[key].map(x => x && x.id).filter(Boolean));
         // An entry with no id cannot be told apart from one already held, so it is not carried
         // over: duplicating it on every connect is worse than losing a malformed row.
-        const extra = lose[key].filter(x => x && x.id && !have.has(x.id)
-          && (!onlyExtras || onlyExtras.has(x.id)));
+        const extra = lose[key].filter(x => x && x.id && !have.has(x.id) && onlyExtras.has(x.id));
         // Nothing to add. Returned as the winning body itself, so the caller can tell "the union
         // is one of the two I already have" from "the union is new and has to be written".
         if (!extra.length) return winBody;
@@ -6811,9 +6910,9 @@
         out[key] = win[key].concat(extra);
         return JSON.stringify(out);
       }
-      if (Array.isArray(server) || Array.isArray(local)) return null;
-      if (Object.keys(lose).every(k => k in win)) return winBody;
-      return JSON.stringify(Object.assign({}, lose, win));
+      // A map's keys are not rows anyone created, so there is no outbox for them and nothing to
+      // rebase: the relay's document stands.
+      return serverBody;
     }
 
     function stateRead(name) {
@@ -7000,8 +7099,9 @@
         const body = doc.body == null ? null : doc.body;
         if (first) {
           const local = stateRead(name);
-          if (name === 'conversations' && rev > 0 && local) {
-            const merged = stateMerge(name, body, local, false, statePending(name));
+          const pending = statePending(name);
+          if (pending && rev > 0 && local) {
+            const merged = stateMerge(name, body, local, pending);
             if (merged !== null && merged !== body) {
               stateSyncApply(name, merged);
               stateDirty.add(name);
@@ -7051,6 +7151,8 @@
       if (first) {
         try { if (typeof convAutoJoin === 'function') convAutoJoin(); }
         catch (e) { /* the view is not loaded (vm slice), or not up yet */ }
+        try { if (typeof convLiveWarmRecent === 'function') convLiveWarmRecent(); }
+        catch (e) { /* the live reader is unavailable in this build */ }
       }
     }
 
@@ -7070,7 +7172,11 @@
       const name = msg && msg.name;
       if (!STATE_DOCS[name]) return;
       const remote = msg.body == null ? null : msg.body;
-      const merged = stateMerge(name, remote, stateRead(name), false, statePending(name));
+      // Only a document with an outbox has anything to carry across. For the others this is the
+      // plain adopt it has always been: their loser is dropped, not retried, because retrying is
+      // what turns a guarded last-write-wins back into an unguarded one.
+      const pending = statePending(name);
+      const merged = pending ? stateMerge(name, remote, stateRead(name), pending) : null;
       stateRev[name] = msg.rev || 0;
       stateInFlight.delete(name);
       delete stateSent[name];
@@ -12175,6 +12281,37 @@
       if (hit) { saveConvIndex(items); if (!activePane) renderConversations(); }
     }
 
+    // The relay cache is the source a fresh browser can fill before it has watched any panes.
+    // Keep the landing index in step with the same rows its conversation view will draw.
+    //
+    // Raised and never lowered. The relay answers a window — 200 rows a pane — and a browser that
+    // has watched a pane for a week holds more of it than that window carries, so writing this
+    // count down would tell the reader their record had shrunk. The card says the larger of what
+    // is on disk here and what the relay just handed over.
+    function convNoteLiveCounts(keys) {
+      if (typeof convLiveEntries !== 'function') return;
+      const items = loadConvIndex();
+      let hit = false;
+      for (const c of items) for (const m of c.members || []) {
+        if (!(keys || []).includes(m.key)) continue;
+        const entries = convLiveEntries([m.key]);
+        if (!entries.length) continue;
+        const last = entries[entries.length - 1] || {};
+        const messages = Math.max(Number(m.messages) || 0, entries.length);
+        const seen = Math.max(Number(m.seen) || 0, convAt(last) || 0);
+        // The preview belongs to whichever side is newer, so a card cannot show a line older than
+        // the timestamp beside it.
+        const text = seen > (Number(m.seen) || 0)
+          ? String(last.text || '').replace(/\s+/g, ' ').trim().slice(0, 120) : m.last;
+        if (m.messages === messages && m.seen === seen && m.last === text) continue;
+        m.messages = messages;
+        m.seen = seen;
+        m.last = text;
+        hit = true;
+      }
+      if (hit) { saveConvIndex(items); if (!activePane) renderConversations(); }
+    }
+
     // What the session was, for a conversation that outlives it. Every field is one the pane
     // record already carries, except `role`, which roleOf() recovers from the label. Placement and
     // slot are deliberately absent: a snapshot says where a pane *is*, never how it was created,
@@ -12208,9 +12345,14 @@
     function saveConvIndex(items) {
       const kept = convFit(items);
       try {
+        // What this save adds that the index did not already have is what the relay has never been
+        // told about. Ids the save drops leave the outbox with them: a conversation deleted before
+        // it ever synced, or one convFit trimmed, is not waiting to be sent anywhere, and an outbox
+        // that only ever grows is a localStorage key that never stops.
         const before = new Set(loadConvIndex().map(c => c && c.id).filter(Boolean));
+        const here = new Set(kept.map(c => c && c.id).filter(Boolean));
         const pending = JSON.parse(localStorage.getItem(CONV_PENDING_KEY) || '[]');
-        const next = new Set(Array.isArray(pending) ? pending : []);
+        const next = new Set((Array.isArray(pending) ? pending : []).filter(id => here.has(id)));
         for (const c of kept) if (c && c.id && !before.has(c.id)) next.add(c.id);
         localStorage.setItem(CONV_PENDING_KEY, JSON.stringify(Array.from(next)));
         localStorage.setItem(CONV_INDEX_KEY, JSON.stringify({ version: 1, items: kept }));
@@ -12839,7 +12981,9 @@
       renderConvPaneChrome(conv, recs, hidden, key, entries);
       const html = convHeadHtml(thread, key, joint ? -1 : entries.length,
         joint ? entries.length : -1, convsForPane(a)) +
-        (joint ? convMembersHtml(thread, recs) : '') + (entries.length
+        (joint ? convMembersHtml(thread, recs) : '') +
+        // Above the oldest bubble, which is where the reader is by the time they want it.
+        (typeof convOlderHtml === 'function' ? convOlderHtml(want) : '') + (entries.length
         ? convEntriesHtml(entries, { key: key, agent: a.agent, label: paneLabel(a) }, paired)
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional — a live draft, or ' +
@@ -13311,6 +13455,15 @@
     // rather than an arbitrary window of it.
     const CONV_LIVE_ROWS = 200;
 
+    // How far back a reader may walk one pane, by hand. Ten presses of CONV_LIVE_ROWS.
+    //
+    // A ceiling and not "until the record runs out", because this store shares an IndexedDB budget
+    // with the transcripts: an uncapped walk back through a busy pane evicts another conversation's
+    // history to make room, and a silent eviction of something the reader did not ask about is a
+    // worse outcome than a button that stops. What it costs is visible while it is spent — the
+    // storage panel reports this store per pane.
+    const CONV_LIVE_DEEP_MAX = 2000;
+
     // The thread re-renders on every poll of the open pane, and a query per render would be a
     // database read every three seconds for a thread nobody touched. A turn ending pushes straight
     // past this — see `convLiveSync` — so the cadence costs freshness only while nothing happens.
@@ -13319,7 +13472,12 @@
     // The record, one bucket per pane fingerprint rather than one answer per roster, so a pane in
     // two conversations is fetched once and the second thread draws with no round trip.
     //
-    //   Map<fpKey, { turns: Array, syncedTo: number, lastFetch: number }>
+    //   Map<fpKey, { turns: Array, syncedTo: number, lastFetch: number,
+    //                 depth: {paneId: rows}, ended: {paneId: true} }>
+    //
+    // `depth` is how many rows of each pane this browser has asked to keep — CONV_LIVE_ROWS until a
+    // reader walks back, and raised a window at a time by `convLiveOlder`. `ended` is the pane the
+    // record had nothing older for, which is what lets the button say so rather than go quiet.
     //
     // `syncedTo` is the id this fingerprint has been *answered through*, which is not the same as
     // the id of its newest turn. A roster query covers every member jointly, so a member that
@@ -13328,6 +13486,43 @@
     // whole history every cadence — see `convLiveFetch`.
     const convLiveCache = new Map();
     let convLiveTruncated = false, convLiveError = '';
+
+    // --- "Asking the relay", said only while it is true ---
+    //
+    // The record arrives in windows and in deltas, so a thread can be on screen and still be short
+    // of what the relay holds. A reader cannot tell that apart from a thread that is simply
+    // finished, and the difference is between waiting a moment and going to look for a bug.
+    //
+    // Transient, and it never says the opposite. A resting "synced" would be a claim this client
+    // has no way to back: the relay answers a bounded window and reports no total, so "everything
+    // is here" is not something the answer contains. Saying nothing at rest is the honest state.
+    let convLiveAsking = 0, convLiveAskedAt = 0;
+
+    // A socket that dies with a question in it never answers. Past this the ask is presumed lost —
+    // a pill that stays lit forever is worse than no pill.
+    const CONV_LIVE_ASK_TIMEOUT = 15000;
+
+    function convLiveSyncing() {
+      if (convLiveAsking <= 0) return false;
+      if (Date.now() - convLiveAskedAt > CONV_LIVE_ASK_TIMEOUT) { convLiveAsking = 0; return false; }
+      return true;
+    }
+
+    function convLiveAskSent(n) {
+      convLiveAsking += n;
+      convLiveAskedAt = Date.now();
+      if (typeof hangSync === 'function') {
+        hangSync();
+        // Nothing else redraws on a timeout expiring, and the pill has to be able to go out on its
+        // own when the answer never comes.
+        setTimeout(hangSync, CONV_LIVE_ASK_TIMEOUT + 100);
+      }
+    }
+
+    function convLiveAskDone(all) {
+      convLiveAsking = all ? 0 : Math.max(0, convLiveAsking - 1);
+      if (typeof hangSync === 'function') hangSync();
+    }
 
     // One host has two spellings: the relay's snapshot and the record both name the local host
     // `local`, but a pane that reached this app with no host at all is keyed under ''. Folded here
@@ -13347,7 +13542,7 @@
     function convLiveBucket(fpKey) {
       let bucket = convLiveCache.get(fpKey);
       if (!bucket) {
-        bucket = { turns: [], syncedTo: 0, lastFetch: 0 };
+        bucket = { turns: [], syncedTo: 0, lastFetch: 0, depth: {}, ended: {} };
         convLiveCache.set(fpKey, bucket);
       }
       return bucket;
@@ -13401,6 +13596,9 @@
             if (!rec || !rec.fp || convLiveCache.has(rec.fp)) continue;
             convLiveCache.set(rec.fp, {
               turns: rec.turns || [], syncedTo: rec.syncedTo || 0, lastFetch: 0,
+              // Without this a walk back would survive the reload only until the next answer, when
+              // the trim would cut every pane to one window again and throw it all away.
+              depth: rec.depth || {}, ended: rec.ended || {},
               // Answered by the relay once, on a previous day. Without this the thread would say
               // "Reading the relay's record…" over rows it is already drawing.
               answered: true,
@@ -13425,7 +13623,8 @@
           const bucket = convLiveCache.get(fpKey);
           if (!bucket) return null;
           return idbReq(store.put({ fp: fpKey, turns: bucket.turns || [],
-            syncedTo: bucket.syncedTo || 0, touched: now }));
+            syncedTo: bucket.syncedTo || 0, depth: bucket.depth || {},
+            ended: bucket.ended || {}, touched: now }));
         }).filter(Boolean));
       } catch (e) { return; }
       await convLiveEvict(db);
@@ -13521,14 +13720,20 @@
     // One query for the whole roster. Sent only when the answer on hand cannot serve: a member with
     // no bucket yet, or a bucket old enough to be worth asking again. `force` is a turn ending or
     // the ⟳, both of which are someone saying "now".
-    function convLiveFetch(keys, force) {
-      if (!convLiveOn()) return;
+    function convLiveFetch(keys, force, background) {
+      if (!background && !convLiveOn()) return;
       const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
       if (!fps.length) return;
       // Whatever is on disk, before deciding anything: the watermark that says what to ask for
       // lives there now, and asking without it would re-fetch a window this browser already holds.
       // The render that follows draws from the same buckets, so a thread is on screen either way.
-      if (!convLiveLoaded) { convLiveHydrate().then(() => renderConvView()); return; }
+      if (!convLiveLoaded) {
+        convLiveHydrate().then(() => {
+          if (background) convLiveFetch(keys, force, true);
+          else renderConvView();
+        });
+        return;
+      }
       if (!ws || ws.readyState !== 1) {
         // Only when there is nothing to show. With the record on disk, a relay that is down or a
         // phone with no signal is a thread that is behind, not a thread that is empty — and saying
@@ -13567,10 +13772,34 @@
       // by nothing else.
       if (!force && syncedTo > 0 && syncedTo !== Infinity) payload.since_id = syncedTo;
       ws.send(JSON.stringify(payload));
+      convLiveAskSent(1);
     }
 
-    // The newest CONV_LIVE_ROWS of each pane, in reading order. Pure.
-    function convLiveTrim(turns) {
+    // A fresh browser starts with no transcript cache, so a landing page of conversations it has
+    // never watched has nothing to count. Warm the recent end of the user's work and leave older
+    // threads to the on-demand reader.
+    //
+    // Not forced. This runs on the first answer of every connect, which on a phone is every time
+    // it comes out of a pocket, and forcing would re-ask the whole recent roster each time; the
+    // ordinary freshness rule already asks for a member with no bucket, which is the fresh browser
+    // this exists for.
+    function convLiveWarmRecent() {
+      if (typeof loadConvIndex !== 'function') return;
+      const items = loadConvIndex();
+      const recent = items.slice().sort((a, b) => {
+        const seen = c => Math.max(0, ...((c.members || []).map(m => Number(m.seen) || 0)));
+        return seen(b) - seen(a) || (Number(b.created) || 0) - (Number(a.created) || 0);
+      }).slice(0, 5);
+      const keys = [...new Set(recent.flatMap(c => (c.members || []).map(m => m.key)).filter(Boolean))];
+      convLiveFetch(keys, false, true);
+    }
+
+    // The newest rows of each pane, in reading order. Pure.
+    //
+    // CONV_LIVE_ROWS each, unless a reader has walked that pane back: `depth` is what
+    // `convLiveOlder` raised, and without reading it this would discard every backfilled row on
+    // the same tick it arrived — the walk back would fetch, trim, and show nothing.
+    function convLiveTrim(turns, depth) {
       const kept = [];
       const seen = new Map();
       // Backwards: the newest end is the end that is kept, which is the same end the relay's own
@@ -13578,12 +13807,136 @@
       for (let i = turns.length - 1; i >= 0; i--) {
         const t = turns[i];
         const pane = t.pane_id || '';
+        const cap = Math.min((depth && depth[pane]) || CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
         const n = seen.get(pane) || 0;
-        if (n >= CONV_LIVE_ROWS) continue;
+        if (n >= cap) continue;
         seen.set(pane, n + 1);
         kept.push(t);
       }
       return kept.reverse();
+    }
+
+    // --- Walking one thread backwards, because a reader asked ---
+    //
+    // Everything above goes forwards. The relay answers the newest `last` rows inside a byte
+    // ceiling, and `since_id` asks for what has happened since — so a pane with a thousand turns
+    // shows its recent end and grows from there, and the rest is unreachable by any question this
+    // client knew how to ask.
+    //
+    // This is the other direction, and it is deliberately manual. The automatic behaviour is
+    // unchanged: nothing walks back on its own, because the rows are the reader's disk and the
+    // relay's time, and neither should be spent on history nobody asked to see.
+
+    // Which pane ids a roster accounts for — one that is live right now, or one the roster names.
+    // A row carrying any of them belongs to that member and to nobody else; a row from a pane that
+    // has exited has no claimant and goes to whoever holds the fingerprint now, which is what keeps
+    // a respawned pane's history attached to it.
+    function convLiveClaimed(keys) {
+      const claimed = new Set();
+      for (const x of (typeof agents !== 'undefined' ? agents : [])) {
+        if (x.pane_id) claimed.add(x.pane_id);
+      }
+      for (const k of (keys || [])) claimed.add(convPaneOfKey(k));
+      return claimed;
+    }
+
+    function convPaneOfKey(k) {
+      try { return (JSON.parse(k) || [])[1] || ''; } catch (e) { return ''; }
+    }
+
+    function convLiveRowIsMine(t, mine, claimed) {
+      const pid = t.pane_id || '';
+      return !(mine && pid && pid !== mine && claimed.has(pid));
+    }
+
+    // The oldest row this browser holds for one member, which is the id the next window back is
+    // asked for. 0 when it holds nothing — there is no window before nothing, and the ordinary
+    // forward fetch is what that member needs.
+    function convLiveOldestSeq(key, claimed) {
+      const oldest = convLiveOldest(key, claimed);
+      return oldest ? oldest.seq : 0;
+    }
+
+    function convLiveOldest(key, claimed) {
+      const fp = convKeyFingerprint(key);
+      const bucket = fp && convLiveCache.get(convFpKey(fp));
+      if (!bucket) return null;
+      const mine = convPaneOfKey(key);
+      let oldest = null;
+      for (const t of bucket.turns) {
+        if (!t.seq || !convLiveRowIsMine(t, mine, claimed)) continue;
+        if (!oldest || t.seq < oldest.seq) oldest = t;
+      }
+      return oldest;
+    }
+
+    // Whether there is a window back left to ask for, per member. Three ways to be finished, and
+    // the button has to be able to tell all three from "not yet asked": the record said it had
+    // nothing older, the pane is at the ceiling, or this browser holds nothing to walk back from.
+    function convLiveCanLoadOlder(keys) {
+      if (!convLiveOn()) return false;
+      const claimed = convLiveClaimed(keys);
+      return (keys || []).some(key => {
+        const fp = convKeyFingerprint(key);
+        const bucket = fp && convLiveCache.get(convFpKey(fp));
+        if (!bucket) return false;
+        const pane = convPaneOfKey(key);
+        if (bucket.ended[pane]) return false;
+        if ((bucket.depth[pane] || CONV_LIVE_ROWS) >= CONV_LIVE_DEEP_MAX) return false;
+        return convLiveOldestSeq(key, claimed) > 0;
+      });
+    }
+
+    // One window back for every member that has one, asked pane by pane.
+    //
+    // Pane-scoped rather than over the roster, and not because it is tidier: `until_id` is one
+    // member's oldest row, and several members do not share one. Asked jointly, the member with
+    // the oldest row would set the bound for all of them and the others would be handed a window
+    // they already hold.
+    function convLiveOlder(keys) {
+      if (!ws || ws.readyState !== 1) return 0;
+      const claimed = convLiveClaimed(keys);
+      let asked = 0;
+      for (const key of (keys || [])) {
+        const fp = convKeyFingerprint(key);
+        if (!fp) continue;
+        const fpKey = convFpKey(fp);
+        const bucket = convLiveCache.get(fpKey);
+        if (!bucket) continue;
+        const pane = convPaneOfKey(key);
+        if (bucket.ended[pane]) continue;
+        const have = Math.min(bucket.depth[pane] || CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
+        if (have >= CONV_LIVE_DEEP_MAX) continue;
+        const oldest = convLiveOldest(key, claimed);
+        if (!oldest) continue;
+        // A respawn inherits rows from its prior pane id. The relay must filter that old physical
+        // pane, while depth and the end marker still belong to the current logical member.
+        const sourcePane = oldest.pane_id || pane;
+        // Raised before the answer, not after it: the trim runs on the tick the rows land, and a
+        // ceiling still at one window would throw them away before anything drew them.
+        //
+        // Both keys, because the trim counts by the pane id on the *row* and the ceiling is asked
+        // about the member: raising only the member's would cap the arriving rows at one window
+        // and stall the walk. That gives a respawned member a generous cap on each physical pane
+        // it spans, but not a larger walk — presses stop at the member's own ceiling, so what is
+        // actually fetched is still CONV_LIVE_DEEP_MAX rows however they split.
+        bucket.depth[pane] = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
+        bucket.depth[sourcePane] = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
+        const payload = { type: 'conv_log', fingerprints: [fp], pane: sourcePane,
+                          until_id: oldest.seq, last: CONV_LIVE_ROWS };
+        if (sourcePane !== pane) {
+          payload.owner_pane = pane;
+          // The same answer, remembered locally, for a relay too old to echo it back. This page is
+          // deployed separately from the relay and can be any age relative to it — against one that
+          // has not been restarted the end marker would otherwise land on the dead pane, and the
+          // reader would never be told the walk had reached the bottom.
+          (bucket.owner || (bucket.owner = {}))[sourcePane] = pane;
+        }
+        ws.send(JSON.stringify(payload));
+        asked++;
+      }
+      if (asked) convLiveAskSent(asked);
+      return asked;
     }
 
     // A window that did not reach the end, spent again on one pane at a time.
@@ -13617,11 +13970,94 @@
         ws.send(JSON.stringify(
           { type: 'conv_log', fingerprints: [fp], pane: pane, last: CONV_LIVE_ROWS }));
       }
+      if (sent.size) convLiveAskSent(sent.size);
+    }
+
+    // The control, at the top of the thread rather than floating over it: it is about the oldest
+    // bubble, so it belongs above the oldest bubble — which is also where the reader's eye already
+    // is by the time they want it. Absent whenever there is nothing to press it for, and it says
+    // which of the reasons that is: the ceiling and the bottom of the record are different answers.
+    function convOlderHtml(keys) {
+      if (!convLiveOn()) return '';
+      const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
+      if (!fps.some(fp => (convLiveCache.get(convFpKey(fp)) || {}).answered)) return '';
+      if (convLiveCanLoadOlder(keys)) {
+        return '<div class="conv-older"><button class="conv-older-btn" ' +
+          'onclick="convLoadOlder(this)" ' +
+          'title="Ask the relay for the window before the oldest message here">' +
+          '↑ Load older</button></div>';
+      }
+      const claimed = convLiveClaimed(keys);
+      const deep = (keys || []).some(key => {
+        const fp = convKeyFingerprint(key);
+        const bucket = fp && convLiveCache.get(convFpKey(fp));
+        return bucket && (bucket.depth[convPaneOfKey(key)] || 0) > CONV_LIVE_ROWS;
+      });
+      if (!deep) return '';
+      const ceiling = (keys || []).some(key => {
+        const fp = convKeyFingerprint(key);
+        const bucket = fp && convLiveCache.get(convFpKey(fp));
+        return bucket && (bucket.depth[convPaneOfKey(key)] || 0) >= CONV_LIVE_DEEP_MAX
+          && !bucket.ended[convPaneOfKey(key)] && convLiveOldestSeq(key, claimed) > 0;
+      });
+      return '<div class="conv-older"><span class="conv-older-end">' + (ceiling
+        ? `As far back as this device keeps — ${CONV_LIVE_DEEP_MAX} messages a pane`
+        : 'The start of the relay’s record') + '</span></div>';
+    }
+
+    // Pressed. The thread grows *upwards*, so the reader's place has to be put back afterwards:
+    // rows prepended above the scroll position move everything they were reading down by their own
+    // height, and a control that throws you somewhere else is not one anybody presses twice.
+    let convOlderAnchor = null;
+
+    function convLoadOlder(btn) {
+      const box = btn && btn.closest ? btn.closest('.conv-thread, .conv-wrap, .term-wrap') : null;
+      const scroller = box && box.classList.contains('conv-thread') ? box
+        : (typeof hangConvBox === 'function' && box && box.id === 'convWrap' ? hangConvBox() : box);
+      const keys = convOlderKeys(box);
+      if (scroller) convOlderAnchor = { box: scroller, height: scroller.scrollHeight };
+      if (!convLiveOlder(keys)) { convOlderAnchor = null; return; }
+      if (btn) btn.disabled = true;
+    }
+
+    // Whose thread was pressed. The window addresses its conversation's roster; the pane addresses
+    // whatever roster its own thread is drawn from, which is the pane alone unless it is in a
+    // conversation.
+    function convOlderKeys(box) {
+      const inWindow = !!(box && box.id === 'convViewThread');
+      const id = inWindow ? (typeof convViewId !== 'undefined' ? convViewId : '')
+        : (typeof convViewId !== 'undefined' && typeof convPaneRoster !== 'undefined'
+           && convPaneRoster ? convViewId : '');
+      const conv = id && typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === id) : null;
+      if (inWindow) return conv ? (conv.members || []).map(m => m.key) : [];
+      const a = (typeof activePane !== 'undefined' && activePane && typeof paneOf === 'function')
+        ? paneOf(activePane) : null;
+      const mine = a ? convMemberKey(a) : '';
+      const roster = conv ? (conv.members || []).map(m => m.key) : [];
+      if (roster.length) return roster;
+      return mine ? [mine] : [];
+    }
+
+    // Put the reader back where they were, once the rows are on screen. Measured rather than
+    // remembered by row: the bubbles are variable height and a wrapped one is not the same height
+    // twice, so the only number that answers this is how much taller the box got.
+    // Held across several answers rather than cleared by the first: a joint thread asks one
+    // question per member, and each answer that lands grows the box again. The anchor moves with
+    // it and is dropped only once nothing is outstanding.
+    function convOlderRestore() {
+      const anchor = convOlderAnchor;
+      if (!anchor || !anchor.box) return;
+      const grew = anchor.box.scrollHeight - anchor.height;
+      if (grew > 0) anchor.box.scrollTop += grew;
+      anchor.height = anchor.box.scrollHeight;
+      if (!convLiveSyncing()) convOlderAnchor = null;
     }
 
     // The relay answering. Addressed to the client that asked and never broadcast, so this arrives
     // only where someone turned the toggle on.
     function convLiveReceive(msg) {
+      convLiveAskDone();
       convLiveError = '';
       convLiveTruncated = !!msg.truncated;
       const turns = Array.isArray(msg.turns) ? msg.turns : [];
@@ -13652,11 +14088,20 @@
         // taking its highest id as the watermark would tell the next delta that every *other*
         // pane sharing this fingerprint is current through an id it was never asked about, and
         // their rows would never arrive at all.
-        if (!msg.pane) {
+        // `until_id` as well as `pane`: a backfill's highest id is *older* than this bucket's
+        // watermark, so taking it as one would wind the bucket backwards and make the next delta
+        // re-fetch every turn in between. The relay echoes it back for exactly this check.
+        if (!msg.pane && msg.until_id == null) {
           convLiveVerified.add(fpKey);
           if (answeredThrough > bucket.syncedTo) bucket.syncedTo = answeredThrough;
           bucket.lastFetch = now;
           bucket.answered = true;
+        }
+        // The record had nothing before what this browser already holds. Recorded per pane so the
+        // reader is told the walk is over rather than handed a button that does nothing — and so
+        // the depth this ask raised is not spent again on a question with no answer.
+        if (msg.until_id != null && msg.pane && !turns.length) {
+          bucket.ended[msg.owner_pane || (bucket.owner || {})[msg.pane] || msg.pane] = true;
         }
         touched.add(fpKey);
       }
@@ -13671,7 +14116,7 @@
         // thread is a pane. Over the bucket, the busiest pane sharing a fingerprint evicts the
         // quiet one's history down to nothing — the reader opens a pane with 181 turns behind it
         // and is shown whatever is left of 200 after its neighbours took theirs.
-        bucket.turns = convLiveTrim(bucket.turns);
+        bucket.turns = convLiveTrim(bucket.turns, bucket.depth);
       }
 
       // A roster answer that did not fit is asked again, pane by pane. Never off a pane-scoped
@@ -13682,13 +14127,17 @@
       // Kept, so the next session starts where this one got to. Not awaited: the thread below is
       // drawn from memory and a disk write is not something a reader should wait behind.
       convLivePersist(touched);
+      if (typeof convNoteLiveCounts === 'function') convNoteLiveCounts(convLiveAsked);
 
       if (!convLiveOn()) return;
-      renderConvView();
       // `false`: an answer arriving is not the reader asking to be moved. Both views already follow
       // the newest message for anyone sitting at the bottom, and forcing it here dragged a reader
       // who had scrolled up back down every time the record was re-read — every five seconds.
-      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      const drawn = [renderConvView(),
+                     typeof renderConvStandalone === 'function' ? renderConvStandalone(false) : null];
+      // After the bubbles are on screen, not before: the box has to have its new height for the
+      // reader's place to be measurable at all. Both renders are async, so this waits on them.
+      if (convOlderAnchor) Promise.all(drawn).then(convOlderRestore, convOlderRestore);
     }
 
     // The one refusal worth catching: the record is off, so there is nothing to read and no amount
@@ -13700,6 +14149,7 @@
       convLiveError = text === 'conversation log is off'
         ? 'The relay is not recording. Set HERDR_CONV_LOG=1 and restart it.' : text;
       convLiveCache.clear();
+      convLiveAskDone(true);
       if (convLiveOn()) renderConvView();
     }
 
@@ -13749,21 +14199,15 @@
       // what keeps a respawned pane's history attached to it.
       // Every pane id with an owner: one that is live right now, or one this roster names. A row
       // carrying any of them belongs to that member and to nobody else.
-      const claimed = new Set();
-      for (const x of (typeof agents !== 'undefined' ? agents : [])) {
-        if (x.pane_id) claimed.add(x.pane_id);
-      }
-      const paneOfKey = k => { try { return (JSON.parse(k) || [])[1] || ''; } catch (e) { return ''; } };
-      for (const k of (keys || [])) claimed.add(paneOfKey(k));
+      const claimed = convLiveClaimed(keys);
       for (const k of (keys || [])) {
         const fp = convKeyFingerprint(k);
         if (!fp) continue;
         const bucket = convLiveCache.get(convFpKey(fp));
         if (!bucket) continue;
-        const mine = paneOfKey(k);
+        const mine = convPaneOfKey(k);
         for (const t of bucket.turns) {
-          const pid = t.pane_id || '';
-          if (mine && pid && pid !== mine && claimed.has(pid)) continue;
+          if (!convLiveRowIsMine(t, mine, claimed)) continue;
           // Two roster members can fold to one fingerprint — a pane respawned under a new id is the
           // same pane to the record — and the bucket must not be drawn twice for them.
           if (t.seq && seen.has(t.seq)) continue;
@@ -16308,7 +16752,8 @@
       const rosterHtml = convRosterOpen ? convRosterHtml(conv, composed.recs, hidden) : '';
       if (rosterHtml !== convRosterHtmlLast) { convRosterHtmlLast = rosterHtml; panel.innerHTML = rosterHtml; }
       panel.hidden = !convRosterOpen;
-      const html = (entries.length
+      const html = (typeof convOlderHtml === 'function' ? convOlderHtml(shownKeys) : '') +
+        (entries.length
         // Same fallback the visibility filter above uses: a single-member thread's entries carry no
         // key, and the dock reads a bubble's key to know who wrote it — an unkeyed bubble has no
         // source and so no target to exclude.
@@ -18305,6 +18750,16 @@
       hangSyncCommits(document.getElementById('paneCommits'),
                       live && !!thread && !thread.hidden);
       hangSyncCommits(document.getElementById('convCommits'), live && !!convViewId);
+      // Whether the relay has been asked something that has not come back. Only where the record is
+      // what is on screen: a warm fetch runs with the toggle off, and a pill over this browser's own
+      // transcript would be about a thread the reader is not looking at.
+      const asking = live && typeof convLiveSyncing === 'function' && convLiveSyncing();
+      hangSyncPill(document.getElementById('paneSyncing'), asking && !!thread && !thread.hidden);
+      hangSyncPill(document.getElementById('convViewSyncing'), asking && !!convViewId);
+    }
+
+    function hangSyncPill(el, on) {
+      if (el) el.hidden = !on;
     }
 
     function hangSyncCommits(btn, offered) {
