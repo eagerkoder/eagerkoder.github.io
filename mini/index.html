@@ -3003,36 +3003,124 @@
     /* The session strip: what is arbitrating this conversation, above the thread it is
        arbitrating. Opaque like .conv-panel and for the same reason — it rides the sticky header
        and the thread scrolls under it. */
+    /* A floating panel over the thread rather than a band across it. The strip is chrome for a
+       session, not part of the conversation, and a solid bar the width of the screen reads as the
+       latter — so the ground is translucent and only the controls are solid. Blurred where the
+       browser has it: over a thread of monospace text, a plain alpha wash makes the glyphs behind
+       the buttons legible enough to be read as part of the strip. */
     .arb-strip {
       display: flex;
-      align-items: center;
-      gap: 6px;
-      /* One line, always. What used to be here was a sentence — the last decision's gate, target
-         and why — which wrapped to three lines on a phone and pushed the thread down by all of
-         them. What replaced it is short and fixed, so a strip that still does not fit scrolls
-         sideways rather than growing. */
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 6px 12px;
+      flex-direction: column;
+      gap: 4px;
+      margin: 4px 8px 6px;
+      padding: 5px 6px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       font-size: 0.68rem;
       color: var(--muted);
     }
 
-    /* Nothing is running: one button, and no bar of chrome pretending to be a status. */
+    /* One line, always. What used to be here was a sentence — the last decision's gate, target
+       and why — which wrapped to three lines on a phone and pushed the thread down by all of
+       them. What replaced it is short and fixed, so a bar that still does not fit scrolls
+       sideways rather than growing. */
+    .arb-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      /* With the scrollbar hidden, the only thing saying there is more of this row is the edge
+         fading out. Without it a clipped button reads as a broken one. */
+      mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    }
+
+    .arb-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* The sentence the chip cannot hold, under the controls rather than in a `title` no phone can
+       open. Its own floating panel: it is prose about the state, and it must not make the row of
+       buttons taller or move them as the state changes. */
+    .arb-say {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 4px 4px 2px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+      line-height: 1.35;
+    }
+
+    /* What Resume will do — the one line somebody acts on, so it is the one that is not grey. */
+    .arb-say-line {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .arb-say-why {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .arb-say-more {
+      flex: none;
+      align-self: center;
+    }
+
+    /* Opaque, over a translucent ground: a control you can see the thread through does not read
+       as pressable. */
+    .arb-strip .arb-btn {
+      background: var(--surface);
+    }
+
+    /* The lifecycle four. Square, glyph-only, and the same size as each other whatever the glyph
+       is — they are aimed at rather than read. */
+    .arb-ico {
+      flex: none;
+      min-width: 32px;
+      padding: 4px 0;
+      font-size: 0.8rem;
+      line-height: 1;
+      text-align: center;
+    }
+
+    /* Nothing is running: one button, and no panel of chrome pretending to be a status. */
     .arb-strip.idle {
-      border-bottom: none;
+      border: none;
       background: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
       padding: 4px 12px;
-      justify-content: flex-end;
+      align-items: flex-end;
     }
 
     .arb-strip .arb-state {
+      flex: none;
       color: var(--text);
       font-weight: 600;
       white-space: nowrap;
+    }
+
+    .arb-strip .arb-budget {
+      flex: none;
+    }
+
+    /* On a phone the row is wider than the screen, and what scrolls off is whatever is last —
+       which was the controls. The countdown is the one thing here that is only ever read, and it
+       is read again in the Edit dialog, so it is what gives way. */
+    @media (max-width: 480px) {
+      .arb-strip .arb-budget {
+        display: none;
+      }
+
+      .arb-strip .arb-active {
+        max-width: 34%;
+      }
     }
 
     .arb-strip[data-state="paused"] .arb-state {
@@ -3199,6 +3287,145 @@
       color: var(--muted);
     }
 
+    /* What Resume would do, at the top of the sheet where the Resume buttons are. A stopped
+       session's four resume behaviours are indistinguishable from outside — same button, same
+       state — and one of them does nothing visible, so the sentence goes above the path rather
+       than in it. */
+    .arb-plan {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    /* The one case where Resume is the wrong button: a member finished and nobody asked. Tinted,
+       because it is the case this banner exists for and it arrives looking like the quiet one. */
+    .arb-plan.warn {
+      border-left: 3px solid var(--orange);
+    }
+
+    .arb-plan-line {
+      margin: 0;
+      flex: 1 1 220px;
+      min-width: 0;
+      font-size: 0.72rem;
+      color: var(--text);
+    }
+
+    .arb-plan-do {
+      display: flex;
+      gap: 6px;
+      flex: none;
+    }
+
+    /* The resume dialog's own table. A table and not a list of paragraphs: four short columns
+       that line up down the page are read at a glance, which is the whole job — find the last
+       thing that happened, and the row it stopped at. */
+    .arb-rows {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.68rem;
+      color: var(--text);
+    }
+
+    .arb-rows th {
+      position: sticky;
+      top: 0;
+      text-align: left;
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--surface);
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .arb-rows td {
+      padding: 5px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    .arb-rows tr.bad td {
+      color: var(--red);
+    }
+
+    .arb-rows tr.stop td {
+      font-weight: 600;
+      background: color-mix(in srgb, var(--orange) 10%, transparent);
+    }
+
+    .arb-row-at,
+    .arb-row-seq {
+      white-space: nowrap;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .arb-row-kind {
+      white-space: nowrap;
+      color: var(--muted);
+    }
+
+    /* The plan, above the table: what the button will do, and the button. */
+    .arb-plan-hint {
+      margin: 2px 0 0;
+      font-size: 0.66rem;
+      color: var(--muted);
+      flex: 1 1 100%;
+    }
+
+    /* Which rows of the path are shown. Two states, so two buttons rather than a select: the
+       choice is made with a thumb while reading, and a menu costs a tap to see the options. */
+    .arb-path-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 6px 0 0;
+    }
+
+    .arb-filter {
+      font: inherit;
+      font-size: 0.62rem;
+      padding: 2px 8px;
+      min-height: 24px;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .arb-filter[aria-pressed="true"] {
+      color: var(--text);
+      border-color: var(--blue);
+    }
+
+    .arb-path-count {
+      margin-left: auto;
+      font-size: 0.62rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Where the session is stopped, on the row it stopped at. The last row is not the answer: a
+       trigger that arrived after the stop sits below it and reads like progress. */
+    .arb-step.stop {
+      font-weight: 600;
+    }
+
+    .arb-step-stop {
+      color: var(--muted);
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
     /* Where the session got to, step by step, above the decisions in the sheet. Dense on purpose:
        it is read down, looking for the step that is missing or the one that went red. */
     .arb-path {
@@ -3240,8 +3467,11 @@
     }
 
     /* The one on the strip that says where the session is. It is a state, not a control that does
-       something to the session, so it recedes until it is the thing that needs attention. */
+       something to the session, so it recedes until it is the thing that needs attention.
+       Never shrunk: in a row that scrolls, squeezing this to a sliver loses the answer to "where
+       is it" while keeping every button that acts on it. */
     .arb-strip .arb-active {
+      flex: none;
       max-width: 45%;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -3294,6 +3524,24 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+
+    /* A checkbox reads as a row, not a stacked label like the selects around it. */
+    .arb-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .arb-check input {
+      width: auto;
+      flex: none;
+    }
+
+    /* The sentence under it: which harness is warmed whether or not the box is ticked. */
+    .arb-note {
+      color: var(--muted);
+      font-size: 0.62rem;
     }
 
     /* Nine role badges wrap to three rows twice over, which is most of a phone's height spent on
@@ -6391,6 +6639,7 @@
             <option value="all">Every live pane</option>
             <option value="pairs">Every pair</option>
             <option value="convs">Conversations</option>
+            <option value="thread">This conversation only</option>
           </select>
           <div id="tabScopeHint" style="font-size:0.65rem;color:var(--muted);margin-top:5px"></div>
           <!-- Same reason: a shell never belongs to a pair, so it has no pair bar to place. -->
@@ -6706,9 +6955,14 @@
   </div>
 
   <!-- Relay errors. Until this existed every refusal the relay sent was dropped on the floor,
-     so a rejected send_text or rename looked identical to one that worked. -->
+     so a rejected send_text or rename looked identical to one that worked.
+
+     At the very top of the viewport, over the header rather than under it. It used to hang below
+     the header, which put it inside whichever view was open — and in the conversation it read as
+     part of the thread, one more bubble among the messages it was warning about. A notice about
+     the app belongs to the app. -->
   <div id="toast" role="status" aria-live="polite"
-    style="display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(52px + env(safe-area-inset-top,0px));z-index:200;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
+    style="display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 4px);z-index:200;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
   </div>
 
   <!-- The pane picker. Pinning a partner and adding members to a conversation ask the same
@@ -6779,6 +7033,23 @@
   <!-- What an arbitration session decided, and what it typed because of it. Read-only and fetched
        on open: it carries prose, so the relay answers it to the client that asked and never
        broadcasts it. -->
+  <!-- What Resume will do, and the last few things that happened before it stopped. Its own
+       sheet rather than a banner on the log: the log is a reading of everything the session did
+       and keeps growing, and this is the one question asked at the one moment somebody is stood
+       at a stopped session with a finger over a button. -->
+  <div id="arbResumeSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+    <div onclick="closeArbResume()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Resume from here</span>
+        <button onclick="closeArbResume()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="arbResumeBody"></div>
+    </div>
+  </div>
+
   <div id="arbSheet" style="display:none;position:fixed;inset:0;z-index:100;">
     <div onclick="closeArbDetail()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
@@ -8688,9 +8959,11 @@
     // What the bottom strip lists. Scoped to the open pane's Project by default: the strip is for
     // moving between the panes of the thing being worked on, and a machine hosting four projects
     // turns it into a row to scroll rather than one to tap. 'all' is the old behaviour, kept.
-    // 'pairs' is the third: the strip becomes the pairs themselves.
+    // 'pairs' is the third: the strip becomes the pairs themselves. 'thread' is the narrowest —
+    // the panes of the conversation the open pane is reading, which is the row you want while a
+    // thread is on screen and the one 'project' is still too wide to be.
     const TAB_SCOPE_KEY = 'herdr_tab_scope';
-    const TAB_SCOPES = ['project', 'all', 'pairs', 'convs'];
+    const TAB_SCOPES = ['project', 'all', 'pairs', 'convs', 'thread'];
     function tabScope() {
       const v = localStorage.getItem(TAB_SCOPE_KEY);
       return TAB_SCOPES.includes(v) ? v : 'project';
@@ -8795,6 +9068,17 @@
         const open = paneOf(activePane);
         if (open) live = live.filter(a =>
           projectKey(a) === projectKey(open) || a.pane_id === activePane);
+      }
+      // The conversation the open pane is reading, when that is the setting. Same shape as the
+      // Project filter and the same exemption: the open pane is always in its own strip. A pane
+      // reading nothing narrows to nothing — the strip stays whole rather than emptying, because
+      // a row that vanishes is read as the panes having gone.
+      if (scope === 'thread' && activePane) {
+        const open = paneOf(activePane);
+        const conv = open ? convViewConv(open) : null;
+        const keys = new Set(((conv && conv.members) || []).map(m => m.key));
+        if (keys.size) live = live.filter(a =>
+          keys.has(convMemberKey(a)) || a.pane_id === activePane);
       }
       if (scope === 'pairs') {
         live = pairedTabs(live);
@@ -9569,11 +9853,20 @@
       else if (msg.type === 'arb_detail') {
         arbReceiveDetail(msg);
       }
-      // Only failures arrive for a send, and only when the relay could not prove the pane took
-      // the text. Worth a toast: the composer clears either way, so this is the only difference a
-      // person can see between a send that landed and one that may not have.
+      // A send says nothing when it lands cleanly. It says something twice when it does not: once
+      // when the relay could not prove the pane took it, and again when the pane either takes it or
+      // runs out of time. `pending` is the first of those, and it is not a failure — a message
+      // queued behind a working pane is the ordinary case and reads as an error only because
+      // nothing ever came back to say it had gone.
       else if (msg.type === 'command_result' && msg.command === 'send_text') {
-        showToast(`That pane did not confirm the send — check ${paneLabel(paneOf(msg.pane_id) || {}) || msg.pane_id}.`);
+        const where = paneLabel(paneOf(msg.pane_id) || {}) || msg.pane_id;
+        if (msg.pending) {
+          showToast(msg.reason === 'queued'
+            ? `Queued at ${where} — it is working; the message goes in when it finishes.`
+            : `${where} has not confirmed the send yet — watching.`, 'info');
+        }
+        else if (msg.ok) showToast(`${where} took the message.`, 'info');
+        else showToast(`That pane did not confirm the send — check ${where}.`);
       }
       else if (msg.type === 'command_result' &&
                (msg.command === 'start_agent' || msg.command === 'open_terminal')) {
@@ -10905,11 +11198,34 @@
       // own reply not at all: that is plain prose two columns in. `speaker: null` is what makes a
       // block start positional rather than a glyph match, and `opens` says which column-0 lines a
       // message may follow. `result` is empty because a column-0 tool call is already an end.
-      agy: { speaker: null, result: [], user: ['>'], opens: ['>', '●', '▸', '─'] },
+      agy: { speaker: null, result: [], user: ['>'], opens: ['>', '●', '▸', '─'], chrome: '>' },
     };
 
     // The character in a harness's gutter column, which is column 0 everywhere but pi.
     function gutterOf(row, g) { return (row || '')[g.indent || 0]; }
+
+    // How far above the bottom of a read the live composer may be found. The footer is a rule, an
+    // empty input line, one or two blanks and a status bar; ten rows covers that and stops a
+    // genuinely empty prompt in the middle of a transcript from cutting the window in half.
+    const CHROME_ROWS = 10;
+
+    // The rows above and including the live composer — the transcript, without the pane's own
+    // footer. agy right-aligns a model and credit line under a rule at the foot of the pane, and a
+    // positional harness reads any indented line under a column-0 line as the start of a message,
+    // so its own chrome was read as its closing words.
+    //
+    // The *empty* composer only: a `>` with text after it is a prompt in the transcript and cannot
+    // be told from the live one by shape. Inclusive of that line, because it is the anchor
+    // findFinalMessage reads back from, and trimmed from the end so every index into the result is
+    // still an index into the pane. Ported from `transcript` in relay/pane_summary.py.
+    function transcriptRows(rows, g) {
+      const mark = (g || {}).chrome;
+      if (!mark || !rows || !rows.length) return rows;
+      for (let j = rows.length - 1; j >= 0 && j > rows.length - 1 - CHROME_ROWS; j--) {
+        if ((rows[j] || '').replace(/\s+$/, '') === mark) return rows.slice(0, j + 1);
+      }
+      return rows;
+    }
 
     // Does this row close the block above it? Anything in column 0 does — the next glyph, the turn
     // footer, a rule, the prompt.
@@ -10965,13 +11281,24 @@
       if (g.tool && g.tool.test(((rows[start] || '').slice(g.indent || 0).replace(/^\S\s*/, ''))))
         return null;
       let end = start;
+      // A result glyph hangs *directly* under the call that produced it — the call line, its
+      // wrapped remainder, then the output. Nothing separates them, so a glyph found past the
+      // block's first blank line is not one: it is prose that happens to start a wrapped line with
+      // the character, which is what an agent writing about a terminal does constantly. That cost
+      // a whole message: a summary quoting `⎿` was read as a tool execution and never shown.
+      //
+      // Not on an indented harness. There a result glyph *is* an end (`endsBlock`), so it is read
+      // in its own column rather than at the start of a wrapped line, and pi does put a blank line
+      // between a reply and the command under it — the one case this rule would get backwards.
+      let gap = false;
       for (let j = start + 1; j < rows.length; j++) {
         const line = (rows[j] || '').trimStart();
         // A result glyph means this block ran something rather than said something. Tested before
         // the end check, because on an indented harness a result glyph is itself an end.
-        if (line && g.result.includes(line[0])) return null;
+        if (line && (!gap || g.indent) && g.result.includes(line[0])) return null;
         if (endsBlock(rows[j], g)) break;
         if (line) end = j;
+        else gap = true;
       }
       return [start, end];
     }
@@ -11038,6 +11365,7 @@
     function userInputLines(rows, agent) {
       const g = profileFor(agent), lines = new Set();
       if (!g || !rows) return lines;
+      rows = transcriptRows(rows, g);
       let inTurn = false, pending = [];
       rows.forEach((row, i) => {
         if (isUserInput(row, agent, rows, i)) { inTurn = true; pending = []; }
@@ -11062,6 +11390,7 @@
     function findFinalMessage(rows, agent) {
       const g = profileFor(agent);
       if (!g || !rows || !rows.length) return null;
+      rows = transcriptRows(rows, g);
       const lastInput = g.composer === false ? -1 : lastUserInput(rows, agent);
       const before = lastInput < 0 ? rows.length : lastInput;
       for (let i = before - 1; i >= 0; i--) {
@@ -11131,6 +11460,7 @@
     function messageBlocks(rows, agent) {
       const g = profileFor(agent), out = [];
       if (!g || !rows) return out;
+      rows = transcriptRows(rows, g);
       for (let i = 0; i < rows.length; i++) {
         if (!startsBlock(rows, g, i)) continue;
         const at = blockSpan(rows, g, i);
@@ -11428,6 +11758,77 @@
     // match had never seen, and the window it was in was written down as a gap or as a second copy.
     // Stored text stays exactly as it was extracted; only what the recorder compares is normalized.
     function convKey(text) { return String(text == null ? '' : text).replace(/\s+/g, ''); }
+
+    // A prompt this browser sent can come back merged into the block underneath it. How many of a
+    // pane's own sends are checked for that, and how much of one has to match at each end for the
+    // cut to be made. The port of SENT_LOOKBACK and ECHO_EDGE in relay/conversation_log.py.
+    const CONV_SENT_LOOKBACK = 4;
+    const CONV_ECHO_EDGE = 40;
+
+    // The offset in `text` just past its `count`th non-whitespace character. The comparison runs
+    // over `convKey`s, which hold no whitespace at all, so an offset found there means nothing to
+    // the text it came from until it is walked back like this.
+    function convCutAt(text, count) {
+      let seen = 0;
+      for (let i = 0; i < text.length; i++) {
+        if (/\s/.test(text[i])) continue;
+        if (++seen === count) return i + 1;
+      }
+      return text.length;
+    }
+
+    // A block cut into the prompt echoed at the top of it and what the agent said underneath, or
+    // null when it does not hold that prompt — the ordinary case.
+    //
+    // A harness with no glyph of its own — agy — draws a pasted prompt exactly the way it draws its
+    // own reply: the first line after the `>` gutter, the rest indented two columns. The detector
+    // tells them apart by the blank line agy leaves before it answers, and a *pasted* prompt with a
+    // blank line in it defeats that: the prompt's own second paragraph opens the block, and when the
+    // agent then answers without running a tool there is no column-0 line anywhere between them. One
+    // block, holding the instruction and the answer, attributed to the agent.
+    //
+    // Shape cannot separate them, so this does not try to. What was sent is known, because this
+    // browser sent it, so the echo is matched against that and cut off where it ends. Both ends are
+    // checked and the middle is not: a terminal re-wraps what it echoes (`convKey` covers that) but
+    // it also drops what will not fit and replaces characters it cannot draw.
+    function convSplitEcho(text, sent) {
+      const key = convKey(text), skey = convKey(sent);
+      if (key.length < CONV_ECHO_EDGE || skey.length < 2 * CONV_ECHO_EDGE) return null;
+      // Where in the prompt the block picks it up, rather than assuming the top of it: the first
+      // line of a send is echoed on the prompt gutter itself and is read as the prompt it is.
+      const begin = skey.indexOf(key.slice(0, CONV_ECHO_EDGE));
+      if (begin < 0 || skey.length - begin < 2 * CONV_ECHO_EDGE) return null;
+      const at = key.indexOf(skey.slice(-CONV_ECHO_EDGE), CONV_ECHO_EDGE);
+      if (at < 0) return null;
+      const cut = convCutAt(text, at + CONV_ECHO_EDGE);
+      const head = text.slice(0, cut).trim(), rest = text.slice(cut).trim();
+      // Nothing under it: the block is the echo, and is not the agent speaking.
+      return head && rest ? [head, rest] : null;
+    }
+
+    // The window, with any prompt of this record's own cut off the block it was merged into. The
+    // prompt half stays a message: it is what the pane shows, and the record already holds the send
+    // that put it there, so the anchor recognises it and only the agent's half is new.
+    function convUnmergeSent(fresh, stored) {
+      // Newest first, matching ConversationLog._sent_texts. When two recent sends share enough
+      // wording to match, both recorders must choose the same one.
+      const sent = (stored || []).filter(e => e.who === 'user' && e.at_src === 'sent')
+        .slice(-CONV_SENT_LOOKBACK).reverse().map(e => e.text);
+      if (!sent.length) return fresh || [];
+      const out = [];
+      (fresh || []).forEach(m => {
+        let split = null;
+        if (m.who === 'agent') {
+          for (let i = 0; i < sent.length && !split; i++) split = convSplitEcho(m.text, sent[i]);
+        }
+        if (!split) { out.push(m); return; }
+        // Both halves keep the whole block's range: they are one run of rows on screen, and the
+        // range exists to point a reader at them rather than to be arithmetic.
+        out.push(Object.assign({}, m, { who: 'user', text: split[0] }));
+        out.push(Object.assign({}, m, { text: split[1] }));
+      });
+      return out;
+    }
 
     // Everything said in this window, in window order: the agent's closing message per turn, and
     // each run of the user's own lines as one message rather than one per line.
@@ -12458,7 +12859,9 @@
     async function recordPaneNow(a, key, rows) {
       const now = Date.now();
       const held = await convHold(key, now);
-      const fresh = paneMessages(rows, a.agent);
+      // Against this record's own sends: a prompt drawn the way the agent's reply is drawn comes
+      // back as one block holding both, and cutting it needs to know what was typed (§convSplitEcho).
+      const fresh = convUnmergeSent(paneMessages(rows, a.agent), held.entries);
       const live = paneOf(a.pane_id) || a;
       const working = live.status === 'working';
       const label = paneLabel(a) || held.label || '';
@@ -15696,6 +16099,15 @@
           'thread; any other opens the conversation on its own.';
         return;
       }
+      if (scope === 'thread') {
+        const open = activePane ? paneOf(activePane) : null;
+        const conv = open ? convViewConv(open) : null;
+        const n = ((conv && conv.members) || []).length;
+        el.textContent = n
+          ? `Only the ${n} panes of ${conv.name}.`
+          : 'This pane is not reading a conversation, so the strip shows every live pane.';
+        return;
+      }
       if (scope === 'pairs') {
         const n = pairs.filter(p => pairHealth(p, agents).state === 'healthy').length;
         el.textContent = n
@@ -16738,13 +17150,17 @@
     }
 
     let toastTimer = null;
-    function showToast(text) {
+    // `kind` is 'error' unless something says otherwise. A notice that nothing went wrong — a
+    // message queued behind a working pane, and the pane later taking it — must not wear the red
+    // border or make the sound that means a refusal, or the two stop being distinguishable.
+    function showToast(text, kind) {
       const el = document.getElementById('toast');
       el.textContent = text;
+      el.style.borderColor = kind === 'info' ? 'var(--border)' : 'var(--red)';
       el.style.display = 'block';
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
-      if (window.cue) cue('error');
+      if (window.cue && kind !== 'info') cue('error');
     }
 
     function agentCard(a) {
@@ -19634,6 +20050,12 @@
     // the session actually moved and not on every poll that repeats a budget.
     let arbDetail = null, arbEvents = null, arbDetailFor = '', arbDetailAt = '';
 
+    // What Resume would do, as of the answer that opened the sheet. Held beside the events rather
+    // than read off the session message every render: the session message is broadcast on state
+    // changes and the plan moves without one — a member goes idle, a drop box gains a file — so
+    // the copy that arrived with the path is the one that matches the path being read.
+    let arbPlan = null, arbResumeOpen = false;
+
     // Per connection, never cached: a capability is a fact about the relay on the other end of
     // this socket, and the next one may be a different relay entirely.
     function arbReset() {
@@ -19646,7 +20068,9 @@
       arbEvents = null;
       arbDetailFor = '';
       arbDetailAt = '';
+      arbPlan = null;
       closeArbDetail();
+      closeArbResume();
       const el = document.getElementById('arbStrip');
       if (el) el.innerHTML = '';
       arbSyncOpenButton();
@@ -19916,7 +20340,7 @@
       if (!ws || ws.readyState !== 1) return;
       const at = arbDetailStamp(session);
       if (arbDetailFor === session.id && arbDetailAt === at) return;
-      if (arbDetailFor !== session.id) { arbDetail = null; arbEvents = null; }
+      if (arbDetailFor !== session.id) { arbDetail = null; arbEvents = null; arbPlan = null; }
       arbDetailFor = session.id;
       arbDetailAt = at;
       arbSend({type: 'arb_detail', session: session.id});
@@ -19987,6 +20411,7 @@
       human: 'you typed',
       waiting: 'waiting', record: 'record written', decided: '', rejected: 'record refused',
       reprompt: 're-asked', sent: 'sent', paused: 'paused', resumed: 'resumed',
+      warmed: 'woke',
       edited: 'session edited', ended: 'session ended', error: 'error',
     };
 
@@ -20003,9 +20428,29 @@
       }));
     }
 
+    // The relay's pause codes, in the words a person would use. The codes are exact and several
+    // of them name their own mechanism rather than the reader's problem — `budget_consecutive` is
+    // a count of automated sends nobody joined in on, which is "needs a human" and nothing else.
+    // The sentence under the strip still gives the whole of it; this is the two words on the chip.
+    const ARB_PAUSE_SHORT = {
+      budget_steps: 'out of steps',
+      budget_consecutive: 'needs a human',
+      budget_time: 'out of time',
+      call_human: 'needs you',
+      invalid_record: 'bad decision file',
+      send_unconfirmed: 'send not confirmed',
+      arbitrator_gone: 'arbitrator gone',
+      member_gone: 'member gone',
+      member_ambiguous: 'two panes match',
+      restart: 'relay restarted',
+      not_started: 'not started',
+      user: 'by you',
+    };
+
     function arbStateLabel(s) {
       if (s.state === 'paused') {
-        return 'Paused — ' + String(s.pause_reason || 'stopped').replace(/_/g, ' ');
+        const code = String(s.pause_reason || 'stopped');
+        return 'Paused · ' + (ARB_PAUSE_SHORT[code] || code.replace(/_/g, ' '));
       }
       return s.state === 'awaiting' ? 'Deciding…' : 'Arbitrating';
     }
@@ -20057,15 +20502,43 @@
     function arbStripHtml(session, conv, on) {
       if (!on || !conv || !session || session.conversation !== conv.id) return '';
       const s = session, paused = s.state === 'paused';
+      // The lifecycle four, as icons. They are the controls a person reaches for without reading —
+      // stop it, start it, start it and ask — and a row of words for them crowded out the state,
+      // which is the thing the strip is for. Every one keeps a full label for a screen reader and
+      // a title for a pointer; the glyph is the affordance, never the name.
+      // The name is what it is called — the accessible name, and the only thing a screen reader
+      // or a test has to go on. The title is the sentence about it, which is a tooltip and must
+      // never be the name: "Resume — arm the loop and wait for the next turn to end" is not what
+      // anybody calls that button.
+      const icon = (glyph, name, why, onclick, cls) =>
+        `<button class="arb-btn arb-ico${cls ? ' ' + cls : ''}" ${onclick}` +
+        ` title="${escapeHtml(why)}" aria-label="${escapeHtml(name)}">${glyph}</button>`;
+      const lead = arbLeadsWithTrigger(s);
+      const acts = paused
+        // What a resume does first. Armed, it waits for a trigger — a member ending a turn, or a
+        // clock — and with two idle members and no clocks that is a session that reads as running
+        // and never acts. `Resume and trigger` asks for a decision now. Two buttons rather than
+        // one that guesses, and which of them is the quiet one comes from the plan: the relay has
+        // already worked out whether arming alone would do anything.
+        ? icon('▶', 'Resume', 'Arm the loop and wait for the next turn to end',
+               'onclick="arbCommand(\'arb_resume\')"', lead ? 'quiet' : '') +
+          icon('⏭', 'Resume and trigger', 'Arm the loop and ask for a decision now',
+               'onclick="arbCommand(\'arb_resume\', {kick: true})"', lead ? '' : 'quiet')
+        : icon('⏸', 'Pause', 'Stop the loop — nothing is sent until it is resumed',
+               'onclick="arbCommand(\'arb_pause\')"', 'quiet');
       return `<div class="arb-strip" data-state="${escapeHtml(s.state || '')}">` +
-        `<span class="arb-state" title="${escapeHtml(arbStateTitle(s))}">` +
-        `${escapeHtml(arbStateLabel(s))}</span>` +
+        '<div class="arb-bar">' +
+        `<span class="arb-state">${escapeHtml(arbStateLabel(s))}</span>` +
         // Which of the three is doing something right now, and the way to its pane. This is the
-        // whole of "where is it": a session is one agent at a time by construction, and the last
-        // decision's sentence — which used to live here — is the answer to a different question
-        // and cost the strip its second and third line to say.
+        // whole of "where is it": a session is one agent at a time by construction.
         arbActiveHtml(s) +
         `<span class="arb-budget">${escapeHtml(arbBudgetLine(s))}</span>` +
+        acts +
+        // Asked twice: ending a session is not undoable, and the loop it stops is the reason
+        // somebody left two agents running unattended.
+        `<button class="arb-btn arm-btn arb-ico" onclick="armButton(this, '■?',` +
+        ` () => arbCommand('arb_cancel'))" title="End this session for good"` +
+        ` aria-label="End session">■</button>` +
         // The path, in a sheet: what was asked, what was written, what was typed and where it
         // stopped. A button rather than a line of prose, because the line was never the whole
         // answer and the sheet always is.
@@ -20081,30 +20554,40 @@
         ` aria-pressed="${arbBubblesOn() ? 'true' : 'false'}"` +
         ` aria-label="Show what the arbitrator decided, in the thread">` +
         `${arbBubblesOn() ? '⚖ shown' : '⚖ hidden'}</button>` +
-        // What a resume does first. Armed, it waits for a trigger — a member ending a turn, or a
-        // clock — and with two idle members and no clocks that is a session that reads as running
-        // and never acts. `Resume and trigger` asks for a decision now, carrying what happened
-        // while it was stopped and what stopped it. Two buttons rather than one that guesses:
-        // a person who paused to type at a member themselves wants the first, and a person who
-        // paused to read wants the second, and neither can be inferred from the pause.
-        (paused
-          ? '<button class="arb-btn" onclick="arbCommand(\'arb_resume\')"' +
-            ' title="Arm the loop and wait for the next turn to end">Resume</button>' +
-            '<button class="arb-btn" onclick="arbCommand(\'arb_resume\', {kick: true})"' +
-            ' title="Arm the loop and ask for a decision now">Resume and trigger</button>'
-          : '<button class="arb-btn" onclick="arbCommand(\'arb_pause\')">Pause</button>') +
         // The brief again, in an empty pane. A long session pushes the opening instruction out
         // of an agent's context and what is left is an arbitrator writing prose where the drop
         // box should be — this is the way back without losing the session. Armed, because it
         // clears the arbitrator's context and that is not undoable.
-        `<button class="arb-btn arm-btn" onclick="armButton(this, 'Re-brief?',` +
+        `<button class="arb-btn arm-btn quiet" onclick="armButton(this, 'Re-brief?',` +
         ` () => arbCommand('arb_reinit'))"` +
         ` aria-label="Clear the arbitrator and give it its brief again">↻ Brief</button>` +
-        // Asked twice: ending a session is not undoable, and the loop it stops is the reason
-        // somebody left two agents running unattended.
-        `<button class="arb-btn arm-btn" onclick="armButton(this, 'End?',` +
-        ` () => arbCommand('arb_cancel'))"` +
-        ` aria-label="End this arbitration session">End</button></div>`;
+        '</div>' + arbNoteHtml(s) + '</div>';
+    }
+
+    // Whether arming alone would do nothing — which is the relay's answer, not a guess from the
+    // pause reason. See `resume_plan`: `ask` has a trigger waiting to be spent, and `stale` is a
+    // member that finished while nobody was listening.
+    function arbLeadsWithTrigger(s) {
+      const plan = s.plan;
+      return !!plan && (!!plan.stale || plan.action === 'ask');
+    }
+
+    // What the strip cannot say in a word, under the buttons rather than in a `title` nobody on a
+    // phone can open. Two lines at most: what this state means, and — stopped — what Resume will
+    // do about it.
+    function arbNoteHtml(s) {
+      const why = arbStateTitle(s);
+      const paused = s.state === 'paused';
+      const said = paused && s.plan ? arbPlanLine(s.plan, s) : null;
+      if (!why && !said) return '';
+      return '<div class="arb-say">' +
+        (said ? `<span class="arb-say-line">${escapeHtml(said.line)}</span>` : '') +
+        `<span class="arb-say-why">${escapeHtml(why)}</span>` +
+        (paused
+          ? '<button class="arb-btn quiet arb-say-more" onclick="arbOpenResume()"' +
+            ' title="The last steps, and what Resume will do">Steps</button>'
+          : '') +
+        '</div>';
     }
 
     // Which of the three panes the session is currently on, and what it is doing there.
@@ -20181,7 +20664,16 @@
           arbLimitField('arbRuns', 'Stop after this many in a row with nobody joining in',
                         at.arbRuns, ARB_LIMITS.arbRuns) +
           arbLimitField('arbMinutes', 'Stop after this many minutes', at.arbMinutes,
-                        ARB_LIMITS.arbMinutes) + '</details>') +
+                        ARB_LIMITS.arbMinutes) +
+          // A cold agent answers its first prompt with nothing — the harness wakes, redraws, and
+          // the turn ends with no reply — and the arbitrator then reports, correctly and
+          // uselessly, that the member said nothing. agy does it reliably enough to be woken
+          // whether or not this is ticked, which the note says rather than hides.
+          `<label class="arb-check"><input id="arbWarmup" type="checkbox"` +
+          `${at.arbWarmup ? ' checked' : ''}> Wake the members before the first instruction` +
+          '</label>' +
+          '<span class="arb-note">agy is always woken — it is the one that needs it.</span>' +
+          '</details>') +
         // The two being arbitrated, named rather than assumed. In a two-member conversation these
         // are the only answer and the selects say so by having one option each; past two they are
         // the question the strip used to refuse to ask.
@@ -20232,6 +20724,9 @@
        'arbIdle', 'arbRuntime', 'arbSteps', 'arbRuns', 'arbMinutes'].forEach(id => {
         at[id] = (document.getElementById(id) || {}).value || '';
       });
+      // A checkbox answers with `checked`, not `value` — read the same way as the rest, every
+      // session would be a woken one.
+      at.arbWarmup = !!(document.getElementById('arbWarmup') || {}).checked;
       return at;
     }
 
@@ -20313,6 +20808,7 @@
         arbSteps: String(b.max_steps || ARB_LIMITS.arbSteps[0]),
         arbRuns: String(b.max_consecutive || ARB_LIMITS.arbRuns[0]),
         arbMinutes: String(b.max_minutes || ARB_LIMITS.arbMinutes[0]),
+        arbWarmup: !!s.warmup,
       };
     }
 
@@ -20600,6 +21096,7 @@
           max_consecutive: arbLimitValue('arbRuns'),
           max_wall_clock_ms: arbLimitValue('arbMinutes') * 60000,
         },
+        warmup: !!at.arbWarmup,
       };
     }
 
@@ -20616,6 +21113,7 @@
         arbitrator: { pane_id: got.who },
         triggers: { on_turn_end: true, idle_ms: got.idle, runtime_ms: got.runtime },
         budget: got.budget,
+        warmup: got.warmup,
         paused: arbStartPaused,
       });
       // The dialog is done — it asked its questions. Nothing is drawn in its place, though: the
@@ -20645,6 +21143,7 @@
       if (got.idle !== (t.idle_ms || 0) || got.runtime !== (t.runtime_ms || 0)) {
         msg.triggers = { on_turn_end: true, idle_ms: got.idle, runtime_ms: got.runtime };
       }
+      if (got.warmup !== was.arbWarmup) msg.warmup = got.warmup;
       if (String(got.budget.max_steps) !== was.arbSteps ||
           String(got.budget.max_consecutive) !== was.arbRuns ||
           String(got.budget.max_wall_clock_ms / 60000) !== was.arbMinutes) {
@@ -20681,18 +21180,102 @@
     // the state says it stopped and the reason says what tripped, and neither says which step it
     // got to — whether the prompt went out, whether a record was ever written, whether the
     // instruction reached the member.
+    // The steps the poll loop repeats while nothing is moving. Worth recording and not worth
+    // reading: at four polls a minute a stopped session's path is mostly these, and the row a
+    // person opened the sheet for is the one they scroll past looking for them.
+    const ARB_STEP_NOISE = ['waiting', 'warmed'];
+    const ARB_PATH_KEY = 'herdr_arb_path';
+
+    function arbPathFilter() {
+      return localStorage.getItem(ARB_PATH_KEY) === 'all' ? 'all' : 'key';
+    }
+
+    function setArbPathFilter(v) {
+      try { localStorage.setItem(ARB_PATH_KEY, v === 'all' ? 'all' : 'key'); }
+      catch (e) { /* private mode: this session only */ }
+      arbRenderDetail();
+    }
+
     function arbPathHtml(events) {
       if (!Array.isArray(events) || !events.length) return '';
+      const filter = arbPathFilter();
+      const rows = filter === 'all' ? events
+        : events.filter(e => !ARB_STEP_NOISE.includes(e.kind));
+      const toggle = ['key', 'all'].map(v =>
+        `<button class="arb-filter" aria-pressed="${filter === v ? 'true' : 'false'}"` +
+        ` onclick="setArbPathFilter('${v}')">${v === 'key' ? 'Key steps' : 'All'}</button>`).join('');
+      // Where it is stopped *now*: the last pause with no resume under it. Marked rather than
+      // left to be inferred from the last row, because the last row of a stopped session is
+      // often a trigger that arrived after the stop and was dropped — which reads like progress.
+      const stopped = rows.map(e => e.kind).lastIndexOf('paused');
+      const breakpoint = stopped >= 0 && !rows.slice(stopped + 1).some(e => e.kind === 'resumed')
+        ? stopped : -1;
       return '<details class="arb-path" open><summary>The path</summary>' +
-        events.map(e => {
+        `<p class="arb-path-bar">${toggle}` +
+        `<span class="arb-path-count">${rows.length} of ${events.length} steps</span></p>` +
+        rows.map((e, i) => {
           const when = e.at
             ? new Date(e.at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
           const bad = e.kind === 'error' || e.kind === 'rejected' || e.kind === 'paused';
-          return `<p class="arb-step${bad ? ' bad' : ''}">` +
+          return `<p class="arb-step${bad ? ' bad' : ''}${i === breakpoint ? ' stop' : ''}">` +
             `<span class="arb-step-at">${escapeHtml(when)}</span>` +
             `<span class="arb-step-kind">${escapeHtml(e.kind || '')}</span>` +
-            `<span>${escapeHtml(e.detail || '')}</span></p>`;
+            `<span>${escapeHtml(e.detail || '')}` +
+            `${i === breakpoint ? '<span class="arb-step-stop"> ◀ stopped here</span>' : ''}` +
+            '</span></p>';
         }).join('') + '</details>';
+    }
+
+    // How long ago, in the coarsest unit that is still true. A member that went quiet is read as
+    // "did I forget this?", and the answer to that is minutes and hours, never seconds.
+    function arbAgo(at) {
+      const ms = Date.now() - (at || 0);
+      if (ms < 90_000) return 'just now';
+      const mins = Math.round(ms / 60000);
+      return mins < 60 ? `${mins} min ago`
+        : `${Math.round(mins / 60)} h ago`;
+    }
+
+    // What Resume will do, in the words of the thing it will do — the relay works the case out
+    // with the same code that acts on it (`resume_plan`), so this only has to say it.
+    //
+    // The reason this exists: four of these read identically from outside — the button says
+    // Resume and the session says paused — and one of them, `wait`, does nothing you can see.
+    // That is the session left armed and idle while a member sits finished, which is the single
+    // most expensive way this feature fails.
+    // What Resume will do, in as few words as it takes — and the detail under it, for the reader
+    // who wants it. Two fields rather than one sentence: the first line answers "can I press it",
+    // and everything that made the old single sentence long (which member, how long ago, what the
+    // other button does) is the second, which nobody has to read to act.
+    //
+    // The reason this exists: four resumes read identically from outside — the button says Resume
+    // and the session says paused — and one of them, `wait`, does nothing you can see. That is a
+    // session left armed while a member sits finished, which is the most expensive way this
+    // feature fails.
+    function arbPlanLine(plan, session) {
+      const seq = plan.sequence;
+      if (plan.action === 'collect') {
+        return {line: 'A decision is written and ready to send.',
+                hint: `Resume sends what the arbitrator decided for step #${seq}.`};
+      }
+      if (plan.action === 'await') {
+        return {line: 'The arbitrator is still deciding.',
+                hint: `Resume goes back to waiting on step #${seq}. Resume and trigger asks a ` +
+                  'fresh question instead.'};
+      }
+      if (plan.action === 'ask') {
+        return {line: 'A turn ended while it was stopped.',
+                hint: 'Resume asks the arbitrator to decide about it now.'};
+      }
+      if (plan.stale) {
+        const who = plan.stale.label || plan.stale.member;
+        return {line: `Waiting on ${who} to finish its turn.`,
+                hint: `Written to ${arbAgo(plan.stale.at)}, and it has not ended a turn since. ` +
+                  'Resume alone waits for a wake-up that may never come — Resume and trigger ' +
+                  'asks now.'};
+      }
+      return {line: 'Armed — waiting for the next turn to end.',
+              hint: 'Nothing is pending. Resume and trigger asks for a decision now instead.'};
     }
 
     function arbDetailHtml(decisions, session, events) {
@@ -20724,15 +21307,105 @@
       }).join('');
     }
 
+    // --- the resume dialog --------------------------------------------------------------
+    //
+    // Its own sheet, not a banner on the log. The log is a reading of everything this session did
+    // and it will keep growing; this is the one question asked at the one moment a person is
+    // standing at a stopped session with a finger over a button: what happens if I press it, and
+    // what was the last thing that happened before it stopped.
+
+    const ARB_RESUME_ROWS = 15;
+
+    function arbResumeRows(events) {
+      if (!Array.isArray(events)) return [];
+      return events.filter(e => !ARB_STEP_NOISE.includes(e.kind)).slice(-ARB_RESUME_ROWS);
+    }
+
+    function arbResumeHtml(session, events, plan) {
+      if (!session) return '';
+      const rows = arbResumeRows(events);
+      const paused = session.state === 'paused';
+      const said = plan ? arbPlanLine(plan, session) : null;
+      // The one case where Resume is the wrong button and the second one is the answer, so it is
+      // the one case that leads with it.
+      const lead = !!plan && (!!plan.stale || plan.action === 'ask');
+      const head = said
+        ? `<p class="arb-plan-line">${escapeHtml(said.line)}</p>` +
+          `<p class="arb-plan-hint">${escapeHtml(said.hint)}</p>`
+        : '<p class="arb-plan-line">Reading the session…</p>';
+      const acts = !paused ? '' :
+        '<div class="arb-plan-do">' +
+        `<button class="arb-btn${lead ? ' quiet' : ''}" onclick="arbCommand('arb_resume')">` +
+        '▶ Resume</button>' +
+        `<button class="arb-btn${lead ? '' : ' quiet'}"` +
+        ` onclick="arbCommand('arb_resume', {kick: true})">⏭ Resume and trigger</button></div>`;
+      // Where it is stopped *now*: the last pause with no resume under it. Not the last row — a
+      // trigger that arrived after the stop sits below it and reads like progress.
+      const stopped = rows.map(e => e.kind).lastIndexOf('paused');
+      const mark = stopped >= 0 && !rows.slice(stopped + 1).some(e => e.kind === 'resumed')
+        ? stopped : -1;
+      const body = rows.length
+        ? rows.map((e, i) => {
+            const when = e.at
+              ? new Date(e.at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+            const bad = e.kind === 'error' || e.kind === 'rejected' || e.kind === 'paused';
+            return `<tr class="${bad ? 'bad' : ''}${i === mark ? ' stop' : ''}">` +
+              `<td class="arb-row-at">${escapeHtml(when)}</td>` +
+              `<td class="arb-row-seq">${e.sequence ? '#' + escapeHtml(String(e.sequence)) : ''}</td>` +
+              `<td class="arb-row-kind">${escapeHtml(e.kind || '')}</td>` +
+              `<td>${escapeHtml(e.detail || '')}` +
+              `${i === mark ? '<span class="arb-step-stop"> ◀ stopped here</span>' : ''}</td></tr>`;
+          }).join('')
+        : '<tr><td colspan="4" class="arb-dec-empty">Nothing has happened yet.</td></tr>';
+      return `<div class="arb-plan${plan && plan.stale ? ' warn' : ''}">${head}${acts}</div>` +
+        '<table class="arb-rows"><thead><tr><th>Time</th><th>Step</th><th>What</th>' +
+        '<th>Detail</th></tr></thead><tbody>' + body + '</tbody></table>';
+    }
+
+    function arbRenderResume() {
+      const el = document.getElementById('arbResumeBody');
+      if (!el || !arbResumeOpen) return;
+      const here = arbSessionHere();
+      // The copy that came with the path when there is one, and the session message's own
+      // otherwise — which is what an older relay leaves, and what this shows in the moment before
+      // its own answer arrives.
+      el.innerHTML = arbResumeHtml(here, arbEvents, arbPlan || (here || {}).plan || null);
+    }
+
+    function arbOpenResume() {
+      const session = arbSessionHere();
+      if (!session) return;
+      if (arbDetailFor !== session.id) { arbDetail = null; arbEvents = null; arbPlan = null; }
+      arbResumeOpen = true;
+      const el = document.getElementById('arbResumeSheet');
+      if (el) el.style.display = 'block';
+      arbRenderResume();
+      // Always asked, never taken from the held copy: what Resume would do is exactly the thing
+      // that moves while a session sits stopped, and this is somebody looking now.
+      arbDetailFor = session.id;
+      arbDetailAt = arbDetailStamp(session);
+      arbSend({type: 'arb_detail', session: session.id});
+    }
+
+    function closeArbResume() {
+      arbResumeOpen = false;
+      const el = document.getElementById('arbResumeSheet');
+      if (el) el.style.display = 'none';
+    }
+
     function arbRenderDetail() {
       const el = document.getElementById('arbDetailBody');
-      if (el) el.innerHTML = arbDetailHtml(arbDetail, arbSessionHere(), arbEvents);
+      const here = arbSessionHere();
+      if (el) el.innerHTML = arbDetailHtml(arbDetail, here, arbEvents);
+      // The resume dialog reads the same two answers — the path and the plan that came with it —
+      // and is open or not independently of this one.
+      arbRenderResume();
     }
 
     function arbOpenDetail() {
       const session = arbSessionHere();
       if (!session) return;
-      if (arbDetailFor !== session.id) { arbDetail = null; arbEvents = null; }
+      if (arbDetailFor !== session.id) { arbDetail = null; arbEvents = null; arbPlan = null; }
       const el = document.getElementById('arbSheet');
       if (el) el.style.display = 'block';
       arbRenderDetail();
@@ -20759,6 +21432,9 @@
       // A relay too old to send them is not a relay with an empty path — the thread draws none
       // either way, and the sheet says so rather than showing a session that did nothing.
       arbEvents = Array.isArray(msg.events) ? msg.events : null;
+      // Worked out at the moment this answer was built, which is the only copy that matches the
+      // path beside it. Absent from an older relay, and then the session message's own is used.
+      arbPlan = msg.plan || null;
       arbRenderDetail();
       // And the thread, which draws from the same rows. Only when there is one on screen — this
       // arrives on every decision, and a render is not free.
