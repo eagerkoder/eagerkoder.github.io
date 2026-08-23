@@ -3041,10 +3041,17 @@
       flex-wrap: nowrap;
       overflow-x: auto;
       scrollbar-width: none;
-      /* With the scrollbar hidden, the only thing saying there is more of this row is the edge
-         fading out. Without it a clipped button reads as a broken one. */
-      mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
-      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+      /* A tray, not a row of loose buttons: the controls of one session are one object, and over a
+         scrolling thread a shadow is what says this sits above the text rather than in it. The
+         ground is semi-transparent and blurred, so the thread stays visible through it and the
+         buttons on top stay the only solid thing. */
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
     }
 
     .arb-bar::-webkit-scrollbar {
@@ -3052,10 +3059,17 @@
     }
 
     /* The row is drawn from `.hang-btn`, which is hidden until something turns it on. Here they
-       are all on: the strip only exists while there is a session to control. */
+       are all on: the strip only exists while there is a session to control.
+
+       Lifted off the page rather than sharing the surface everything else uses: this floats over a
+       thread of monospace text with no ground of its own, and at 28px a chip the same colour as
+       the card behind it reads as part of the card. --arb-chip is the one value both the buttons
+       and the chips under them are drawn in, so they stay one thing. */
     .arb-bar .hang-btn {
       display: inline-flex;
       flex: none;
+      background: var(--arb-chip);
+      color: var(--text);
     }
 
     /* The one to press, and the toggle that is on. Colour rather than weight — these are 28px
@@ -3080,6 +3094,12 @@
       max-width: min(100%, 320px);
     }
 
+    .arb-strip {
+      /* Brighter than `--surface` by a fixed amount of the text colour, so it lifts in every one
+         of the eleven themes rather than in the two a hand-picked grey was chosen against. */
+      --arb-chip: color-mix(in srgb, var(--text) 13%, var(--surface));
+    }
+
     /* Opaque, one at a time: the strip has no ground of its own, so a line without a background
        is prose over a thread of monospace text. */
     .arb-say > span,
@@ -3087,7 +3107,16 @@
       padding: 2px 7px;
       border-radius: 8px;
       border: 1px solid var(--border);
-      background: var(--surface);
+      background: var(--arb-chip);
+    }
+
+    /* Which pane is working is a chip that happens to be a button, so it is drawn as the chips
+       beside it and not as `.arb-btn`, whose background is `none` — over a thread that is a
+       transparent chip with a border, which is the one thing this strip cannot have. */
+    .arb-say-top > .arb-btn {
+      min-height: 0;
+      font-size: inherit;
+      background: var(--arb-chip);
     }
 
     /* The chips that say where the session is, on one row and never wrapping into the sentence
@@ -3163,6 +3192,28 @@
     .arb-btn.warn {
       color: var(--red);
       border-color: var(--red);
+    }
+
+    /* Re-brief and End, which used to be two taps away on the strip. A row of their own at the
+       bottom of the dialog, under everything that is a field — they are not settings, and putting
+       them among the selects is how a Save lands on a session somebody meant to end. */
+    .arb-danger {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .arb-danger .arb-note {
+      flex-basis: 100%;
+    }
+
+    /* Drawn on the text's own line rather than the baseline the box sits on: at 11px next to a
+       label, a glyph-sized SVG that sits on the baseline reads as a dropped character. */
+    .arb-sign {
+      vertical-align: -2px;
+      flex: none;
     }
 
     /* The mark a pane carries while it is arbitrating, wherever that pane is drawn. */
@@ -3479,8 +3530,6 @@
        that gives way when the row is too narrow, the other two being fixed-width facts. */
     .arb-strip .arb-active {
       min-width: 0;
-      font-size: inherit;
-      min-height: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -6409,7 +6458,7 @@
            pane, or it has none and this opens the form that gives it one. Hidden when neither is
            true, because a button whose answer is "nothing" is one a person taps twice. -->
       <button class="hang-btn hang-arbitrator" id="convArbitrator" onclick="arbOpenFromConv()"
-        aria-label="Arbitrate this conversation">⚖</button>
+        aria-label="Arbitrate this conversation"><svg class="arb-sign" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3.2 21 20.2H3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" /><circle cx="12" cy="9.4" r="1.7" fill="var(--red)" /><circle cx="8.6" cy="16.6" r="1.7" fill="var(--orange)" /><circle cx="15.4" cy="16.6" r="1.7" fill="var(--green)" /></svg></button>
       <button class="hang-btn hang-tidy" id="convTidy" onclick="hangRefreshConv()"
         title="Reload this conversation, then remove any duplicates its members picked up"
         aria-label="Refresh and tidy">
@@ -6700,7 +6749,7 @@
         <!-- Only when this pane is in a session. A pane view has no conversation and no strip,
              so the one thing this can mean here is "take me to the arbitrator reading this". -->
         <button class="hang-btn hang-arbitrator" id="paneArbitrator" onclick="arbOpenFromPane()"
-          aria-label="Open the arbitrator’s pane">⚖</button>
+          aria-label="Open the arbitrator’s pane"><svg class="arb-sign" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3.2 21 20.2H3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" /><circle cx="12" cy="9.4" r="1.7" fill="var(--red)" /><circle cx="8.6" cy="16.6" r="1.7" fill="var(--orange)" /><circle cx="15.4" cy="16.6" r="1.7" fill="var(--green)" /></svg></button>
         <button class="hang-btn hang-tidy" id="paneTidy" onclick="hangRefresh()"
           title="Refresh, then remove any duplicates this transcript picked up"
           aria-label="Refresh and tidy">
@@ -6970,7 +7019,7 @@
      part of the thread, one more bubble among the messages it was warning about. A notice about
      the app belongs to the app. -->
   <div id="toast" role="status" aria-live="polite"
-    style="display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 4px);z-index:200;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
+    style="display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 4px);z-index:200;max-width:90vw;padding:8px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.65rem;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
   </div>
 
   <!-- The pane picker. Pinning a partner and adding members to a conversation ask the same
@@ -7129,7 +7178,7 @@
     <div role="dialog" aria-label="Arbitrate this conversation"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">⚖ Arbitrate · <span id="arbSetupConvName"></span></span>
+        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><svg class="arb-sign" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 3.2 21 20.2H3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" /><circle cx="12" cy="9.4" r="1.7" fill="var(--red)" /><circle cx="8.6" cy="16.6" r="1.7" fill="var(--orange)" /><circle cx="15.4" cy="16.6" r="1.7" fill="var(--green)" /></svg> Arbitrate · <span id="arbSetupConvName"></span></span>
         <button onclick="closeArbSetup()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
@@ -14439,7 +14488,7 @@
           if (e.event) {
             last = at;
             return `<div class="conv-arb-to">` +
-              `<span class="conv-commits-lede">⚖ ${escapeHtml(e.lede || '')}</span>` +
+              `<span class="conv-commits-lede">${arbSign(11)} ${escapeHtml(e.lede || '')}</span>` +
               (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
                         `${escapeHtml(e.text)}</span>` : '') +
               (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
@@ -14461,7 +14510,7 @@
             (e.delivered ? '' : '<span class="conv-commit warn">not confirmed</span>') +
             '</div>';
           last = at;
-          return `<div class="conv-arb"><span class="conv-arb-who">⚖ ` +
+          return `<div class="conv-arb"><span class="conv-arb-who">${arbSign(11)} ` +
             `${escapeHtml(e.label || 'Arbitrator')}` +
             (when ? `<span class="conv-time">${escapeHtml(when)}</span>` : '') +
             `</span>${escapeHtml(e.text || '')}</div>${rail}`;
@@ -14480,7 +14529,7 @@
         // An arbitrated send has no `from` pane: it was composed by the arbitrator out of what two
         // members said, so what the badge names is the arbitrator itself.
         const from = user && e.via === 'arbitrator'
-          ? '<span class="via" aria-hidden="true">⚖</span> arbitrator'
+          ? `<span class="via" aria-hidden="true">${arbSign(10)}</span> arbitrator`
           : user && e.via && e.via !== 'typed' && e.from
           ? `<span class="via" aria-hidden="true">⇄</span> ${escapeHtml(e.from.label || 'another pane')}` +
             `${e.via === 'mixed' ? ' · edited' : ''}`
@@ -20142,7 +20191,8 @@
     // and a chime on every poll would be an alarm with no off switch.
     function arbAlertPause(s) {
       const why = (s.last_decision || {}).why;
-      showToast('⚖ Arbitration paused — ' + (s.pause_reason === 'call_human'
+      // No mark: a toast is textContent, and the one thing it must never carry is markup.
+      showToast('Arbitration paused — ' + (s.pause_reason === 'call_human'
         ? (why || 'the arbitrator is asking for you')
         : String(s.pause_reason || 'stopped').replace(/_/g, ' ')));
       if (window.cue) cue('chime');
@@ -20238,7 +20288,8 @@
 
     function arbMark(paneId) {
       return arbIsArbitrator(paneId)
-        ? ' <span class="badge arb" title="The arbitrator of a running session">⚖</span>' : '';
+        ? ' <span class="badge arb" title="The arbitrator of a running session">' +
+          arbSign(11) + '</span>' : '';
     }
 
     // Typing at the arbitrator is asked twice — not refused. A person may well need to answer a
@@ -20517,11 +20568,55 @@
     // The eye, for the one control here that is a view toggle rather than an action. Inline
     // rather than a glyph: nothing in the emoji set reads as "shown/hidden" at 13px, and the two
     // states are the same drawing in two colours, which a font cannot give.
-    const ARB_EYE =
-      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
-      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />' +
-      '<circle cx="12" cy="12" r="3" /></svg>';
+    // The tray's controls, drawn rather than typed. A glyph row is at the mercy of the font: ⏭ and
+    // ▶ arrive at different weights and different widths, ⓘ is a full-height circle next to a
+    // half-height ✎, and on a phone at least one of them is a colour emoji nobody asked for. These
+    // are one 24-box and one stroke width, so the row reads as one set of six.
+    const ARB_ICONS = {
+      edit: '<path d="M4.5 19.5h4L19 9a2.1 2.1 0 0 0-3-3L5.5 15.5v4z" />',
+      log: '<path d="M4.5 7h15M4.5 12h15M4.5 17h9" />',
+      steps: '<circle cx="12" cy="12" r="8.5" /><path d="M12 11.2v5" />' +
+             '<path d="M12 7.6h.01" />',
+      play: '<path d="M8.5 5.8 18.5 12 8.5 18.2z" fill="currentColor" stroke-linejoin="round" />',
+      kick: '<path d="M5.5 5.8 14 12 5.5 18.2z" fill="currentColor" stroke-linejoin="round" />' +
+            '<path d="M18 5.8v12.4" />',
+      pause: '<path d="M9.3 5.8v12.4M14.7 5.8v12.4" />',
+    };
+
+    function arbGlyph(name) {
+      return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        ARB_ICONS[name] + '</svg>';
+    }
+
+    // Two drawings, not one in two colours: shown is an open eye, hidden is the same eye struck
+    // through. A toggle whose only difference is a colour is a toggle nobody can read the state of
+    // without pressing it.
+    function arbEye(on) {
+      return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />' +
+        '<circle cx="12" cy="12" r="3" />' +
+        (on ? '' : '<path d="M4 20 20 4" />') + '</svg>';
+    }
+
+    // The mark for everything arbitration: three lights in a triangle. ⚖ was a courtroom, which is
+    // not what this is — one thing decides which of two goes next, and that is a signal. Drawn
+    // rather than typed so it is the same size in every place it appears, and so the lights are
+    // the theme's own red, amber and green rather than whatever the emoji font has.
+    //
+    // The triangle is `currentColor`, so it greys with the text around it and lights blue with a
+    // button that is on.
+    function arbSign(size) {
+      const px = size || 14;
+      return `<svg class="arb-sign" viewBox="0 0 24 24" width="${px}" height="${px}"` +
+        ' aria-hidden="true">' +
+        '<path d="M12 3.2 21 20.2H3z" fill="none" stroke="currentColor" stroke-width="1.7"' +
+        ' stroke-linejoin="round" />' +
+        '<circle cx="12" cy="9.4" r="1.7" fill="var(--red)" />' +
+        '<circle cx="8.6" cy="16.6" r="1.7" fill="var(--orange)" />' +
+        '<circle cx="15.4" cy="16.6" r="1.7" fill="var(--green)" /></svg>';
+    }
 
     function arbStripHtml(session, conv, on) {
       if (!on || !conv || !session || session.conversation !== conv.id) return '';
@@ -20538,50 +20633,45 @@
         `<button class="hang-btn arb-ico${cls ? ' ' + cls : ''}" ${onclick}` +
         ` title="${escapeHtml(why)}" aria-label="${escapeHtml(name)}">${glyph}</button>`;
       const lead = arbLeadsWithTrigger(s);
-      const acts = paused
-        // What a resume does first. Armed, it waits for a trigger — a member ending a turn, or a
-        // clock — and with two idle members and no clocks that is a session that reads as running
-        // and never acts. `Resume and trigger` asks for a decision now. Two buttons rather than
-        // one that guesses, and which of them is lit comes from the plan: the relay has already
-        // worked out whether arming alone would do anything.
-        ? icon('▶', 'Resume', 'Arm the loop and wait for the next turn to end',
-               'onclick="arbCommand(\'arb_resume\')"', lead ? '' : 'lit') +
-          icon('⏭', 'Resume and trigger', 'Arm the loop and ask for a decision now',
-               'onclick="arbCommand(\'arb_resume\', {kick: true})"', lead ? 'lit' : '')
-        : icon('⏸', 'Pause', 'Stop the loop — nothing is sent until it is resumed',
-               'onclick="arbCommand(\'arb_pause\')"');
       return `<div class="arb-strip" data-state="${escapeHtml(s.state || '')}">` +
-        '<div class="arb-bar">' + acts +
-        // The last few steps and what Resume will do, in a sheet of its own. Only while it is
-        // stopped: that is the only time the question is asked.
-        (paused
-          ? icon('ⓘ', 'Steps', 'The last steps, and what Resume will do',
-                 'onclick="arbOpenResume()"')
-          : '') +
-        // Asked twice: ending a session is not undoable, and the loop it stops is the reason
-        // somebody left two agents running unattended. A glyph and not an SVG, because arming
-        // swaps the label and swapping it back is text.
-        icon('■', 'End session', 'End this session for good',
-             `onclick="armButton(this, '■?', () => arbCommand('arb_cancel'))"`, 'arm-btn') +
-        // The path: what was asked, what was written, what was typed and where it stopped.
-        icon('☰', 'Log', 'What this session has done, step by step',
-             'onclick="arbOpenDetail()"') +
+        '<div class="arb-bar">' +
+        // Left to right, least to most consequential: the two dialogs, then the toggle, then what
+        // acts on the session. Nothing that ends or empties something is here at all — Re-brief
+        // and End live in the Edit dialog, behind a deliberate trip, because the strip is a row of
+        // 28px squares over a thread being read with a thumb.
+        //
         // The dialog that appointed it, opened on what it already says.
-        icon('✎', 'Edit', 'Change this session — who, what for, and who decides',
+        icon(arbGlyph('edit'), 'Edit', 'Change this session — who, what for, and who decides',
              'onclick="arbEditHere()"') +
-        // The brief again, in an empty pane. A long session pushes the opening instruction out of
-        // an agent's context and what is left is an arbitrator writing prose where the drop box
-        // should be — this is the way back without losing the session. Armed: it clears the
-        // arbitrator's context, and that is not undoable.
-        icon('↻', 'Re-brief', 'Clear the arbitrator and give it its brief again',
-             `onclick="armButton(this, '↻?', () => arbCommand('arb_reinit'))"`, 'arm-btn') +
+        // The path: what was asked, what was written, what was typed and where it stopped.
+        icon(arbGlyph('log'), 'Log', 'What this session has done, step by step',
+             'onclick="arbOpenDetail()"') +
         // Here and not in the pane menu with the other reading toggles: this one is only ever a
         // question while a session is running, and the strip is the only thing on screen that
         // exists exactly then.
         `<button class="hang-btn arb-ico${arbBubblesOn() ? ' lit' : ''}"` +
         ` onclick="toggleArbBubbles()" aria-pressed="${arbBubblesOn() ? 'true' : 'false'}"` +
         ' title="Show what the arbitrator decided, in the thread"' +
-        ` aria-label="Arbitrator’s decisions in the thread">${ARB_EYE}</button>` +
+        ` aria-label="Arbitrator’s decisions in the thread">${arbEye(arbBubblesOn())}</button>` +
+        // The last few steps and what Resume will do, in a sheet of its own. Only while it is
+        // stopped: that is the only time the question is asked.
+        (paused
+          ? icon(arbGlyph('steps'), 'Steps', 'The last steps, and what Resume will do',
+                 'onclick="arbOpenResume()"')
+          : '') +
+        // What a resume does first. Armed, it waits for a trigger — a member ending a turn, or a
+        // clock — and with two idle members and no clocks that is a session that reads as running
+        // and never acts. `Resume and trigger` asks for a decision now. Two buttons rather than
+        // one that guesses, and which of them is lit comes from the plan: the relay has already
+        // worked out whether arming alone would do anything. Last, and in that order, because the
+        // plain Resume is the one a thumb reaches for without looking.
+        (paused
+          ? icon(arbGlyph('kick'), 'Resume and trigger', 'Arm the loop and ask for a decision now',
+                 'onclick="arbCommand(\'arb_resume\', {kick: true})"', lead ? 'lit' : '') +
+            icon(arbGlyph('play'), 'Resume', 'Arm the loop and wait for the next turn to end',
+                 'onclick="arbCommand(\'arb_resume\')"', lead ? '' : 'lit')
+          : icon(arbGlyph('pause'), 'Pause', 'Stop the loop — nothing is sent until it is resumed',
+                 'onclick="arbCommand(\'arb_pause\')"')) +
         '</div>' + arbSayHtml(s) + '</div>';
     }
 
@@ -20649,7 +20739,8 @@
       return `<button class="arb-btn arb-active${who.blocked ? ' warn' : ''}` +
         `${who.idle ? ' quiet' : ''}" onclick="openTerminal('${escapeHtml(who.pane_id)}')"` +
         ` aria-label="Open ${escapeHtml(who.label)}’s pane">` +
-        `${who.arbiter ? '⚖ ' : ''}${escapeHtml(who.label)} · ${escapeHtml(who.doing)}</button>`;
+        `${who.arbiter ? arbSign(11) + ' ' : ''}${escapeHtml(who.label)} · ` +
+        `${escapeHtml(who.doing)}</button>`;
     }
 
     // --- appointing one -------------------------------------------------------------------
@@ -20668,7 +20759,7 @@
         // The one that decides. It is deliberately not in the conversation — it is not a
         // participant in it, it is the thing deciding what happens in it — so its list is the panes
         // outside the conversation and inside its project.
-        arbPart('⚖ Arbitrator',
+        arbPart('Arbitrator',
           arbSlot('arbWho', free, at.arbWho || (free[0] || {}).pane_id) +
           // §10's two clocks, off by default and folded away because of it. A turn ending is
           // always a trigger; these are for the two ways a conversation stops without anyone's
@@ -20697,7 +20788,7 @@
           `${at.arbWarmup ? ' checked' : ''}> Wake the members before the first instruction` +
           '</label>' +
           '<span class="arb-note">agy is always woken — it is the one that needs it.</span>' +
-          '</details>') +
+          '</details>', arbSign(12) + ' ') +
         // The two being arbitrated, named rather than assumed. In a two-member conversation these
         // are the only answer and the selects say so by having one option each; past two they are
         // the question the strip used to refuse to ask.
@@ -20709,12 +20800,38 @@
           arbRoleField('arbRoleSecond', at.arbRoleSecond)) +
         // Only when appointing one. A session that is already running has been armed or not
         // armed already, and the strip's Pause and Resume are where that is changed.
-        (editing ? '' : arbArmChoiceHtml()) +
+        (editing ? arbSessionActionsHtml() : arbArmChoiceHtml()) +
         '<div class="arb-form-actions">' +
         '<button class="arb-btn" onclick="closeArbSetup()">Cancel</button>' +
         (editing
           ? '<button class="arb-btn go" onclick="arbSave()">Save</button>'
           : '<button class="arb-btn go" onclick="arbStart()">Start</button>') + '</div>';
+    }
+
+    // The two that empty or end something. They used to sit on the strip, one tap from a thread
+    // being scrolled with a thumb — armed, but armed is one mistap away from done. Here they are
+    // behind opening a dialog, which is the trip that suits what they do, and they are the only
+    // things in it that are not a field.
+    //
+    // Editing only: a session that does not exist yet has nothing to re-brief or end.
+    function arbSessionActionsHtml() {
+      return '<div class="arb-part arb-danger">' +
+        '<button type="button" class="arb-btn arm-btn"' +
+        ` onclick="armButton(this, 'Re-brief?', () => arbSessionAction('arb_reinit'))">` +
+        'Re-brief the arbitrator</button>' +
+        '<button type="button" class="arb-btn arm-btn warn"' +
+        ` onclick="armButton(this, 'End session?', () => arbSessionAction('arb_cancel'))">` +
+        'End session</button>' +
+        '<span class="arb-note">Re-briefing empties the arbitrator’s context and gives it its ' +
+        'brief again — the session and its record are kept. Ending it is final.</span>' +
+        '</div>';
+    }
+
+    // Both close the dialog they were pressed in: the form behind them describes a session that
+    // is about to be re-briefed or gone, and leaving it open invites a Save on top of that.
+    function arbSessionAction(command) {
+      closeArbSetup();
+      arbCommand(command);
     }
 
     // The pane, or a new one. A room is often assembled from nothing — two fresh agents and
@@ -20776,9 +20893,9 @@
     }
 
     // A rule above rather than a box around: the three are a reading order, not three forms.
-    function arbPart(lede, body) {
-      return `<div class="arb-part"><span class="arb-part-lede">${escapeHtml(lede)}</span>` +
-        body + '</div>';
+    function arbPart(lede, body, mark) {
+      return '<div class="arb-part"><span class="arb-part-lede">' +
+        (mark || '') + `${escapeHtml(lede)}</span>` + body + '</div>';
     }
 
     function arbSetupOpen() {
