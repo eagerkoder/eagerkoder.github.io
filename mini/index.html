@@ -3003,90 +3003,130 @@
     /* The session strip: what is arbitrating this conversation, above the thread it is
        arbitrating. Opaque like .conv-panel and for the same reason — it rides the sticky header
        and the thread scrolls under it. */
-    /* A floating panel over the thread rather than a band across it. The strip is chrome for a
-       session, not part of the conversation, and a solid bar the width of the screen reads as the
-       latter — so the ground is translucent and only the controls are solid. Blurred where the
-       browser has it: over a thread of monospace text, a plain alpha wash makes the glyphs behind
-       the buttons legible enough to be read as part of the strip. */
+    /* The session's controls, floating over the top-left of the thread and level with the row in
+       the opposite corner (`.hang-float`). Nothing here has a ground of its own: the strip is
+       transparent and every button and every line of text carries its own, which is what lets a
+       thread scroll under it without either one becoming unreadable. */
+    .conv-view-top #arbStrip {
+      position: absolute;
+      top: 100%;
+      margin-top: 6px;
+      left: var(--hang-right, 22px);
+      z-index: 5;
+      /* The thread owns everything between the two floating corners. Only the chips take taps. */
+      pointer-events: none;
+      max-width: calc(100% - 160px);
+    }
+
     .arb-strip {
       display: flex;
       flex-direction: column;
+      align-items: flex-start;
       gap: 4px;
-      margin: 4px 8px 6px;
-      padding: 5px 6px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--surface) 72%, transparent);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      font-size: 0.68rem;
+      font-size: 0.62rem;
       color: var(--muted);
     }
 
-    /* One line, always. What used to be here was a sentence — the last decision's gate, target
-       and why — which wrapped to three lines on a phone and pushed the thread down by all of
-       them. What replaced it is short and fixed, so a bar that still does not fit scrolls
-       sideways rather than growing. */
+    .arb-strip > * {
+      pointer-events: auto;
+      max-width: 100%;
+    }
+
+    /* One line, always: these are aimed at rather than read, and a row that wrapped would push
+       the thread's first message down every time a state changed. It scrolls instead. */
     .arb-bar {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
       flex-wrap: nowrap;
       overflow-x: auto;
       scrollbar-width: none;
       /* With the scrollbar hidden, the only thing saying there is more of this row is the edge
          fading out. Without it a clipped button reads as a broken one. */
-      mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+      mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
     }
 
     .arb-bar::-webkit-scrollbar {
       display: none;
     }
 
-    /* The sentence the chip cannot hold, under the controls rather than in a `title` no phone can
-       open. Its own floating panel: it is prose about the state, and it must not make the row of
-       buttons taller or move them as the state changes. */
+    /* The row is drawn from `.hang-btn`, which is hidden until something turns it on. Here they
+       are all on: the strip only exists while there is a session to control. */
+    .arb-bar .hang-btn {
+      display: inline-flex;
+      flex: none;
+    }
+
+    /* The one to press, and the toggle that is on. Colour rather than weight — these are 28px
+       squares and a heavier border at this size reads as a different-sized button. */
+    .arb-bar .hang-btn.lit {
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    .arb-ico {
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    /* Under the row: what state this is, what Resume would do, and what the state means. Each
+       line its own opaque chip, because the strip has no ground of its own. */
     .arb-say {
       display: flex;
-      align-items: baseline;
-      gap: 6px;
-      padding: 4px 4px 2px;
-      border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-      line-height: 1.35;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      max-width: min(100%, 320px);
+    }
+
+    /* Opaque, one at a time: the strip has no ground of its own, so a line without a background
+       is prose over a thread of monospace text. */
+    .arb-say > span,
+    .arb-say-top > * {
+      padding: 2px 7px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    /* The chips that say where the session is, on one row and never wrapping into the sentence
+       under them. */
+    .arb-say-top {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 0 !important;
+      border: none !important;
+      background: none !important;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .arb-say-budget {
+      white-space: nowrap;
+      flex: none;
+    }
+
+    .arb-say-state {
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .arb-strip[data-state="paused"] .arb-say-state {
+      color: var(--orange);
     }
 
     /* What Resume will do — the one line somebody acts on, so it is the one that is not grey. */
     .arb-say-line {
       color: var(--text);
-      font-weight: 600;
+      font-size: 0.6rem;
     }
 
     .arb-say-why {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .arb-say-more {
-      flex: none;
-      align-self: center;
-    }
-
-    /* Opaque, over a translucent ground: a control you can see the thread through does not read
-       as pressable. */
-    .arb-strip .arb-btn {
-      background: var(--surface);
-    }
-
-    /* The lifecycle four. Square, glyph-only, and the same size as each other whatever the glyph
-       is — they are aimed at rather than read. */
-    .arb-ico {
-      flex: none;
-      min-width: 32px;
-      padding: 4px 0;
-      font-size: 0.8rem;
-      line-height: 1;
-      text-align: center;
+      font-size: 0.56rem;
+      line-height: 1.4;
     }
 
     /* Nothing is running: one button, and no panel of chrome pretending to be a status. */
@@ -3097,38 +3137,6 @@
       -webkit-backdrop-filter: none;
       padding: 4px 12px;
       align-items: flex-end;
-    }
-
-    .arb-strip .arb-state {
-      flex: none;
-      color: var(--text);
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .arb-strip .arb-budget {
-      flex: none;
-    }
-
-    /* On a phone the row is wider than the screen, and what scrolls off is whatever is last —
-       which was the controls. The countdown is the one thing here that is only ever read, and it
-       is read again in the Edit dialog, so it is what gives way. */
-    @media (max-width: 480px) {
-      .arb-strip .arb-budget {
-        display: none;
-      }
-
-      .arb-strip .arb-active {
-        max-width: 34%;
-      }
-    }
-
-    .arb-strip[data-state="paused"] .arb-state {
-      color: var(--orange);
-    }
-
-    .arb-strip .arb-budget {
-      white-space: nowrap;
     }
 
     .arb-btn {
@@ -3298,7 +3306,7 @@
       gap: 8px;
       padding: 10px 14px;
       border-bottom: 1px solid var(--border);
-      background: var(--panel);
+      background: var(--surface);
     }
 
     /* The one case where Resume is the wrong button: a member finished and nobody asked. Tinted,
@@ -3466,13 +3474,13 @@
       color: var(--muted);
     }
 
-    /* The one on the strip that says where the session is. It is a state, not a control that does
-       something to the session, so it recedes until it is the thing that needs attention.
-       Never shrunk: in a row that scrolls, squeezing this to a sliver loses the answer to "where
-       is it" while keeping every button that acts on it. */
+    /* The one that says which pane is doing something. It is a state that happens to be a way to
+       that pane, so it recedes until it is the thing that needs attention — and it is the chip
+       that gives way when the row is too narrow, the other two being fixed-width facts. */
     .arb-strip .arb-active {
-      flex: none;
-      max-width: 45%;
+      min-width: 0;
+      font-size: inherit;
+      min-height: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -9865,7 +9873,10 @@
             ? `Queued at ${where} — it is working; the message goes in when it finishes.`
             : `${where} has not confirmed the send yet — watching.`, 'info');
         }
-        else if (msg.ok) showToast(`${where} took the message.`, 'info');
+        // The same sentence the composer says the moment a send lands cleanly — a message that
+        // took a minute to be confirmed is not a different outcome from one that took none, and
+        // wording it differently made the slow path read as a warning.
+        else if (msg.ok) showToast(`✓ Sent to ${where}`, 'ok');
         else showToast(`That pane did not confirm the send — check ${where}.`);
       }
       else if (msg.type === 'command_result' &&
@@ -14316,7 +14327,7 @@
       if (!ws || !live || live.status !== 'working') return;
       armButton(btn, 'Esc?', () => {
         ws.send(JSON.stringify({ type: 'send_keys', pane_id: live.pane_id, keys: ['Escape'] }));
-        showToast(`Sent Escape to ${paneLabel(live)}`);
+        showToast(`✓ Sent Escape to ${paneLabel(live)}`, 'ok');
         burstPoll();
       });
     }
@@ -17156,11 +17167,15 @@
     function showToast(text, kind) {
       const el = document.getElementById('toast');
       el.textContent = text;
-      el.style.borderColor = kind === 'info' ? 'var(--border)' : 'var(--red)';
+      // Three kinds, and the default is the loud one: a toast with no kind is something that went
+      // wrong, which is what most of them are. `ok` is the other end — a send that landed — and it
+      // is a colour rather than only a ✓ because the tick is 8px of a line read at arm's length.
+      el.style.borderColor = kind === 'ok' ? 'var(--green)'
+        : kind === 'info' ? 'var(--border)' : 'var(--red)';
       el.style.display = 'block';
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
-      if (window.cue && kind !== 'info') cue('error');
+      if (window.cue && kind !== 'info' && kind !== 'ok') cue('error');
     }
 
     function agentCard(a) {
@@ -19315,7 +19330,7 @@
       dockPicks = [];
       closeDockMenu();
       renderConvDock();
-      showToast(`Sent to ${paneLabel(live) || target}`);
+      showToast(`✓ Sent to ${paneLabel(live) || target}`, 'ok');
       burstPoll(target);
     }
 
@@ -19416,8 +19431,8 @@
       drawDockPicks();
       closeDockMenu();
       renderConvDock();
-      showToast(`Sent ${picked.length} message${picked.length === 1 ? '' : 's'} ` +
-        `to ${paneLabel(live) || target}`);
+      showToast(`✓ Sent ${picked.length} message${picked.length === 1 ? '' : 's'} ` +
+        `to ${paneLabel(live) || target}`, 'ok');
       burstPoll(target);
     }
 
@@ -20499,69 +20514,75 @@
     // pushes every message down by its own height, and a person reading a conversation nobody is
     // arbitrating was paying that for a button. Appointing one is the ⚖ in the header, which costs
     // no height and is there whether or not the thread is scrolled to the top.
+    // The eye, for the one control here that is a view toggle rather than an action. Inline
+    // rather than a glyph: nothing in the emoji set reads as "shown/hidden" at 13px, and the two
+    // states are the same drawing in two colours, which a font cannot give.
+    const ARB_EYE =
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />' +
+      '<circle cx="12" cy="12" r="3" /></svg>';
+
     function arbStripHtml(session, conv, on) {
       if (!on || !conv || !session || session.conversation !== conv.id) return '';
       const s = session, paused = s.state === 'paused';
-      // The lifecycle four, as icons. They are the controls a person reaches for without reading —
-      // stop it, start it, start it and ask — and a row of words for them crowded out the state,
-      // which is the thing the strip is for. Every one keeps a full label for a screen reader and
-      // a title for a pointer; the glyph is the affordance, never the name.
+      // Drawn as the same 28px chip as the row in the opposite corner — see `.hang-float`. They
+      // float over one thread and belong to it equally, and a second visual language for the
+      // controls on the left would read as a second kind of thing.
+      //
       // The name is what it is called — the accessible name, and the only thing a screen reader
       // or a test has to go on. The title is the sentence about it, which is a tooltip and must
       // never be the name: "Resume — arm the loop and wait for the next turn to end" is not what
       // anybody calls that button.
       const icon = (glyph, name, why, onclick, cls) =>
-        `<button class="arb-btn arb-ico${cls ? ' ' + cls : ''}" ${onclick}` +
+        `<button class="hang-btn arb-ico${cls ? ' ' + cls : ''}" ${onclick}` +
         ` title="${escapeHtml(why)}" aria-label="${escapeHtml(name)}">${glyph}</button>`;
       const lead = arbLeadsWithTrigger(s);
       const acts = paused
         // What a resume does first. Armed, it waits for a trigger — a member ending a turn, or a
         // clock — and with two idle members and no clocks that is a session that reads as running
         // and never acts. `Resume and trigger` asks for a decision now. Two buttons rather than
-        // one that guesses, and which of them is the quiet one comes from the plan: the relay has
-        // already worked out whether arming alone would do anything.
+        // one that guesses, and which of them is lit comes from the plan: the relay has already
+        // worked out whether arming alone would do anything.
         ? icon('▶', 'Resume', 'Arm the loop and wait for the next turn to end',
-               'onclick="arbCommand(\'arb_resume\')"', lead ? 'quiet' : '') +
+               'onclick="arbCommand(\'arb_resume\')"', lead ? '' : 'lit') +
           icon('⏭', 'Resume and trigger', 'Arm the loop and ask for a decision now',
-               'onclick="arbCommand(\'arb_resume\', {kick: true})"', lead ? '' : 'quiet')
+               'onclick="arbCommand(\'arb_resume\', {kick: true})"', lead ? 'lit' : '')
         : icon('⏸', 'Pause', 'Stop the loop — nothing is sent until it is resumed',
-               'onclick="arbCommand(\'arb_pause\')"', 'quiet');
+               'onclick="arbCommand(\'arb_pause\')"');
       return `<div class="arb-strip" data-state="${escapeHtml(s.state || '')}">` +
-        '<div class="arb-bar">' +
-        `<span class="arb-state">${escapeHtml(arbStateLabel(s))}</span>` +
-        // Which of the three is doing something right now, and the way to its pane. This is the
-        // whole of "where is it": a session is one agent at a time by construction.
-        arbActiveHtml(s) +
-        `<span class="arb-budget">${escapeHtml(arbBudgetLine(s))}</span>` +
-        acts +
+        '<div class="arb-bar">' + acts +
+        // The last few steps and what Resume will do, in a sheet of its own. Only while it is
+        // stopped: that is the only time the question is asked.
+        (paused
+          ? icon('ⓘ', 'Steps', 'The last steps, and what Resume will do',
+                 'onclick="arbOpenResume()"')
+          : '') +
         // Asked twice: ending a session is not undoable, and the loop it stops is the reason
-        // somebody left two agents running unattended.
-        `<button class="arb-btn arm-btn arb-ico" onclick="armButton(this, '■?',` +
-        ` () => arbCommand('arb_cancel'))" title="End this session for good"` +
-        ` aria-label="End session">■</button>` +
-        // The path, in a sheet: what was asked, what was written, what was typed and where it
-        // stopped. A button rather than a line of prose, because the line was never the whole
-        // answer and the sheet always is.
-        `<button class="arb-btn quiet" onclick="arbOpenDetail()"` +
-        ` title="What this session has done, step by step">Log</button>` +
+        // somebody left two agents running unattended. A glyph and not an SVG, because arming
+        // swaps the label and swapping it back is text.
+        icon('■', 'End session', 'End this session for good',
+             `onclick="armButton(this, '■?', () => arbCommand('arb_cancel'))"`, 'arm-btn') +
+        // The path: what was asked, what was written, what was typed and where it stopped.
+        icon('☰', 'Log', 'What this session has done, step by step',
+             'onclick="arbOpenDetail()"') +
         // The dialog that appointed it, opened on what it already says.
-        `<button class="arb-btn quiet" onclick="arbEditHere()"` +
-        ` title="Change this session — who, what for, and who decides">Edit</button>` +
-        // On the strip and not in the pane menu with the other reading toggles: this one is only
-        // ever a question while a session is running, and the strip is the only thing on screen
-        // that exists exactly then.
-        `<button class="arb-btn quiet" onclick="toggleArbBubbles()"` +
-        ` aria-pressed="${arbBubblesOn() ? 'true' : 'false'}"` +
-        ` aria-label="Show what the arbitrator decided, in the thread">` +
-        `${arbBubblesOn() ? '⚖ shown' : '⚖ hidden'}</button>` +
-        // The brief again, in an empty pane. A long session pushes the opening instruction out
-        // of an agent's context and what is left is an arbitrator writing prose where the drop
-        // box should be — this is the way back without losing the session. Armed, because it
-        // clears the arbitrator's context and that is not undoable.
-        `<button class="arb-btn arm-btn quiet" onclick="armButton(this, 'Re-brief?',` +
-        ` () => arbCommand('arb_reinit'))"` +
-        ` aria-label="Clear the arbitrator and give it its brief again">↻ Brief</button>` +
-        '</div>' + arbNoteHtml(s) + '</div>';
+        icon('✎', 'Edit', 'Change this session — who, what for, and who decides',
+             'onclick="arbEditHere()"') +
+        // The brief again, in an empty pane. A long session pushes the opening instruction out of
+        // an agent's context and what is left is an arbitrator writing prose where the drop box
+        // should be — this is the way back without losing the session. Armed: it clears the
+        // arbitrator's context, and that is not undoable.
+        icon('↻', 'Re-brief', 'Clear the arbitrator and give it its brief again',
+             `onclick="armButton(this, '↻?', () => arbCommand('arb_reinit'))"`, 'arm-btn') +
+        // Here and not in the pane menu with the other reading toggles: this one is only ever a
+        // question while a session is running, and the strip is the only thing on screen that
+        // exists exactly then.
+        `<button class="hang-btn arb-ico${arbBubblesOn() ? ' lit' : ''}"` +
+        ` onclick="toggleArbBubbles()" aria-pressed="${arbBubblesOn() ? 'true' : 'false'}"` +
+        ' title="Show what the arbitrator decided, in the thread"' +
+        ` aria-label="Arbitrator’s decisions in the thread">${ARB_EYE}</button>` +
+        '</div>' + arbSayHtml(s) + '</div>';
     }
 
     // Whether arming alone would do nothing — which is the relay's answer, not a guess from the
@@ -20572,21 +20593,24 @@
       return !!plan && (!!plan.stale || plan.action === 'ask');
     }
 
-    // What the strip cannot say in a word, under the buttons rather than in a `title` nobody on a
-    // phone can open. Two lines at most: what this state means, and — stopped — what Resume will
-    // do about it.
-    function arbNoteHtml(s) {
-      const why = arbStateTitle(s);
+    // What the row of icons cannot say, under it rather than in a `title` no phone can open.
+    // Three lines, each shorter-lived than the one above it: what state this is in, what Resume
+    // would do about it, and what the state means. Each carries its own background — the strip
+    // itself is transparent, so a line without one is prose over a thread of monospace text.
+    function arbSayHtml(s) {
       const paused = s.state === 'paused';
       const said = paused && s.plan ? arbPlanLine(s.plan, s) : null;
-      if (!why && !said) return '';
       return '<div class="arb-say">' +
+        // The state, what is left of the budget, and which of the three panes is doing something
+        // — one row of chips, because all three answer "where is this session" and none of them
+        // is a control of it. The last is a way to the pane, which is why it is a button.
+        '<span class="arb-say-top">' +
+        `<span class="arb-say-state">${escapeHtml(arbStateLabel(s))}</span>` +
+        `<span class="arb-say-budget">${escapeHtml(arbBudgetLine(s))}</span>` +
+        arbActiveHtml(s) +
+        '</span>' +
         (said ? `<span class="arb-say-line">${escapeHtml(said.line)}</span>` : '') +
-        `<span class="arb-say-why">${escapeHtml(why)}</span>` +
-        (paused
-          ? '<button class="arb-btn quiet arb-say-more" onclick="arbOpenResume()"' +
-            ' title="The last steps, and what Resume will do">Steps</button>'
-          : '') +
+        `<span class="arb-say-why">${escapeHtml(arbStateTitle(s))}</span>` +
         '</div>';
     }
 
@@ -21721,7 +21745,7 @@
         // The screen the pane repaints after a clear is the live frame; the backlog behind it is
         // history the user did not ask to keep looking at. Undone by Load more or reopening it.
         paneSource = 'visible';
-        showToast(`Sent ${line} — Load more or reopen for history`);
+        showToast(`✓ Sent ${line} — Load more or reopen for history`, 'ok');
       });
     }
 
@@ -21730,7 +21754,7 @@
         closeFireMenu();
         const line = isShell(activePane) ? 'exit' : '/quit';
         if (!sendLine(line)) return;
-        showToast(`Sent ${line}`);
+        showToast(`✓ Sent ${line}`, 'ok');
       });
     }
 
@@ -21793,6 +21817,7 @@
       const paneId = activePane, text = i.value;
       if (!sendTextTo(paneId, text)) return;
       i.value = ''; autoGrow(i);
+      showToast(`✓ Sent to ${paneLabel(paneOf(paneId) || {}) || paneId}`, 'ok');
       renderQuickActions();   // the pane has a last send now, so Resend has something to offer
       // Only what was typed at a terminal, and only from this composer. A transfer, a shortcut and
       // a resend all reach the wire by other paths, and none of them is the user typing a command.
@@ -22088,7 +22113,7 @@
       if (chord) {
         e.preventDefault();
         sendKeys([chord]);
-        showToast(`Sent ${chord}`);  // the pane may show nothing for it, and silence reads as broken
+        showToast(`✓ Sent ${chord}`, 'ok');  // the pane may show nothing for it, and silence reads as broken
         return;
       }
       const act = enterAction(e, { enterSends: enterSendsOn(), shell: shell });
