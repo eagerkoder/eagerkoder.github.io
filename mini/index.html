@@ -1292,6 +1292,52 @@
       border-color: var(--blue);
     }
 
+    /* A tile is a button, so its Edit cannot live inside it — nesting one button in another is not
+       markup a browser will keep. The wrapper is the grid cell instead, and the two are siblings:
+       pressing Edit never reaches the tile, with no stopPropagation to remember. */
+    .launcher-tile-wrap {
+      position: relative;
+      display: flex;
+      min-width: 0;
+    }
+
+    .launcher-tile-wrap .launcher-tile {
+      flex: 1;
+      min-width: 0;
+      /* Room for the corner the button sits in, kept by every line rather than by the one that
+         happens to be longest today. */
+      padding-right: 26px;
+    }
+
+    /* Quiet until it is looked for: a launcher is pressed far more often than it is edited, and a
+       control that is as loud as the tile it sits on is a mis-tap waiting to happen. */
+    .launcher-edit {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.7rem;
+      line-height: 1;
+      opacity: 0.5;
+      cursor: pointer;
+    }
+
+    .launcher-edit:hover, .launcher-edit:focus-visible {
+      opacity: 1;
+      color: var(--blue);
+      background: var(--surface);
+    }
+
     /* A tile stands in for a thing that will exist, so it carries the kind's colour the way an
        agent card carries its agent's — the terminal green of a shell, the blue of a session. */
     .launcher-tile .launcher-kind {
@@ -1369,12 +1415,17 @@
       min-width: 0;
     }
 
+    /* On the tile these are footnotes, not headlines: the tile's name and payload are what is
+       read, and three full-strength marks under them turn a keypad into a warning board. Paled
+       rather than recoloured, so `insecure` keeps its red and `no approvals` its orange — the
+       band headings above them are where either is stated at full strength. */
     .launcher-badges .launcher-badge {
       align-self: auto;
       margin-top: 0;
-      padding: 1px 4px;
-      font-size: 0.5rem;
-      letter-spacing: 0.03em;
+      padding: 0 3px;
+      font-size: 0.44rem;
+      letter-spacing: 0.02em;
+      opacity: 0.6;
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -1559,6 +1610,22 @@
        failure this list can see coming, and it is invisible until the session starts without it. */
     .cfg-key { color: var(--muted); }
     .cfg-unset { color: var(--red); }
+
+    /* Switched off: dimmed, and said in a word as well. Dimming alone reads as "not loaded yet" on
+       a list the relay fills in a moment after the page draws. */
+    .cfg-row.cfg-off { opacity: 0.55; }
+
+    /* Orange is the app's amber, as .conversation-tier.idle says: a switched-off config is not
+       broken and not merely quiet — it is a state the reader put it in and can put it out of. */
+    .cfg-off-tag {
+      font-size: 0.55rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 1px 5px;
+      border: 1px solid var(--orange);
+      border-radius: 4px;
+      color: var(--orange);
+    }
 
     .cfg-empty, .cfg-note {
       grid-column: 1 / -1;
@@ -2100,8 +2167,22 @@
       margin-left: auto;
     }
 
-    .conversation-title .archive-btn + .end-btn {
+    .conversation-title .archive-btn + .end-btn,
+    .conversation-title .archive-btn + .conv-purge {
       margin-left: 0;
+    }
+
+    /* Red, and only in the archive. It is the one control on this page that destroys words as well
+       as the record — the roster's Delete leaves them, and wears no colour for that reason. */
+    .conversation-title .conv-purge {
+      border: 1px solid var(--red);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--red);
+      font: inherit;
+      font-size: 0.65rem;
+      padding: 3px 6px;
+      cursor: pointer;
     }
 
     /* The tier, not the name. Naming an auto conversation promotes it, so this is what goes away
@@ -2694,6 +2775,56 @@
       padding: 12px 16px;
       color: var(--muted);
       font-size: 0.75rem;
+    }
+
+    /* The landing page's own search, fixed to the foot. Not a sheet: it has no way in and no way
+       out, it is simply there while the landing page is, so it is styled as a bar rather than as a
+       dialog. The results grow upwards out of it and are capped at half the screen, because the
+       thing being searched for is behind them. */
+    .landing-search {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 90;
+      /* The page is centred and capped at 1100px on a wide screen; a fixed bar is out of that flow
+         and would run the full window unless it is given the same cap and centred itself. */
+      max-width: 1100px;
+      margin-inline: auto;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .landing-search input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+
+    .landing-search input:focus {
+      outline: none;
+      border-color: var(--blue);
+    }
+
+    /* Its own scroller above the box. The rows are the picker's, so a pane found here looks like
+       the same pane found anywhere else. */
+    .landing-search-results {
+      max-height: 50vh;
+      overflow-y: auto;
+      margin: -8px -12px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Room for the bar, or the last card on the page is behind it and unreachable. */
+    body.landing-search #agentListView {
+      padding-bottom: 60px;
     }
 
     /* A session that has already ended. Dimmer than a live pane, and it has to stay legible: this
@@ -4628,18 +4759,37 @@
       opacity: 0.65;
     }
 
-    /* The name gives up the width, and Remove keeps its place at the end of every row. */
+    /* The name gives up the width first, and the state after it: what a row must never lose is
+       the actions at its end. */
     .conv-roster-row .who {
+      flex: 0 1 auto;
+      min-width: 3ch;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     .conv-roster-row .tag {
-      flex: 1;
+      flex: 1 1 auto;
+      min-width: 0;
       font-size: 0.6rem;
       color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* Six buttons on a live row is more than a phone has width for, and a button pushed off the
+       edge is a button that does not exist. Grouped, so the overflow wraps the whole group onto a
+       second line rather than orphaning the last one — the name, the badge and the state keep
+       their row either way, which is the row a reader scans. */
+    .conv-roster-acts {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px;
+      flex: 0 1 auto;
     }
 
     .conv-roster-row.gone .tag {
@@ -4649,15 +4799,18 @@
     .conv-roster .conv-drop,
     .conv-roster .conv-swap,
     .conv-roster .conv-again,
+    .conv-roster .conv-reset,
+    .conv-roster .conv-restart,
     .conv-roster .conv-open,
     .conv-roster .conv-end,
     .conv-roster-actions button {
-      font-size: 0.65rem;
+      font-size: 0.62rem;
       /* Not the menu's 44px floor — a roster of eight members at 44px a row is a screen of
-         buttons and no thread. 32px is a thumb, and every one of these is either reversible or
+         buttons and no thread. 30px is a thumb, and every one of these is either reversible or
          asked twice. */
-      min-height: 32px;
-      padding: 4px 10px;
+      min-height: 30px;
+      padding: 4px 7px;
+      flex-shrink: 0;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: none;
@@ -4697,9 +4850,19 @@
     }
 
     .conv-roster .conv-open,
-    .conv-roster .conv-again {
+    .conv-roster .conv-again,
+    .conv-roster .conv-restart,
+    .conv-roster-actions .conv-restart {
       color: var(--blue);
       border-color: var(--blue);
+    }
+
+    /* Reset neither ends a session nor brings one back — it leaves the pane exactly where it is
+       and empties it. Muted, like Swap, because it is the third thing. */
+    .conv-roster .conv-reset,
+    .conv-roster-actions .conv-reset {
+      color: var(--muted);
+      border-color: var(--border);
     }
 
     /* Neither blue nor orange. Swap is not a way back into what is already there, and on a live
@@ -7188,6 +7351,9 @@
       <div class="hint">Each section keeps its own separator on the main page. They are shown in the
         order you switch them on, so turning one off and on again moves it to the bottom. One has
         to stay on.</div>
+      <label class="toggle-option"><input type="checkbox" id="landingSearchOn" onchange="setLandingSearch(this.checked)"> Search bar at the foot of the page</label>
+      <div class="hint">Searches every pane and every conversation by name, including the ones
+        behind the Auto and Archive modes.</div>
       <!-- The launcher's own tiles are reachable from its section header too. Here as well because
            an install whose stored order predates the launcher has that section switched off — and
            the first tile saved is what switches it back on, so there has to be somewhere to save
@@ -7342,6 +7508,17 @@
     <!-- Up to five recently opened panes, rendered with the same cards. -->
     <div class="recents" id="recents" style="display:none"></div>
     <div class="conversations" id="conversations" style="display:none"></div>
+  </div>
+
+  <!-- Fixed to the foot of the landing page, hidden everywhere else — see syncLandingSearch. The
+       results sit above the box rather than below it, so the finger that is typing is not on top
+       of what it is looking for. -->
+  <div class="landing-search" id="landingSearch" hidden>
+    <div class="landing-search-results" id="landingSearchResults" hidden></div>
+    <input id="landingSearchInput" type="search" placeholder="Search panes and conversations"
+           aria-label="Search panes and conversations" autocomplete="off"
+           autocorrect="off" autocapitalize="none" spellcheck="false"
+           oninput="renderLandingSearch()" onkeydown="landingSearchKey(event)" />
   </div>
 
   <div class="view" id="timelineView" style="display:none;padding:12px;">
@@ -11793,6 +11970,9 @@
         // start named itself with. After openPendingStart, so a start this tab is still holding
         // the answer for lands the ordinary way.
         if (typeof convResumeRespawn === 'function') convResumeRespawn();
+        // Restart all, one member per landing. After the two above, which are what clear the way
+        // for the next one — see convRestartStep.
+        if (typeof convRestartStep === 'function') convRestartStep();
         openNotificationPane();
       }
       else if (msg.type === 'agent_update') {
@@ -12541,7 +12721,9 @@
     }
 
     function startConfigs() {
-      return typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+      // Offered, not merely known: a config the user switched off is refused by the relay, so it
+      // must not be on a strip that starts something.
+      return typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
     }
 
     // Stock kinds, then one `+custom`. One badge and not a badge per alias: there will be more
@@ -13241,7 +13423,16 @@
     // endpoint — so the client asks before it sends, and puts the choice back to the reader.
     function agentConfigLive(id, kind) {
       const row = agentConfigRow(id);
-      return !!(row && (!kind || row.kind === kind));
+      // Switched off counts as gone, which is the whole of what disabling means: the relay refuses
+      // a start naming one, so a button that offered it would be a refusal after the tap.
+      return !!(row && !row.off && (!kind || row.kind === kind));
+    }
+
+    // The configs a session may actually be started under. Everything that offers a choice reads
+    // this; the launcher's own list reads agentConfigRows, because a switched-off config still has
+    // to be drawn somewhere or there is no way to switch it back on.
+    function agentConfigOffered() {
+      return agentConfigRows().filter(r => !r.off);
     }
 
     function agentConfigProviders() {
@@ -13282,19 +13473,21 @@
               : escapeHtml(row.key) + ' is not set on the relay — the session would start without'
                 + ' a key'}">$${escapeHtml(row.key)}${row.key_set ? '' : ' ✕'}</span>`
         : '';
-      return `<button class="cfg-row" onclick="openAgentConfig('${escapeHtml(row.id)}')"`
+      const off = row.off
+        ? '<span class="cfg-off-tag" title="Switched off — not offered anywhere">off</span>' : '';
+      return `<button class="cfg-row${row.off ? ' cfg-off' : ''}"`
+        + ` onclick="openAgentConfig('${escapeHtml(row.id)}')"`
         + ` title="View and edit ${escapeHtml(row.label)}">`
         + `<span class="cfg-line">${badge}`
-        + `<span class="cfg-provider">${escapeHtml(row.provider_label || row.provider)}</span></span>`
+        + `<span class="cfg-provider">${escapeHtml(row.provider_label || row.provider)}</span>${off}</span>`
         + `<span class="cfg-line cfg-sub"><span class="cfg-model">`
         + `${escapeHtml(row.model || 'default model')}</span>${key}</span>`
         + '</button>';
     }
 
     function agentConfigsHtml() {
-      // Nothing to draw without a provider file: aliases would have nothing to be aliases *of*,
-      // and a header over an empty list that can never fill is worse than no header. The same
-      // rule start_options already applies to Start.
+      // Nothing to draw without a provider: aliases need something to be aliases *of*. Stock
+      // providers make this available without a file; an actually empty list still has no action.
       if (!agentConfigProviders().length) return '';
       const bands = agentConfigBands();
       return '<div class="section-header" style="margin-top:18px">Agent configs'
@@ -13322,7 +13515,7 @@
       const row = id ? agentConfigRow(id) : null;
       const stored = loadAgentConfigs().find(a => a.id === id)
         || (row ? {id: row.id, label: row.label, provider: row.provider, model: row.model,
-                   model_option: row.model_option, key: row.key} : null);
+                   model_option: row.model_option, key: row.key, off: row.off} : null);
       // `saved` freezes the id: it is derived from the name while a config is being made, and a
       // rename afterwards must not silently become a different config.
       agentConfigDraft = stored ? Object.assign({saved: true}, stored)
@@ -13441,9 +13634,19 @@
             + `<pre class="cfg-command" onclick="writeClipboard(this.textContent, function(){})"`
             + ' title="Tap to copy">' + escapeHtml(row.command) + '</pre>'
           : d.id ? '' : '<div class="cfg-note">Save it to see the command it will run.</div>')
+        // Switched off rather than deleted: what it took to write this down is worth keeping even
+        // when the config is not one anybody should be starting today. Off, it is drawn here and
+        // offered nowhere — the relay refuses a start naming it, so this is not a UI filter that a
+        // stale tile could get around.
+        + (d.off
+          ? '<div class="cfg-note">Switched off. It is kept here and offered nowhere — no strip'
+            + ' lists it, and a start naming it is refused.</div>'
+          : '')
         + '<div class="ql-actions">'
         + (d.id && loadAgentConfigs().some(a => a.id === d.id)
           ? '<button class="ql-secondary" onclick="deleteAgentConfig()">Delete</button>'
+            + `<button class="ql-secondary" onclick="agentConfigToggleOff()">`
+            + `${d.off ? 'Enable' : 'Disable'}</button>`
           : '<button class="ql-secondary" onclick="closeLauncherEdit()">Cancel</button>')
         + '<button class="ql-primary" onclick="saveAgentConfig()">Save config</button></div>';
     }
@@ -13461,6 +13664,15 @@
       }
     }
 
+    // A draft edit like every other field on this form, and saved by the same button: a toggle
+    // that wrote straight through would be the one control here that does not need Save, which is
+    // a worse surprise than one more tap.
+    function agentConfigToggleOff() {
+      if (!agentConfigDraft) return;
+      agentConfigDraft.off = !agentConfigDraft.off;
+      drawAgentConfig();
+    }
+
     function saveAgentConfig() {
       const d = agentConfigDraft;
       if (!d || !d.id || !d.provider) return;
@@ -13468,6 +13680,7 @@
       const at = items.findIndex(a => a.id === d.id);
       const row = {id: d.id, label: d.label || d.id, provider: d.provider,
                    model: d.model || '', model_option: d.model_option || '', key: d.key || ''};
+      if (d.off) row.off = true;
       if (at < 0) items.push(row); else items[at] = row;
       saveAgentConfigs(items);
       closeLauncherEdit();
@@ -13605,7 +13818,10 @@
       // keyboard and reports nothing to a screen reader, and the reason this tile cannot be
       // pressed is the one thing its reader most needs. It is still not pressable — nothing is
       // wired to it yet, and step 4's handler returns on a closed gate.
-      return `<button class="launcher-tile" data-action="${escapeHtml(tile.action)}"`
+      // The tile and its Edit are siblings inside one grid cell — see .launcher-tile-wrap for why
+      // Edit cannot be inside the button it edits.
+      return `<div class="launcher-tile-wrap">`
+        + `<button class="launcher-tile" data-action="${escapeHtml(tile.action)}"`
         + ` data-tile="${escapeHtml(tile.id)}" aria-disabled="${gate.ok ? 'false' : 'true'}"`
         // A gone Project is the one closed gate the presser can fix, so this tile is still worth
         // a pointer: the press opens it on that field rather than reporting a dead end.
@@ -13622,7 +13838,15 @@
         // the payload out of the tile. The row is what makes them small enough to sit together.
         + (insecure || solo || badge
           ? `<span class="launcher-badges">${insecure}${solo}${badge}</span>` : '')
-        + '</button>';
+        + '</button>'
+        // Straight to this tile's form, without going through the Edit sheet to find it again.
+        // Drawn on every tile including a gated one: a tile that cannot be pressed is exactly the
+        // one somebody has come to fix.
+        + `<button class="launcher-edit" data-tile="${escapeHtml(tile.id)}"`
+        + ` onclick="launcherEditFromTile(this.dataset.tile)"`
+        + ` title="Edit ${escapeHtml(tile.label)}"`
+        + ` aria-label="Edit the tile ${escapeHtml(tile.label)}">\u270e</button>`
+        + '</div>';
     }
 
     // The tiles, in bands. Manual order inside a band, Project order between them: the user
@@ -14000,7 +14224,7 @@
     function launcherKinds() { return (startOptions && startOptions.agents) || []; }
 
     function launcherConfigs() {
-      return typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+      return typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
     }
 
     // Everything typed since the last repaint, back into the draft. Called before every redraw
@@ -14284,6 +14508,13 @@
       launcherMembersCustom = launcherDraft.members.some(m => m.config);
       launcherArbCustom = !!((launcherDraft.arbitrator || {}).config);
       launcherDrawForm();
+    }
+
+    // The pencil in a tile's corner. The sheet has to be up before the form can be drawn into it,
+    // which is the same two steps launcherRepoint takes and the reason neither calls the other.
+    function launcherEditFromTile(id) {
+      openLauncherEdit();
+      launcherEditTile(id);
     }
 
     // A stale tile, opened on the one field that is wrong. Not a wizard: the Project strip is
@@ -16439,6 +16670,29 @@
       } catch (e) { /* nothing to evict is not an error */ }
     }
 
+    // Erase these transcripts outright, from both stores and from the fold held in memory.
+    //
+    // Eviction is the ordinary way a record leaves — oldest first, and never one a named
+    // conversation still references. This is the other one: the reader asked for a conversation to
+    // have never happened, so the words go with it rather than being left for a sweep that would
+    // refuse to take them. The caller decides which keys those are; a key some other conversation
+    // still shows is not one of them.
+    async function convForget(keys) {
+      const list = (keys || []).filter(Boolean);
+      if (!list.length) return;
+      // The in-memory fold first, or the next poll writes the record back out of it.
+      for (const k of list) { convHeld.delete(k); convQueues.delete(k); }
+      const all = convFallbackAll();
+      for (const k of list) delete all[k];
+      convFallbackWrite(all);
+      const db = await openConvDB();
+      if (!db) return;
+      try {
+        const write = db.transaction(CONV_DB_STORE, 'readwrite').objectStore(CONV_DB_STORE);
+        await Promise.all(list.map(k => idbReq(write.delete(k))));
+      } catch (e) { /* no database, or it is already gone: the fallback copy is deleted either way */ }
+    }
+
     function loadConvIndex() { return parseConvIndex(localStorage.getItem(CONV_INDEX_KEY)); }
 
     // The transcripts of panes read this session, so a 3s poll folds into memory and touches the
@@ -17490,8 +17744,14 @@
       catch (e) { return false; }
     }
 
+    // Auto and Archive are the same shape: each swaps what the section is showing rather than
+    // adding a second list under it, so at most one can be on. Switching into one leaves the other.
     function toggleConvLandingAuto() {
-      try { localStorage.setItem(CONV_LANDING_AUTO_KEY, convLandingAutoOn() ? 'off' : 'on'); }
+      const on = convLandingAutoOn();
+      try {
+        localStorage.setItem(CONV_LANDING_AUTO_KEY, on ? 'off' : 'on');
+        if (!on) localStorage.setItem(CONV_LANDING_ARCHIVE_KEY, 'off');
+      }
       catch (e) { /* private mode: this session only */ }
       renderConversations();
     }
@@ -17502,8 +17762,11 @@
     }
 
     function toggleConvLandingArchive() {
-      try { localStorage.setItem(CONV_LANDING_ARCHIVE_KEY,
-        convLandingArchiveOn() ? 'off' : 'on'); }
+      const on = convLandingArchiveOn();
+      try {
+        localStorage.setItem(CONV_LANDING_ARCHIVE_KEY, on ? 'off' : 'on');
+        if (!on) localStorage.setItem(CONV_LANDING_AUTO_KEY, 'off');
+      }
       catch (e) { /* private mode: this session only */ }
       renderConversations();
     }
@@ -20983,11 +21246,20 @@
   </div>`;
     }
 
-    // The one place the user's order is applied to cards. Every list on the main page — the hoist,
-    // each status section, a Project's panes — ends here, so ordering once at the bottom covers
-    // all of them and cannot fall out of step between two of them.
+    // The one place a card list is ordered. Every list on the main page — the hoist, each status
+    // section, a Project's panes — ends here, so ordering once at the bottom covers all of them
+    // and cannot fall out of step between two of them.
+    //
+    // Most recently active first, not the manual order the tab strip uses. The two lists are read
+    // for different reasons: the strip is a fixed set of places you learn the position of, so it
+    // must not move under the tap, while the cards are "what is going on right now" and the pane
+    // that just moved is the one being looked for. A pane this browser has never watched move
+    // sorts last and keeps snapshot order, which is what a fresh reload shows.
     function agentCards(list) {
-      return orderedAgents(list).map(agentCard).join('');
+      return list.map((agent, index) => ({agent, index}))
+        .sort((a, b) => (lastSeen[b.agent.pane_id] || 0) - (lastSeen[a.agent.pane_id] || 0)
+          || a.index - b.index)
+        .map(x => agentCard(x.agent)).join('');
     }
 
     // `note` rides in the header at reduced weight, the same way the blocked count does. A section
@@ -21008,7 +21280,9 @@
       const filter = agentKindsHtml(agents);
       if (filter) header.insertAdjacentHTML('beforeend', filter);
       header.insertAdjacentHTML('beforeend',
-        '<button class="section-action" onclick="openOrder()" aria-label="Reorder tabs">Reorder</button>');
+        '<button class="section-action" onclick="openOrder()"' +
+        ' title="The order of the tab strip. The cards below are newest-first."' +
+        ' aria-label="Reorder tabs">Reorder tabs</button>');
       // Reorder, then +. The same right-hand order the Launcher header uses: + is always last,
       // because it is the one that makes something rather than rearranging what is there.
       // Starting a session is what this section is a list of, so this is where it belongs — and
@@ -21087,6 +21361,9 @@
       const archived = all.filter(c => c.archived);
       const active = all.filter(c => !c.archived);
       const autos = active.filter(c => c.auto);
+      // `shown` is the named list, plus the autos while the reader is in that mode — the tab strip
+      // draws from it too, and a strip that could not show the conversation on screen would be the
+      // one thing worse than a strip carrying an extra tab.
       return { all: all, archived: archived, autos: autos,
         shown: active.filter(c => !c.auto)
           .concat(convLandingAutoOn() ? autos.slice(0, CONV_LANDING_AUTO_MAX) : []).sort(by) };
@@ -21195,14 +21472,25 @@
             unique('project').map(p => ` <span class="badge proj">@${escapeHtml(p)}</span>`).join(''),
         };
       });
-      const autos = list.autos, showAuto = convLandingAutoOn();
-      const autoControl = autos.length
-        ? `<button class="section-action conv-auto-toggle" onclick="toggleConvLandingAuto()" aria-pressed="${showAuto}" ` +
-          `title="Shows up to ${CONV_LANDING_AUTO_MAX} latest automatic conversations">` +
-          `${showAuto ? 'Hide auto' : 'Show auto'} (${autos.length})</button>` : '';
+      // Two modes over one list, and never a second list underneath. Auto and Archive are both
+      // "not the conversations you named", and drawing either below the named ones puts back on
+      // screen exactly what filing it away was for — so each swaps what the section shows, and
+      // the way out of both is the same arrow.
+      const archiveOn = convLandingArchiveOn() && list.archived.length > 0;
+      const autoOn = !archiveOn && convLandingAutoOn() && list.autos.length > 0;
+      const back = call => `<button class="section-action conv-back" onclick="${call}"` +
+        ` title="Back to the conversations you named" aria-label="Back to named conversations">` +
+        `\u2190 Back</button>`;
+      const autoControl = list.autos.length
+        ? (autoOn ? back('toggleConvLandingAuto()')
+          : `<button class="section-action conv-auto-toggle" onclick="toggleConvLandingAuto()"` +
+            ` aria-pressed="false" title="Conversations this app filed on its own">` +
+            `Auto (${list.autos.length})</button>`) : '';
       const archiveControl = list.archived.length
-        ? `<button class="section-action" onclick="toggleConvLandingArchive()" aria-pressed="${convLandingArchiveOn()}">` +
-          `${convLandingArchiveOn() ? 'Hide archive' : 'Archive'} (${list.archived.length})</button>` : '';
+        ? (archiveOn ? back('toggleConvLandingArchive()')
+          : `<button class="section-action" onclick="toggleConvLandingArchive()"` +
+            ` aria-pressed="false" title="Conversations you put away">` +
+            `Archive (${list.archived.length})</button>`) : '';
       // The + is drawn whether or not there is anything under it, which is the one place this
       // section differs from the others: an entry point that only appears once you already have a
       // conversation cannot be how the first one is made.
@@ -21238,6 +21526,15 @@
         ` onclick="event.stopPropagation(); ${archived ? 'unarchiveConversation' : 'archiveConversation'}(this.dataset.convId)"` +
         ` aria-label="${archived ? 'Unarchive' : 'Archive'} ${escapeHtml(r.c.name)}">` +
         `${archived ? 'Unarchive' : 'Archive'}</button>` +
+        // Only in the archive, and only there. Putting a conversation away is the first of the two
+        // steps — see purgeConversation for why that is the safeguard rather than a second dialog.
+        (archived
+          ? `<button class="conv-purge arm-btn" data-conv-id="${escapeHtml(r.c.id)}"` +
+            ` onclick="event.stopPropagation(); armButton(this, 'Delete for good?',` +
+            ` () => purgeConversation(this.dataset.convId))"` +
+            ` aria-label="Delete ${escapeHtml(r.c.name)}, its sessions and everything it recorded">` +
+            `Delete</button>`
+          : '') +
         // The same control the roster panel calls End all, on the card, for the same reason the
         // agent cards carry one: the list is where a session is recognised as finished, and going
         // into a conversation to close it is a trip taken only to press one button. Drawn only
@@ -21262,12 +21559,20 @@
         `${r.seen ? ' · Last activity ' + fmtAgo(new Date(Math.min(r.seen, now))) : ''}</div></div>`;
       const archivedRows = list.archived.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
       const activeRows = list.shown.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
-      el.innerHTML = `<div class="section-header">Conversations${autoControl}${archiveControl}${newControl}</div>` +
-        (activeRows.length ? activeRows.map(r => card(r, false)).join('')
+      const autoRows = list.autos.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
+      // In a mode the header carries one control — the way back. Nothing else there acts on what
+      // is on screen: + New makes a named conversation, and the other mode's button would be a
+      // second exit that lands somewhere the reader did not ask for.
+      const mode = archiveOn || autoOn;
+      el.innerHTML = `<div class="section-header">` +
+        `${archiveOn ? 'Archived conversations' : autoOn ? 'Auto conversations' : 'Conversations'}` +
+        `${mode ? (archiveOn ? archiveControl : autoControl)
+          : autoControl + archiveControl + newControl}</div>` +
+        (archiveOn ? archivedRows.map(r => card(r, true)).join('')
+        : autoOn ? autoRows.map(r => card(r, false)).join('')
+        : activeRows.length ? activeRows.map(r => card(r, false)).join('')
         : '<p class="pair-empty">No conversations yet. Start one here, or record a pane into one '
-          + 'from its own menu.</p>') +
-        (convLandingArchiveOn() && archivedRows.length
-          ? `<div class="section-header">Archived conversations</div>${archivedRows.map(r => card(r, true)).join('')}` : '');
+          + 'from its own menu.</p>');
       applySections();
     }
 
@@ -21531,14 +21836,31 @@
           kindBadge((rec.spawn || {}).agent || (live.get(m.key) || {}).agent || '',
                     live.get(m.key), (rec.spawn || {}).config) +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'no longer live')}</span>` +
-          // End first, then Remove, and only then the way in. The two that take something away sit
-          // together; Open is not one of them. End is offered only where there is something running
-          // to end — an ended row carries Start again in the same place, which is the other half of
-          // the same control: this row is where a member is sent away and brought back.
+          // The actions in a group of their own, so a row that runs out of width wraps them
+          // together underneath instead of pushing the last one off the edge — the name, the badge
+          // and the state stay on one line whatever the row holds.
+          `<span class="conv-roster-acts">` +
+          // End, then the two ways back to the beginning, then Remove, and only then the way in.
+          // The ones that take something away sit together; Open is not one of them. End is offered
+          // only where there is something running to end — an ended row carries Start again in the
+          // same place, which is the other half of the same control: this row is where a member is
+          // sent away and brought back.
           (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.key,
             pane: (live.get(m.key) || {}).pane_id, data: ` data-key="${escapeHtml(m.key)}"`,
             aria: "End this member's session",
             fire: 'endConvMember(this.dataset.key)'}) : '') +
+          // Same pane, back at its first turn: the harness's own clear, then the words this
+          // session was started with. Asked twice — what it throws away is the agent's context,
+          // which nothing here can bring back.
+          (on ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.key)}"` +
+            ` onclick="armButton(this, 'Reset?', () => convResetMember(this.dataset.key))"` +
+            ` aria-label="Clear this member's session and start it over in the same pane">` +
+            `Reset</button>` : '') +
+          // A new pane, with the same everything. Swap without the question — see convRestartMember.
+          (on && canRespawn(rec.spawn)
+            ? `<button class="conv-restart arm-btn" data-key="${escapeHtml(m.key)}"` +
+              ` onclick="armButton(this, 'Restart?', () => convRestartMember(this.dataset.key))"` +
+              ` aria-label="End this member and start the same session again">Restart</button>` : '') +
           `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.key)}"` +
           ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button>` +
@@ -21565,7 +21887,7 @@
           (!on && canRespawn(rec.spawn) ? `<button class="conv-again arm-btn" data-key="${escapeHtml(m.key)}"` +
             ` onclick="convArmRespawn(this, this.dataset.key)"` +
             ` aria-label="Start a new session and continue this conversation">Start again</button>` : '') +
-          `</div>`;
+          `</span></div>`;
       }).join('');
       // The tier, said where the button that changes it is. "How do I make this one mine" is the
       // question an auto record raises, and the answer is one word on the button below it.
@@ -21583,6 +21905,14 @@
           panes: Array.from(live.values()).map(a => a.pane_id),
           aria: 'End every session in this conversation, keeping the transcripts',
           fire: 'endConversation(convViewId)'}) +
+        // Beside End all, because they are the same question asked of every member at once. Reset
+        // keeps the panes and clears what is in them; Restart replaces them.
+        `<button class="conv-reset arm-btn" onclick="armButton(this, 'Reset all?', convResetAll)"` +
+        ` aria-label="Clear every session in this conversation and start each one over">` +
+        `Reset all</button>` +
+        `<button class="conv-restart arm-btn" onclick="armButton(this, 'Restart all?', convRestartAll)"` +
+        ` aria-label="End every session in this conversation and start each one again">` +
+        `Restart all</button>` +
         `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
         `<button class="arm-btn" onclick="armButton(this, 'Duplicate?', duplicateConversation)"` +
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
@@ -21596,6 +21926,29 @@
           ? `<button onclick="openNewAgent()" aria-label="Start a new agent in this conversation">` +
             `New agent</button>` : '') +
         `</div>${tier}</div>`;
+    }
+
+    // The starter role a session was begun as, from the record or — for a record that predates it —
+    // from the name it was given, which is derived from the same badge. A session started as an
+    // Architect is started again as one, opening prompt and all; one that matches no badge keeps
+    // the old behaviour of its bare wire role.
+    // A recorded `at` that is not one of the four badges is still a starter: a launcher tile's
+    // members carry any chip the composer offers. Wrapped as a role with nothing but its name,
+    // which is all roleStarter reads — and on the wire it is `agent`, which is what it was.
+    //
+    // And a record that says nothing at all is a record written before any of this was kept, not a
+    // session that asked for silence — those say NO_STARTER. So it falls to the default rather than
+    // coming up bare, which is what every other way of starting a session already does.
+    //
+    // Read by both of the ways a session is begun again: Restart, which makes a new pane, and
+    // Reset, which keeps the pane and says the same opening words into it.
+    function respawnStarter(spawn) {
+      const was = canonAt((spawn || {}).starter);
+      return (spawn || {}).starter === NO_STARTER ? null
+        : startRoleOf(was)
+          || (was && roleStarter({at: was}) ? {at: was} : null)
+          || startRoleFromLabel((spawn || {}).label)
+          || startRoleOf(START_DEFAULT_AT);
     }
 
     // A pane does not carry the role it was started with, and neither does a record that predates
@@ -21781,6 +22134,11 @@
       if (!pane) return;
       const conv = loadConvIndex().find(c => c.id === held.conv);
       if (!conv) { forgetConvRespawn(); return; }
+      // The ordinary path may already have run: the relay's answer arrived, openPendingStart
+      // continued the member, and the roster moved it to the new pane's key. There is nothing left
+      // to resume, and adopting a second time would copy the transcript onto itself and say so in
+      // a toast. The note is only for the tab that lost that answer.
+      if (!(conv.members || []).some(m => m.key === held.key)) { forgetConvRespawn(); return; }
       if (convRespawnResuming === held.ref) return;
       convRespawnResuming = held.ref;
       try {
@@ -21817,23 +22175,7 @@
       // session was in. New tab only where that workspace is live on that host right now.
       const tab = !!spawn.workspace_id && agents.some(x => x.workspace_id === spawn.workspace_id
         && (x.host || 'local') === (spawn.host || 'local'));
-      // The starter role it was begun as, from the record or — for a record that predates it — from
-      // the name it was given, which is derived from the same badge. A session started as an
-      // Architect is started again as one, opening prompt and all; one that matches no badge keeps
-      // the old behaviour of its bare wire role.
-      // A recorded `at` that is not one of the four badges is still a starter: a launcher tile's
-      // members carry any chip the composer offers. Wrapped as a role with nothing but its name,
-      // which is all roleStarter reads — and on the wire it is `agent`, which is what it was.
-      //
-      // And a record that says nothing at all is a record written before any of this was kept, not
-      // a session that asked for silence — those say NO_STARTER. So it falls to the default rather
-      // than coming up bare, which is what every other way of starting a session already does.
-      const was = canonAt(spawn.starter);
-      const starter = spawn.starter === NO_STARTER ? null
-        : startRoleOf(was)
-          || (was && roleStarter({at: was}) ? {at: was} : null)
-          || startRoleFromLabel(spawn.label)
-          || startRoleOf(START_DEFAULT_AT);
+      const starter = respawnStarter(spawn);
       const msg = Object.assign({
         type: 'start_agent', name: spawn.agent, project_id: spawn.project_id,
         placement: tab ? 'new_tab' : 'new_workspace', slot: slotFor(),
@@ -21870,6 +22212,84 @@
       msg.ref = convRespawnRef();
       rememberConvRespawn(conv.id, key, msg.ref);
       ws.send(JSON.stringify(msg));
+    }
+
+    // Reset and Restart: the two ways to put a member back at the beginning.
+    //
+    // Reset keeps the pane. It clears the harness's own conversation and then says the same
+    // opening words the session was started with, so the agent is where it was on its first turn
+    // without herdr making a new pane or the reader losing the terminal they had open.
+    //
+    // Restart makes a new one — End followed by Start again, with no dialog in between. That is
+    // what Swap already does except that Swap stops to ask what to start; this answers "the same
+    // thing" and is the case worth a button of its own.
+
+    // What starts a fresh conversation inside each harness's own TUI. The same names the command
+    // palette lists; `/clear` for most, and the two that call it something else are pi and
+    // opencode. An unknown harness gets `/clear`, which is the majority spelling.
+    const RESET_CMD = {pi: '/new', opencode: '/new'};
+
+    function convResetMember(key) {
+      const live = agents.find(x => convMemberKey(x) === key);
+      if (!live) return false;
+      const rec = (convViewRecs || []).find(r => r.key === key) || {};
+      // Not through agentSlash. That rewrites a leading `/` to `$` for codex because a *skill* is
+      // invoked that way there — `$ponytail`, `$caveman`. This is a slash command, and codex spells
+      // those the same as everyone else: `$clear` would be typed at the composer as text.
+      const cmd = RESET_CMD[agentHarness(live.agent)] || '/clear';
+      if (!sendTextTo(live.pane_id, cmd)) return false;
+      // Second, and into the same pane, so the relay's per-pane lane keeps the order: the opening
+      // words must arrive at a cleared session and not before it is cleared.
+      const prompt = roleStarter(respawnStarter(rec.spawn || {}), live.agent);
+      if (prompt) sendTextTo(live.pane_id, agentSlash(prompt, live.agent));
+      return true;
+    }
+
+    // A pane runs one CLI and there is no restarting it in place, so this is the same End and the
+    // same Start again the row already offers, in one press.
+    function convRestartMember(key) {
+      const live = agents.find(x => convMemberKey(x) === key);
+      if (live) endPane(live.pane_id);
+      convRespawn(key);
+    }
+
+    // Every live member, one at a time.
+    //
+    // Restart owns `startIntent` and the respawn note, and there is one of each: fired in a loop
+    // they would trample each other and only the last member would continue its thread. So the
+    // queue is drained by the snapshot handler — one restart in flight, the next going out once
+    // the pane it made has landed and been continued.
+    let convRestartQueue = [];
+
+    function convRestartAll() {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv) return;
+      const live = new Set(agents.map(x => convMemberKey(x)));
+      convRestartQueue = (conv.members || []).map(m => m.key).filter(k => live.has(k)
+        && canRespawn(((convViewRecs || []).find(r => r.key === k) || {}).spawn));
+      if (!convRestartQueue.length) { showToast('Nothing here can be restarted.', 'info'); return; }
+      showSpawnStatus(`Restarting ${convRestartQueue.length} pane` +
+                      `${convRestartQueue.length === 1 ? '' : 's'}…`, 'busy');
+      convRestartStep();
+    }
+
+    function convRestartStep() {
+      if (!convRestartQueue.length) return;
+      // A start of any kind in flight, this queue's or somebody else's. Both clear themselves —
+      // the note by its own deadline — so a member whose start never produced a pane costs the
+      // queue a pause rather than the rest of the list.
+      if ((typeof pendingStart !== 'undefined' && pendingStart) || heldConvRespawn()) return;
+      convRestartMember(convRestartQueue.shift());
+    }
+
+    function convResetAll() {
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv) return;
+      // No queue: a reset is two sends into one pane, and the relay already keeps a pane's
+      // messages in the order they arrived.
+      const n = (conv.members || []).filter(m => convResetMember(m.key)).length;
+      showToast(n ? `Reset ${n} pane${n === 1 ? '' : 's'}.` : 'Nothing here is running.',
+                n ? 'ok' : 'info');
     }
 
     // The whole thread as Markdown, members and what they were included: a conversation is a
@@ -22060,9 +22480,12 @@
     // A conversation is a roster and a name, so this ends the grouping and nothing else: every
     // member's transcript stays in the store, unreferenced, and takes its turn under the eviction
     // rules like any other. Said in the toast, because "delete" reads as "the words are gone".
-    function deleteConversation() {
-      const items = loadConvIndex(), conv = items.find(c => c.id === convViewId);
-      if (!conv) return;
+    // The record and the reading state that hangs off it. Both ways out of a conversation end
+    // here: Delete, which leaves the transcripts where they are, and the archive's Delete for
+    // good, which does not.
+    function dropConversationRecord(id) {
+      const items = loadConvIndex(), conv = items.find(c => c.id === id);
+      if (!conv) return null;
       saveConvIndex(items.filter(c => c.id !== conv.id));
       // The reading state goes with it, or a conversation created later on a recycled id would
       // inherit a stranger's folded-out members.
@@ -22076,6 +22499,12 @@
       try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
       catch (e) { /* private mode: this session only */ }
       if (typeof stateSyncMark === 'function') stateSyncMark('conv_view');
+      return conv;
+    }
+
+    function deleteConversation() {
+      const conv = dropConversationRecord(convViewId);
+      if (!conv) return;
       convStandaloneHtml = '';
       renderConversations();
       if (document.body.classList.contains('conversation-open')) {
@@ -22093,6 +22522,31 @@
       }
       showToast(`Deleted "${conv.name}". What its panes said stays on this device, ` +
         'unreferenced, until space runs out.');
+    }
+
+    // As if it never happened: the sessions ended, the transcripts erased, the record gone.
+    //
+    // Offered only on an archived conversation, and that is the safeguard rather than an extra
+    // dialog — putting one away is a deliberate act, and this sits behind it. Delete in the
+    // roster is the reversible one: it leaves the words on the device where a new conversation
+    // could pick them up again. This is the other answer, for a conversation the reader wants
+    // gone.
+    async function purgeConversation(id) {
+      const conv = loadConvIndex().find(c => c.id === id);
+      if (!conv || !conv.archived) return;
+      const keys = (conv.members || []).map(m => m.key);
+      // The sessions first. A pane still running is the one part of "it never happened" that no
+      // record can erase on its own.
+      for (const key of keys) endConvMember(key);
+      dropConversationRecord(id);
+      if (convViewId === id) convViewId = null;
+      // After the record is out of the index, so what comes back is the rest of the list: a member
+      // some other conversation still shows keeps its words.
+      const kept = convReferenced();
+      await convForget(keys.filter(k => !kept.has(k)));
+      convStandaloneHtml = '';
+      renderConversations();
+      showToast(`Deleted "${conv.name}" and everything it recorded.`, 'ok');
     }
 
     function convRemoveMember(key) {
@@ -22448,6 +22902,120 @@
       document.getElementById('agentListView').style.display = '';
       paneStampAt = null;
       renderStatusBar();
+    }
+
+  </script>
+  <script>
+    // --- Landing search ---
+    //
+    // One box at the foot of the main page for "where is that pane". A machine running twenty
+    // panes across four projects turns the landing into a scroll, and the sections it is split
+    // into are the wrong axis for the question actually being asked, which is a name.
+    //
+    // The matching is the pane picker's, borrowed rather than rewritten: same fields, same
+    // substring-then-subsequence rule per field, so what "cdx" finds here is what it finds there.
+    // At the bottom because that is where a thumb is, and fixed rather than a section because a
+    // search control you have to scroll to is one nobody uses.
+    const LANDING_SEARCH_KEY = 'herdr_landing_search';
+    // Enough to answer the question, short enough that the list never covers the page it is a
+    // way into. Past this, type another letter.
+    const LANDING_SEARCH_MAX = 8;
+
+    function landingSearchOn() {
+      try { return localStorage.getItem(LANDING_SEARCH_KEY) !== 'off'; }
+      catch (e) { return true; }
+    }
+
+    function setLandingSearch(on) {
+      try { localStorage.setItem(LANDING_SEARCH_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      const box = document.getElementById('landingSearchOn');
+      if (box) box.checked = !!on;
+      syncLandingSearch();
+    }
+
+    // Only the landing page has a landing page to search. The bar is fixed, so without this it
+    // would sit over an open pane's composer — see renderSectionTabs, which asks the same question
+    // of the same node for the same reason.
+    function syncLandingSearch() {
+      const bar = document.getElementById('landingSearch');
+      if (!bar) return;
+      const list = document.getElementById('agentListView');
+      const show = landingSearchOn() && !!list && list.style.display !== 'none';
+      bar.hidden = !show;
+      document.body.classList.toggle('landing-search', show);
+      if (!show) clearLandingSearch();
+    }
+
+    function clearLandingSearch() {
+      const input = document.getElementById('landingSearchInput');
+      if (input) input.value = '';
+      const out = document.getElementById('landingSearchResults');
+      if (out) { out.innerHTML = ''; out.hidden = true; }
+    }
+
+    // Everything on the landing page that can be gone *to*: the live panes, and the conversations
+    // — including the auto ones and the archived ones, which are the two the page itself keeps
+    // behind a mode. A search that could only reach what is already on screen would be a filter.
+    // Read on every keystroke, so a pane that arrived while the box was open is findable.
+    function landingSearchGroups() {
+      const groups = [];
+      const panes = agents.concat(shells).map(a => pickPaneRow(a));
+      if (panes.length) groups.push({head: 'Panes', rows: panes, go: id => jumpToPane(id)});
+      const convs = (typeof convLandingList === 'function' ? convLandingList().all : []).map(c => ({
+        id: c.id,
+        name: c.name || 'Conversation',
+        glyph: typeof convGlyph === 'function' ? convGlyph(c) : '#',
+        note: c.archived ? 'Archived' : (c.auto ? 'Auto' : ''),
+        meta: (c.members || []).map(m => escapeHtml(m.label || '')).filter(Boolean).join(', '),
+      }));
+      if (convs.length) groups.push({head: 'Conversations', rows: convs,
+        go: id => openConversation(id)});
+      return groups;
+    }
+
+    function landingRowHtml(group, row) {
+      return `<button class="pair-pick" data-group="${group}" data-id="${escapeHtml(row.id)}" ` +
+        `onclick="landingSearchGo(this.dataset.group, this.dataset.id)">` +
+        `<span class="dot" style="background:${row.color || 'var(--muted)'}" aria-hidden="true"></span>` +
+        `<span class="kind" aria-hidden="true">${row.glyph || '⬛'}</span>` +
+        `<span class="info"><span class="name">${escapeHtml(row.name || '')}</span>` +
+        `<span class="meta">${row.meta || ''}</span></span>` +
+        (row.note ? `<span class="pair-note">${escapeHtml(row.note)}</span>` : '') + `</button>`;
+    }
+
+    function renderLandingSearch() {
+      const input = document.getElementById('landingSearchInput');
+      const out = document.getElementById('landingSearchResults');
+      if (!input || !out) return;
+      const q = input.value.trim().toLowerCase();
+      if (!q) { out.innerHTML = ''; out.hidden = true; return; }
+      let shown = 0, html = '';
+      landingSearchGroups().forEach((g, i) => {
+        const rows = g.rows.filter(r => pickMatch(pickHay(r), q))
+          .slice(0, LANDING_SEARCH_MAX - shown);
+        if (!rows.length) return;
+        shown += rows.length;
+        html += `<div class="pair-head">${escapeHtml(g.head)}</div>` +
+          rows.map(r => landingRowHtml(i, r)).join('');
+      });
+      out.innerHTML = html || `<p class="pair-empty">Nothing here matches "${escapeHtml(q)}".</p>`;
+      out.hidden = false;
+    }
+
+    // The groups are rebuilt rather than held: a row tapped a minute after it was drawn should go
+    // where that pane is now, and an id that has since gone is a no-op rather than a stale jump.
+    function landingSearchGo(group, id) {
+      const g = landingSearchGroups()[Number(group)];
+      if (!g || !g.rows.some(r => r.id === id)) return;
+      clearLandingSearch();
+      const input = document.getElementById('landingSearchInput');
+      if (input) input.blur();
+      g.go(id);
+    }
+
+    function landingSearchKey(e) {
+      if (e.key === 'Escape') { clearLandingSearch(); e.target.blur(); }
     }
 
   </script>
@@ -23338,7 +23906,7 @@
     function renderNewAgent() {
       // The same strip the Start sheet draws, for the same reason: stock kinds, then one
       // `+custom` that opens the agent configs rather than a badge per alias.
-      const configs = typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+      const configs = typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
       document.getElementById('newAgentKinds').innerHTML = (startOptions.agents || [])
         .map(k => badgeHtml(k, !newAgentConfig && k === newAgentKind, `pickNewAgentKind('${k}')`,
                             {agent: k})).join('')
@@ -23383,7 +23951,7 @@
     }
 
     function pickNewAgentConfig(id) {
-      const rows = typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+      const rows = typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
       const row = rows.find(c => c.id === id);
       if (!row) return;
       newAgentConfig = id;
@@ -24015,8 +24583,9 @@
       });
       syncBackLabel();
       // The section shortcuts belong to the landing page, and this is the one call every view
-      // change already makes.
+      // change already makes. The search bar at its foot is landing-only for the same reason.
       renderSectionTabs();
+      if (typeof syncLandingSearch === 'function') syncLandingSearch();
     }
 
     // The pane header always exits to the list; only the status-bar arrows walk history.
@@ -27207,6 +27776,7 @@
     setConvTidy(convTidyOn());
     setDockMru(dockMruOn());
     setAutocorrect(autocorrectOn());
+    setLandingSearch(landingSearchOn());
     setBandwidthOn(bandwidthOn());
     syncBandwidthRange();
     setConvSweep(localStorage.getItem('herdr_conv_sweep') || '1h');
