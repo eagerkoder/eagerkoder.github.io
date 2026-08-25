@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-08-24">
+  <meta name="app-built" content="2026-08-25">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -1358,6 +1358,27 @@
       cursor: not-allowed;
     }
 
+    /* The tile's marks, side by side on the line the payload leaves behind. Wrapping is allowed
+       but rarely needed: at this size all three fit a phone's tile. */
+    .launcher-badges {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      margin-top: auto;
+      min-width: 0;
+    }
+
+    .launcher-badges .launcher-badge {
+      align-self: auto;
+      margin-top: 0;
+      padding: 1px 4px;
+      font-size: 0.5rem;
+      letter-spacing: 0.03em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .launcher-badge {
       align-self: flex-start;
       margin-top: auto;
@@ -1369,6 +1390,199 @@
       letter-spacing: 0.04em;
       color: var(--orange);
       white-space: nowrap;
+    }
+
+    /* The one badge that is not about this relay's configuration but about where the work goes.
+       Red rather than orange, and on the tile itself as well as over its band. */
+    .launcher-badge.insecure {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* What this tile will start, rather than what is wrong with it: a roster that runs its tools
+       without asking. Read off the members, so a tile says it without being opened. */
+    .launcher-badge.solo {
+      border-color: var(--orange);
+      color: var(--orange);
+    }
+
+    .ql-insecure {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin: 10px 0 0;
+      font-size: 0.75rem;
+      line-height: 1.35;
+      color: var(--muted);
+    }
+
+    .ql-insecure input {
+      margin: 2px 0 0;
+      flex: 0 0 auto;
+    }
+
+    .ql-insecure strong { color: var(--red); }
+
+    /* The control that says a session will act without being asked. A switch rather than a tick:
+       it is a mode the session runs in, not a fact being recorded about it, and the three places
+       it is offered — the tile editor, the Start sheet, the conversation's New agent — draw the
+       same one, because it is the same question.
+
+       Still an <input type="checkbox"> underneath. The switch is the appearance; the semantics,
+       the keyboard and the screen reader are the platform's. */
+    .ql-solo,
+    .start-check {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 0.75rem;
+      line-height: 1;
+      white-space: nowrap;
+      color: var(--muted);
+    }
+
+    /* `.start-field` is declared later and lays its label above its input; these rows are a switch
+       *beside* its word, so the pair has to win on specificity rather than on order. */
+    .start-field.start-check { flex-direction: row; }
+
+    .ql-solo { margin: 8px 0 0; }
+
+    .ql-solo input,
+    .start-check input {
+      appearance: none;
+      -webkit-appearance: none;
+      flex: 0 0 auto;
+      position: relative;
+      width: 26px;
+      height: 15px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid var(--border, var(--muted));
+      border-radius: 8px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .ql-solo input::after,
+    .start-check input::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    /* Orange on, and orange is this app's word for "worth reading twice" — the same colour the
+       gate badges wear. Never green: this is not a thing going well. */
+    .ql-solo input:checked,
+    .start-check input:checked {
+      background: color-mix(in srgb, var(--orange) 30%, transparent);
+      border-color: var(--orange);
+    }
+
+    .ql-solo input:checked::after,
+    .start-check input:checked::after {
+      background: var(--orange);
+      transform: translateX(11px);
+    }
+
+    .ql-solo input:focus-visible,
+    .start-check input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+    /* On, the words beside it stop being a caption and start being the state. */
+    .ql-solo:has(input:checked),
+    .start-check:has(input:checked) { color: var(--text); }
+
+    /* --- agent configs --- */
+    /* Under the tiles, in the launcher's own grid, and spanning it: a config is one line of facts
+       about a named environment, not a tile you press to start something. Every colour on the row
+       comes from its harness — `oclaude1` is a claude and wears claude's badge — so the reader
+       learns no twelfth colour meaning "custom". */
+    .cfg-row {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .cfg-row:hover { border-color: var(--blue); }
+
+    .cfg-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    /* The second line is evidence, not identity: what it will run and what it will run it with. */
+    .cfg-sub {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.62rem;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .cfg-provider {
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+
+    /* A config's name and its model are both strings a shell will be given verbatim, so they are
+       set like one: `oclaude1` and `claude-opus-4-8[1m]` are read character by character when two
+       of them differ by one, and a proportional face is what makes that hard. The badge keeps its
+       harness colour — only the face changes. */
+    .cfg-row .badge, .cfg-model {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* Same reason, in the editor: what is typed into these is what the export line carries. */
+    #launcherEditBody input[list="cfgModels"],
+    #launcherEditBody #cfgLabel {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* A key is named, never shown. Red when the relay does not hold the variable — that is the one
+       failure this list can see coming, and it is invisible until the session starts without it. */
+    .cfg-key { color: var(--muted); }
+    .cfg-unset { color: var(--red); }
+
+    .cfg-empty, .cfg-note {
+      grid-column: 1 / -1;
+      font-size: 0.7rem;
+      line-height: 1.4;
+      color: var(--muted);
+      margin: 2px 0;
+    }
+
+    /* The line the relay will run, with the key as a $VAR reference. Selectable and scrollable
+       rather than wrapped: it is meant to be pasted into a terminal, and a broken line is not. */
+    .cfg-command {
+      margin: 0;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.62rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      cursor: copy;
     }
 
     /* --- the tile editor --- */
@@ -1466,6 +1680,11 @@
       flex: 1 1 100%;
       min-width: 0;
     }
+
+    /* The member card's field rule above is intentionally full-width; do not let it turn this
+       switch into a full-width input. */
+    .ql-member .ql-solo { flex: 1 1 100%; }
+    .ql-member .ql-solo input { flex: 0 0 auto; min-width: 0; }
 
     /* The arbitration block, borrowed whole: `arb-form` is what lays out the role picker, the
        folded clocks and the checkbox, so the launcher wears it rather than restating it. Only the
@@ -1567,6 +1786,16 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    /* The launch sheet repeats the saved setting without permitting a last-second mutation. */
+    .ql-part .ql-solo {
+      margin: 0 0 0 2px;
+      gap: 4px;
+      font-size: 0.62rem;
+    }
+
+    .ql-solo-readonly { cursor: default; }
+    .ql-solo-readonly input { cursor: default; opacity: 1; }
 
     /* Which of the two slots this is. Quieter than the name beside it — the name is what the
        reader is looking for, the slot is only what tells the two role fields apart. */
@@ -1859,6 +2088,22 @@
       margin-left: auto;
     }
 
+    .conversation-title .archive-btn {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.65rem;
+      padding: 3px 6px;
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    .conversation-title .archive-btn + .end-btn {
+      margin-left: 0;
+    }
+
     /* The tier, not the name. Naming an auto conversation promotes it, so this is what goes away
        when it does — the name the user typed is never marked up. */
     .conversation-tier {
@@ -1871,6 +2116,15 @@
       border-radius: 4px;
       color: var(--muted);
       font-weight: 500;
+    }
+
+    /* Nothing in it is running. The same badge as `auto` and a different colour, because it is a
+       different kind of fact: `auto` is about how the conversation was filed and never changes on
+       its own, this is about right now. Orange is the app's amber — there is no --yellow, and this
+       is not a red: an ended conversation is finished, not broken. */
+    .conversation-tier.idle {
+      color: var(--orange);
+      border-color: var(--orange);
     }
 
     .conversation-count,
@@ -3302,10 +3556,10 @@
        conversation; row two is what the record is, which nobody taps. */
     .conv-view-head {
       display: grid;
-      grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+      grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
       grid-template-areas:
-        'back mark title tier who  open'
-        'back sub  sub   sub  sub  sub';
+        'back mark title idle tier who  open'
+        'back sub  sub   sub  sub  sub  sub';
       align-items: center;
       column-gap: 8px;
       row-gap: 0;
@@ -3335,6 +3589,7 @@
     .conv-view-head > .back { grid-area: back; }
     .conv-view-head .conv-kind { grid-area: mark; }
     .conv-view-head .title { grid-area: title; }
+    .conv-view-head #convViewIdle { grid-area: idle; }
     .conv-view-head #convViewTier { grid-area: tier; }
     .conv-view-head #convViewWho { grid-area: who; }
 
@@ -4392,6 +4647,7 @@
     }
 
     .conv-roster .conv-drop,
+    .conv-roster .conv-swap,
     .conv-roster .conv-again,
     .conv-roster .conv-open,
     .conv-roster .conv-end,
@@ -4446,9 +4702,33 @@
       border-color: var(--blue);
     }
 
+    /* Neither blue nor orange. Swap is not a way back into what is already there, and on a live
+       member it ends a session — so it wears the colour of the thing it is closest to being
+       without claiming to be either. */
+    .conv-roster .conv-swap {
+      color: var(--muted);
+      border-color: var(--border);
+    }
+
     /* The same two-tap promise QUIT makes in the header, on a button a render draws rather than
        one that lives in the markup. Longer drain — see ARM_MS: these are aimed at off a panel,
        not pressed by a thumb already resting on them. */
+    /* The send is out. Grey and inert, and the same shape as the button it replaces so the row
+       does not move under the thumb that just pressed it. It goes back to End by the entry leaving
+       endWatch — the pane gone, or the deadline passed — so a failure needs no state of its own. */
+    .end-going,
+    .conv-roster .end-going,
+    .conv-roster-actions .end-going {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 0.65rem;
+      padding: 4px 8px;
+      flex-shrink: 0;
+      cursor: default;
+    }
+
     .arm-btn[data-armed="1"],
     .term-menu .menu-item.arm-btn[data-armed="1"] {
       color: var(--bg);
@@ -6341,6 +6621,17 @@
       color: var(--bg);
     }
 
+    /* An option carrying the pane's own words rather than Yes/No. They are as long as whoever
+       wrote that TUI made them, and a row of three cannot be allowed to push the nav off the
+       screen — so each takes its share and cuts, with the whole line in the title. */
+    .btn-choice {
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .term-input {
       padding: 8px 12px;
       display: flex;
@@ -7091,6 +7382,9 @@
       <!-- The same badge the card carries, for the same reason: an automatic conversation is one
            nobody chose to keep, and the window it is read in has to say so before anything typed
            into it is trusted to survive. -->
+      <!-- Left of the tier, and the same badge: what is true now, then what this thread is. -->
+      <span class="conversation-tier idle" id="convViewIdle" hidden
+        title="Nothing in this conversation is running. Start a member again from the roster.">inactive</span>
       <span class="conversation-tier" id="convViewTier" hidden
         title="Filed automatically, and dropped first when space runs out. Rename it to keep it for good.">auto</span>
       <button class="who-btn" id="convViewWho" onclick="toggleConvRoster()" aria-expanded="false"
@@ -7660,12 +7954,21 @@
           <!-- Badges rather than a select, and the same four the conversation's New agent dialog
                offers: a role is how a session is started here, so it is picked the same way in
                both places. Leaving the row empty is a start with no role — allowed, not advised. -->
-          <div class="start-field">Role <span class="field-note">optional · recommended</span>
+          <div class="start-field">Prompt <span class="field-note">optional · recommended</span>
             <div id="startRoles" class="badge-strip"></div>
           </div>
           <div class="start-field">Agent
             <div id="startAgents" class="badge-strip"></div>
           </div>
+          <!-- Under the agent, because it is a fact about the agent and not about the session:
+               claude and codex each have a flag for it and nothing else does, so the row is drawn
+               only where the relay says the kind takes one. On by default under an agent config,
+               off on a stock harness — the endpoint a user configured is the one they mean to leave
+               running. -->
+          <label class="start-field start-check" id="startUnattendedRow" style="display:none">
+            <input type="checkbox" id="startUnattended" onchange="pickStartUnattended(this.checked)" />
+            <span>Skip approvals</span>
+          </label>
         </div>
         <label class="start-field">Where<select id="startPlacement" onchange="renderStartTarget()"></select></label>
         <label class="start-field">Name<input id="startName" type="text" maxlength="32" autocapitalize="none"
@@ -7818,9 +8121,15 @@
         </div>
         <!-- What it is started as. The badge carries both halves: the role the relay names the pane
              for, and the @ prompt that opens the session — see START_ROLES. -->
-        <div class="start-field">Role
+        <div class="start-field">Prompt
           <div id="newAgentRoles" class="badge-strip"></div>
         </div>
+        <!-- The same row the Start sheet carries, under the agent for the same reason: it is a
+             fact about the agent, and only claude and codex have a flag for it. -->
+        <label class="start-field start-check" id="newAgentUnattendedRow" style="display:none">
+          <input type="checkbox" id="newAgentUnattended" onchange="pickNewAgentUnattended(this.checked)" />
+          <span>Skip approvals</span>
+        </label>
         <label class="start-field">Name<input id="newAgentName" type="text" maxlength="32" autocapitalize="none"
             autocomplete="off" placeholder="Auto — Role N" /></label>
         <!-- One line, because there is usually one Project in play and the rest are a tap away. -->
@@ -8499,6 +8808,12 @@
       // reason `conversations` does: a tile built while the relay was unreachable is a row this
       // browser made and nothing else has, and the adopt on reconnect would otherwise drop it.
       launcher:      { key: 'herdr_launcher', pendingKey: 'herdr_launcher_pending' },
+      // Which model `oclaude1` runs and which of the relay's key variables it draws from is an
+      // answer about the work, not about this screen — and a phone starting it against a
+      // different provider than the desktop did is the confusion this store exists to prevent.
+      // It carries no secret: the names of variables only, and the relay reads its own
+      // environment for the rest.
+      agent_configs: { key: 'herdr_agent_configs' },
     };
 
     // One message per document per burst. Renaming a pair is one edit to the user and several
@@ -8548,6 +8863,7 @@
       conv_view:     { map: true },
       conv_hidden:   { map: true },
       launcher:      { list: 'items' },
+      agent_configs: { list: 'aliases' },
     };
 
     // The relay's document with locally-created rows appended — never a general union. `onlyExtras`
@@ -8740,6 +9056,7 @@
       conv_view:     ['renderConvBar', 'renderConvView'],
       conv_hidden:   ['renderConvManage', 'renderConvView'],
       launcher:      ['renderLauncher'],
+      agent_configs: ['renderAgentConfigs'],
     };
 
     function stateSyncRerender(name) {
@@ -8954,6 +9271,11 @@
       return out;
     }
 
+    // Two sigils, and the app draws no third: `@` is a prompt — text that gets typed at an agent —
+    // and `#` is a role, which is what a session *is*. A reader who has learned one of them has
+    // learned both, and every list that draws either wears it: the composer chips, the palette,
+    // the transfer sheet, a launcher member's starter, and the role badges in both start dialogs.
+    //
     // `at` is the chip's name in the thread — `@review`, `@test` — and the label is its name
     // everywhere else. Two fields rather than one derived from the other: a label is prose and can
     // be renamed without silently renaming the control the user has learned to tap.
@@ -8961,45 +9283,101 @@
       { at: 'review-fix', label: 'Review, edit & fix', text: 'Review, edit, fix; then propose next steps.' },
       { at: 'review-only', label: 'Review only', text: 'Review only. Dont edit/ change code; then propose next steps.' },
       { at: 'implement', label: 'Implement', text: 'Proceed to implement.' },
+      { at: 'continue', label: 'Continue', text: 'Continue.' },
       { at: 'test', label: 'Test',
         text: 'Write /update tests this needs, run them, and report what actually failed.' },
       { at: 'test-min', label: 'Test, minimally',
-        text: 'Dont rerun passing tests. Only tests relevant to code changes you make or ' +
-          'essential for you.' },
+        text: 'Dont rerun passing tests. Dont run full test suite. Only tests relevant to code ' +
+          'changes you make or essential for you.' },
       { at: 'no-test', label: 'No tests, just finish',
         text: 'Dont test, just finish implementation.' },
       { at: 'status-now', label: 'Status of what was asked',
         text: 'At the end also list out the features requested with brief status of each.' },
-      { at: 'architect', label: 'Architect prompt', text: '/ponytail\n/caveman\n@.agent/prompts/System_Prompt_2_Architect.md\n' },
+      // The four a session can be *started* as. `-prompt` and not a bare name because they are the
+      // only chips that are also an opening instruction, and a reader tapping `@architect-prompt`
+      // into a running conversation should be able to see that it is the same thing the Start
+      // sheet offers as `@architect`.
+      //
+      // Three of them have nothing written under them yet. They are listed anyway: the badge exists
+      // so a session can be started as a Reviewer today, and the day someone writes the text every
+      // tile and every record naming it opens with it, with no migration. `promptChips` is what
+      // keeps them out of the composer until then — a chip that types nothing is a dead control.
+      { at: 'architect-prompt', label: 'Architect prompt',
+        text: '/ponytail\n/caveman\n\nRead Instructions here: @.agent/prompts/System_Prompt_2_Architect.md\nThen wait for tasks to work on.' },
+      { at: 'reviewer-prompt', label: 'Reviewer prompt', text: '' },
+      { at: 'implementer-prompt', label: 'Implementer prompt', text: '' },
+      { at: 'arbitrator-prompt', label: 'Arbitrator prompt', text: '' },
     ];
 
-    // What a session is started as. Functionally an @ prompt like the ones above — it is text sent
-    // into a fresh pane — but chosen as a badge rather than tapped in as a chip, because it is the
-    // one instruction that is given before there is anything to talk about.
+    // The chips worth showing in a composer, a palette or a transfer sheet: the ones with something
+    // to type. Carries each one's index, because every one of those lists acts on the index and a
+    // filtered copy would renumber them.
+    function promptChips() {
+      return SHORTCUTS.map((s, i) => ({s: s, i: i})).filter(x => x.s.text);
+    }
+
+    // A starter recorded before the four carried their suffix — `architect` for `architect-prompt`.
+    // One line rather than a migration: those names are on disk in conversations, in launcher tiles,
+    // in localStorage and in whatever another browser on older code writes next, and a rename that
+    // has to reach all four is a rename that will miss one.
+    function canonAt(at) {
+      if (!at || SHORTCUTS.some(s => s.at === at)) return at || '';
+      return SHORTCUTS.some(s => s.at === at + '-prompt') ? at + '-prompt' : at;
+    }
+
+    // What a session is started as, and the start dialogs ask it as a *prompt* — the badges are
+    // `@architect`, not `# Architect`. That is the whole of it as far as the user is concerned: the
+    // opening instruction is the choice, and everything else here is bookkeeping under it.
     //
-    // `role` is what goes on the wire, and the relay knows only its own three; the rest are ways of
-    // working, not roles it can name a pane for, so they ride on `agent` and carry their name as the
-    // pane's label instead. `at` names the SHORTCUTS entry that opens the session — absent from the
-    // list means no opening text, which is where the three undefined ones sit until they are written.
-    // ponytail: prompts for reviewer/arbitrator/orchestrator are TBD; add them to SHORTCUTS under
-    // these `at` names and the badges pick them up with no change here.
+    // `role` is that bookkeeping. It goes on the wire, the relay knows only its own three, and the
+    // rest ride on `agent` and carry their name as the pane's label instead — which is why a pane
+    // started as an Arbitrator is still called "Arbitrator" and not "Agent 1". A role is a thing the
+    // user names in only one place, the arbitrator's own setup, where `#` marks it.
+    //
+    // Orchestrator is gone and Implementer is here: the four are the ways of working this project
+    // actually has. A record still naming the old one resolves to no prompt, which is what it always
+    // had.
     const START_ROLES = [
-      { name: 'Architect', role: 'architect', at: 'architect' },
-      { name: 'Reviewer', role: 'reviewer', at: 'reviewer' },
-      { name: 'Arbitrator', role: 'agent', at: 'arbitrator' },
-      { name: 'Orchestrator', role: 'agent', at: 'orchestrator' },
+      { name: 'Architect', role: 'architect', at: 'architect-prompt' },
+      { name: 'Reviewer', role: 'reviewer', at: 'reviewer-prompt' },
+      { name: 'Implementer', role: 'agent', at: 'implementer-prompt' },
+      { name: 'Arbitrator', role: 'agent', at: 'arbitrator-prompt' },
     ];
+
+    // The badge's own text: the prompt without its suffix, which is what the picker is asking. The
+    // suffix is for the composer, where these sit beside `@test` and `@review-fix` and need to say
+    // they are the opening kind.
+    function startRoleTag(r) {
+      return '@' + String((r || {}).at || '').replace(/-prompt$/, '');
+    }
+
+    // What a session is started as when nobody has said otherwise. The first badge is Architect
+    // and this is that name written down, because "the first one" is an accident of order and this
+    // is a decision: a session is better started as something.
+    const START_DEFAULT_AT = 'architect-prompt';
+
+    // And what a session *deliberately* started bare records instead of nothing. Empty is also what
+    // a record written before any of this existed says, and the two have to be told apart: one is a
+    // session that asked for no opening prompt, the other is one nobody ever asked. Not a name in
+    // SHORTCUTS, so everything that resolves an `at` already answers nothing for it.
+    const NO_STARTER = 'none';
 
     // The opening text a role badge carries, or '' while its prompt is still to be written.
-    function roleStarter(r) {
-      return ((SHORTCUTS.find(s => s.at === (r || {}).at) || {}).text || '').trim();
+    // `agent` is the harness it is about to be typed into. Every chip in the composer already goes
+    // through agentSlash on its way to a pane; an opening prompt is the same text typed by the same
+    // hand, and skipping it meant every codex session started as an Architect opened with
+    // `/ponytail` — which codex reads as an unknown command rather than as the prompt it is.
+    // Optional, because two callers ask only whether a starter has any text at all.
+    function roleStarter(r, agent) {
+      const text = ((SHORTCUTS.find(s => s.at === canonAt((r || {}).at)) || {}).text || '').trim();
+      return agent ? agentSlash(text, agent) : text;
     }
 
     // `at` is the badge's name on disk as well as in SHORTCUTS: a conversation records which role a
     // session was started as so a respawn can start as the same one, and a name is the one part of
     // this list that will still mean something after the list has been reordered.
     function startRoleOf(at) {
-      return START_ROLES.find(r => r.at === at) || null;
+      return START_ROLES.find(r => r.at === canonAt(at)) || null;
     }
 
     // The badge a live pane was started as, read back off its label — every started pane is named
@@ -9083,8 +9461,19 @@
     // codex invokes its prompts with $; every other agent uses /. Only a line-leading slash is
     // rewritten, so a path or URL inside the shortcut text is left alone. Keyed off the pane the
     // text is going into, not the one it came from.
+    // `agent` may be an alias rather than a harness — `ocodex--1-` runs codex and has to be
+    // written for codex. Resolved here rather than at each caller: a caller that has to remember
+    // to resolve first is a caller that will forget, and this one already cost a session an
+    // opening prompt codex answered with `Unrecognized command '/ponytail'`.
     function agentSlash(text, agent) {
-      return agent === 'codex' ? text.replace(/^\//gm, '$') : text;
+      return agentHarness(agent) === 'codex' ? text.replace(/^\//gm, '$') : text;
+    }
+
+    // The harness under a name that may be either. An unknown name is its own answer, which is
+    // what keeps this working in a page where the configs section is not loaded.
+    function agentHarness(agent) {
+      const name = String(agent || '');
+      return (typeof agentConfigKind === 'function' && agentConfigKind(name)) || name;
     }
 
     // A corrupt blob must not brick the terminal view — it loads as no pairs at all.
@@ -9273,18 +9662,45 @@
     // limit anyone will meet; the document also has user_state's 256 KB over it.
     const LAUNCHER_MAX = 60;
 
-    // The two the renderer knows how to press. A tile carrying anything else is *kept* and drawn
-    // disabled — see launcherGate. Dropping it would let a browser on an older build destroy an
-    // action every other browser can see, which is the failure stateSyncPlan exists to stop one
-    // level up.
-    const LAUNCHER_ACTIONS = ['run', 'spawn'];
+    // The three the renderer knows how to press, in the order the editor offers them: sessions
+    // first, because that is what this launcher is mostly for. A tile carrying anything else is
+    // *kept* and drawn disabled — see launcherGate. Dropping it would let a browser on an older
+    // build destroy an action every other browser can see, which is the failure stateSyncPlan
+    // exists to stop one level up.
+    const LAUNCHER_ACTIONS = ['spawn', 'term', 'run'];
+
+    // Both open a terminal and neither starts an agent; `run` also types a line at it. One
+    // predicate rather than two names threaded through every branch, because the difference
+    // between them is one field and everything else about them is the same.
+    // ponytail: `term` is a `run` with an optional command today. If it grows its own fields —
+    // a shell to open, a directory under the Project — this is where they part.
+    // A tile whose providers the user has told us not to trust with their work. It is a claim
+    // about the endpoints behind the agents, which nothing here can verify — so it is answered by
+    // the person who set the providers up, kept on the tile, and repeated everywhere the tile is:
+    // its own band, its own badge, and a line in the confirm that presses it.
+    function launcherInsecure(tile) {
+      return !!(tile && tile.insecure);
+    }
+
+    // Does pressing this tile start anything that will run tools without asking? Read off the
+    // members rather than stored on the tile: the answer is per member, and a tile whose one custom
+    // agent was swapped for a stock one must stop saying it without anybody editing a second field.
+    function launcherSolo(tile) {
+      return (tile && Array.isArray(tile.members) ? tile.members : []).some(launcherUnattended)
+        || launcherUnattended(tile && tile.arbitrator);
+    }
+
+    function launcherIsTerm(tile) {
+      return !!tile && (tile.action === 'run' || tile.action === 'term');
+    }
 
     // Exactly what relay/start_agent.py accepts, restated because the relay does not offer it.
     // `extra = set(msg) - base_fields` is a hard refusal there, so a stray key is not a warning —
     // it is the whole message rejected. launcherStrict is what makes that a test failure here
     // instead of a spawn that mysteriously does nothing.
     const OPEN_TERMINAL_FIELDS = ['type', 'project_id', 'placement', 'label', 'slot'];
-    const START_AGENT_FIELDS = ['type', 'name', 'role', 'project_id', 'placement', 'label', 'slot'];
+    const START_AGENT_FIELDS = ['type', 'name', 'role', 'project_id', 'placement', 'label', 'slot',
+                                'config', 'unattended'];
 
     // Always. The other two placements name a live pane — `workspace_id` for a tab, `split_from`
     // for a split — and a tile saved last week cannot: the pane it would have named is gone, and
@@ -9301,7 +9717,7 @@
     // The starter every new member is given until it is changed. A SHORTCUTS `at` name and not the
     // text itself: the text is edited in one place and a tile saved last month follows it, which is
     // the whole reason the chips are addressed by name everywhere else.
-    const LAUNCHER_DEFAULT_AT = 'architect';
+    const LAUNCHER_DEFAULT_AT = 'architect-prompt';
 
     function launcherId() {
       return 'ql_' + Math.random().toString(36).slice(2, 10);
@@ -9325,7 +9741,7 @@
     // spawn lands on a conversation now, but one agent in one is still an agent to the person who
     // pressed it, and calling it a conversation would name the container instead of the thing.
     function launcherNoun(tile) {
-      if (!tile || tile.action === 'run') return 'terminal';
+      if (!tile || launcherIsTerm(tile)) return 'terminal';
       return (Array.isArray(tile.members) ? tile.members.length : 0) > 1 ? 'conversation' : 'agent';
     }
 
@@ -9455,9 +9871,11 @@
       // the same roster pressed into whichever tree wants it. The Project is then asked for at the
       // press, where it is mandatory — see launcherAskProject.
       if (LAUNCHER_ACTIONS.indexOf(tile.action) < 0) return 'Unknown action';
-      if (tile.action === 'run') {
+      if (launcherIsTerm(tile)) {
         const command = typeof tile.command === 'string' ? tile.command.trim() : '';
-        if (!command) return 'Give it a command to run';
+        // A `term` with nothing to type is the whole point of it — an empty prompt in the right
+        // tree. A `run` with nothing to run is a button that opens a terminal and lies about it.
+        if (tile.action === 'run' && !command) return 'Give it a command to run';
         // SEND_TEXT_MAX is the relay's cap on one send_text. Longer text is splittable in the
         // composer, but a launcher command that arrived in two pieces would run the first half at
         // the prompt — so this is a real limit rather than a chunking problem.
@@ -9516,7 +9934,7 @@
       // start_options' absence is already the app's gate for Start, and open_terminal's two gates
       // are reported inside it as `terminal`. Same signals, read from a tile.
       if (!opts) return { ok: false, reason: 'This relay starts nothing', badge: 'Unavailable' };
-      if (tile.action === 'run') {
+      if (launcherIsTerm(tile)) {
         return opts.terminal ? { ok: true, reason: '', badge: '' }
           : { ok: false, reason: 'Terminal mode is off on this relay', badge: 'No terminals' };
       }
@@ -9528,6 +9946,15 @@
       if (missing.length) {
         return { ok: false, reason: `This relay does not start ${missing.join(', ')}`,
                  badge: 'Unknown agent' };
+      }
+      // A config is the provider-backed half of a custom agent. The harness alone is not enough:
+      // starting an alias after its provider was removed would silently fall back to the stock CLI.
+      const configs = opts.configs || [];
+      const stale = launcherRoster(tile).find(m => m.config
+        && !configs.some(c => c.id === m.config && c.kind === m.name));
+      if (stale) {
+        return { ok: false, reason: `Agent config ${stale.config} is not available on this relay`,
+                 badge: 'Missing config' };
       }
       // `arb` is arbOn — whether this relay sent arb_sessions on this connection, which is the
       // app's gate for arbitration everywhere else. A tile is refused rather than quietly
@@ -9543,7 +9970,7 @@
     // the confirm, which is the whole of this feature's answer to a mislabelled action.
     function launcherPreview(tile) {
       if (!tile) return '';
-      if (tile.action === 'run') return String(tile.command || '');
+      if (launcherIsTerm(tile)) return String(tile.command || '');
       const members = Array.isArray(tile.members) ? tile.members : [];
       const line = members.map(m => (m && m.name) || '?').join(' + ');
       // The arbitrator is named apart from the two rather than joined into them: it is not a third
@@ -9584,6 +10011,15 @@
       }, OPEN_TERMINAL_FIELDS);
     }
 
+    // Whether this member is started with its harness's own approval prompts off. Unanswered means
+    // the default rather than off: a member on an agent config is one the user set up an endpoint
+    // for and expects to work unattended, and a stock harness is one they are sitting in front of.
+    // Every tile saved before the checkbox existed reads through here, which is why the default
+    // lives in one function rather than in each caller.
+    function launcherUnattended(m) {
+      return m && m.unattended === undefined ? !!(m && m.config) : !!(m && m.unattended);
+    }
+
     // One member's start_agent. Called once per member and never in a loop that does not wait:
     // next_role_label reads the live agent list to pick "Architect 2", so two starts in flight at
     // once can choose the same name and the relay renames around the collision — leaving a roster
@@ -9605,6 +10041,10 @@
         // behind it.
         label: member.label,
         slot: tile.slot,
+        config: member.config,
+        // Only ever sent when it is on: the relay's default is an interactive session, and `false`
+        // on the wire would say the same thing at more length.
+        unattended: launcherUnattended(member) || undefined,
       }, START_AGENT_FIELDS);
     }
 
@@ -10749,7 +11189,7 @@
             }).join('')}</div></div>`).join('') +
           panes.map(a => `<div class="bandwidth-row pane-bandwidth-row" data-pane="${escapeHtml(a.pane_id)}">` +
             `<span class="bandwidth-label pane-bandwidth-name"><span class="dot"></span>` +
-            `${escapeHtml(paneLabel(a))}${agentBadge(a.agent)}<small class="pane-bandwidth-ping"></small></span>` +
+            `${escapeHtml(paneLabel(a))}${paneBadge(a)}<small class="pane-bandwidth-ping"></small></span>` +
             `<span class="bandwidth-chip bandwidth-hist" title="Historical total of completed intervals for ${escapeHtml(paneLabel(a))}"></span>` +
             `<div class="bandwidth-chips">${buckets.map(b => { const t = at(b);
               return `<span class="bandwidth-chip${t.live ? ' now' : ''}" ` +
@@ -11209,6 +11649,19 @@
         // took a minute to be confirmed is not a different outcome from one that took none, and
         // wording it differently made the slow path read as a warning.
         else if (msg.ok) showToast(`✓ Sent to ${where}`, 'ok');
+        // A pane at a menu took nothing, which is not the same as a pane that took it and said
+        // nothing: the text is held here and goes out again as soon as the question is answered.
+        else if (msg.reason === 'menu') {
+          holdForMenu(msg.pane_id, lastSubmitted.get(msg.pane_id));
+          showToast(`${where} is waiting on a prompt — answer it and this goes in behind it.`,
+                    'info');
+        }
+        // Gone, not silent. The relay watched the pane vanish under this text, so there is nobody
+        // left to check with and nothing was delivered — "check the pane" would send the reader to
+        // a pane that is not there.
+        else if (msg.reason === 'pane_gone') {
+          showToast(`${where} closed before it took that — nothing was delivered.`);
+        }
         else showToast(`That pane did not confirm the send — check ${where}.`);
       }
       else if (msg.type === 'command_result' &&
@@ -11268,6 +11721,9 @@
         }
       }
       else if (msg.type === 'agents') {
+        // Before the timeline: a message held back by a menu belongs in the pane the moment the
+        // pane can take it, and the rest of this branch is bookkeeping.
+        sendHeldAfterMenu(msg.agents);
         // Track timeline on status changes
         let ring = false;
         for (const a of msg.agents) {
@@ -11333,6 +11789,10 @@
           }
         }
         openPendingStart();
+        // A restart whose answer was lost with the tab that asked for it, picked up by the id that
+        // start named itself with. After openPendingStart, so a start this tab is still holding
+        // the answer for lands the ordinary way.
+        if (typeof convResumeRespawn === 'function') convResumeRespawn();
         openNotificationPane();
       }
       else if (msg.type === 'agent_update') {
@@ -11340,8 +11800,19 @@
         if (!update || !update.pane_id) return;
         const existing = agents.find(a => a.pane_id === update.pane_id);
         const previousStatus = existing?.status || prevStatuses[update.pane_id];
+        const previousTurn = existing?.turn;
         if (existing) Object.assign(existing, update);
         else agents.push({ ...update });
+        // The relay's record grew a row for this pane. It is not a status change — the snapshot
+        // carrying the status went out before the turn was read and written — so nothing else here
+        // would notice, and a thread showing this pane would stay a turn behind until some other
+        // pane moved. The fetch itself is gated on the watermark (conv_live.js): a redraw for a
+        // pane no open thread contains asks for nothing.
+        if (update.turn && update.turn !== previousTurn
+            && typeof convLiveOn === 'function' && convLiveOn()) {
+          renderConvView();
+          if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+        }
         if (previousStatus && previousStatus !== update.status) {
           timeline.unshift({ project: update.project, agent: update.agent, status: update.status, time: new Date() });
           if (timeline.length > 100) timeline.pop();
@@ -11777,7 +12248,12 @@
       const known = (startOptions && startOptions.roles) || [];
       const wire = role && known.includes(role.role) ? role.role
         : (known.includes('agent') ? 'agent' : known[0]);
-      const label = typed || (role && role.at !== role.role ? role.name : '');
+      // The badge's own name against the role it rides on: `@architect` goes out as `architect` and
+      // the relay names the pane, `@arbitrator` goes out as `agent` and would come up called
+      // "Agent 1", so it carries its name instead. Compared without the suffix — that is for the
+      // composer, and the wire has never heard of it.
+      const bare = String((role || {}).at || '').replace(/-prompt$/, '');
+      const label = typed || (role && bare !== role.role ? role.name : '');
       const out = wire ? {role: wire} : {};
       if (label) out.label = label;
       return out;
@@ -11794,6 +12270,34 @@
     // without one. Kept apart from startIntent because it is a different question — where the new
     // pane lands versus what it is told first — and every route in can ask both.
     let startPrompt = '';
+    // *Which* starter that was, as a SHORTCUTS `at`. The prompt is text and cannot be asked again
+    // what it was; this is the name, and it is what makes a restart open the same way.
+    let startStarter = '';
+
+    // pane_id -> the `at` it was started under. Written by whoever starts a session, read by
+    // convSpawn so a conversation records what the session *was* rather than guessing it back off
+    // the pane's name.
+    //
+    // Guessing was the bug: a pane named for its role ("Architect 1") gave the right answer and a
+    // pane named anything else — every session a launcher tile starts, which names its members
+    // after the tile — gave none at all, so Start again brought it up silent. In memory only; the
+    // durable copy is the one convSpawn writes into the conversation, and convSpawn keeps what is
+    // already recorded rather than overwriting it with nothing after a reload.
+    const paneStarter = new Map();
+
+    // Bounded, because pane ids are recycled by herdr and this is never read for a pane that is not
+    // on screen. Oldest first — a browser open for a week starting sessions all day is what this is
+    // for, and the sessions that matter are the recent ones.
+    const PANE_STARTER_MAX = 200;
+
+    function notePaneStarter(paneId, at) {
+      if (!paneId || !at) return;
+      paneStarter.delete(paneId);
+      paneStarter.set(paneId, at);
+      while (paneStarter.size > PANE_STARTER_MAX) {
+        paneStarter.delete(paneStarter.keys().next().value);
+      }
+    }
 
     async function openPendingStart() {
       if (!pendingStart) return;
@@ -11808,8 +12312,19 @@
       startIntent = null;
       // Read once here for the same reason: a start that never came up must not leave its opening
       // words to be said to whatever is started next.
-      const prompt = startPrompt;
+      //
+      // Written for the pane that actually landed, not for the harness the caller had in mind when
+      // it resolved the text. Those two disagree more often than they look: a member swapped from
+      // one harness to another, a start whose kind came off a stale record, an alias resolved
+      // somewhere that only knew its id. The pane is the one place the answer is a fact, and
+      // agentSlash is idempotent, so a prompt already in the right form passes through untouched.
+      const prompt = startPrompt ? agentSlash(startPrompt, a.agent) : '';
+      const starterAt = startStarter;
       startPrompt = '';
+      startStarter = '';
+      // Before anything below opens, joins or sends: the first thing that happens to this pane may
+      // be a record of it, and a record taken before this is one that learned nothing.
+      notePaneStarter(a.pane_id, starterAt);
       // The pair dialog reopens on the pane it was left from, with the session that was started
       // for it already chosen, and saves itself. "Start a session and pair with it" already said
       // what the pair is; stopping at a filled-in form asks the user to confirm a decision they
@@ -11925,6 +12440,17 @@
     function duplicatePane() {
       const a = activePane ? agents.find(x => x.pane_id === activePane) : null;
       if (!ws || !canDuplicate(a)) return;
+      // Same agent means the same agent config — and an alias the relay no longer offers is not a
+      // reason to quietly bring the copy up on the stock endpoint under the same name. The dialog
+      // is opened on that Project instead and the reader picks, which is the same answer Start
+      // again gives to the same question.
+      if (a.config && !(typeof agentConfigLive === 'function' && agentConfigLive(a.config, a.agent))) {
+        openStartDialog(a.project_id);
+        if (typeof showToast === 'function') {
+          showToast(`Agent config "${a.config}" is gone. Pick what to start instead.`);
+        }
+        return;
+      }
       const tab = !!a.workspace_id;
       const msg = {
         type: 'start_agent', name: a.agent, role: roleOf(a), project_id: a.project_id,
@@ -11933,6 +12459,17 @@
         placement: tab ? 'new_tab' : 'new_workspace', slot: slotFor(),
       };
       if (tab) msg.workspace_id = a.workspace_id;
+      if (a.config) msg.config = a.config;
+      // A duplicate comes up the way the pane it came from did, and the same default decides it:
+      // the snapshot does not say how that one was started, so a config is the whole of what is
+      // known about it.
+      if (a.config && startUnattendedOffered(a.agent)) msg.unattended = true;
+      // A duplicate opens the way the pane it came from opened. The wire role alone cannot say
+      // that — Arbitrator and Orchestrator both go out as `agent` — so the starter is resolved the
+      // same way a conversation resolves it: what this browser watched, then the pane's name.
+      const dupAt = canonAt(typeof convStarterOf === 'function' ? convStarterOf(a) : '');
+      startPrompt = roleStarter({at: dupAt}, a.agent);
+      startStarter = dupAt;
       // No label: the relay names it for the role, so a duplicate of "Architect 1" arrives as
       // "Architect 2" rather than as a second pane with the same name.
       startIntent = 'open';
@@ -11955,25 +12492,103 @@
     let startRolePick = '';
 
     function renderStartRoles() {
-      document.getElementById('startRoles').innerHTML = startRoles().map(r =>
-        badgeHtml(`# ${r.name}`, r.at === startRolePick, `pickStartRole('${r.at}')`,
-          {proj: true, title: roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet'}))
-        .join('');
+      document.getElementById('startRoles').innerHTML =
+        badgeHtml('@none', !startRolePick, "pickStartRole('')",
+          {proj: true, title: 'Starts with nothing typed at it'})
+        + startRoles().map(r =>
+          badgeHtml(startRoleTag(r), r.at === startRolePick, `pickStartRole('${r.at}')`,
+            {proj: true, title: roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet'}))
+          .join('');
     }
 
     // The harness, in the same row of badges rather than in a select beside them: the sheet asks
     // three questions about what a session *is*, and one of them reading as a form control while
     // the other two read as badges was the whole inconsistency.
     let startAgentPick = '';
+    // An agent config, when one was picked instead of the stock harness. Held apart from the kind
+    // rather than folded into it: a config *is* a kind plus an environment, and the relay is told
+    // both — `name` is what it starts, `config` is what it starts it under.
+    let startConfigPick = '';
+    let startCustomOpen = false;
+    // null until the checkbox is touched, and then the user's own answer for the rest of this
+    // dialog. Held apart from the default so that picking a different agent moves the box with the
+    // pick right up until someone disagrees with it, and never after.
+    let startUnattendedPick = null;
 
+    // Which harnesses this relay can start with their own approval prompts off. Empty against a
+    // relay too old to say, and then the row is not drawn at all rather than drawn and refused.
+    function startUnattendedOffered(kind) {
+      return ((startOptions || {}).unattended || []).indexOf(kind) >= 0;
+    }
+
+    // On under an agent config, off on a stock harness. A config is an endpoint the user set up for
+    // work that runs without them; a stock start is the one they are sitting in front of.
+    function startUnattendedOn() {
+      if (!startUnattendedOffered(startAgentPick)) return false;
+      return startUnattendedPick === null ? !!startConfigPick : startUnattendedPick;
+    }
+
+    function renderStartUnattended() {
+      const row = document.getElementById('startUnattendedRow');
+      const box = document.getElementById('startUnattended');
+      if (!row || !box) return;
+      row.style.display = startUnattendedOffered(startAgentPick) ? 'flex' : 'none';
+      box.checked = startUnattendedOn();
+    }
+
+    function pickStartUnattended(on) {
+      startUnattendedPick = !!on;
+    }
+
+    function startConfigs() {
+      return typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+    }
+
+    // Stock kinds, then one `+custom`. One badge and not a badge per alias: there will be more
+    // aliases than harnesses before long, and a strip that grows with them is a strip nobody can
+    // read. Open, the aliases appear after it wearing their own harness's colour.
     function renderStartAgents() {
-      document.getElementById('startAgents').innerHTML = ((startOptions || {}).agents || []).map(k =>
-        badgeHtml(k, k === startAgentPick, `pickStartAgent('${k}')`, {agent: k})).join('');
+      const configs = startConfigs();
+      document.getElementById('startAgents').innerHTML =
+        ((startOptions || {}).agents || []).map(k =>
+          badgeHtml(k, !startConfigPick && k === startAgentPick, `pickStartAgent('${k}')`,
+                    {agent: k})).join('')
+        + (configs.length
+          ? badgeHtml('+custom', startCustomOpen || !!startConfigPick, 'toggleStartCustom()',
+              {proj: true, title: 'Start under one of your agent configs'})
+            + (startCustomOpen || startConfigPick
+              ? configs.map(c => badgeHtml(c.label, c.id === startConfigPick,
+                  `pickStartConfig('${escapeHtml(c.id)}')`,
+                  {agent: c.kind, title: c.command || c.provider_label || ''})).join('')
+              : '')
+          : '');
+    }
+
+    function toggleStartCustom() {
+      startCustomOpen = !startCustomOpen;
+      // Closing it also drops the choice: the row would otherwise say a stock kind is picked while
+      // the start still carried a config nobody can see.
+      if (!startCustomOpen) startConfigPick = '';
+      renderStartAgents();
+      renderStartUnattended();
+      if (window.cue) cue('tick');
+    }
+
+    function pickStartConfig(id) {
+      const row = startConfigs().find(c => c.id === id);
+      if (!row) return;
+      startConfigPick = id;
+      startAgentPick = row.kind;
+      renderStartAgents();
+      renderStartUnattended();
+      if (window.cue) cue('tick');
     }
 
     function pickStartAgent(kind) {
       startAgentPick = kind;
+      startConfigPick = '';
       renderStartAgents();
+      renderStartUnattended();
       if (window.cue) cue('tick');
     }
 
@@ -12096,15 +12711,28 @@
       document.getElementById('startName').placeholder = terminal ? 'Auto — Terminal N' : 'Auto — Role N';
       // Reopens on the role it last started as, which is usually the one being started again —
       // and on none when that badge is gone, rather than silently on a different way of working.
-      startRolePick = startRoles().some(r => r.at === localStorage.getItem(START_ROLE_KEY))
-        ? localStorage.getItem(START_ROLE_KEY) : '';
+      //
+      // Never having chosen is a different answer from having chosen and taken it off again, and
+      // getItem is the one place the two are still told apart: null for the first, '' for the
+      // second. A session is better started as something, so the first opens on the first badge
+      // offered — Architect, the way conv_dock's own picker already opens — and the second stays
+      // empty, because tapping a lit badge off is how a start with no opening prompt is asked for.
+      const seenRole = localStorage.getItem(START_ROLE_KEY);
+      startRolePick = seenRole === null ? ((startRoles()[0] || {}).at || '')
+        : startRoles().some(r => r.at === seenRole) ? seenRole : '';
       renderStartRoles();
       // The harness is not optional, so unlike the role it falls back to the first offered rather
       // than to none — a remembered kind the relay has since dropped picks nothing otherwise.
       const kinds = startOptions.agents || [];
       const remembered = localStorage.getItem(START_AGENT_KEY);
       startAgentPick = kinds.includes(remembered) ? remembered : (kinds[0] || '');
+      startConfigPick = '';
+      startCustomOpen = false;
+      // A fresh dialog asks the question fresh: an answer given to the last start says nothing
+      // about this one, which may be a different harness entirely.
+      startUnattendedPick = null;
       renderStartAgents();
+      renderStartUnattended();
       fillSelect('startPlacement', [['new_tab', 'New tab'], ['new_workspace', 'New workspace'], ['split', 'Split']]);
       restoreStartChoice('startPlacement', START_PLACE_KEY, 'new_tab');
       document.getElementById('startName').value = '';  // blank means "let the relay name it"
@@ -12193,6 +12821,10 @@
       // readable on it without a second round trip. Not for a split: "beside that pane" is already
       // a statement about width, and a desktop asking for "wide" would move the new session
       // straight back out of the split the user picked.
+      if (!terminal && startConfigPick) msg.config = startConfigPick;
+      // Only when it is on. The relay's default is a session that asks before it acts, and saying
+      // so on the wire would be a longer way of saying nothing.
+      if (!terminal && startUnattendedOn()) msg.unattended = true;
       if (placement !== 'split') msg.slot = slotFor();
       // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
       // answered that for an agent, this answers it for the other message. Omitted, not empty — the
@@ -12217,7 +12849,8 @@
       // rather than waiting to be told. Set here and not above the target check: a submit that
       // refused must leave nothing behind for the next start to open with. Nothing to say for a
       // terminal, or for a role whose prompt is still to be written.
-      startPrompt = terminal ? '' : roleStarter(role);
+      startPrompt = terminal ? '' : roleStarter(role, startAgentPick);
+      startStarter = terminal ? '' : ((role || {}).at || NO_STARTER);
       ws.send(JSON.stringify(msg));
     }
 
@@ -12327,7 +12960,7 @@
         `onclick="closeRecentSheet(); jumpToPane('${escapeHtml(p.pane_id)}')">` +
         `<span class="kind" aria-hidden="true">${shell ? '⬛' : agentGlyph()}</span>` +
         `<span class="info"><span class="name">${escapeHtml(paneLabel(p))}` +
-        `${shell ? '' : agentBadge(p.agent)}</span>` +
+        `${shell ? '' : paneBadge(p)}</span>` +
         `<span class="meta">${escapeHtml(meta)}</span></span>` +
         `<span class="dot" style="background:${statusColor(p)}" aria-hidden="true"></span>` +
         `</button>`;
@@ -12558,6 +13191,305 @@
   <!-- After status_bar.js, which owns `projects`, `startOptions` and escapeHtml's callers, and
        after sections.js, whose applySections it calls to take an empty section off screen. -->
   <script>
+    // --- Agent configs ---
+    // A config is one name for "this harness, against that provider, on that model, with that
+    // key" — `oclaude1` beside stock `claude`. The split is the point and it is not this file's
+    // to move: a *provider* is a file on the relay's machine and names the endpoint and which of
+    // the relay's environment variables may supply a credential; an *alias* is what lives here,
+    // and it can only ever choose among what that file already authorised. So there is no field
+    // in this editor that names a host, a variable, or a secret — and nothing a browser writes
+    // can send a key somewhere the file did not.
+    //
+    // localStorage is the working copy, mirrored by state_sync like the launcher next door: which
+    // model `oclaude1` runs is a fact about the work, not about this screen.
+
+    const AGENT_CONFIG_KEY = 'herdr_agent_configs';
+    const AGENT_CONFIG_MAX = 64;
+
+    function parseAgentConfigs(raw) {
+      let doc = null;
+      try { doc = JSON.parse(raw || 'null'); } catch (e) { doc = null; }
+      const items = doc && Array.isArray(doc.aliases) ? doc.aliases : [];
+      return items.filter(a => a && typeof a.id === 'string' && a.id).slice(0, AGENT_CONFIG_MAX);
+    }
+
+    function loadAgentConfigs() {
+      try { return parseAgentConfigs(localStorage.getItem(AGENT_CONFIG_KEY)); }
+      catch (e) { return []; }
+    }
+
+    function saveAgentConfigs(items) {
+      const kept = items.slice(0, AGENT_CONFIG_MAX);
+      try {
+        localStorage.setItem(AGENT_CONFIG_KEY, JSON.stringify({aliases: kept}));
+      } catch (e) { /* private mode: this session only */ }
+      if (typeof stateSyncMark === 'function') stateSyncMark('agent_configs');
+      return kept;
+    }
+
+    // What the relay says about each alias: its harness, whether the key variable is actually set
+    // over there, and the command line the spawn will run. Derived on the relay because only the
+    // relay has read the provider file — so a row this browser wrote is drawn from the answer
+    // rather than from what it wrote, which is also what makes a typo visible.
+    function agentConfigRows() {
+      return ((typeof startOptions !== 'undefined' && startOptions) || {}).configs || [];
+    }
+
+    // Is this alias still one the relay offers, for that harness? The question every path that
+    // starts something already recorded has to ask first: an id outlives what it names, and the
+    // relay refuses a start carrying a dead one rather than quietly running it on the stock
+    // endpoint — so the client asks before it sends, and puts the choice back to the reader.
+    function agentConfigLive(id, kind) {
+      const row = agentConfigRow(id);
+      return !!(row && (!kind || row.kind === kind));
+    }
+
+    function agentConfigProviders() {
+      return ((typeof startOptions !== 'undefined' && startOptions) || {}).providers || [];
+    }
+
+    function agentConfigRow(id) {
+      return agentConfigRows().find(r => r.id === id) || null;
+    }
+
+    // The harness an alias runs, so every badge for it wears that harness's colour. `oclaude1` is
+    // a claude and reads as one; a colour that meant "custom" would be a twelfth thing to learn.
+    function agentConfigKind(id) {
+      return (agentConfigRow(id) || {}).kind || '';
+    }
+
+    // --- The section, under the launcher's own tiles ---
+
+    function agentConfigBands() {
+      const out = [];
+      for (const row of agentConfigRows()) {
+        const band = out.find(b => b.kind === row.kind);
+        if (band) band.rows.push(row); else out.push({kind: row.kind, rows: [row]});
+      }
+      return out;
+    }
+
+    // Two lines. The first is what the thing is — its name, its harness, the provider it is
+    // pointed at; the second is what it will do — the model, and the key variable with whether
+    // this relay actually holds it. Everything needed to tell two aliases apart without opening
+    // either, which is the whole job of a list of near-identical things.
+    function agentConfigRowHtml(row) {
+      const badge = typeof agentBadge === 'function' ? agentBadge(row.label, row.kind)
+        : ` <span class="badge">${escapeHtml(row.label)}</span>`;
+      const key = row.key
+        ? `<span class="cfg-key${row.key_set ? '' : ' cfg-unset'}"`
+          + ` title="${row.key_set ? 'This relay holds ' + escapeHtml(row.key)
+              : escapeHtml(row.key) + ' is not set on the relay — the session would start without'
+                + ' a key'}">$${escapeHtml(row.key)}${row.key_set ? '' : ' ✕'}</span>`
+        : '';
+      return `<button class="cfg-row" onclick="openAgentConfig('${escapeHtml(row.id)}')"`
+        + ` title="View and edit ${escapeHtml(row.label)}">`
+        + `<span class="cfg-line">${badge}`
+        + `<span class="cfg-provider">${escapeHtml(row.provider_label || row.provider)}</span></span>`
+        + `<span class="cfg-line cfg-sub"><span class="cfg-model">`
+        + `${escapeHtml(row.model || 'default model')}</span>${key}</span>`
+        + '</button>';
+    }
+
+    function agentConfigsHtml() {
+      // Nothing to draw without a provider file: aliases would have nothing to be aliases *of*,
+      // and a header over an empty list that can never fill is worse than no header. The same
+      // rule start_options already applies to Start.
+      if (!agentConfigProviders().length) return '';
+      const bands = agentConfigBands();
+      return '<div class="section-header" style="margin-top:18px">Agent configs'
+        + '<button class="section-action" onclick="openAgentConfig(\'\')"'
+        + ' title="Add a config" aria-label="Add an agent config">+ New</button></div>'
+        + (bands.length
+          ? bands.map(b => `<div class="launcher-band">${escapeHtml(b.kind)}</div>`
+            + b.rows.map(agentConfigRowHtml).join('')).join('')
+          : '<div class="cfg-empty">No configs yet. + New names one — a model and a key, against'
+            + ' a provider this relay already has.</div>');
+    }
+
+    // --- One config, in the launcher's own dialog ---
+    // Reused rather than built again: it is the same modal, the same close button, and a second
+    // one would be a second thing to dismiss.
+
+    let agentConfigDraft = null;
+
+    function openAgentConfig(id) {
+      const providers = agentConfigProviders();
+      // The local document first, then the relay's own row for it. The second is not a nicety: a
+      // browser that has adopted the shared document has both, but one that has just connected has
+      // the row on screen before the document lands — and a dialog that opened blank on a row the
+      // user can see would look like the config had been lost.
+      const row = id ? agentConfigRow(id) : null;
+      const stored = loadAgentConfigs().find(a => a.id === id)
+        || (row ? {id: row.id, label: row.label, provider: row.provider, model: row.model,
+                   model_option: row.model_option, key: row.key} : null);
+      // `saved` freezes the id: it is derived from the name while a config is being made, and a
+      // rename afterwards must not silently become a different config.
+      agentConfigDraft = stored ? Object.assign({saved: true}, stored)
+        : {id: '', label: '', provider: (providers[0] || {}).id || '',
+           model: '', model_option: '', key: ''};
+      drawAgentConfig();
+      const box = document.getElementById('launcherModal');
+      if (box) box.style.display = 'block';
+    }
+
+    function agentConfigSet(field, value) {
+      if (!agentConfigDraft) return;
+      agentConfigDraft[field] = value;
+      // The provider decides which keys exist, so changing it drops a key the new one never
+      // offered rather than carrying a name the relay would refuse.
+      if (field === 'provider') {
+        agentConfigDraft.key = '';
+        const provider = agentConfigProviders().find(p => p.id === value) || {};
+        // These fields are absent because the selected provider cannot carry them. Leaving an
+        // old value in the draft would save a setting the new provider silently ignores.
+        if (provider.has_model === false) agentConfigDraft.model = '';
+        if (provider.has_model_option === false) agentConfigDraft.model_option = '';
+      }
+      drawAgentConfig();
+    }
+
+    // A typed field records and does *not* redraw. The dialog is one innerHTML write, so redrawing
+    // on every keystroke replaces the input under the cursor — which is a field that drops focus
+    // after one character. Only the choices redraw, because only they change what is on the form.
+    function agentConfigType(field, value) {
+      if (agentConfigDraft) agentConfigDraft[field] = value;
+    }
+
+    // Suggestions when the provider file names none. A shortcut and never a limit — the field
+    // stays free text, because model names move faster than any list in this app. Keyed by
+    // harness, so a provider that carries a model variable at all gets the names for its CLI.
+    const MODEL_SUGGESTIONS = {
+      claude: ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-8[1m]',
+               'claude-opus-4-6[1m]', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+    };
+
+    // The two model fields, drawn only where they do something. A provider with no `model_var`
+    // takes its model from its own config file — codex does — and a box that silently went
+    // nowhere is worse than no box, so it says where the model actually lives instead.
+    function agentConfigModelHtml(provider, d) {
+      if (!provider.has_model && !provider.has_model_option) {
+        return '<div class="cfg-note">This provider takes its model from the CLI\'s own config,'
+          + ' not the environment — so there is nothing to set here.</div>';
+      }
+      const list = (provider.models || []).length
+        ? provider.models : (MODEL_SUGGESTIONS[provider.kind] || []);
+      // A native datalist: the field is still free text, the suggestions are one tap on a phone,
+      // and it is markup rather than a dropdown this app would have to own.
+      const datalist = list.length
+        ? `<datalist id="cfgModels">${list.map(m =>
+            `<option value="${escapeHtml(m)}"></option>`).join('')}</datalist>`
+        : '';
+      const field = (label, key, placeholder) =>
+        `<label class="start-field">${label}`
+        + '<input type="text" maxlength="120" autocapitalize="none" autocomplete="off"'
+        + (datalist ? ' list="cfgModels"' : '')
+        + ` value="${escapeHtml(d[key] || '')}" placeholder="${escapeHtml(placeholder)}"`
+        + ` oninput="agentConfigType('${key}', this.value)"></label>`;
+      return datalist
+        + (provider.has_model ? field('Model', 'model', list[0] || 'claude-opus-5') : '')
+        + (provider.has_model_option
+          ? field('Model option', 'model_option', list[1] || '') : '');
+    }
+
+    function drawAgentConfig() {
+      const body = document.getElementById('launcherEditBody');
+      const title = document.getElementById('launcherEditTitle');
+      if (!body || !agentConfigDraft) return;
+      const d = agentConfigDraft;
+      const provider = agentConfigProviders().find(p => p.id === d.provider) || {};
+      if (title) title.textContent = d.id ? d.label || d.id : 'New agent config';
+      const row = d.id ? agentConfigRow(d.id) : null;
+      const keys = provider.keys || [];
+      body.innerHTML =
+        '<label class="start-field">Name'
+        + `<input id="cfgLabel" type="text" maxlength="32" autocapitalize="none" autocomplete="off"`
+        + ` value="${escapeHtml(d.label || '')}"`
+        + ' placeholder="oclaude1" oninput="agentConfigName(this.value)"></label>'
+        + '<label class="start-field">Provider'
+        + `<select onchange="agentConfigSet('provider', this.value)">`
+        + agentConfigProviders().map(p =>
+          `<option value="${escapeHtml(p.id)}"${p.id === d.provider ? ' selected' : ''}>`
+          + `${escapeHtml(p.label)} — ${escapeHtml(p.kind)}</option>`).join('')
+        + '</select></label>'
+        // Read-only on purpose, and said out loud rather than left off: the endpoint is the whole
+        // of what makes a provider a trust decision, and it is edited in the file on the relay's
+        // machine. A field here that could change it would be this feature's one real hole.
+        + (provider.base_url
+          ? `<div class="cfg-note">Endpoint <code>${escapeHtml(provider.base_url)}</code>`
+            + ' — set in the relay\'s config file, not here.</div>'
+          : '')
+        + agentConfigModelHtml(provider, d)
+        + (keys.length
+          ? '<div class="start-field">Key<div class="badge-strip">'
+            + keys.map(k => badgeHtml('$' + k.name + (k.set ? '' : ' ✕'),
+                k.name === (d.key || (keys[0] || {}).name),
+                `agentConfigSet('key', '${escapeHtml(k.name)}')`,
+                {proj: true, title: k.set ? 'This relay holds ' + k.name
+                  : k.name + ' is not set on the relay'})).join('')
+            + '</div></div>'
+          : '<div class="cfg-note">This provider names no key variables.</div>')
+        // The line the relay will actually run, with the key as a `$VAR` reference rather than a
+        // value — so it is both safe to show and pasteable into the user's own shell, which is
+        // how a wrong endpoint gets found in one paste instead of one spawn. Only for a saved
+        // config: it comes from the relay, and an unsaved draft is not one it has read.
+        + (row && row.command
+          ? '<div class="cfg-note">Effective command</div>'
+            + `<pre class="cfg-command" onclick="writeClipboard(this.textContent, function(){})"`
+            + ' title="Tap to copy">' + escapeHtml(row.command) + '</pre>'
+          : d.id ? '' : '<div class="cfg-note">Save it to see the command it will run.</div>')
+        + '<div class="ql-actions">'
+        + (d.id && loadAgentConfigs().some(a => a.id === d.id)
+          ? '<button class="ql-secondary" onclick="deleteAgentConfig()">Delete</button>'
+          : '<button class="ql-secondary" onclick="closeLauncherEdit()">Cancel</button>')
+        + '<button class="ql-primary" onclick="saveAgentConfig()">Save config</button></div>';
+    }
+
+    // The name is the id, lowercased into the shape the relay accepts — one field rather than
+    // two, because nobody wants to type `oclaude1` twice to get a config called oclaude1.
+    function agentConfigName(value) {
+      if (!agentConfigDraft) return;
+      agentConfigDraft.label = value.slice(0, 32);
+      if (!agentConfigDraft.saved) {
+        // "oclaude [1]" is an id of `oclaude-1`, not `oclaude--1-`: runs of punctuation collapse
+        // to one dash and the ends are trimmed, the same shape every other slug in this app has.
+        agentConfigDraft.id = value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
+          .replace(/^-+|-+$/g, '').slice(0, 32).replace(/-+$/, '');
+      }
+    }
+
+    function saveAgentConfig() {
+      const d = agentConfigDraft;
+      if (!d || !d.id || !d.provider) return;
+      const items = loadAgentConfigs();
+      const at = items.findIndex(a => a.id === d.id);
+      const row = {id: d.id, label: d.label || d.id, provider: d.provider,
+                   model: d.model || '', model_option: d.model_option || '', key: d.key || ''};
+      if (at < 0) items.push(row); else items[at] = row;
+      saveAgentConfigs(items);
+      closeLauncherEdit();
+      // The row's derived half — the command, whether the key is set — is the relay's answer, and
+      // it arrives as a fresh start_options once the write lands. Until then the section redraws
+      // from what it already had, which is the previous answer rather than a wrong new one.
+      renderLauncher();
+    }
+
+    function deleteAgentConfig() {
+      const d = agentConfigDraft;
+      if (!d || !d.id) return;
+      saveAgentConfigs(loadAgentConfigs().filter(a => a.id !== d.id));
+      closeLauncherEdit();
+      renderLauncher();
+    }
+
+    // state_sync's rerender target for this document, and the reason it is named rather than
+    // inlined: a config written on the phone has to redraw the desktop's launcher.
+    function renderAgentConfigs() {
+      if (typeof renderLauncher === 'function') renderLauncher();
+    }
+
+  </script>
+  <script>
     // --- Launcher, on screen ---
     // The section reads the document and draws a tile per row. Pressing one is steps 4-6; this
     // file currently only says what is there and whether it could be pressed.
@@ -12584,6 +13516,9 @@
         + 'a6 6 0 0 1 6.5-6A6 6 0 0 1 17 12z"/><path d="M14.5 19.4A6 6 0 0 0 20 15.5"/>',
     };
 
+    // A terminal is a terminal whether or not a line is typed at it.
+    LAUNCHER_GLYPHS.term = LAUNCHER_GLYPHS.run;
+
     function launcherIcon(action) {
       const glyph = LAUNCHER_GLYPHS[action];
       if (!glyph) return '';
@@ -12595,7 +13530,7 @@
     // What the tile calls the thing it will make.
     function launcherKindLine(tile) {
       const many = (tile.members || []).length > 1;
-      const kind = tile.action === 'run' ? 'Terminal'
+      const kind = launcherIsTerm(tile) ? 'Terminal'
         : launcherWantsArb(tile) ? 'Arbitrated' : many ? 'Conversation' : 'Session';
       // The bubbles rather than the robot as soon as there is more than one agent on the tile:
       // what this press makes is a room with them in it, and that is what the reader wants to
@@ -12623,18 +13558,20 @@
     // the same kind are two panes, and the badges are what says which kinds without the reader
     // parsing a line of lowercase words. A command has no badges — it is quoted verbatim.
     function launcherPayloadHtml(tile) {
-      if (!tile || tile.action === 'run') {
+      if (!tile || launcherIsTerm(tile)) {
         return escapeHtml(launcherPreview(tile));
       }
-      const members = (tile.members || []).map(m => (m && m.name) || '?');
-      const badges = members.map(k => typeof agentBadge === 'function'
-        ? agentBadge(k) : ` <span class="badge">${escapeHtml(k)}</span>`);
+      const members = (tile.members || []).map(m => m || {});
+      const badges = members.map(m => typeof configBadge === 'function'
+        ? configBadge(m.name || '?', m.config)
+        : ` <span class="badge">${escapeHtml(m.name || '?')}</span>`);
       // The arbitrator is named apart from the two rather than joined into them: it is not a third
       // participant, it is the one deciding between the other two.
       return badges.join(' <span class="launcher-plus">+</span>')
         + (launcherWantsArb(tile)
           ? ` <span class="launcher-plus">\u2696</span>`
-            + (typeof agentBadge === 'function' ? agentBadge(tile.arbitrator.name)
+            + (typeof configBadge === 'function'
+               ? configBadge(tile.arbitrator.name, tile.arbitrator.config)
                : ` <span class="badge">${escapeHtml(tile.arbitrator.name)}</span>`)
           : '');
     }
@@ -12649,6 +13586,18 @@
       // in step 4 shows the whole of it; two lines here is what fits without the grid going ragged.
       const payload = launcherPreview(tile);
       const badge = gate.badge ? `<span class="launcher-badge">${escapeHtml(gate.badge)}</span>` : '';
+      // On the tile as well as over the band. A tile is dragged between bands by editing it, and
+      // the one thing that must never be true of this mark is that it can be missed.
+      const insecure = launcherInsecure(tile)
+        ? '<span class="launcher-badge insecure" title="The providers behind this tile do not'
+          + ' protect what is sent to them">insecure</span>'
+        : '';
+      // The other thing a tile can be that its name does not say. Beside the insecure mark and in
+      // the same shape: both are facts about what pressing it does, and neither is a gate.
+      const solo = launcherSolo(tile)
+        ? '<span class="launcher-badge solo" title="Starts without approval prompts — it runs'
+          + ' tools without asking">no approvals</span>'
+        : '';
       // aria-disabled and not the `disabled` attribute: a disabled button is skipped by the
       // keyboard and reports nothing to a screen reader, and the reason this tile cannot be
       // pressed is the one thing its reader most needs. It is still not pressable — nothing is
@@ -12666,7 +13615,10 @@
         + `<span class="launcher-name">${escapeHtml(tile.label)}`
         + `${launcherProjectBadge(tile)}</span>`
         + (payload ? `<span class="launcher-payload">${launcherPayloadHtml(tile)}</span>` : '')
-        + badge
+        // One row, and never a column: a tile can carry all three at once, and stacked they push
+        // the payload out of the tile. The row is what makes them small enough to sit together.
+        + (insecure || solo || badge
+          ? `<span class="launcher-badges">${insecure}${solo}${badge}</span>` : '')
         + '</button>';
     }
 
@@ -12680,13 +13632,18 @@
     function launcherGroups(tiles) {
       const out = [];
       const band = (label, list) => { if (list.length) out.push({label: label, tiles: list}); };
-      band('Templates', tiles.filter(t => !t.project_id));
-      projects.forEach(p => band(p.label || p.id, tiles.filter(t => t.project_id === p.id)));
+      // Insecure first, and out of every other band: the whole point of the mark is that it is
+      // read before the tile is pressed, and a warning mixed in among the Project it happens to
+      // belong to is one more badge in a grid of badges.
+      const safe = tiles.filter(t => !launcherInsecure(t));
+      band('[insecure]', tiles.filter(launcherInsecure));
+      band('Templates', safe.filter(t => !t.project_id));
+      projects.forEach(p => band(p.label || p.id, safe.filter(t => t.project_id === p.id)));
       // Tiles pointing at a Project this relay does not have. Last, and still drawn: they are the
       // broken ones, each already wearing its own badge, and a band that hid them would be the one
       // place the problem is fixable and the last place it is mentioned.
       const known = new Set(projects.map(p => p.id));
-      band('Missing Project', tiles.filter(t => t.project_id && !known.has(t.project_id)));
+      band('Missing Project', safe.filter(t => t.project_id && !known.has(t.project_id)));
       return out;
     }
 
@@ -12715,7 +13672,10 @@
         + (groups.length > 1
           ? groups.map(g => `<div class="launcher-band">${escapeHtml(g.label)}</div>`
             + g.tiles.map(launcherTileHtml).join('')).join('')
-          : tiles.map(launcherTileHtml).join(''));
+          : tiles.map(launcherTileHtml).join(''))
+        // Under the tiles and inside the same section, because it is the launcher's own answer to
+        // "what can this press start" — not a seventh section with a tab of its own.
+        + (typeof agentConfigsHtml === 'function' ? agentConfigsHtml() : '');
       applySections();
     }
 
@@ -12761,8 +13721,17 @@
       // and together they are what tells two otherwise identical tiles apart.
       const where = `${project.label || tile.project_id}`
         + (project.host && project.host !== 'local' ? ` on ${project.host}` : '');
-      if (tile.action === 'run') {
-        return [`Run this in a new terminal on ${where}?`, '', tile.command];
+      // First line, above the payload: a tile the user marked insecure is one whose providers
+      // they told us not to trust with their work, and the press is the last moment that is
+      // still worth knowing.
+      const warn = launcherInsecure(tile)
+        ? ['Insecure: the providers behind this tile do not protect what is sent to them.', '']
+        : [];
+      if (launcherIsTerm(tile)) {
+        const command = String(tile.command || '').trim();
+        return warn.concat(command
+          ? [`Run this in a new terminal on ${where}?`, '', command]
+          : [`Open a terminal on ${where}?`]);
       }
       // The arbitrator counts. It is a third pane started on the same relay in the same Project,
       // and a confirm that said "2 sessions" before starting three would be the one number on
@@ -12770,7 +13739,7 @@
       const roster = launcherRoster(tile);
       const many = roster.length > 1;
       const arb = launcherWantsArb(tile);
-      return [`Start ${many ? roster.length + ' sessions' : 'a session'} on ${where}?`,
+      return warn.concat([`Start ${many ? roster.length + ' sessions' : 'a session'} on ${where}?`,
               '', roster.map(m => m.name).join(', '),
               '',
               arb ? `${tile.arbitrator.name} will decide between `
@@ -12782,7 +13751,7 @@
                 // first decision for it.
                 + 'It starts paused — arm it from the conversation.'
                 : many ? 'They are started one at a time and grouped into a conversation.'
-                : 'It gets a conversation of its own, under the name you give it.']
+                : 'It gets a conversation of its own, under the name you give it.'])
         .filter(l => l !== null);
     }
 
@@ -12826,7 +13795,7 @@
       // `label` — the pane's name, the conversation's, the status line's — so naming it once here
       // is what keeps the launch's name and the tile's name from having to be the same thing.
       const named = launcherNamed(tile, typed);
-      return named.action === 'run' ? launcherRunTile(named) : launcherSpawnTile(named);
+      return launcherIsTerm(named) ? launcherRunTile(named) : launcherSpawnTile(named);
     }
 
     // What the sheet calls back into: the tile as stored, run in the Project just chosen. The
@@ -12877,8 +13846,26 @@
     // opening the session, by proxy.
     function launcherStarter(paneId, member) {
       const at = member && member.at;
-      if (!at || typeof SHORTCUTS === 'undefined') return false;
-      const text = ((SHORTCUTS.find(s => s.at === at) || {}).text || '').trim();
+      // A member whose starter was cleared in the editor is a deliberate bare start, and is
+      // recorded as one — otherwise it comes back from a restart wearing the default it was
+      // taken off.
+      if (!at) {
+        if (typeof notePaneStarter === 'function') notePaneStarter(paneId, NO_STARTER);
+        return false;
+      }
+      if (typeof roleStarter !== 'function') return false;
+      // Through roleStarter and not off SHORTCUTS directly: it is the one place a starter's text is
+      // resolved, and the one place it is written in the form the harness under it understands —
+      // codex takes `$ponytail` where claude takes `/ponytail`.
+      // The pane's own harness, not the member's name: the two agree on every ordinary press, and
+      // where they do not it is the pane that is about to read this.
+      const text = roleStarter({at: at},
+                               (typeof agentOf === 'function' && agentOf(paneId)) || member.name);
+      // Recorded whether or not there is text for it today. The chip is edited in one place, so a
+      // starter with nothing written under it now is one a restart should still open with once
+      // somebody writes it — and a tile's members are named after the tile, so the pane's own name
+      // will never say what it was started as.
+      if (typeof notePaneStarter === 'function') notePaneStarter(paneId, at);
       return text ? sendTextTo(paneId, text) : false;
     }
 
@@ -13005,8 +13992,13 @@
     // What the form was opened on, so Delete knows whether there is anything to delete and the
     // list can be returned to. '' for a tile being added.
     let launcherEditing = '';
+    let launcherMembersCustom = false, launcherArbCustom = false;
 
     function launcherKinds() { return (startOptions && startOptions.agents) || []; }
+
+    function launcherConfigs() {
+      return typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+    }
 
     // Everything typed since the last repaint, back into the draft. Called before every redraw
     // and before saving, which is what lets the form rebuild itself around a badge tap without
@@ -13024,6 +14016,8 @@
       if (command !== undefined) d.command = command;
       const scope = val('qlScope');
       if (scope !== undefined) d.scope = scope;
+      const insecure = document.getElementById('qlInsecure');
+      if (insecure) d.insecure = !!insecure.checked;
       // The arbitration settings, and only ever what is on screen: `val` answers undefined for a
       // field this draw did not make, which is what leaves a tile's clocks alone while its
       // arbitrator is switched off and on again.
@@ -13040,6 +14034,8 @@
         if (label !== undefined) m.label = label.trim();
         const at = val('qlAt' + i);
         if (at !== undefined) m.at = at;
+        const solo = document.getElementById('qlSolo' + i);
+        if (solo) m.unattended = !!solo.checked;
       });
       return d;
     }
@@ -13131,10 +14127,12 @@
     // fact about the tile; the confirm is a fact about the press, and there is no press to describe
     // until there is somewhere to press it.
     function launcherRosterHtml(tile) {
-      const roster = tile.action === 'run' ? [] : launcherRoster(tile);
+      const roster = launcherIsTerm(tile) ? [] : launcherRoster(tile);
       if (!roster.length) return '';
       return '<div class="ql-roster">' + roster.map(m => {
-        const starter = (SHORTCUTS.find(s => s.at === m.at) || {}).label || '';
+        // The @name and not the label: this is the same prompt the composer offers, and a strip
+        // that renamed it would be the one place in the app it is not addressed by name.
+        const starter = (SHORTCUTS.find(s => s.at === canonAt(m.at)) || {}).at || '';
         return `<span class="ql-part${m.arb ? ' arb' : ''}">`
           // Scales for the arbitrator, the robot for a member. It is not a third participant, it is
           // the one deciding between the other two, and a strip drawing all three alike would tell
@@ -13142,8 +14140,9 @@
           + (m.arb ? '<span class="ql-part-mark" aria-hidden="true">⚖</span>'
                    : `<span class="ql-part-mark">${launcherIcon('spawn')}</span>`)
           + `<span class="ql-part-name">${escapeHtml(m.label || m.name)}</span>`
-          + agentBadge(m.name)
-          + (starter ? `<span class="ql-part-role">${escapeHtml(starter)}</span>` : '')
+          + configBadge(m.name, m.config)
+          + (starter ? `<span class="ql-part-role">@${escapeHtml(starter)}</span>` : '')
+          + launcherUnattendedHtml(m, '', true)
           + '</span>';
       }).join('') + '</div>';
     }
@@ -13254,7 +14253,7 @@
       const kinds = launcherKinds();
       launcherEditing = '';
       launcherDraft = {
-        id: launcherId(), label: '', action: 'run',
+        id: launcherId(), label: '', action: 'spawn',
         // None, deliberately. A tile is more useful as a template than as a button — the same
         // roster pressed into whichever tree wants it — and a form that opened on one Project
         // would make the narrower tile the one people make by accident.
@@ -13262,8 +14261,10 @@
         command: '', members: [], scope: '',
       };
       // A relay that starts nothing still has terminals, and one with terminals off still starts
-      // agents. Opening on the half that cannot work is a form whose first act is to refuse.
-      if (!(startOptions || {}).terminal && kinds.length) launcherDraft.action = 'spawn';
+      // agents. Opening on the one that cannot work is a form whose first act is to refuse.
+      if (!kinds.length && (startOptions || {}).terminal) launcherDraft.action = 'term';
+      launcherMembersCustom = false;
+      launcherArbCustom = false;
       launcherDrawForm();
     }
 
@@ -13277,6 +14278,8 @@
         members: (tile.members || []).map(m => Object.assign({}, m)),
         arbitrator: tile.arbitrator ? Object.assign({}, tile.arbitrator) : null,
       });
+      launcherMembersCustom = launcherDraft.members.some(m => m.config);
+      launcherArbCustom = !!((launcherDraft.arbitrator || {}).config);
       launcherDrawForm();
     }
 
@@ -13300,15 +14303,17 @@
       launcherDrawForm();
     }
 
-    function launcherAddMember(name) {
+    function launcherAddMember(name, config) {
       launcherReadForm();
       const d = launcherDraft;
       if ((d.members || []).length >= LAUNCHER_MEMBERS_MAX) {
         showToast(`At most ${LAUNCHER_MEMBERS_MAX} agents`);
         return;
       }
+      if (config) launcherMembersCustom = true;
       d.members = (d.members || []).concat(
-        [{name: name, role: '', label: '', at: LAUNCHER_DEFAULT_AT}]);
+        [{name: name, config: config || '', role: '', label: '', at: LAUNCHER_DEFAULT_AT,
+          unattended: launcherUnattended({name: name, config: config || ''})}]);
       launcherDrawForm();
     }
 
@@ -13320,10 +14325,18 @@
 
     // '' switches it off. Off and not absent, because launcherWantsArb reads the field's presence
     // and a tile that lost its arbitrator by being widened to three keeps it — see step 6.
-    function launcherPickArb(name) {
+    function launcherPickArb(name, config) {
       launcherReadForm();
-      launcherDraft.arbitrator = name ? {name: name} : null;
+      if (config) launcherArbCustom = true;
+      launcherDraft.arbitrator = name ? {name: name, config: config || ''} : null;
       if (name) launcherArbSeed();
+      launcherDrawForm();
+    }
+
+    function launcherToggleCustom(where) {
+      launcherReadForm();
+      if (where === 'members') launcherMembersCustom = !launcherMembersCustom;
+      else launcherArbCustom = !launcherArbCustom;
       launcherDrawForm();
     }
 
@@ -13350,6 +14363,7 @@
     function launcherFormHtml() {
       const d = launcherDraft;
       const kinds = launcherKinds();
+      const configs = launcherConfigs();
       const terminal = !!(startOptions || {}).terminal;
       const members = d.members || [];
       // Two or more. The arbitrator itself still takes exactly two — that is the relay's
@@ -13358,16 +14372,20 @@
       // selects over the roster, defaulted to the pair launcherArbOrder picked.
       const canArb = d.action === 'spawn' && members.length >= 2;
       const arbName = (d.arbitrator || {}).name || '';
+      const arbConfig = (d.arbitrator || {}).config || '';
       return '<label class="start-field">Name<input id="qlName" type="text"'
         + ` maxlength="${LAUNCHER_LABEL_MAX}" autocapitalize="none" autocomplete="off"`
         + ` placeholder="what pressing this does" value="${escapeHtml(d.label || '')}" /></label>`
         + '<div class="start-field">What it does<div class="badge-strip">'
-        + badgeHtml('Run a command', d.action === 'run', "launcherPickAction('run')",
-                    {title: terminal ? 'Opens a terminal and types this at it'
-                                     : 'This relay has terminal mode switched off'})
         + badgeHtml('Start agents', d.action === 'spawn', "launcherPickAction('spawn')",
                     {title: kinds.length ? 'Starts one or more sessions'
                                          : 'This relay starts nothing'})
+        + badgeHtml('Start terminal', d.action === 'term', "launcherPickAction('term')",
+                    {title: terminal ? 'Opens a terminal in the Project, and types nothing'
+                                     : 'This relay has terminal mode switched off'})
+        + badgeHtml('Run a command', d.action === 'run', "launcherPickAction('run')",
+                    {title: terminal ? 'Opens a terminal and types this at it'
+                                     : 'This relay has terminal mode switched off'})
         + '</div></div>'
         + '<div class="start-field">Project<div class="badge-strip">'
         + badgeHtml('Ask each time', !d.project_id, "launcherPickProject('')",
@@ -13378,20 +14396,29 @@
               {proj: true, title: p.host && p.host !== 'local' ? 'on ' + p.host : ''})).join('')
           : '<span class="ql-none">This relay has no Projects configured.</span>')
         + '</div></div>'
-        + (d.action === 'run'
-          ? '<label class="start-field">Command<textarea id="qlCommand" rows="2"'
+        + (launcherIsTerm(d)
+          // Offered for a `term` too, and optional there: the two differ by whether the line is
+          // required, and a field that vanished between them would make switching one to the other
+          // lose what was typed.
+          ? `<label class="start-field">Command${d.action === 'term' ? ' <span class="field-note">optional</span>' : ''}`
+            + '<textarea id="qlCommand" rows="2"'
             + ' autocapitalize="none" autocomplete="off" spellcheck="false"'
             + ` placeholder="pytest -q">${escapeHtml(d.command || '')}</textarea></label>`
-          : launcherMembersHtml(members, kinds))
+          : launcherMembersHtml(members, kinds, configs))
         + (canArb
           ? '<div class="start-field">Arbitrator<div class="badge-strip">'
             + badgeHtml('None', !arbName, "launcherPickArb('')",
                         {title: 'The two talk without one deciding between them'})
-            + kinds.map(k => badgeHtml(k, k === arbName, `launcherPickArb('${escapeHtml(k)}')`,
+            + kinds.map(k => badgeHtml(k, !arbConfig && k === arbName,
+              `launcherPickArb('${escapeHtml(k)}')`,
                                        {agent: k})).join('')
+            + launcherCustomBadges(configs, launcherArbCustom, 'arbitrator', c =>
+              `launcherPickArb('${escapeHtml(c.kind)}', '${escapeHtml(c.id)}')`,
+              c => c.id === arbConfig)
             + '</div></div>'
             + (arbName ? launcherArbSetupHtml(d, members) : '')
           : '')
+        + launcherInsecureHtml(d)
         + '<p id="qlError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>'
         + '<div class="ql-actions">'
         + (launcherEditing
@@ -13401,12 +14428,36 @@
         + '</div>';
     }
 
-    function launcherMembersHtml(members, kinds) {
+    // The one answer on this form that is not about what the tile does. Nothing here can tell a
+    // provider that protects the user's work from one that does not — only the person who set the
+    // endpoints up knows — so it is asked plainly and then repeated wherever the tile appears.
+    // A checkbox and not a badge strip: it is a warning being accepted, not an option being tuned.
+    function launcherInsecureHtml(d) {
+      return '<label class="ql-insecure">'
+        // No redraw on change: nothing else on the form depends on it, and launcherReadForm
+        // picks it up before the save like every other field here.
+        + `<input type="checkbox" id="qlInsecure"${d.insecure ? ' checked' : ''}>`
+        + '<span><strong>Insecure</strong> — the providers behind this tile do not protect what is'
+        + ' sent to them. Prompts, code and file contents may be retained or used for training.'
+        + '</span></label>';
+    }
+
+    function launcherCustomBadges(configs, open, where, pick, selected) {
+      if (!configs.length) return '';
+      return badgeHtml('+custom', open, `launcherToggleCustom('${where === 'members' ? 'members' : 'arbitrator'}')`,
+        {proj: true, title: 'Start under one of your agent configs'})
+        + (open ? configs.map(c => badgeHtml(c.label, !!(selected && selected(c)), pick(c),
+          {agent: c.kind, title: c.command || c.provider_label || ''})).join('') : '');
+    }
+
+    function launcherMembersHtml(members, kinds, configs) {
       return '<div class="start-field">Agents<div class="badge-strip">'
         + (kinds.length
           ? kinds.map(k => badgeHtml('+ ' + k, false, `launcherAddMember('${escapeHtml(k)}')`,
                                      {agent: k, title: 'Add one of these to the roster'})).join('')
           : '<span class="ql-none">This relay starts nothing.</span>')
+        + launcherCustomBadges(configs, launcherMembersCustom, 'members', c =>
+          `launcherAddMember('${escapeHtml(c.kind)}', '${escapeHtml(c.id)}')`)
         + '</div>'
         // Three answers per member: what to call it, what it is for, and what to say to it first.
         // The name is a template rather than the pane's name — launcherNamed puts the launch's tag
@@ -13451,7 +14502,7 @@
           // that looks live and is not.
           + `<span class="ql-member-kind"><span class="ql-arb-slot">Agent ${i + 1}</span>`
           + launcherPairSelect(members, i)
-          + (typeof agentBadge === 'function' ? agentBadge(m.name)
+          + (typeof configBadge === 'function' ? configBadge(m.name, m.config)
              : ` <span class="badge">${escapeHtml(m.name)}</span>`) + '</span>'
           + (typeof arbRoleField === 'function'
             ? arbRoleField(`qlRole${i}`, m.role || '')
@@ -13519,8 +14570,10 @@
     // on placeholders nobody can read.
     function launcherMemberHtml(m, i) {
       const at = m.at === undefined ? LAUNCHER_DEFAULT_AT : m.at;
+      const config = m.config && launcherConfigs().find(c => c.id === m.config);
+      const shown = config ? config.label : m.name;
       return '<div class="ql-member">'
-        + `<span class="ql-member-kind">${escapeHtml(m.name)}</span>`
+        + `<span class="ql-member-kind">${escapeHtml(shown)}</span>`
         + `<button class="ql-del" onclick="launcherDropMember(${i})"`
         + ` aria-label="Remove ${escapeHtml(m.name)}">✕</button>`
         + `<input id="qlMemberName${i}" type="text" maxlength="${LAUNCHER_LABEL_MAX}"`
@@ -13535,12 +14588,37 @@
         // a starter is edited in one place and every tile that names it follows, which is why the
         // chips are addressed by name everywhere else in the app.
         + `<select id="qlAt${i}" aria-label="First prompt for ${escapeHtml(m.name)}">`
-        + `<option value=""${at ? '' : ' selected'}>No first prompt</option>`
+        + `<option value=""${at ? '' : ' selected'}>@none — no first prompt</option>`
         + (typeof SHORTCUTS === 'undefined' ? '' : SHORTCUTS.map(sc =>
-            `<option value="${escapeHtml(sc.at)}"${sc.at === at ? ' selected' : ''}>`
+            `<option value="${escapeHtml(sc.at)}"${sc.at === canonAt(at) ? ' selected' : ''}>`
             + `@${escapeHtml(sc.at)} — ${escapeHtml(sc.label)}</option>`).join(''))
         + '</select>'
+        // Said in the tile because it is decided per member: two agents in one roster can want
+        // different answers, and the tile is where a roster is written down. Only for the kinds a
+        // relay has a flag for — see UNATTENDED_ARGS; the rest are drawn without it rather than
+        // with a control that would refuse the start.
+        + launcherUnattendedHtml(m, 'qlSolo' + i)
         + '</div>';
+    }
+
+    // One rendering for the editable member card and the read-only launch sheet. The latter is
+    // deliberately a disabled native checkbox: the tile's saved answer is visible but cannot be
+    // changed while confirming a launch.
+    function launcherUnattendedHtml(m, id, readOnly) {
+      if (!launcherUnattendedOffered(m.name)) return '';
+      const checked = launcherUnattended(m) ? ' checked' : '';
+      const disabled = readOnly ? ' disabled' : '';
+      const ident = id ? ` id="${id}"` : '';
+      return `<label class="ql-solo${readOnly ? ' ql-solo-readonly' : ''}">`
+        + `<input type="checkbox"${ident}${checked}${disabled}`
+        + ` aria-label="Start ${escapeHtml(m.name)} without approval prompts" />`
+        + '<span>Skip approvals</span></label>';
+    }
+
+    // The relay says which harnesses it can start this way. An older relay says nothing, and then
+    // nothing is offered: the checkbox would be a start refused on arrival.
+    function launcherUnattendedOffered(kind) {
+      return ((startOptions || {}).unattended || []).indexOf(kind) >= 0;
     }
 
     function launcherDrawForm() {
@@ -13582,20 +14660,30 @@
     function launcherTileOf(d) {
       const tile = {id: d.id, label: String(d.label || '').trim(), action: d.action,
                     project_id: d.project_id};
-      if (d.action === 'run') { tile.command = String(d.command || '').trim(); return tile; }
+      // Absent rather than false, like every other optional field here: a tile that has never been
+      // marked and one marked and unmarked are the same tile.
+      if (d.insecure) tile.insecure = true;
+      if (launcherIsTerm(d)) { tile.command = String(d.command || '').trim(); return tile; }
       tile.members = (d.members || []).map(m => {
         const out = {name: m.name};
+        if (m.config) out.config = m.config;
         if (m.role) out.role = m.role;
         if (m.label) out.label = m.label;
         // '' is a real answer — this member opens with nothing — so it is stored as absent and
         // read back as absent, and the default only applies to a member being added.
         if (m.at) out.at = m.at;
+        // Absent while it agrees with the default for a member like this — on under an agent
+        // config, off on a stock harness — and written down the moment the user disagrees. Same
+        // rule as every other optional field here: a tile stores answers, not restatements.
+        const solo = launcherUnattended(m);
+        if (solo !== !!m.config) out.unattended = solo;
         return out;
       });
       // Kept whatever the roster size, exactly as launcherWantsArb expects: a tile widened to
       // three and edited back down to two must still have the arbitrator it was given.
       if (d.arbitrator && d.arbitrator.name) {
         tile.arbitrator = {name: d.arbitrator.name};
+        if (d.arbitrator.config) tile.arbitrator.config = d.arbitrator.config;
         // Only what was answered. An absent clock is off and an absent limit is the relay's own
         // DEFAULT_BUDGET — restating either here would be a second copy of a number the relay
         // owns, kept in step by hand for no gain.
@@ -13703,9 +14791,10 @@
       // and column 0 is what it refuses — kiro's tool calls, its credit line, its rules and its
       // status bar all live there, and none of them is ever typed.
       //
-      // No `chrome`, unlike agy: kiro's whole footer is in column 0, so none of it can open a
-      // positional block, and the composer placeholder under it is indented but sits under the
-      // status bar rather than under a rule — which is the question `userLine` already asks.
+      // `chrome` is the rule kiro's footer opens with, and it is a cut for the same reason agy's
+      // composer line is one: the placeholder under it is indented, and the walk back for what
+      // opened it runs straight past kiro's column-0 chrome to the last `●` above it. A turn where
+      // kiro had not answered yet was read as kiro saying `ask a question or describe a task ↵`.
       // `composer: false` for the reason pi has it: the live composer is not a prompt, so the
       // newest reply is below the newest prompt rather than above it.
       //
@@ -13714,7 +14803,7 @@
       // reached for a tool before saying anything is recorded as kiro saying `<｜DSML｜function_calls`.
       kiro: {
         speaker: null, result: [], user: [], opens: ['●'], composer: false,
-        endLine: /^\s*<｜DSML｜/,
+        endLine: /^\s*<｜DSML｜/, chrome: /^─{20,}\s*$/,
         userLine: (row, rows, i) => {
           if (!(row || '').trim() || /^\S/.test(row || '') || !rows) return false;
           for (let j = i - 1; j >= 0; j--) {
@@ -13746,8 +14835,11 @@
     function transcriptRows(rows, g) {
       const mark = (g || {}).chrome;
       if (!mark || !rows || !rows.length) return rows;
+      // A string is the whole of the line; a pattern is a shape, which is what a harness whose
+      // footer opens with a rule needs — the rule is a different width in every pane.
+      const hit = mark.test ? (row => mark.test(row)) : (row => row.replace(/\s+$/, '') === mark);
       for (let j = rows.length - 1; j >= 0 && j > rows.length - 1 - CHROME_ROWS; j--) {
-        if ((rows[j] || '').replace(/\s+$/, '') === mark) return rows.slice(0, j + 1);
+        if (hit(rows[j] || '')) return rows.slice(0, j + 1);
       }
       return rows;
     }
@@ -15261,6 +16353,22 @@
     // chose the dead member and asked its replacement to continue the same thread. Copy its record
     // under the new physical pane key; the old key remains for any other conversation that still
     // names that ended session.
+    // The record a replacement starts life with. The transcript continues; the identity does not.
+    // `spawn` describes the pane that ended — its harness, its label, the agent config it came up
+    // under — and a member swapped from oclaude to stock codex would go on wearing all three,
+    // because convSpawn falls back to what was recorded before whenever the live pane does not say.
+    // The starter is the one part that carries: it is the role this member is in the conversation
+    // for, and nothing else remembers it once the browser that watched the start reloads.
+    function convContinued(old, newKey, label) {
+      return Object.assign({}, old, {
+        key: newKey, label: label || old.label || '', entries: (old.entries || []).slice(),
+        spawn: {starter: ((old.spawn || {}).starter) || ''},
+        // The new pane cannot be aligned to the old pane's output. Keep the continuation boundary
+        // until its first completed turn, then append that whole turn after this history.
+        continued: true, backfilled: true, depth: 0, lastTurn: 0,
+      });
+    }
+
     async function convContinueTranscript(oldKey, newKey, label) {
       if (!oldKey || !newKey || oldKey === newKey) return true;
       const old = convHeld.get(oldKey) || (await convGet([oldKey]))[0];
@@ -15271,12 +16379,7 @@
       // joining as a new member, which is what a restart did before it could continue anything.
       const taken = convHeld.get(newKey) || (await convGet([newKey]))[0];
       if (taken && (taken.entries || []).length && convReferenced().has(newKey)) return false;
-      const next = Object.assign({}, old, {
-        key: newKey, label: label || old.label || '', entries: (old.entries || []).slice(),
-        // The new pane cannot be aligned to the old pane's output. Keep the continuation boundary
-        // until its first completed turn, then append that whole turn after this history.
-        continued: true, backfilled: true, depth: 0, lastTurn: 0,
-      });
+      const next = convContinued(old, newKey, label);
       if (!(await convPut(next))) return false;
       convHeld.set(newKey, next);
       return true;
@@ -15519,7 +16622,7 @@
         held.entries = capEntries(fitted.concat(held.entries, tagged.entries));
         held.label = label;
         held.touched = now;
-        held.spawn = convSpawn(a, now);
+        held.spawn = convSpawn(a, now, held.spawn);
         await convCommit(key);
       } else if (noteGap || initialized) {
         await convCommit(key);
@@ -15574,7 +16677,7 @@
         held.entries = capEntries(held.entries.concat(convStamped([entry], label, a.agent || '')));
         held.label = label;
         held.touched = now;
-        held.spawn = convSpawn(a, now);
+        held.spawn = convSpawn(a, now, held.spawn);
         await convCommit(key);
         if (convThreadShows(key)) renderConvView();
       });
@@ -15960,17 +17063,49 @@
     // record already carries, except `role`, which roleOf() recovers from the label. Placement and
     // slot are deliberately absent: a snapshot says where a pane *is*, never how it was created,
     // and a replacement is placed by today's layout rather than by a dead pane's.
-    function convSpawn(a, now) {
+    function convSpawn(a, now, prev) {
       return {
         agent: a.agent || '', role: roleOf(a) || '', label: paneLabel(a) || '',
-        // Which of the standard starter roles it was begun as, so starting it again begins it the
-        // same way — including the opening prompt, which `role` alone cannot say: Arbitrator and
-        // Orchestrator both go on the wire as `agent`.
-        starter: (startRoleFromLabel(paneLabel(a)) || {}).at || '',
+        // What it was started as, so starting it again starts it the same way — including the
+        // opening prompt, which `role` alone cannot say: Arbitrator and Orchestrator both go on
+        // the wire as `agent`.
+        //
+        // Three sources, in the order of how much they know. What this browser watched happen;
+        // then what was recorded the last time it was asked, which is how the answer survives a
+        // reload that emptied the first; and only then the pane's name, which is a guess and is
+        // right only for the panes the relay named after their role. The guess alone was the bug:
+        // a launcher names its members after the tile, so every session started from one came back
+        // with no starter and Start again brought it up silent.
+        starter: convStarterOf(a, prev),
+        // The agent config it was started under, by id and by nothing else. What that id points
+        // at — provider, model, which variable the key is read from — is the relay's answer and
+        // may have moved since, so a restart resolves it again and comes up on the alias as it is
+        // now rather than on a snapshot of how it was born.
+        //
+        // `prev` is what makes it durable past the relay: pane_config is in memory there, so a
+        // relay restart drops `config` off the snapshot while the pane it describes runs on. The
+        // record already knew, and keeps knowing.
+        // Inherited only from a spawn of the same harness. A record written before this pane was
+        // swapped describes a different agent entirely, and its alias would otherwise be read back
+        // onto the one running now — a member restarted as stock codex kept saying `oclaude`.
+        config: a.config || (sameKind(a, prev) ? prev.config : '') || '',
         project_id: a.project_id || '', project: a.project || '', cwd: a.cwd || '',
         host: a.host || '', workspace_id: a.workspace_id || '', tab_id: a.tab_id || '',
         captured: now,
       };
+    }
+
+    // Is what was recorded before about the same harness as the pane in hand? An empty `agent` on
+    // the old record is not a mismatch — it predates the field.
+    function sameKind(a, prev) {
+      return !!prev && (!prev.agent || prev.agent === (a.agent || ''));
+    }
+
+    function convStarterOf(a, prev) {
+      const watched = typeof paneStarter !== 'undefined' && a.pane_id
+        ? paneStarter.get(a.pane_id) : '';
+      return watched || ((prev || {}).starter || '')
+        || (startRoleFromLabel(paneLabel(a)) || {}).at || '';
     }
 
     // At the ceiling it is the auto tier that gives way, oldest first (D4). New conversations are
@@ -16021,7 +17156,8 @@
     }
 
     function convMemberOf(a) {
-      return { key: convMemberKey(a), added: Date.now(), label: paneLabel(a) };
+      return { key: convMemberKey(a), added: Date.now(), label: paneLabel(a),
+        agent: a.agent || '', project: a.project || '' };
     }
 
     function openConvDialog(paneId) {
@@ -16334,6 +17470,7 @@
     const CONV_AUTO_KEY = 'herdr_conv_auto', CONV_AUTO_SEEN_KEY = 'herdr_conv_auto_seen';
     const CONV_AUTO_SEEN_MAX = 500;
     const CONV_LANDING_AUTO_KEY = 'herdr_conv_landing_auto', CONV_LANDING_AUTO_MAX = 10;
+    const CONV_LANDING_ARCHIVE_KEY = 'herdr_conv_landing_archive';
 
     // The toggle exists so auto conversations cannot bury the named ones, which is a question
     // about this reader's screen and not about the agents — so it is not one of the four synced
@@ -16352,6 +17489,18 @@
 
     function toggleConvLandingAuto() {
       try { localStorage.setItem(CONV_LANDING_AUTO_KEY, convLandingAutoOn() ? 'off' : 'on'); }
+      catch (e) { /* private mode: this session only */ }
+      renderConversations();
+    }
+
+    function convLandingArchiveOn() {
+      try { return localStorage.getItem(CONV_LANDING_ARCHIVE_KEY) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function toggleConvLandingArchive() {
+      try { localStorage.setItem(CONV_LANDING_ARCHIVE_KEY,
+        convLandingArchiveOn() ? 'off' : 'on'); }
       catch (e) { /* private mode: this session only */ }
       renderConversations();
     }
@@ -16405,8 +17554,13 @@
       for (const c of items) for (const m of (c && c.members) || []) if (m && m.key) had.add(m.key);
       // Only a pane an agent is running in has messages to record — the same gate the menu item
       // uses, so a harness the app cannot read is not filed under a record it can never write to.
+      // A pane a restart in flight is about to continue a thread onto is not a fresh pane. Filing
+      // it here would put its key in a conversation of its own, and a key some conversation names
+      // is one convContinueTranscript refuses to write over — so the thread it was started to
+      // continue would gain a second member instead of carrying on.
       const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
-        && profileFor(a.agent));
+        && profileFor(a.agent)
+        && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
       const added = fresh.map(a => {
         const conv = {
@@ -16652,7 +17806,8 @@
         (joint ? convMembersHtml(thread, recs) : '') +
         // Above the oldest bubble, which is where the reader is by the time they want it.
         (typeof convOlderHtml === 'function' ? convOlderHtml(want) : '') + (entries.length
-        ? convEntriesHtml(entries, { key: key, agent: a.agent, label: paneLabel(a) }, paired)
+        ? convEntriesHtml(entries, { key: key, agent: a.agent, config: a.config,
+                                     label: paneLabel(a) }, paired)
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional — a live draft, or ' +
             'backfill off the scrollback. Turn "final messages only" off in the pane menu to see it.</p>'
@@ -16696,7 +17851,7 @@
       if (!workingList || !workingList.length) return '';
       return workingList.map(a => {
         const name = escapeHtml(paneLabel(a) || a.pane_id || 'Agent');
-        const badge = a.agent ? agentBadge(a.agent) : '';
+        const badge = a.agent ? paneBadge(a) : '';
         const key = convMemberKey(a);
         const accent = agentColor(a.agent) || 'var(--text)';
         // A button, because it does something: the badge says who is working and pressing it goes
@@ -16766,7 +17921,7 @@
       const color = agentColor(a.agent) || 'var(--muted)';
       const dot = statusColor(live);
       const who = `<span class="dot pulse" style="background:${dot}"></span>` +
-        `${escapeHtml(paneLabel(a) || '')}${agentBadge(a.agent)}`;
+        `${escapeHtml(paneLabel(a) || '')}${paneBadge(a)}`;
       const text = (draft && draft.text || '').trim();
       // `conv-slot` and not `conv-msg`: it looks like a bubble but it is not a message, and the
       // pick handler, Summary, Last and the badge writer all find messages by that class.
@@ -16905,7 +18060,8 @@
         const facts = [spawn.role, spawn.project || spawn.cwd].filter(Boolean);
         return `<span class="conv-member${on ? '' : ' gone'}">` +
           `<span class="who">${escapeHtml((rec && rec.label) || m.label || '')}</span>` +
-          agentBadge(spawn.agent || (live.get(m.key) || {}).agent || '') +
+          kindBadge(spawn.agent || (live.get(m.key) || {}).agent || '', live.get(m.key),
+                    spawn.config) +
           `${on ? '' : '<span class="tag">no longer live</span>'}` +
           `<span class="spawn">${escapeHtml(facts.join(' · '))}</span></span>`;
       }).join('') + '</button>';
@@ -17019,12 +18175,18 @@
         // The harness the entry was recorded under, not the one running in that pane today: a
         // conversation outlives its panes, and a member that has exited still gets its own badge.
         const agent = e.agent || (live && live.agent) || me.agent || '';
+        // The alias it was started under, where there is one. An entry never carries it — it is a
+        // fact about the session, not about a message — so it is read off the live pane first and
+        // off the spawn record after, which is the only source left once the pane has ended.
+        const spawn = (typeof convViewRecs !== 'undefined'
+          ? (convViewRecs.find(r => r.key === key) || {}).spawn : null) || {};
+        const config = (live && live.config) || spawn.config || me.config || '';
         const color = agentColor(agent) || 'var(--muted)';
         const name = escapeHtml(e.label || me.label || '');
         // The same badge the pane list and the pair sheet use, beside the name: colour says which
         // member, and the badge says what it is — a thread of claude and codex reads as two
         // colleagues rather than as two colours.
-        const badge = agentBadge(agent);
+        const badge = configBadge(agent, config);
         // A user bubble names the pane it was sent *to*, on the same terms as an agent bubble names
         // the one that spoke — in a joint thread "which colleague was this said to" is the question
         // the view exists to answer, and in a single-pane thread it is what keeps a prompt and the
@@ -17430,6 +18592,16 @@
       for (const bucket of buckets) bucket.lastFetch = 0;
     }
 
+    // Does any live pane under this fingerprint hold a turn past what this bucket has been answered
+    // through? `turn` is the relay's own row id, from its own writes, so the two are comparable —
+    // and a relay too old to send it says nothing here, leaving the cadence to do the work.
+    function convLiveNewer(fp, bucket) {
+      if (typeof agents === 'undefined' || !Array.isArray(agents)) return false;
+      const key = convFpKey(fp);
+      return agents.some(a => Number(a.turn) > (bucket.syncedTo || 0)
+        && convFpKey([a.host, a.agent, a.cwd]) === key);
+    }
+
     // One query for the whole roster. Sent only when the answer on hand cannot serve: a member with
     // no bucket yet, or a bucket old enough to be worth asking again. `force` is a turn ending or
     // the ⟳, both of which are someone saying "now".
@@ -17472,6 +18644,12 @@
         if (!bucket) { syncedTo = 0; needsFetch = true; continue; }
         if (bucket.syncedTo < syncedTo) syncedTo = bucket.syncedTo;
         if (now - bucket.lastFetch >= CONV_LIVE_EVERY) needsFetch = true;
+        // The relay says on every snapshot which row this pane's record ends at, so a thread that
+        // is behind asks now rather than at the next cadence. That gap is not theoretical: a turn
+        // whose pane painted nothing yet is held back by the relay for up to HERDR_LATE_TURN_MS
+        // and lands with no status change behind it — the invalidate convReadTurnEnd sent when the
+        // turn ended fetched a record that had not been written yet, and nothing said so.
+        if (convLiveNewer(fp, bucket)) needsFetch = true;
       }
       if (!needsFetch) return;
 
@@ -17550,7 +18728,20 @@
       const want = new Set(keys || []);
       const out = new Map();
       if (typeof loadConvIndex !== 'function') return out;
-      for (const c of loadConvIndex()) {
+      const all = loadConvIndex();
+      // A duplicated conversation can deliberately share a current pane while carrying a different
+      // predecessor chain. The thread on screen owns its chain; scanning every conversation would
+      // let its duplicate attach history it never claimed.
+      //
+      // Only when that conversation is one of the ones being asked about, though. This is called
+      // for the pane's own thread as well as the window's, and a pane read outside any conversation
+      // is drawn while `convViewId` still holds whichever window was open last — see convOlderKeys,
+      // which draws the same distinction for the same reason. Scoping to a conversation that does
+      // not contain the key would drop a respawn's `was` and put the walk back at the wrong pane.
+      const current = typeof convViewId !== 'undefined' && convViewId
+        ? all.find(c => c && c.id === convViewId
+            && (c.members || []).some(m => m && want.has(m.key))) : null;
+      for (const c of current ? [current] : all) {
         for (const m of (c && c.members) || []) {
           // Array-checked: this document is written by other browsers and by older builds, and a
           // member carrying a string here would make `.includes` match on a substring.
@@ -18777,7 +19968,9 @@
     // "claude" have to colour alike or the colour stops meaning the kind. Anything unrecognised
     // keeps the muted default rather than borrowing a colour that already means something.
     function agentColor(agent) {
-      const k = (agent || '').toLowerCase();
+      // Coerced, not assumed: this is called from a dozen render paths, and one of them handing it
+      // a number instead of a name threw inside the render rather than losing one badge's colour.
+      const k = String(agent || '').toLowerCase();
       if (k.startsWith('claude')) return 'var(--agent-claude)';
       if (k.startsWith('codex')) return 'var(--blue)';
       // kiro before pi: `startsWith('pi')` does not match it, but the two shared --green until
@@ -18788,14 +19981,51 @@
       return '';
     }
 
-    function agentBadge(agent) {
+    // `kind` is for the names that are not their own harness: an agent config called `oclaude1`
+    // runs claude and has to read as one, and agentColor matches on the text. Optional, so every
+    // existing caller — where the text *is* the kind — is unchanged.
+    function agentBadge(agent, kind) {
       if (!agent) return '';
-      const c = agentColor(agent);
+      const c = agentColor(kind || agent);
       // Text and border carry the colour; the fill stays the neutral one every badge shares.
       // A 16% wash of the accent under its own text cost ~0.8 of contrast ratio and was what
       // made the light theme's badges unreadable at this size.
       const tint = c ? `color:${c};border-color:color-mix(in srgb, ${c} 55%, transparent)` : '';
       return ` <span class="badge" style="${tint}">${escapeHtml(agent)}</span>`;
+    }
+
+    // A pane's own badge. The same badge as `agentBadge(a.agent)` for every session ever started
+    // before agent configs existed — and for one started under `oclaude1`, that name instead,
+    // still wearing claude's colour, because that is what it is. The kind underneath never
+    // changes: everything else in the app keys off it, from the colour to the start allowlist to
+    // the fingerprint a conversation remembers a member by.
+    //
+    // The relay carries `config` on the pane and this reads the label out of the configs it
+    // advertised. A config deleted since the pane started leaves the harness's own name, which is
+    // the true thing to say when the alias is gone.
+    function paneBadge(a) {
+      const pane = a || {};
+      const row = pane.config && typeof agentConfigRow === 'function'
+        ? agentConfigRow(pane.config) : null;
+      return agentBadge((row && row.label) || pane.agent, pane.agent);
+    }
+
+    // A recorded kind, upgraded to the alias when the pane it names is live and was started under
+    // one. The lists that read a conversation's own record — the roster, the recent sheet — know
+    // only what a member was started as; this is how they say `oclaude1` where the pane views do,
+    // without giving up the recorded name for a member whose pane has gone.
+    // `config` is the recorded one, for a member whose pane has ended — and for one running past
+    // a relay restart, which drops the alias off the snapshot while the pane lives on. The live
+    // pane wins where there is one: it is the only source that cannot be out of date.
+    function kindBadge(name, pane, config) {
+      return configBadge(name, (pane && pane.config) || config || '');
+    }
+
+    // The same badge for something that has not started yet: a launcher tile's roster, and the
+    // form building it. There is no pane to read the alias off, so the tile carries it — which is
+    // the whole point of pinning a config to a tile.
+    function configBadge(name, config) {
+      return config ? paneBadge({agent: name, config: config}) : agentBadge(name);
     }
 
     // One nomenclature wherever a pane is named — card, terminal header, both kinds of pane:
@@ -18818,7 +20048,7 @@
       // who will type into it from there.
       const arb = typeof arbMark === 'function' ? arbMark(a.pane_id) : '';
       return `<span aria-hidden="true">${a.agent ? agentGlyph() : '⬛'}</span> ` +
-        escapeHtml(name) + proj + (withAgent ? agentBadge(a.agent) : '') + arb;
+        escapeHtml(name) + proj + (withAgent ? paneBadge(a) : '') + arb;
     }
 
     // From the live snapshot, never a pinned record: a pane's agent is what herdr reports now.
@@ -18857,7 +20087,7 @@
       box.innerHTML = live.length
         ? live.map(a => {
           const cwd = a.cwd ? escapeHtml(a.cwd.split('/').slice(-2).join('/')) : '';
-          const meta = a.agent ? `${agentBadge(a.agent)} ${cwd}` : cwd;
+          const meta = a.agent ? `${paneBadge(a)} ${cwd}` : cwd;
           return `<div class="order-row" role="option" tabindex="0" aria-selected="false" data-pane="${escapeHtml(a.pane_id)}">
       <span class="dot" style="background:${a.agent ? statusColor(a) : shellColor(a.pane_id)}" aria-hidden="true"></span>
       <span class="kind" aria-hidden="true">${a.agent ? agentGlyph() : '⬛'}</span>
@@ -19123,7 +20353,7 @@
         ? `<span class="pair-target" title="${escapeHtml(title || paneLabel(mineLive))}">` +
           `<span class="dot${mineLive.status === 'working' ? ' pulse' : ''}" ` +
           `style="background:${statusColor(mineLive)}" aria-hidden="true"></span>` +
-          `<span class="label">${escapeHtml(paneLabel(mineLive))}</span>${agentBadge(mineLive.agent)}</span>`
+          `<span class="label">${escapeHtml(paneLabel(mineLive))}</span>${paneBadge(mineLive)}</span>`
         : pair ? `<span class="pair-name">${escapeHtml(pair.name)}</span>` : '';
       if (!pair) {
         // Nothing to switch to and nothing to transfer, so the strip is the name alone — and
@@ -19348,7 +20578,7 @@
         name: paneLabel(a),
         agent: a.agent || '',
         project: a.project || a.project_id || '',
-        meta: a.agent ? `${agentBadge(a.agent)} ${cwd}` : cwd,
+        meta: a.agent ? `${paneBadge(a)} ${cwd}` : cwd,
         color: a.agent ? statusColor(a) : shellColor(a.pane_id),
         glyph: a.agent ? agentGlyph() : '⬛',
       }, extra || {});
@@ -19393,7 +20623,7 @@
       // The harness badge and the live dot, exactly as the agent list draws them: this sheet
       // prefills a composer in another pane, and a name alone is not enough to be sure which.
       document.getElementById('transferBadge').innerHTML =
-        agentBadge((live && live.agent) || partner.agent || '');
+        live ? paneBadge(live) : agentBadge(partner.agent || '');
       const dot = document.getElementById('transferDot');
       dot.style.background = live ? statusColor(live) : 'var(--muted)';
       dot.classList.toggle('pulse', !!live && live.status === 'working');
@@ -19405,8 +20635,8 @@
         document.getElementById('transferSheet').style.display = 'block';
         return;
       }
-      box.innerHTML = SHORTCUTS.map((s, i) =>
-        `<button class="nav-key" style="width:100%;justify-content:flex-start" onclick="doTransfer(${i})">${escapeHtml(s.label)}</button>`).join('') +
+      box.innerHTML = promptChips().map(({s, i}) =>
+        `<button class="nav-key" style="width:100%;justify-content:flex-start" onclick="doTransfer(${i})">@${escapeHtml(s.at)} — ${escapeHtml(s.label)}</button>`).join('') +
         `<button class="nav-key" style="width:100%;justify-content:flex-start;color:var(--muted)" onclick="doTransfer(-1)">No instruction</button>`;
       preview.textContent = transferSelection.length > 600
         ? transferSelection.slice(0, 600) + '\n…'
@@ -19742,8 +20972,9 @@
       const paired = pairFor(pairs, a.pane_id);
       return `<div class="agent${kind ? ' attention' : ''}${kind === 'done' ? ' alert-done' : ''}" role="button" tabindex="0" aria-label="${label}, ${a.status}${note}" onclick="openTerminal('${a.pane_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${a.pane_id}')}">
     <span class="dot${pulseClass}" style="background:${color}" aria-hidden="true"></span>
-    <div class="info"><div class="project">${paneChrome(a, false)}${host}</div><div class="meta">${agentBadge(a.agent).trimStart()} ${cwd}</div></div>
-    <button class="end-btn arm-btn" aria-label="End ${label}" onclick="event.stopPropagation();armButton(this, 'End?', () => endPane('${a.pane_id}'))">End</button>
+    <div class="info"><div class="project">${paneChrome(a, false)}${host}</div><div class="meta">${paneBadge(a).trimStart()} ${cwd}</div></div>
+    ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + a.pane_id, pane: a.pane_id, stop: true,
+                  aria: 'End ' + label, fire: `endPane('${a.pane_id}')`})}
     <button class="pair-btn${paired ? ' paired' : ''}" aria-label="Pair ${label}" onclick="openPairDialog('${a.pane_id}',event)">${paired ? 'Paired' : 'Pair'}</button>
     <span class="chev" aria-hidden="true">›</span>
   </div>`;
@@ -19795,7 +21026,8 @@
       return `<div class="agent" role="button" tabindex="0" aria-label="Terminal ${escapeHtml(paneLabel(s))}" onclick="openTerminal('${s.pane_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${s.pane_id}')}">
     <span class="term-glyph" aria-hidden="true">$</span>
     <div class="info"><div class="project">${paneChrome(s)}${host}</div><div class="meta">${cwd}</div></div>
-    <button class="end-btn arm-btn" aria-label="End ${escapeHtml(paneLabel(s))}" onclick="event.stopPropagation();armButton(this, 'End?', () => endPane('${s.pane_id}'))">End</button>
+    ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + s.pane_id, pane: s.pane_id, stop: true,
+                  aria: 'End ' + paneLabel(s), fire: `endPane('${s.pane_id}')`})}
     <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
   </div>`;
     }
@@ -19849,10 +21081,58 @@
       // the work that decides — newest message first, then the fuller record.
       const by = (a, b) => (!!a.auto - !!b.auto) || seenOf(b) - seenOf(a) || countOf(b) - countOf(a);
       const all = loadConvIndex().sort(by);
-      const autos = all.filter(c => c.auto);
-      return { all: all, autos: autos,
-        shown: all.filter(c => !c.auto)
+      const archived = all.filter(c => c.archived);
+      const active = all.filter(c => !c.archived);
+      const autos = active.filter(c => c.auto);
+      return { all: all, archived: archived, autos: autos,
+        shown: active.filter(c => !c.auto)
           .concat(convLandingAutoOn() ? autos.slice(0, CONV_LANDING_AUTO_MAX) : []).sort(by) };
+    }
+
+    function setConversationArchived(id, archived) {
+      const items = loadConvIndex().map(c => {
+        if (c.id !== id) return c;
+        const next = Object.assign({}, c);
+        if (archived) next.archived = true; else delete next.archived;
+        return next;
+      });
+      saveConvIndex(items);
+      renderConversations();
+    }
+
+    function archiveConversation(id) { setConversationArchived(id, true); }
+    function unarchiveConversation(id) { setConversationArchived(id, false); }
+
+    // One End button, wherever it is drawn — four cards and two rows, all of them redrawn by the
+    // poll under whoever is aiming at them. Four states in one place:
+    //
+    //   resting    the word, and a first tap that arms it
+    //   armed      the question, with the drain, and a second tap that fires
+    //   in flight  Ending…, greyed and taking no taps — the send is out and nothing else to say
+    //   back       the word again, because the send was given up on. See endWatch.
+    //
+    // `key` is what carries the arm and the flight across a redraw: the element changes between
+    // the two taps, its action does not.
+    function endBtnHtml(o) {
+      const key = o.key;
+      // Any of them: a conversation is drawn Ending… while one member is still on its way out,
+      // because the conversation is the thing being ended and the rest is not a second question.
+      const pending = typeof endPending === 'function'
+        && (o.panes || [o.pane]).filter(Boolean).some(endPending);
+      const armed = typeof armButtonArmed === 'function' && armButtonArmed(key);
+      const rest = o.rest || 'End';
+      const ask = o.ask || 'End?';
+      if (pending) {
+        return `<button class="${o.cls} end-going" disabled` +
+          ` data-arm-key="${escapeHtml(key)}"` +
+          ` aria-label="${escapeHtml(o.aria)} — ending">Ending…</button>`;
+      }
+      return `<button class="${o.cls} arm-btn" data-arm-key="${escapeHtml(key)}"` +
+        (armed ? ` data-armed="1" data-arm-label="${escapeHtml(rest)}"` : '') +
+        (o.data || '') +
+        ` aria-label="${escapeHtml(o.aria)}"` +
+        ` onclick="${o.stop ? 'event.stopPropagation();' : ''}armButton(this, '${ask}', ` +
+        `() => ${o.fire}, this.dataset.armKey)">${escapeHtml(armed ? ask : rest)}</button>`;
     }
 
     function renderConversations() {
@@ -19860,12 +21140,33 @@
       if (!el) return;
       const now = Date.now();
       const list = convLandingList();
-      const rows = list.shown.map(c => {
+      // Both lists, because the archive is drawn from the same rows: building only the shown ones
+      // left `archivedRows` matching nothing, so the Archive button counted cards it could never
+      // draw and an archived conversation could not be got back at.
+      const rows = list.shown.concat(list.archived).map(c => {
         const members = c.members || [];
         const count = members.reduce((n, m) => n + (Number(m.messages) || 0), 0);
         const seen = Math.max(0, ...members.map(m => Number(m.seen) || 0));
         const live = members.map(m => agents.find(a => convMemberKey(a) === m.key)).filter(Boolean);
         const names = members.map(m => escapeHtml(m.label || (agents.find(a => convMemberKey(a) === m.key) || {}).label || 'Former pane'));
+        // What each member is and where it is working, in the order of how much each source knows.
+        // The member record, written when it joined; then the live pane, which is right for a
+        // member that has come back under a new name; then the key itself, which carries the
+        // harness and the directory of every member ever recorded, including the ones that predate
+        // the fields above. The directory's last segment is a guess at the Project and is the last
+        // resort for exactly that reason — a member filed before this existed still shows where it
+        // was working, and one filed since shows what the relay calls it.
+        const badgeValues = members.map(m => {
+          const pane = agents.find(a => convMemberKey(a) === m.key) || {};
+          let key = [];
+          try { key = JSON.parse(m.key || '[]'); } catch (e) { /* a member key from before this */ }
+          const cwd = key[3] || '';
+          return { agent: m.agent || pane.agent || key[2] || '',
+            project: m.project || pane.project || cwd.split('/').filter(Boolean).pop() || '' };
+        });
+        // Unique, because a conversation of four claudes in one Project is one badge and one
+        // Project — the card says what is in it, not how many.
+        const unique = (field) => Array.from(new Set(badgeValues.map(x => x[field]).filter(Boolean)));
         const liveNames = live.map(a => escapeHtml(paneLabel(a)));
         // The newest message across the members, which is the one line that says whether this
         // conversation is worth opening. Written by convNoteCounts as each member records.
@@ -19885,56 +21186,85 @@
           // grey included, because an idle agent is still an agent. With none, there is no status
           // to paint and the dot is drawn hollow: ended is not a state, it is the absence of one.
           ended: live.length ? '' : ' ended',
+          // Carried out of the row builder: the card's End is drawn below, where `live` is not.
+          livePanes: live.map(a => a.pane_id),
+          badges: unique('agent').map(a => agentBadge(a)).join('') +
+            unique('project').map(p => ` <span class="badge proj">@${escapeHtml(p)}</span>`).join(''),
         };
       });
-      const autos = list.autos, showAuto = convLandingAutoOn(), shown = rows;
+      const autos = list.autos, showAuto = convLandingAutoOn();
       const autoControl = autos.length
         ? `<button class="section-action conv-auto-toggle" onclick="toggleConvLandingAuto()" aria-pressed="${showAuto}" ` +
           `title="Shows up to ${CONV_LANDING_AUTO_MAX} latest automatic conversations">` +
           `${showAuto ? 'Hide auto' : 'Show auto'} (${autos.length})</button>` : '';
+      const archiveControl = list.archived.length
+        ? `<button class="section-action" onclick="toggleConvLandingArchive()" aria-pressed="${convLandingArchiveOn()}">` +
+          `${convLandingArchiveOn() ? 'Hide archive' : 'Archive'} (${list.archived.length})</button>` : '';
       // The + is drawn whether or not there is anything under it, which is the one place this
       // section differs from the others: an entry point that only appears once you already have a
       // conversation cannot be how the first one is made.
       const newControl = `<button class="section-action conv-new" onclick="newConversation()"` +
         ` title="Start an empty conversation and add panes to it"` +
         ` aria-label="Start a new conversation">+ New</button>`;
-      el.innerHTML = `<div class="section-header">Conversations${autoControl}${newControl}</div>` +
-        (list.all.length ? shown.map(r =>
+      const card = (r, archived) =>
         `<div class="conversation-card" role="button" tabindex="0" data-conv-id="${escapeHtml(r.c.id)}"` +
         ` onclick="openConversation(this.dataset.convId)"` +
         ` onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openConversation(this.dataset.convId); }">` +
-        // The mark, then the live dot: what this card is, then how its panes are doing. The dot
-        // alone was doing both jobs, which is why a conversation card and an agent card opened the
-        // same way but did not read as different things.
         // Dot, mark, name — the dot is the row's live state and reads first on every card in the
-        // list; the mark says what kind of thing the name belongs to.
+        // list; the mark says what kind of thing the name belongs to. The dot alone was doing both
+        // jobs, which is why a conversation card and an agent card opened the same way but did not
+        // read as different things.
         `<div class="conversation-title"><span class="dot${r.pulse}${r.ended}" style="background:${r.dot}"` +
         ` aria-hidden="true"></span><span class="conv-kind">${convGlyph()}</span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
+        // Nothing running, said in words beside the hollow dot. The dot is the glance; this is
+        // for the reader who has not learned yet that a hollow one means the panes are gone.
+        `${r.liveNames.length ? '' : '<span class="conversation-tier idle" title="Nothing in '
+          + 'this conversation is running. Open it to start a member again.">inactive</span>'}` +
         // The tier, on the card rather than in the name: promotion is a rename the user makes,
         // not a marker the app writes into what they typed (D4).
         `${r.c.auto ? '<span class="conversation-tier" title="Filed automatically, and dropped ' +
           'first when space runs out. Open it and rename it to keep it for good.">auto</span>' : ''}` +
         `<span class="conversation-count">${r.count} ` +
         `${r.count === 1 ? 'message' : 'messages'}</span>` +
+        // Archiving is the reader saying "not now" about a conversation they mean to keep — the
+        // one thing the auto tier cannot express, since that is about how a conversation was made
+        // rather than whether anyone wants to look at it. Recorded on the conversation and not in
+        // this browser, so a card put away on a phone is away on the desktop too.
+        `<button class="archive-btn" data-conv-id="${escapeHtml(r.c.id)}"` +
+        ` onclick="event.stopPropagation(); ${archived ? 'unarchiveConversation' : 'archiveConversation'}(this.dataset.convId)"` +
+        ` aria-label="${archived ? 'Unarchive' : 'Archive'} ${escapeHtml(r.c.name)}">` +
+        `${archived ? 'Unarchive' : 'Archive'}</button>` +
         // The same control the roster panel calls End all, on the card, for the same reason the
         // agent cards carry one: the list is where a session is recognised as finished, and going
         // into a conversation to close it is a trip taken only to press one button. Drawn only
         // where there is something running — an ended conversation is already where this leads.
         (r.liveNames.length
-          ? `<button class="end-btn arm-btn" data-conv-id="${escapeHtml(r.c.id)}"` +
-            ` aria-label="End every session in ${escapeHtml(r.c.name)}, keeping the transcripts"` +
-            ` onclick="event.stopPropagation();armButton(this, 'End all?', ` +
-            `() => endConversation(this.dataset.convId))">End</button>`
+          // Ending… as soon as any member of it has a send in flight: the conversation is the
+          // thing being ended, and one pane still on its way out is not a second question.
+          ? endBtnHtml({cls: 'end-btn', key: 'end-conversation:' + r.c.id, ask: 'End all?',
+              panes: r.livePanes,
+              stop: true, data: ` data-conv-id="${escapeHtml(r.c.id)}"`,
+              aria: `End every session in ${r.c.name}, keeping the transcripts`,
+              fire: 'endConversation(this.dataset.convId)'})
           : '') +
         `</div>` +
+        // What is in it, before what was said in it: which harnesses, and which Projects they are
+        // working in. A conversation is recognised by its members long before its newest line is
+        // read, and on a phone that line is the only other thing on the card.
+        (r.badges ? `<div class="conversation-meta">${r.badges}</div>` : '') +
         (r.last ? `<div class="conversation-last">${escapeHtml(r.last)}</div>` : '') +
         `<div class="conversation-meta">${r.names.join(' · ')}</div>` +
         `<div class="conversation-meta">${r.liveNames.length ? 'Live: ' + r.liveNames.join(', ') : 'No live members'}` +
-        `${r.seen ? ' · Last activity ' + fmtAgo(new Date(Math.min(r.seen, now))) : ''}</div></div>`
-        ).join('')
+        `${r.seen ? ' · Last activity ' + fmtAgo(new Date(Math.min(r.seen, now))) : ''}</div></div>`;
+      const archivedRows = list.archived.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
+      const activeRows = list.shown.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
+      el.innerHTML = `<div class="section-header">Conversations${autoControl}${archiveControl}${newControl}</div>` +
+        (activeRows.length ? activeRows.map(r => card(r, false)).join('')
         : '<p class="pair-empty">No conversations yet. Start one here, or record a pane into one '
-          + 'from its own menu.</p>');
+          + 'from its own menu.</p>') +
+        (convLandingArchiveOn() && archivedRows.length
+          ? `<div class="section-header">Archived conversations</div>${archivedRows.map(r => card(r, true)).join('')}` : '');
       applySections();
     }
 
@@ -20076,11 +21406,17 @@
     function convSetSolo(id, key) {
       const conv = loadConvIndex().find(c => c.id === id);
       const members = (conv && conv.members) || [];
-      const rest = members.filter(m => m.key !== key).map(m => m.key);
+      // A key nobody here holds is not a solo, it is every member hidden — `rest` would be the
+      // whole roster, and the view would come up saying "Every member is hidden" with nothing
+      // named to bring back. The composer can be addressing a pane outside this conversation, so
+      // this is reachable by pressing the solo switch at the wrong moment. Guarded here rather
+      // than at the switch because this is what every caller routes through.
+      const solo = members.some(m => m.key === key) ? key : '';
+      const rest = members.filter(m => m.key !== solo).map(m => m.key);
       const all = convHiddenAll();
       // Off is the empty list and not a shorter one: leaving whatever was hidden before solo began
       // would make the X put the reader somewhere they never chose.
-      if (key && rest.length) all[id] = rest; else delete all[id];
+      if (solo && rest.length) all[id] = rest; else delete all[id];
       try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(all)); }
       catch (e) { /* private mode: this session only */ }
       if (typeof stateSyncMark === 'function') stateSyncMark('conv_hidden');
@@ -20094,7 +21430,13 @@
       if (convSoloKey(convViewId)) { convSetSolo(convViewId, ''); return; }
       const live = agents.find(a => a.pane_id === dockAddressed());
       const conv = loadConvIndex().find(c => c.id === convViewId);
-      const key = live ? convMemberKey(live) : ((((conv || {}).members || [])[0] || {}).key || '');
+      const members = (conv || {}).members || [];
+      // The addressed pane only when it is one of these members — the composer is free to be
+      // pointed at a pane this conversation has never heard of, and soloing that is soloing
+      // nobody. First member then, which is what an unaddressed composer already gets.
+      const addressed = live ? convMemberKey(live) : '';
+      const key = members.some(m => m.key === addressed)
+        ? addressed : ((members[0] || {}).key || '');
       convSetSolo(convViewId, key);
     }
 
@@ -20183,15 +21525,17 @@
               ` onclick="toggleConvHidden(this.dataset.key)"` +
               ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>`) +
           `<span class="who">${escapeHtml(rec.label || m.label || 'Former pane')}</span>` +
-          agentBadge((rec.spawn || {}).agent || (live.get(m.key) || {}).agent || '') +
+          kindBadge((rec.spawn || {}).agent || (live.get(m.key) || {}).agent || '',
+                    live.get(m.key), (rec.spawn || {}).config) +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'no longer live')}</span>` +
           // End first, then Remove, and only then the way in. The two that take something away sit
           // together; Open is not one of them. End is offered only where there is something running
           // to end — an ended row carries Start again in the same place, which is the other half of
           // the same control: this row is where a member is sent away and brought back.
-          (on ? `<button class="conv-end arm-btn" data-key="${escapeHtml(m.key)}"` +
-            ` onclick="armButton(this, 'End?', () => endConvMember(this.dataset.key))"` +
-            ` aria-label="End this member's session">End</button>` : '') +
+          (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.key,
+            pane: (live.get(m.key) || {}).pane_id, data: ` data-key="${escapeHtml(m.key)}"`,
+            aria: "End this member's session",
+            fire: 'endConvMember(this.dataset.key)'}) : '') +
           `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.key)}"` +
           ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button>` +
@@ -20200,6 +21544,21 @@
           (on ? `<button class="conv-open" data-key="${escapeHtml(m.key)}"` +
             ` onclick="openConvMemberPane(this.dataset.key)"` +
             ` aria-label="Open this member's pane">Open</button>` : '') +
+          // Swapping the agent is a start whose destination happens to be a member that already
+          // exists, so it asks the Start dialog like every other start does — one place harnesses,
+          // roles and agent configs are listed, rather than a second smaller picker that would
+          // drift out of step with it. Offered on both halves of a row's life: an ended member is
+          // picked up by whatever is started next, and a live one is ended first, because a pane
+          // runs one CLI and there is no changing it underneath.
+          (canStartFromConv()
+            ? (on
+              ? `<button class="conv-swap arm-btn" data-key="${escapeHtml(m.key)}"` +
+                ` onclick="armButton(this, 'End and swap?', () => convSwapLive(this.dataset.key))"` +
+                ` aria-label="End this member and start a different agent in its place">Swap</button>`
+              : `<button class="conv-swap" data-key="${escapeHtml(m.key)}"` +
+                ` onclick="convSwapMember(this.dataset.key)"` +
+                ` aria-label="Start a different agent as this member">Start as\u2026</button>`)
+            : '') +
           (!on && canRespawn(rec.spawn) ? `<button class="conv-again arm-btn" data-key="${escapeHtml(m.key)}"` +
             ` onclick="convArmRespawn(this, this.dataset.key)"` +
             ` aria-label="Start a new session and continue this conversation">Start again</button>` : '') +
@@ -20216,10 +21575,11 @@
         ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
         // Beside Delete because both end something, and apart from it in colour because they end
         // very different things: Delete destroys the record, End stops the sessions and leaves it.
-        `<button class="conv-end arm-btn"` +
-        ` onclick="armButton(this, 'End all?', () => endConversation(convViewId))"` +
-        ` aria-label="End every session in this conversation, keeping the transcripts">End all` +
-        `</button>` +
+        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id, ask: 'End all?',
+          rest: 'End all',
+          panes: Array.from(live.values()).map(a => a.pane_id),
+          aria: 'End every session in this conversation, keeping the transcripts',
+          fire: 'endConversation(convViewId)'}) +
         `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
         `<button class="arm-btn" onclick="armButton(this, 'Duplicate?', duplicateConversation)"` +
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
@@ -20270,7 +21630,15 @@
       const where = agents.find(x => x.project_id === spawn.project_id && x.cwd);
       const moved = where && spawn.cwd && where.cwd !== spawn.cwd
         ? ` It ran in ${spawn.cwd}; that Project now points at ${where.cwd}.` : '';
-      return `Tap again to start a new ${spawn.agent} session in ${project.label || 'this Project'}.${moved}`;
+      // Named by what it will actually come up as. A session started under `oclaude1` restarted as
+      // "a new claude session" would be true about the harness and wrong about the endpoint.
+      const row = spawn.config && typeof agentConfigRow === 'function'
+        ? agentConfigRow(spawn.config) : null;
+      const what = (row && row.label) || spawn.agent;
+      if (spawn.config && !row) {
+        return `Agent config "${spawn.config}" is gone. Tap again to pick what to start instead.`;
+      }
+      return `Tap again to start a new ${what} session in ${project.label || 'this Project'}.${moved}`;
     }
 
     function convArmRespawn(btn, key) {
@@ -20286,11 +21654,162 @@
       if (live) endPane(live.pane_id);
     }
 
+    // Start something else into an existing member's slot. The dialog is opened on that member's
+    // Project and handed the replace intent, so whatever lands continues this member rather than
+    // joining beside it: same row, same name, the transcript carried across the seam and the pair
+    // repointed — the machinery a restart already uses, with the harness left open to be chosen.
+    //
+    // Nothing is sent here. This ends at a dialog on purpose: the one thing a swap must not do is
+    // decide for the reader what the replacement is.
+    function convSwapMember(key, opts) {
+      const o = opts || {};
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      if (!conv || !startOptions) return false;
+      const rec = (convViewRecs || []).find(r => r.key === key) || {};
+      const spawn = rec.spawn || {};
+      const live = agents.find(x => convMemberKey(x) === key);
+      // The live pane's Project first: a record's is what it was started under, and a member that
+      // has been swapped once already may have moved since.
+      openStartDialog((live && live.project_id) || spawn.project_id || '');
+      // After the open, which clears it — the same order reorder.js starts a pair with.
+      startIntent = { conv: conv.id, replace: key };
+      if (o.kind) {
+        startAgentPick = o.kind;
+        startCustomOpen = true;
+        renderStartAgents();
+      }
+      // The name it is known by in the thread, so the replacement comes up as the colleague it
+      // continues rather than as "Architect 2". Only where the relay will take it.
+      const name = String(rec.label || spawn.label || '').trim();
+      const field = document.getElementById('startName');
+      if (field && name && name.length <= 32) field.value = name;
+      if (o.note) showToast(o.note);
+      return true;
+    }
+
+    // The same thing for a member still running. A pane runs one CLI, so there is no changing the
+    // agent in it — the session is ended and the dialog opened over the space it leaves. Asked
+    // twice by the button that calls this, because ending a live agent loses whatever it had not
+    // said yet.
+    function convSwapLive(key) {
+      const live = agents.find(x => convMemberKey(x) === key);
+      if (live) endPane(live.pane_id);
+      return convSwapMember(key, live
+        ? { note: 'Session ended. Pick what to start in its place.' } : null);
+    }
+
+    // A restart names itself, so the pane it makes can be found again by equality rather than by
+    // resemblance. The relay stamps this on the pane and carries it on every snapshot; the note
+    // here is what survives the reload that threw away the relay's answer.
+    //
+    // sessionStorage, not localStorage: this is one tab coming back, and a second tab must not act
+    // on a start it never made. Two minutes, because a start that has not produced a pane by then
+    // failed, and the pane running an hour later is somebody else's.
+    //
+    // ponytail: only the respawn path names itself. A swap begun from the Start dialog loses its
+    // binding to a reload the same way — same treatment, when someone hits it.
+    const CONV_RESPAWN_KEY = 'herdr_conv_respawn';
+    const CONV_RESPAWN_MS = 120000;
+    let convRespawnResuming = '';
+
+    function convRespawnRef() {
+      return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+
+    function rememberConvRespawn(conv, key, ref) {
+      try {
+        sessionStorage.setItem(CONV_RESPAWN_KEY,
+                               JSON.stringify({conv: conv, key: key, ref: ref, at: Date.now()}));
+      } catch (e) { /* private mode: this tab only, which is all this was for */ }
+    }
+
+    function heldConvRespawn() {
+      let held = null;
+      try { held = JSON.parse(sessionStorage.getItem(CONV_RESPAWN_KEY) || 'null'); }
+      catch (e) { return null; }
+      if (!held || !held.ref) return null;
+      if (Date.now() - (held.at || 0) > CONV_RESPAWN_MS) { forgetConvRespawn(); return null; }
+      return held;
+    }
+
+    function forgetConvRespawn() {
+      try { sessionStorage.removeItem(CONV_RESPAWN_KEY); } catch (e) { /* nothing to forget */ }
+    }
+
+    // The pane a start in flight will land on, so nothing else claims it first. The recorder files
+    // every unreferenced pane into an auto conversation on the next snapshot, and a pane filed
+    // there is a pane some conversation already names — which is exactly what stops the succession
+    // below continuing the thread onto it.
+    function convStartClaimed(a) {
+      if (!a) return false;
+      if (typeof pendingStart !== 'undefined' && pendingStart && a.pane_id === pendingStart) return true;
+      const held = heldConvRespawn();
+      return !!(held && a.ref && a.ref === held.ref);
+    }
+
+    // The pane this restart made, once herdr has it. Equality on the id the client itself chose —
+    // no name, no directory, nothing two colleagues in one checkout could share.
+    function convRespawnPane(ref) {
+      return (ref && agents.find(a => a.ref === ref)) || null;
+    }
+
+    // Continue the conversation onto a pane that is already running: the same succession Start
+    // again performs when the relay's answer arrives, run from a note on disk instead.
+    function convAdoptRespawn(conv, key, pane, starter) {
+      startIntent = { conv: conv.id, replace: key };
+      // No opening prompt. It would reach an agent that has been working for however long the
+      // reload took, as an instruction nobody typed just now.
+      startPrompt = '';
+      startStarter = starter || '';
+      pendingStart = pane.pane_id;
+      forgetConvRespawn();
+      openPendingStart();
+    }
+
+    // Called on every snapshot, and does nothing on almost all of them — there is a note only in
+    // the couple of minutes after Start again was pressed.
+    async function convResumeRespawn() {
+      if (!agents.length || typeof convGet !== 'function') return;
+      const held = heldConvRespawn();
+      if (!held) return;
+      const pane = convRespawnPane(held.ref);
+      // Not there yet is not a failure: herdr may still be bringing the agent up. Left for the
+      // next snapshot, and dropped by the deadline when it never arrives.
+      if (!pane) return;
+      const conv = loadConvIndex().find(c => c.id === held.conv);
+      if (!conv) { forgetConvRespawn(); return; }
+      if (convRespawnResuming === held.ref) return;
+      convRespawnResuming = held.ref;
+      try {
+        const rec = (await convGet([held.key]).catch(() => []))[0];
+        // A later Start may have replaced this tab's one pending note while the record was read.
+        // That new start owns the pane now; never continue an older member over it.
+        if ((heldConvRespawn() || {}).ref !== held.ref) return;
+        convAdoptRespawn(conv, held.key, pane, ((rec || {}).spawn || {}).starter || '');
+        showSpawnStatus(`"${paneLabel(pane)}" was already running — continued in "${conv.name}".`,
+                        'success');
+      } finally {
+        if (convRespawnResuming === held.ref) convRespawnResuming = '';
+      }
+    }
+
     function convRespawn(key) {
       const conv = loadConvIndex().find(c => c.id === convViewId);
       const rec = convViewRecs.find(r => r.key === key);
       const spawn = rec && rec.spawn;
       if (!ws || !conv || !canRespawn(spawn)) return;
+      // This member's own restart, already landed — the press before this one, whose answer went
+      // down with the tab. Continued onto that pane rather than starting a second agent beside it.
+      const held = heldConvRespawn();
+      const back = held && held.key === key && held.conv === conv.id
+        ? convRespawnPane(held.ref) : null;
+      if (back) {
+        if (convRespawnResuming === held.ref) return;
+        showSpawnStatus(`"${paneLabel(back)}" is already running — continuing "${conv.name}".`,
+                        'busy');
+        convAdoptRespawn(conv, key, back, (spawn || {}).starter || '');
+        return;
+      }
       // herdr recycles workspace IDs, so a stale one cannot be trusted to name the workspace the
       // session was in. New tab only where that workspace is live on that host right now.
       const tab = !!spawn.workspace_id && agents.some(x => x.workspace_id === spawn.workspace_id
@@ -20299,11 +21818,38 @@
       // the name it was given, which is derived from the same badge. A session started as an
       // Architect is started again as one, opening prompt and all; one that matches no badge keeps
       // the old behaviour of its bare wire role.
-      const starter = startRoleOf(spawn.starter) || startRoleFromLabel(spawn.label);
+      // A recorded `at` that is not one of the four badges is still a starter: a launcher tile's
+      // members carry any chip the composer offers. Wrapped as a role with nothing but its name,
+      // which is all roleStarter reads — and on the wire it is `agent`, which is what it was.
+      //
+      // And a record that says nothing at all is a record written before any of this was kept, not
+      // a session that asked for silence — those say NO_STARTER. So it falls to the default rather
+      // than coming up bare, which is what every other way of starting a session already does.
+      const was = canonAt(spawn.starter);
+      const starter = spawn.starter === NO_STARTER ? null
+        : startRoleOf(was)
+          || (was && roleStarter({at: was}) ? {at: was} : null)
+          || startRoleFromLabel(spawn.label)
+          || startRoleOf(START_DEFAULT_AT);
       const msg = Object.assign({
         type: 'start_agent', name: spawn.agent, project_id: spawn.project_id,
         placement: tab ? 'new_tab' : 'new_workspace', slot: slotFor(),
       }, starter ? startRoleFields(starter, '') : {role: respawnRole(spawn)});
+      // The alias is carried by id and resolved here, not at the time it was recorded: a config
+      // whose provider or model has been edited since restarts on what it says now.
+      //
+      // Gone is a question, never a fallback. Coming back on the stock endpoint under the name the
+      // reader recognises is the one outcome worth refusing outright — so the Start dialog opens
+      // on that Project with the custom row unfolded, and this restart continues from whatever is
+      // picked there. startIntent is set after the open, which clears it.
+      if (spawn.config && !agentConfigLive(spawn.config, spawn.agent)) {
+        convSwapMember(key, {
+          kind: spawn.agent,
+          note: `Agent config "${spawn.config}" is gone. Pick what to start instead.`,
+        });
+        return;
+      }
+      if (spawn.config) msg.config = spawn.config;
       // This is continuation, not duplicate: keep the exact name the user recognises in the thread.
       // Only where the relay will take it — a label over 32 characters is refused outright, and a
       // restart that fails over the name is worse than one that comes up as "Architect 2".
@@ -20311,8 +21857,15 @@
       if (same && same.length <= 32) msg.label = same;
       if (tab) msg.workspace_id = spawn.workspace_id;
       startIntent = { conv: conv.id, replace: key };
-      startPrompt = roleStarter(starter);
+      startPrompt = roleStarter(starter, spawn.agent);
+      // And the new pane records the same starter, so the session can be ended and started again
+      // any number of times without the answer wearing away.
+      startStarter = (starter || {}).at || NO_STARTER;
       showSpawnStatus(`Continuing "${conv.name}"…`, 'busy');
+      // Named and written down before the send, not after: the answer is what a reload loses, so
+      // the note has to be on disk by the time there is anything to lose.
+      msg.ref = convRespawnRef();
+      rememberConvRespawn(conv.id, key, msg.ref);
       ws.send(JSON.stringify(msg));
     }
 
@@ -20448,7 +22001,7 @@
             name: r.label || 'Former pane',
             agent: (r.spawn || {}).agent || '',
             project: r.project || (r.spawn || {}).project || (r.spawn || {}).project_id || '',
-            meta: agentBadge((r.spawn || {}).agent || ''),
+            meta: configBadge((r.spawn || {}).agent || '', (r.spawn || {}).config),
             note: convSpan(now - (r.touched || now)),
             color: 'var(--muted)',
             glyph: agentGlyph(),
@@ -20623,6 +22176,13 @@
       // this is a fact about the conversation that changes while the window is open.
       const tier = document.getElementById('convViewTier');
       if (tier) tier.hidden = !conv.auto;
+      // And whether anything in it is still running, which changes under the reader while the
+      // window is open — a member ending is exactly when this has to appear.
+      const idle = document.getElementById('convViewIdle');
+      if (idle) {
+        const live = new Set(agents.concat(shells).map(x => convMemberKey(x)));
+        idle.hidden = (conv.members || []).some(m => live.has(m.key));
+      }
       const head = view.querySelector('.conv-view-head');
       if (head) head.classList.toggle('auto', !!conv.auto);
       // Written once per open rather than on every redraw: it never changes, and this runs on every
@@ -20673,14 +22233,39 @@
       // is a claude on its own or a claude and a codex, which is the fact a reader wants before
       // opening anything. Read off the recorded spawn first, so a member that has exited still
       // counts; deduped, because two claudes are still "claude".
-      const live = new Map(agents.map(x => [convMemberKey(x), x.agent]));
+      // Deduped by what each member was *started as* and not by its harness: a thread of `claude`
+      // and `oclaude-1` is two different things to talk to, and collapsing them to one claude
+      // badge is the header saying the opposite of what the roster says.
+      const live = new Map(agents.map(x => [convMemberKey(x), x]));
       const kinds = [];
+      const seen = new Set();
       for (const m of members) {
         const rec = composed.recs.find(r => r.key === m.key);
-        const kind = ((rec && rec.spawn) || {}).agent || live.get(m.key);
-        if (kind && !kinds.includes(kind)) kinds.push(kind);
+        const spawn = (rec && rec.spawn) || {};
+        const pane = live.get(m.key);
+        const kind = spawn.agent || (pane && pane.agent) || '';
+        const config = (pane && pane.config) || spawn.config || '';
+        if (kind && !seen.has(config || kind)) {
+          seen.add(config || kind);
+          kinds.push([kind, config]);
+        }
       }
-      document.getElementById('convViewAgents').innerHTML = kinds.map(agentBadge).join('');
+      // Not `kinds.map(configBadge)`: map hands the callback an index too, and the second argument
+      // is the config to name it by — so every badge after the first was named by a number, and
+      // the whole render threw.
+      // And where those agents are working. Same question the landing card answers with the same
+      // badge, asked of the thread that is open: a conversation whose members sit in two Projects
+      // is one whose header has to say so, because nothing else on this screen does.
+      const projects = [];
+      for (const m of members) {
+        const rec = composed.recs.find(r => r.key === m.key);
+        const pane = live.get(m.key);
+        const project = ((rec && rec.spawn) || {}).project || (pane && pane.project) || m.project || '';
+        if (project && !projects.includes(project)) projects.push(project);
+      }
+      document.getElementById('convViewAgents').innerHTML =
+        kinds.map(k => configBadge(k[0], k[1])).join('') +
+        projects.map(p => ` <span class="badge proj">@${escapeHtml(p)}</span>`).join('');
       convViewRecs = composed.recs;
       convViewEntries = entries;
       // The panel is its own element and diffed on its own: a message arriving must not rewrite the
@@ -21573,14 +23158,14 @@
           `title="Talk to ${name}. Double-click to read only ${name}" ` +
           `aria-label="Talk to ${name}">` +
           `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
-          `${name}${agentBadge(a.agent)}</button>`;
+          `${name}${paneBadge(a)}</button>`;
       }).join('');
       // Numbered by the order they were chosen, because that order is what will be written and two
       // lit chips otherwise say nothing about which comes first. In fill mode nothing is lit at
       // all: the instruction is in the box where it can be read, so a second place saying it is on
       // would be saying it twice.
       const fill = dockFill();
-      const chips = byDockMru('chip', SHORTCUTS.map((s, i) => ({s, i})), x => x.s.at).map(({s, i}) => {
+      const chips = byDockMru('chip', promptChips(), x => x.s.at).map(({s, i}) => {
         const at = fill ? -1 : dockPicks.indexOf(i);
         return `<button class="xfer-chip${at >= 0 ? ' on' : ''}" onclick="toggleDockChip(${i})" ` +
           `aria-pressed="${at >= 0}" title="${escapeHtml(s.label)}" ` +
@@ -21639,7 +23224,7 @@
     function openDockMenu() {
       const box = document.getElementById('chipMenu');
       const fill = dockFill();
-      box.innerHTML = SHORTCUTS.map((s, i) =>
+      box.innerHTML = promptChips().map(({s, i}) =>
         `<button class="menu-item" role="${fill ? 'menuitem' : 'menuitemcheckbox'}" ` +
         (fill ? '' : `aria-checked="${dockPicks.includes(i)}" `) +
         `onclick="toggleDockChip(${i})">` +
@@ -21664,7 +23249,7 @@
           `onclick="pickDockTarget('${a.pane_id}')" aria-label="Talk to ${name}">` +
           `<span class="tick">${on ? '✓' : ''}</span>` +
           `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
-          `${name}${agentBadge(a.agent)}</button>`;
+          `${name}${paneBadge(a)}</button>`;
       }).join('') +
         // Last, under the membership: another agent in this conversation is one more of the same
         // list, and the place that answers "who is in this" is the place to add to it.
@@ -21685,6 +23270,14 @@
     // is already answered — beside what this conversation is running — and what is left is four
     // choices, three of them made by tapping a badge: harness, role, name, Project.
     let newAgentKind = '';
+    // The agent config this start runs under, when one was picked. See startConfigPick — the kind
+    // and the environment are two answers, and the relay is told both.
+    let newAgentConfig = '';
+    let newAgentCustom = false;
+    // null until the box is touched, then this dialog's own answer. Same rule as the Start sheet's:
+    // on under an agent config, off on a stock harness, and whatever was said last wins until the
+    // dialog closes. See startUnattendedOn.
+    let newAgentUnattended = null;
     let newAgentRole = 0;
     let newAgentProject = '';
     // Which arbitration slot asked for this one, or '' for the ordinary route in. A slot's start
@@ -21708,6 +23301,8 @@
       // work is what this is usually for. Falls back to the first the relay will start.
       const kinds = startOptions.agents || [];
       newAgentKind = from && kinds.includes(from.agent) ? from.agent : kinds[0];
+      newAgentConfig = '';
+      newAgentCustom = false;
       newAgentRole = 0;
       // Spawned where the conversation lives. Not a rule — the row is right there — but a Project
       // chosen for you is one fewer question in a dialog that exists to be quick.
@@ -21722,6 +23317,9 @@
 
     function closeNewAgent() {
       newAgentFor = '';
+      // A fresh dialog asks it fresh: an answer given about claude says nothing about the codex
+      // the next one might pick.
+      newAgentUnattended = null;
       document.getElementById('newAgentModal').style.display = 'none';
       closeDockMenu('newAgentProjMenu');
     }
@@ -21735,12 +23333,29 @@
     // Three rows of badges, in the order the decision is made. The Project row is one line that
     // scrolls: there is usually one Project in play, and the rest are behind @+ beside it.
     function renderNewAgent() {
+      // The same strip the Start sheet draws, for the same reason: stock kinds, then one
+      // `+custom` that opens the agent configs rather than a badge per alias.
+      const configs = typeof agentConfigRows === 'function' ? agentConfigRows() : [];
       document.getElementById('newAgentKinds').innerHTML = (startOptions.agents || [])
-        .map(k => badgeHtml(k, k === newAgentKind, `pickNewAgentKind('${k}')`, {agent: k})).join('');
-      document.getElementById('newAgentRoles').innerHTML = startRoles().map((r, i) =>
-        badgeHtml(`# ${r.name}`, i === newAgentRole, `pickNewAgentRole(${i})`,
-          {proj: true, title: roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet'}))
-        .join('');
+        .map(k => badgeHtml(k, !newAgentConfig && k === newAgentKind, `pickNewAgentKind('${k}')`,
+                            {agent: k})).join('')
+        + (configs.length
+          ? badgeHtml('+custom', newAgentCustom || !!newAgentConfig, 'toggleNewAgentCustom()',
+              {proj: true, title: 'Start under one of your agent configs'})
+            + (newAgentCustom || newAgentConfig
+              ? configs.map(c => badgeHtml(c.label, c.id === newAgentConfig,
+                  `pickNewAgentConfig('${escapeHtml(c.id)}')`,
+                  {agent: c.kind, title: c.command || c.provider_label || ''})).join('')
+              : '')
+          : '');
+      renderNewAgentUnattended();
+      document.getElementById('newAgentRoles').innerHTML =
+        badgeHtml('@none', newAgentRole < 0, 'pickNewAgentRole(-1)',
+          {proj: true, title: 'Starts with nothing typed at it'})
+        + startRoles().map((r, i) =>
+          badgeHtml(startRoleTag(r), i === newAgentRole, `pickNewAgentRole(${i})`,
+            {proj: true, title: roleStarter(r) ? `Opens with @${r.at}` : 'No opening prompt yet'}))
+          .join('');
       document.getElementById('newAgentProjects').innerHTML = projects.map(p =>
         badgeHtml(`@${p.label}`, p.id === newAgentProject, `pickNewAgentProject('${p.id}')`,
           {proj: true})).join('');
@@ -21752,6 +23367,24 @@
 
     function pickNewAgentKind(kind) {
       newAgentKind = kind;
+      newAgentConfig = '';
+      renderNewAgent();
+      if (window.cue) cue('tick');
+    }
+
+    function toggleNewAgentCustom() {
+      newAgentCustom = !newAgentCustom;
+      if (!newAgentCustom) newAgentConfig = '';
+      renderNewAgent();
+      if (window.cue) cue('tick');
+    }
+
+    function pickNewAgentConfig(id) {
+      const rows = typeof agentConfigRows === 'function' ? agentConfigRows() : [];
+      const row = rows.find(c => c.id === id);
+      if (!row) return;
+      newAgentConfig = id;
+      newAgentKind = row.kind;
       renderNewAgent();
       if (window.cue) cue('tick');
     }
@@ -21767,6 +23400,27 @@
       closeDockMenu('newAgentProjMenu');
       renderNewAgent();
       if (window.cue) cue('tick');
+    }
+
+    // The same question the Start sheet asks, in the other dialog that starts an agent. Drawn only
+    // for a harness this relay has a flag for — startUnattendedOffered reads what it advertised.
+    function newAgentUnattendedOn() {
+      if (typeof startUnattendedOffered !== 'function'
+        || !startUnattendedOffered(newAgentKind)) return false;
+      return newAgentUnattended === null ? !!newAgentConfig : newAgentUnattended;
+    }
+
+    function renderNewAgentUnattended() {
+      const row = document.getElementById('newAgentUnattendedRow');
+      const box = document.getElementById('newAgentUnattended');
+      if (!row || !box) return;
+      row.style.display = typeof startUnattendedOffered === 'function'
+        && startUnattendedOffered(newAgentKind) ? 'flex' : 'none';
+      box.checked = newAgentUnattendedOn();
+    }
+
+    function pickNewAgentUnattended(on) {
+      newAgentUnattended = !!on;
     }
 
     // Every Project as a list, for the ones the line could not hold — the same @+ the instruction
@@ -21794,6 +23448,8 @@
         type: 'start_agent', name: newAgentKind,
         project_id: newAgentProject, slot: slotFor(),
       }, startRoleFields(role, typed));
+      if (newAgentConfig) msg.config = newAgentConfig;
+      if (newAgentUnattendedOn()) msg.unattended = true;
       // Where is not asked: beside what this Project is already running, which is what a new member
       // of an ongoing conversation wants. A Project with nothing live has nowhere to be beside, and
       // gets a workspace of its own.
@@ -21806,7 +23462,8 @@
         ? {arb: {slot: newAgentFor, conv: convViewId}} : {conv: convViewId};
       // The arbitrator is briefed by the session, and that brief is the only thing that tells it
       // what it is. A role's opening prompt would have it doing the work it is there to referee.
-      startPrompt = newAgentFor === 'arbWho' ? '' : roleStarter(role);
+      startPrompt = newAgentFor === 'arbWho' ? '' : roleStarter(role, newAgentKind);
+      startStarter = newAgentFor === 'arbWho' ? NO_STARTER : ((role || {}).at || NO_STARTER);
       showSpawnStatus(`Starting ${msg.label || newAgentKind}…`, 'busy');
       ws.send(JSON.stringify(msg));
       closeNewAgent();
@@ -22559,17 +24216,41 @@
         `<div class="qa-right">${summary}</div></div>`;
       let middle = '';
       if (blocked) {
-        const opts = a.options || ['yes, single permission', 'trust, always allow', 'no (tab to edit)'];
-        middle = opts.map(o => {
-          const cls = o.includes('yes') || o.includes('approve') ? 'btn-yes' : o.includes('trust') ? 'btn-trust' : 'btn-no';
-          const icon = o.includes('yes') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : o.includes('trust') ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-          const label = o.includes('yes') ? 'Yes' : o.includes('trust') ? 'Yes All' : 'No';
-          return `<button class="${cls}" onclick="respond('${o.replace(/'/g, "\\'")}')">${icon} ${label}</button>`;
-        }).join('');
+        // No fallback list any more. The relay sends claude's three where it saw them, the pane's
+        // own numbered menu where there was one, and nothing at all otherwise — a codex pane used
+        // to arrive wearing claude's buttons, and pressing one typed a sentence at a menu that
+        // wanted a number.
+        middle = (a.options || []).map(approvalHtml).join('');
       }
       // Approvals first and on their own line, nav underneath: the row order is what puts the
       // thing that needs answering closest to the terminal it is about.
       setQuickActions(qa, middle + (showNav ? navRow : ''));
+    }
+
+    // One of a blocked pane's choices, as a button. Two shapes arrive: claude's own wording, which
+    // this has always keyed off, and `1. Yes, continue` — a numbered menu the relay read out of the
+    // pane, which is how codex asks everything from its opening trust prompt onwards.
+    //
+    // A numbered option keeps the words the pane offered it under. They are longer than `Yes`, and
+    // they are the only ones that are certainly right: paraphrasing the choice somebody is about to
+    // make is the one thing not to do here. The relay turns it back into the digit on the way out.
+    function approvalHtml(o) {
+      const num = /^([1-9])[.)]\s*(.+)$/.exec(String(o));
+      const body = num ? num[2] : String(o);
+      const low = body.toLowerCase();
+      const kind = /^no\b|^exit\b|^quit\b|^cancel\b/.test(low) ? 'no'
+        : /trust|always|all pending|don'?t ask|dont ask/.test(low) ? 'trust'
+        : /^yes\b|approve|continue|allow|proceed/.test(low) ? 'yes'
+        : 'no';
+      const icon = kind === 'yes'
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        : kind === 'trust'
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      const label = num ? body : (kind === 'yes' ? 'Yes' : kind === 'trust' ? 'Yes All' : 'No');
+      const choice = escapeHtml(JSON.stringify(String(o)));
+      return `<button class="btn-${kind}${num ? ' btn-choice' : ''}" title="${escapeHtml(body)}"` +
+        ` onclick="respond(${choice})">${icon} ${escapeHtml(label)}</button>`;
     }
 
     let paneLines = 200;
@@ -24548,12 +26229,15 @@
     // for as long as a pane is open; these are reached by opening a panel and aiming, and a
     // deadline that expires while you are still moving teaches people to double-tap blind.
     const ARM_MS = 2500;
-    let armedEl = null, armedTimer = 0;
+    let armedEl = null, armedKey = '', armedTimer = 0;
 
-    function armButton(btn, label, run) {
-      if (armedEl === btn) { disarmButton(); run(); return; }
+    // `key` is for a control whose enclosing card is redrawn by the poll. Its element changes,
+    // but its action does not; matching that action lets the second tap reach the same arm.
+    function armButton(btn, label, run, key) {
+      if ((key && armedKey === key) || (!key && armedEl === btn)) { disarmButton(); run(); return; }
       disarmButton();
       armedEl = btn;
+      armedKey = key || '';
       btn.dataset.armLabel = btn.textContent;
       btn.dataset.armed = '1';
       btn.textContent = label;
@@ -24564,16 +26248,33 @@
     function disarmButton() {
       clearTimeout(armedTimer);
       const btn = armedEl;
-      armedEl = null;
-      if (!btn) return;
-      btn.textContent = btn.dataset.armLabel;
-      delete btn.dataset.armed;
-      delete btn.dataset.armLabel;
+      const key = armedKey;
+      armedEl = null; armedKey = '';
+      // The element that was armed, and — for a keyed arm — whatever is standing in its place now.
+      // A poll redraw replaces the node between the two taps, so by the time the arm expires the
+      // one on screen is not the one this holds, and clearing only `armedEl` leaves a detached
+      // node tidied and a live button still saying "End all?" with nothing behind it.
+      // Member keys are JSON fingerprints, so quoting one into a CSS selector makes the second
+      // tap throw before it can run. Compare the dataset instead.
+      const live = key && typeof document !== 'undefined' && document.querySelectorAll
+        ? Array.from(document.querySelectorAll('[data-arm-key]'))
+          .find(el => el.dataset.armKey === key) : null;
+      for (const el of new Set([btn, live])) {
+        if (!el || !el.dataset || !el.dataset.armLabel) continue;
+        el.textContent = el.dataset.armLabel;
+        delete el.dataset.armed;
+        delete el.dataset.armLabel;
+      }
     }
+
+    function armButtonArmed(key) { return !!key && armedKey === key; }
 
     // Anywhere else, and the arm is off: a tap that lands somewhere else is a tap that was not
     // the second half of this pair.
-    document.addEventListener('click', (e) => { if (e.target !== armedEl) disarmButton(); }, true);
+    document.addEventListener('click', (e) => {
+      const keyed = e.target.closest && e.target.closest('[data-arm-key]');
+      if (e.target !== armedEl && (!keyed || keyed.dataset.armKey !== armedKey)) disarmButton();
+    }, true);
 
     function disarmClear() { disarmFire('clsBtn'); }
     function disarmQuit() { disarmFire('quitBtn'); }
@@ -24621,9 +26322,18 @@
     // a transcript that is wrong. The same path, and the same reason, as armQuit above.
     const END_TIMEOUT_MS = 30000;
 
-    // pane_id -> {at, label}: the panes whose agent has been told to quit and whose shell has not
-    // been exited yet. Never persisted — a reload has no send in flight to finish.
+    // pane_id -> {at, label, quiet}: the panes with an end in flight. `quiet` marks the ones whose
+    // last line has already gone out — a shell sent `exit`, or an agent on a relay that lists no
+    // shells — so the tick stops sending at them and only waits for them to disappear. It is also
+    // what keeps the timeout from reporting "did not quit" about a pane that quit immediately and
+    // simply cannot be observed doing it.
+    //
+    // Never persisted: a reload has no send in flight to finish. What reads it is the render — a
+    // button whose pane is in here says Ending… and takes no more taps, and gets its word back by
+    // the entry leaving, whether that is the pane going or the deadline passing.
     const endWatch = new Map();
+
+    function endPending(paneId) { return endWatch.has(paneId); }
 
     function endPane(paneId) {
       const pane = paneOf(paneId);
@@ -24644,6 +26354,10 @@
       // ponytail: leaves a shell behind on a relay with HERDR_ENABLE_TERMINAL off.
       if (!startOptions || !startOptions.terminal) {
         showToast(`Quit ${paneLabel(pane)} — its pane may remain.`, 'info');
+        // Watched quietly all the same, so the button says Ending… like every other one. Nothing
+        // more is sent at it and nothing is reported if it outlasts the deadline — the pane simply
+        // gets its End back, which is the honest answer where the shell cannot be seen.
+        endWatch.set(paneId, {at: Date.now(), label: paneLabel(pane), quiet: true});
         return true;
       }
       endWatch.set(paneId, {at: Date.now(), label: paneLabel(pane)});
@@ -24652,8 +26366,14 @@
     }
 
     function endShell(paneId) {
-      if (!submitText(paneId, 'exit')) return false;
-      endWatch.delete(paneId);
+      const at = endWatch.get(paneId);
+      if (!submitText(paneId, 'exit')) { endWatch.delete(paneId); return false; }
+      // Quiet from here: the line is out and there is nothing left to send. Kept rather than
+      // dropped so the button stays Ending… across both halves of an agent's exit — the pane
+      // leaving the list is what ends it, which is also what takes the card away.
+      endWatch.set(paneId, {at: (at || {}).at || Date.now(),
+                            label: (at || {}).label || paneLabel(paneOf(paneId) || {}),
+                            quiet: true});
       burstPoll(paneId);
       return true;
     }
@@ -24664,12 +26384,14 @@
       if (!endWatch.size) return;
       const now = Date.now();
       for (const [paneId, at] of Array.from(endWatch)) {
-        if (isShell(paneId)) { endShell(paneId); continue; }
         // Gone from both lists: herdr closed the pane itself, which some harnesses do on /quit.
         if (!paneOf(paneId)) { endWatch.delete(paneId); continue; }
+        // `quiet` and not `isShell` alone, or the second line would go out again on every poll
+        // for as long as the shell took to close.
+        if (!at.quiet && isShell(paneId)) { endShell(paneId); continue; }
         if (now - at.at > END_TIMEOUT_MS) {
           endWatch.delete(paneId);
-          showToast(`${at.label} did not quit — it is still running.`);
+          if (!at.quiet) showToast(`${at.label} did not quit — it is still running.`);
         }
       }
     }
@@ -24707,8 +26429,49 @@
     //
     // A socket that is not open is a refusal, not a send: this returns false so the caller keeps the
     // message in the box rather than clearing it over a message the relay never saw.
+    // pane_id -> the text the relay refused because the pane was at a menu. Nothing was typed, so
+    // this is the whole of the message and it is still the client's to send: a start into a codex
+    // asking whether it may trust the directory is the case this exists for, and losing its opening
+    // prompt to the trust prompt is what made a spawn look like it had failed.
+    const menuHeld = new Map();
+
+    function holdForMenu(paneId, text) {
+      if (paneId && text) menuHeld.set(paneId, {text: text, sawBlocked: false, at: Date.now()});
+    }
+
+    // How long a held message waits for the poll to report the menu the relay has already seen.
+    // Giving up is safe because the relay refuses again at a pane still showing one: a late try
+    // costs one pane read and the message is held afresh. Waiting for ever is not safe — a relay
+    // too old to publish the state would hold the text for the life of the page.
+    const MENU_HOLD_WAIT_MS = 10000;
+
+    // Sent again the moment the pane is no longer at the question. Called from the snapshot, which
+    // is the only thing that knows a pane has moved.
+    function sendHeldAfterMenu(list) {
+      if (!menuHeld.size) return;
+      const seen = new Set();
+      for (const a of list || []) {
+        seen.add(a.pane_id);
+        const held = menuHeld.get(a.pane_id);
+        if (!held) continue;
+        // A trust prompt can be reported idle. The relay turns it into blocked on the next spawn
+        // snapshot; wait for that state before treating a later non-blocked snapshot as its answer.
+        if (a.status === 'blocked') { held.sawBlocked = true; continue; }
+        if (!held.sawBlocked && Date.now() - held.at < MENU_HOLD_WAIT_MS) continue;
+        const text = held.text;
+        // Dropped before the send: a second refusal puts it straight back, and holding it in two
+        // places at once is how a message gets sent twice.
+        menuHeld.delete(a.pane_id);
+        submitText(a.pane_id, text);
+      }
+      // A pane that is no longer in the snapshot has ended, and text held for one is not going
+      // anywhere. Dropped here rather than left to accumulate for the life of the page.
+      for (const id of Array.from(menuHeld.keys())) if (!seen.has(id)) menuHeld.delete(id);
+    }
+
     function submitText(paneId, text) {
       if (!text || !paneId || !ws || ws.readyState !== 1) return false;
+      lastSubmitted.set(paneId, text);
       // One message per chunk. Nothing before the last one submits, so they land in the agent's
       // composer as one text; the relay handles a connection's messages in order.
       const parts = chunkText(text);
@@ -24723,6 +26486,10 @@
       }
       return true;
     }
+
+    // What was last handed to a pane, so a refusal can carry it: `command_result` names the pane and
+    // not the text, and the chunks it was split into are not what anyone would want re-sent.
+    const lastSubmitted = new Map();
 
     // One text into one pane, from whichever composer had it. The pane's own composer is one
     // caller; the conversation window's is the other, and it can be pointed at a pane nobody has
@@ -25203,7 +26970,7 @@
     // insertShortcut / runShortcut / deleteShortcut unchanged.
     function paletteItems() {
       if (paletteMode === 'prompts')
-        return SHORTCUTS.map((s, i) => ({ cmd: s.label, desc: 'Insert into composer', idx: i }));
+        return promptChips().map(({s, i}) => ({ cmd: `@${s.at}`, desc: s.label, idx: i }));
       if (paletteMode === 'terminal')
         return termShortcuts.map((s, i) => ({ cmd: s.label, desc: s.text, idx: i, danger: s.danger }));
       return getAgentCommands();
