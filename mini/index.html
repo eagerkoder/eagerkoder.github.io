@@ -22249,8 +22249,11 @@
     // same Start again the row already offers, in one press.
     function convRestartMember(key) {
       const live = agents.find(x => convMemberKey(x) === key);
-      if (live) endPane(live.pane_id);
+      // A blocked (or just vanished) pane was not ended. Starting anyway leaves the old session
+      // beside its supposed replacement, which is precisely what Restart promises not to do.
+      if (!live || !endPane(live.pane_id)) return false;
       convRespawn(key);
+      return true;
     }
 
     // Every live member, one at a time.
