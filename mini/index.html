@@ -5065,7 +5065,10 @@
       border-radius: 6px;
     }
 
-    .conv-roster-row.gone {
+    /* The identity fades, the actions do not: a paused row is where a member is brought back, so
+       its controls are the one part of it that must not look switched off. Not opacity on the row
+       — that is a stacking context, and it dimmed the Restart menu that opens out of it. */
+    .conv-roster-row.gone > :not(.conv-roster-acts) {
       opacity: 0.65;
     }
 
@@ -5113,8 +5116,7 @@
     }
 
     .conv-roster .conv-drop,
-    .conv-roster .conv-swap,
-    .conv-roster .conv-again,
+    .conv-roster .conv-restart-open,
     .conv-roster .conv-reset,
     .conv-roster .conv-restart,
     .conv-roster .conv-open,
@@ -5151,8 +5153,8 @@
       border-color: var(--red);
     }
 
-    /* Orange, not the red Delete wears. Delete destroys a record and cannot be undone; End stops a
-       session that Start again brings back on the very same row. Two different promises, so not
+    /* Orange, not the red Delete wears. Delete destroys a record and cannot be undone; Pause stops
+       a session that Restart brings back on the very same row. Two different promises, so not
        the same colour — and orange is already what this app paints a pane that has stopped. */
     .conv-roster .conv-end,
     .conv-roster-actions .conv-end {
@@ -5166,34 +5168,88 @@
     }
 
     .conv-roster .conv-open,
-    .conv-roster .conv-again,
-    .conv-roster .conv-restart,
+    .conv-roster .conv-restart-open,
     .conv-roster-actions .conv-restart {
       color: var(--blue);
       border-color: var(--blue);
     }
 
     /* Reset neither ends a session nor brings one back — it leaves the pane exactly where it is
-       and empties it. Muted, like Swap, because it is the third thing. */
+       and empties it. Muted, because it is the third thing. */
     .conv-roster .conv-reset,
     .conv-roster-actions .conv-reset {
       color: var(--muted);
       border-color: var(--border);
     }
 
-    /* Neither blue nor orange. Swap is not a way back into what is already there, and on a live
-       member it ends a session — so it wears the colour of the thing it is closest to being
-       without claiming to be either. */
-    .conv-roster .conv-swap {
+    /* One word on the row, both ways of restarting under it. The panel is positioned rather than
+       laid out: a menu that pushed the row apart as it opened would move every control beneath it
+       out from under the thumb that opened this one. */
+    .conv-roster .conv-menu {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .conv-roster .conv-restart-open {
+      list-style: none;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .conv-roster .conv-restart-open::-webkit-details-marker { display: none; }
+
+    .conv-roster .conv-menu-items {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 30;
+      min-width: 220px;
+      max-width: min(78vw, 320px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px;
+      /* Opaque, and darker than the row it covers rather than the same colour as it. A panel that
+         matches its background reads as transparent however solid it is. */
+      background: var(--bg);
+      border: 1px solid var(--blue);
+      border-radius: 8px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+    }
+
+    /* What the tap will start, and where. It was a toast, which is gone by the time the second
+       tap is decided on — here it is beside the item it describes for as long as the menu is up. */
+    .conv-roster .conv-menu-note {
+      margin: 0 0 2px;
+      font-size: 0.6rem;
+      line-height: 1.35;
       color: var(--muted);
-      border-color: var(--border);
+    }
+
+    .conv-roster .conv-menu-items button {
+      width: 100%;
+      text-align: left;
+      white-space: normal;
+      font-size: 0.66rem;
+      min-height: 34px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .conv-roster .conv-menu-items .conv-restart {
+      color: var(--blue);
+      border-color: var(--blue);
     }
 
     /* The same two-tap promise QUIT makes in the header, on a button a render draws rather than
        one that lives in the markup. Longer drain — see ARM_MS: these are aimed at off a panel,
        not pressed by a thumb already resting on them. */
     /* The send is out. Grey and inert, and the same shape as the button it replaces so the row
-       does not move under the thumb that just pressed it. It goes back to End by the entry leaving
+       does not move under the thumb that just pressed it. It goes back to Pause by the entry leaving
        endWatch — the pane gone, or the deadline passed — so a failure needs no state of its own. */
     .end-going,
     .conv-roster .end-going,
@@ -5208,7 +5264,11 @@
       cursor: default;
     }
 
+    /* The menu items are listed too, and not because they differ: their resting rule names an
+       element as well as two classes, so it outweighs this one on background and border and the
+       drain would never be seen. Same declarations, enough specificity to be reached. */
     .arm-btn[data-armed="1"],
+    .conv-roster .conv-menu-items button.arm-btn[data-armed="1"],
     .term-menu .menu-item.arm-btn[data-armed="1"] {
       color: var(--bg);
       border-color: transparent;
@@ -5218,6 +5278,7 @@
 
     @media (prefers-reduced-motion: reduce) {
       .arm-btn[data-armed="1"],
+      .conv-roster .conv-menu-items button.arm-btn[data-armed="1"],
       .term-menu .menu-item.arm-btn[data-armed="1"] {
         background: var(--orange);
         animation: none;
@@ -8487,22 +8548,28 @@
     </div>
   </div>
 
-  <!-- Stays visible after the launch sheet closes, including starts made from Duplicate. -->
-  <div id="spawnStatus" role="status" aria-live="polite"
-    style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom,8px));z-index:201;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--blue);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4);align-items:center;gap:8px">
-    <span id="spawnSpinner" aria-hidden="true" style="width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></span>
-    <span id="spawnStatusText"></span>
-  </div>
+  <!-- Both notices the app draws over itself, in one column at the top of the viewport, over the
+       header rather than under it. It used to hang below the header, which put it inside whichever
+       view was open — and in the conversation it read as part of the thread, one more bubble among
+       the messages it was warning about. A notice about the app belongs to the app.
 
-  <!-- Relay errors. Until this existed every refusal the relay sent was dropped on the floor,
-     so a rejected send_text or rename looked identical to one that worked.
+       They are stacked rather than each pinned to the same point because both can be up at once:
+       a relay error during a spawn is exactly when the two have the most to say. -->
+  <div id="topNotices"
+    style="position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 4px);z-index:201;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none">
 
-     At the very top of the viewport, over the header rather than under it. It used to hang below
-     the header, which put it inside whichever view was open — and in the conversation it read as
-     part of the thread, one more bubble among the messages it was warning about. A notice about
-     the app belongs to the app. -->
-  <div id="toast" role="status" aria-live="polite"
-    style="display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 4px);z-index:200;max-width:90vw;padding:8px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.65rem;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
+    <!-- Relay errors. Until this existed every refusal the relay sent was dropped on the floor,
+       so a rejected send_text or rename looked identical to one that worked. -->
+    <div id="toast" role="status" aria-live="polite"
+      style="display:none;max-width:90vw;padding:8px 14px;border-radius:10px;border:1px solid var(--red);background:var(--surface);color:var(--text);font-size:0.65rem;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,0.4)">
+    </div>
+
+    <!-- Stays visible after the launch sheet closes, including starts made from Duplicate. -->
+    <div id="spawnStatus" role="status" aria-live="polite"
+      style="display:none;max-width:90vw;padding:10px 14px;border-radius:10px;border:1px solid var(--blue);background:var(--surface);color:var(--text);font-size:0.75rem;box-shadow:0 4px 16px rgba(0,0,0,0.4);align-items:center;gap:8px">
+      <span id="spawnSpinner" aria-hidden="true" style="width:12px;height:12px;border:2px solid var(--muted);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></span>
+      <span id="spawnStatusText"></span>
+    </div>
   </div>
 
   <!-- The pane picker. Pinning a partner and adding members to a conversation ask the same
@@ -10270,13 +10337,68 @@
       return !!tile && (tile.action === 'run' || tile.action === 'term');
     }
 
+    // --- Bots ---
+    // A bot is a tile that is always the same session rather than another one like it: one agent,
+    // one conversation, one thread that outlives every pane it has ever run in. Pressing it opens
+    // what is already there, or starts the harness the tile now names *into the thread the last
+    // one left* — the succession a member restart already performs.
+    //
+    // Not a permanent pane id, because there is no such thing to ask for: herdr assigns pane ids
+    // and recycles them, so a client naming one would be naming whatever is in that slot today.
+    // What is permanent is the conversation — a fixed id, a member key that moves from pane to
+    // pane, and the transcript copied across each seam.
+    //
+    // Seeded rather than made: the row exists before anyone has pressed anything, which is the
+    // difference between a bot and a tile that happens to be about one agent.
+    const LAUNCHER_BOTS = [
+      {slug: 'jarvis', label: 'Jarvis', kind: 'claude'},
+    ];
+
+    function launcherIsBot(tile) {
+      return !!(tile && tile.bot);
+    }
+
+    // The one conversation a bot always lands in. Derived from the slug rather than stored, so a
+    // browser that has never seen this bot before still finds the thread the others are writing.
+    function launcherBotConvId(slug) {
+      return 'c_bot_' + String(slug || '');
+    }
+
+    function launcherBotSeed(bot) {
+      return {id: 'ql_bot_' + bot.slug, bot: bot.slug, label: bot.label, action: 'spawn',
+              project_id: '', members: [{name: bot.kind}]};
+    }
+
+    // Every bot, present whether or not the document has heard of it. A bot the user has edited is
+    // in the document and is left exactly as it is; one that is not is added at the end, where the
+    // Bots band picks it up — the band is what puts it at the top of the section, not its index.
+    //
+    // ponytail: a document already at LAUNCHER_MAX loses the seed to saveLauncher's slice. Sixty
+    // tiles is a bound on a client gone wrong rather than a shelf anyone fills.
+    function launcherWithBots(items) {
+      const have = new Set((items || []).map(t => t && t.bot).filter(Boolean));
+      const add = LAUNCHER_BOTS.filter(b => !have.has(b.slug)).map(launcherBotSeed);
+      return add.length ? (items || []).concat(add) : (items || []);
+    }
+
+    // A bot's name is not a launch's name. An ordinary tile tags every press so two of them are
+    // never mistaken for each other; a bot has only ever one, and the tag would rename the one
+    // pane this whole feature exists to keep recognisable.
+    function launcherBotNamed(tile) {
+      const label = launcherClean(tile.label);
+      return Object.assign({}, tile, {
+        label: label,
+        members: (tile.members || []).map(m => Object.assign({}, m, {label: label})),
+      });
+    }
+
     // Exactly what relay/start_agent.py accepts, restated because the relay does not offer it.
     // `extra = set(msg) - base_fields` is a hard refusal there, so a stray key is not a warning —
     // it is the whole message rejected. launcherStrict is what makes that a test failure here
     // instead of a spawn that mysteriously does nothing.
     const OPEN_TERMINAL_FIELDS = ['type', 'project_id', 'placement', 'label', 'slot'];
     const START_AGENT_FIELDS = ['type', 'name', 'role', 'project_id', 'placement', 'label', 'slot',
-                                'config', 'unattended'];
+                                'config', 'unattended', 'ref'];
 
     // Always. The other two placements name a live pane — `workspace_id` for a tab, `split_from`
     // for a split — and a tile saved last week cannot: the pane it would have named is gone, and
@@ -10377,6 +10499,7 @@
     // name was typed for one launch, and a tile that renamed itself on every press would be a
     // button labelled with whatever it last did.
     function launcherNamed(tile, name) {
+      if (launcherIsBot(tile)) return launcherBotNamed(tile);
       const tag = launcherTag();
       // The tag goes on the launch's own name too, not only on the panes under it. One press is
       // one tag: the conversation, every member and the arbitrator all wear it, which is what makes
@@ -10447,6 +10570,14 @@
       // the same roster pressed into whichever tree wants it. The Project is then asked for at the
       // press, where it is mandatory — see launcherAskProject.
       if (LAUNCHER_ACTIONS.indexOf(tile.action) < 0) return 'Unknown action';
+      // A bot is one agent in one thread. Two would be two panes writing into one transcript, and
+      // a terminal has no conversation to be permanent in.
+      if (launcherIsBot(tile)) {
+        if (tile.action !== 'spawn') return 'A bot starts an agent';
+        if ((Array.isArray(tile.members) ? tile.members.length : 0) !== 1) {
+          return 'A bot has exactly one agent';
+        }
+      }
       if (launcherIsTerm(tile)) {
         const command = typeof tile.command === 'string' ? tile.command.trim() : '';
         // A `term` with nothing to type is the whole point of it — an empty prompt in the right
@@ -10600,10 +10731,14 @@
     // next_role_label reads the live agent list to pick "Architect 2", so two starts in flight at
     // once can choose the same name and the relay renames around the collision — leaving a roster
     // the user did not pick.
-    function launcherSpawnMsg(tile, member) {
+    // `ref` is the client's own id for this start, carried on the pane the relay makes for as long
+    // as it lives. Only a bot names one: it is what a reloaded browser has left to find the pane by
+    // once the answer to the start has gone down with the tab.
+    function launcherSpawnMsg(tile, member, ref) {
       return launcherFields({
         type: 'start_agent',
         name: member.name,
+        ref: ref,
         role: LAUNCHER_ROLE,
         project_id: tile.project_id,
         placement: LAUNCHER_PLACEMENT,
@@ -10744,9 +10879,12 @@
     // conversation_store.js already uses: the schema is pure and testable next door in
     // launcher_pure.js, and only this file knows there is a browser.
 
+    // Bots are added on the way out rather than written in on the way past: a browser that has
+    // never stored anything still draws them, and one whose stored bot the user has edited reads
+    // that one back untouched. It reaches storage the next time anything is saved.
     function loadLauncher() {
-      try { return parseLauncher(localStorage.getItem(LAUNCHER_KEY)); }
-      catch (e) { return []; }   // private mode: nothing stored
+      try { return launcherWithBots(parseLauncher(localStorage.getItem(LAUNCHER_KEY))); }
+      catch (e) { return launcherWithBots([]); }   // private mode: nothing stored
     }
 
     // Every write goes through here, which is what keeps the outbox honest. The outbox is the set
@@ -10789,7 +10927,10 @@
     // one operation to the person doing it.
     function putLauncherTile(tile) {
       const items = loadLauncher();
-      const had = items.length;
+      // The bots do not count. They are here on every load, so counting them would mean the
+      // section's one moment of "the user just made a tile" never arrives — see
+      // ensureLauncherSection for why that moment is the switch.
+      const had = items.filter(t => !launcherIsBot(t)).length;
       const at = items.findIndex(t => t.id === tile.id);
       if (at < 0) items.push(tile); else items[at] = tile;
       const kept = saveLauncher(items);
@@ -10797,8 +10938,14 @@
       return kept;
     }
 
+    // A bot is refused. Its row is the only way into a conversation that may have months in it,
+    // and deleting the row would not delete the thread — it would strand it, and the seed would
+    // put the row back wearing the default harness rather than the one that was chosen. The
+    // harness is editable; the row is not.
     function removeLauncherTile(id) {
-      return saveLauncher(loadLauncher().filter(t => t.id !== id));
+      const items = loadLauncher();
+      if (launcherIsBot(items.find(t => t.id === id))) return items;
+      return saveLauncher(items.filter(t => t.id !== id));
     }
 
     // Move one tile by one place. The whole of reordering: six tiles do not need a drag-and-drop
@@ -12961,9 +13108,16 @@
         const conv = items.find(c => c.id === intent.conv);
         if (conv) {
           const prior = (conv.members || []).find(m => m.key === (replacing || {}).key);
+          // Whether this pane is already one of this conversation's members. The fallback below
+          // joins as a new member, which is right for a pane the conversation has never held and
+          // wrong for one it already names: herdr recycles pane ids, and a replace intent that no
+          // longer matches — a second landing, a member moved by the restart before it — would
+          // otherwise append a second row for a key that is already in the list. Two members, one
+          // pane, both drawing the same transcript.
+          const already = (conv.members || []).some(m => m.key === next);
           conv.members = continued && prior
             ? conv.members.map(m => m.key === prior.key
-              ? Object.assign({}, m, {
+              ? Object.assign({}, m, convWasFpPatch(m, prior.key, next), {
                   key: next, label: prior.label || paneLabel(a),
                   // The pane this member continues. This is the only place a member's key moves
                   // from one pane to another, so it is the only place succession is a fact rather
@@ -12971,9 +13125,13 @@
                   // conversation running the same harness in the same directory.
                   was: (m.was || []).concat(convKeyPaneId(prior.key))
                     .filter(Boolean).slice(-CONV_WAS_MAX),
+                  // convWasFpPatch above names the bucket the record kept this member in, where
+                  // the restart moved it to a different one — another harness, or another
+                  // checkout. The pane ids here cannot find those rows on their own: a pane id is
+                  // only ever looked up inside a fingerprint's bucket.
                 })
               : m)
-            : (conv.members || []).concat(convMemberOf(a));
+            : (already ? conv.members : (conv.members || []).concat(convMemberOf(a)));
           saveConvIndex(items);
           // This conversation and not merely "on": the new pane is a member of exactly one so far,
           // but a respawn into a grouping the user chose must open on that grouping.
@@ -13192,6 +13350,18 @@
 
     // A start can outlive its sheet (Duplicate has none), so its result also has one global card.
     // Success and warnings clear shortly; errors stay long enough to be read and retried.
+    //
+    // Busy has a ceiling of its own, and it is the one state that needs one. Every other state
+    // ends by timing out; busy ends only when the pane it is waiting for turns up in a snapshot
+    // and openPendingStart says how it went. A start whose pane never arrives — one refused
+    // between the relay's answer and the poll, one on a host that stopped answering, a batch
+    // abandoned mid-sequence — leaves nothing to clear it, and a spinner that runs for ever reads
+    // as a start that failed silently when the session is in fact up and working.
+    //
+    // Long enough not to talk over a slow one: the relay waits AGENT_START_TIMEOUT_MS (30s) for
+    // herdr alone, and each member of a launcher batch resets this on its own way out. Worded as
+    // a report and not an error, because that is all this knows — the pane has not been seen.
+    const SPAWN_BUSY_MS = 90000;
     let spawnStatusTimer = null;
     function showSpawnStatus(text, state) {
       const el = document.getElementById('spawnStatus');
@@ -13203,7 +13373,13 @@
       el.style.borderColor = color;
       spinner.hidden = state !== 'busy';
       clearTimeout(spawnStatusTimer);
-      if (state !== 'busy') spawnStatusTimer = setTimeout(() => { el.style.display = 'none'; },
+      if (state === 'busy') {
+        spawnStatusTimer = setTimeout(
+          () => showSpawnStatus(`${text} no pane has appeared yet — it may still be coming up.`,
+                                'warning'), SPAWN_BUSY_MS);
+        return;
+      }
+      spawnStatusTimer = setTimeout(() => { el.style.display = 'none'; },
         state === 'error' ? 10000 : 5000);
     }
 
@@ -13432,6 +13608,14 @@
       // terminal, or for a role whose prompt is still to be written.
       startPrompt = terminal ? '' : roleStarter(role, startAgentPick);
       startStarter = terminal ? '' : ((role || {}).at || NO_STARTER);
+      // The session this one replaces, ended here and not when the dialog was opened: a pane runs
+      // one CLI, so the swap has to spend it — but only now that there is something to spend it
+      // on. Cleared as it is used, so a second submit into a dialog left open cannot quit a pane
+      // that is already gone or, worse, one herdr has since recycled the id of.
+      if (startIntent && startIntent.endFirst) {
+        endPane(startIntent.endFirst);
+        startIntent = Object.assign({}, startIntent, {endFirst: ''});
+      }
       ws.send(JSON.stringify(msg));
     }
 
@@ -13808,8 +13992,8 @@
       return kept;
     }
 
-    // What the relay says about each alias: its harness, whether the key variable is actually set
-    // over there, and the command line the spawn will run. Derived on the relay because only the
+    // What the relay says about each alias: its harness, whether the keystore over there actually
+    // holds the key id it names, and the command line the spawn will run. Derived on the relay because only the
     // relay has read the provider file — so a row this browser wrote is drawn from the answer
     // rather than from what it wrote, which is also what makes a typo visible.
     function agentConfigRows() {
@@ -13860,17 +14044,17 @@
     }
 
     // Two lines. The first is what the thing is — its name, its harness, the provider it is
-    // pointed at; the second is what it will do — the model, and the key variable with whether
-    // this relay actually holds it. Everything needed to tell two aliases apart without opening
+    // pointed at; the second is what it will do — the model, and the key id with whether the
+    // relay's keystore actually holds one under it. Everything needed to tell two aliases apart without opening
     // either, which is the whole job of a list of near-identical things.
     function agentConfigRowHtml(row) {
       const badge = typeof agentBadge === 'function' ? agentBadge(row.label, row.kind)
         : ` <span class="badge">${escapeHtml(row.label)}</span>`;
       const key = row.key
         ? `<span class="cfg-key${row.key_set ? '' : ' cfg-unset'}"`
-          + ` title="${row.key_set ? 'This relay holds ' + escapeHtml(row.key)
-              : escapeHtml(row.key) + ' is not set on the relay — the session would start without'
-                + ' a key'}">$${escapeHtml(row.key)}${row.key_set ? '' : ' ✕'}</span>`
+          + ` title="${row.key_set ? "The relay's keystore holds " + escapeHtml(row.key)
+              : escapeHtml(row.key) + ' is not in the relay\'s keystore — the session would start'
+                + ' without a key'}">${escapeHtml(row.key)}${row.key_set ? '' : ' ✕'}</span>`
         : '';
       const off = row.off
         ? '<span class="cfg-off-tag" title="Switched off — not offered anywhere">off</span>' : '';
@@ -14025,19 +14209,19 @@
         + agentConfigModelHtml(provider, d)
         + (keys.length
           ? '<div class="start-field">Key<div class="badge-strip">'
-            + keys.map(k => badgeHtml('$' + k.name + (k.set ? '' : ' ✕'),
+            + keys.map(k => badgeHtml(k.name + (k.set ? '' : ' ✕'),
                 k.name === (d.key || (keys[0] || {}).name),
                 `agentConfigSet('key', '${escapeHtml(k.name)}')`,
-                {proj: true, title: k.set ? 'This relay holds ' + k.name
-                  : k.name + ' is not set on the relay'})).join('')
+                {proj: true, title: k.set ? "The relay's keystore holds " + k.name
+                  : k.name + " is not in the relay's keystore"})).join('')
             + '</div></div>'
           : `<div class="cfg-note">${provider.base_url
-              ? 'This provider names no key variables.'
+              ? 'This provider names no keys.'
               : 'Stock harness — it runs on whatever login the CLI already has on the relay\'s'
                 + ' machine, so there is no key to choose.'}</div>`)
-        // The line the relay will actually run, with the key as a `$VAR` reference rather than a
-        // value — so it is both safe to show and pasteable into the user's own shell, which is
-        // how a wrong endpoint gets found in one paste instead of one spawn. Only for a saved
+        // The line the relay will actually run, with the key as the `$(secret <id>)` call that
+        // fetches it — so it is both safe to show and pasteable into the user's own shell, which
+        // is how a wrong endpoint gets found in one paste instead of one spawn. Only for a saved
         // config: it comes from the relay, and an unsaved draft is not one it has read.
         + (row && row.command
           ? '<div class="cfg-note">Effective command</div>'
@@ -14156,7 +14340,10 @@
     // What the tile calls the thing it will make.
     function launcherKindLine(tile) {
       const many = (tile.members || []).length > 1;
-      const kind = launcherIsTerm(tile) ? 'Terminal'
+      // A bot before anything else it might also be. What matters about this row is not that it
+      // starts one session — every one-agent tile does — it is that it starts *the same* one.
+      const kind = launcherIsBot(tile) ? 'Bot'
+        : launcherIsTerm(tile) ? 'Terminal'
         : launcherWantsArb(tile) ? 'Arbitrated' : many ? 'Conversation' : 'Session';
       // The bubbles rather than the robot as soon as there is more than one agent on the tile:
       // what this press makes is a room with them in it, and that is what the reader wants to
@@ -14274,13 +14461,18 @@
       // belong to is one more badge in a grid of badges.
       const safe = tiles.filter(t => !launcherInsecure(t));
       band('[insecure]', tiles.filter(launcherInsecure));
-      band('Templates', safe.filter(t => !t.project_id));
-      projects.forEach(p => band(p.label || p.id, safe.filter(t => t.project_id === p.id)));
+      // Bots above the rest, and out of the Project bands: a bot is not one of the things the
+      // reader is choosing between — it is the one row that is always the same room, and it is
+      // read past rather than read through.
+      band('Bots', safe.filter(launcherIsBot));
+      const rest = safe.filter(t => !launcherIsBot(t));
+      band('Templates', rest.filter(t => !t.project_id));
+      projects.forEach(p => band(p.label || p.id, rest.filter(t => t.project_id === p.id)));
       // Tiles pointing at a Project this relay does not have. Last, and still drawn: they are the
       // broken ones, each already wearing its own badge, and a band that hid them would be the one
       // place the problem is fixable and the last place it is mentioned.
       const known = new Set(projects.map(p => p.id));
-      band('Missing Project', safe.filter(t => t.project_id && !known.has(t.project_id)));
+      band('Missing Project', rest.filter(t => t.project_id && !known.has(t.project_id)));
       return out;
     }
 
@@ -14380,6 +14572,13 @@
           ? [`Run this in a new terminal on ${where}?`, '', command]
           : [`Open a terminal on ${where}?`]);
       }
+      // A bot says what it is instead of how many it starts: one, always, and the same one.
+      if (launcherIsBot(tile)) {
+        return warn.concat([`Start ${tile.label} on ${where}?`, '',
+                            ((tile.members || [])[0] || {}).name || '',
+                            '', 'It keeps its conversation — the thread carries on where it left '
+                            + 'off.']);
+      }
       // The arbitrator counts. It is a third pane started on the same relay in the same Project,
       // and a confirm that said "2 sessions" before starting three would be the one number on
       // screen that was wrong.
@@ -14442,7 +14641,81 @@
       // `label` — the pane's name, the conversation's, the status line's — so naming it once here
       // is what keeps the launch's name and the tile's name from having to be the same thing.
       const named = launcherNamed(tile, typed);
+      if (launcherIsBot(named)) return launcherBotGo(named);
       return launcherIsTerm(named) ? launcherRunTile(named) : launcherSpawnTile(named);
+    }
+
+    // A bot press is "open this again", never "start another one like it". Three cases, and only
+    // the last two send anything:
+    //
+    //   the pane is up on the harness the tile names  — open it, and nothing else happens
+    //   the pane is gone                              — start it into the thread it left
+    //   the tile names a different harness            — end that pane and do the same
+    //
+    // The third is what "change the agent whenever you like" means in a terminal: a pane runs one
+    // CLI, so swapping the harness is Pause followed by Restart, which is exactly the succession
+    // a member swap already performs — same conversation, same name, the transcript carried across
+    // the seam by convContinueTranscript.
+    //
+    // ponytail: the harness alone decides whether the running pane is the one the tile asks for.
+    // An agent config swapped for another on the same harness is not restarted, and `config` falls
+    // off the snapshot on a relay restart — reading it here would end a live pane over a field
+    // that had merely gone quiet.
+    function launcherBotGo(tile) {
+      const member = (tile.members || [])[0] || {};
+      launcherBotHome(tile);
+      const conv = loadConvIndex().find(c => c.id === launcherBotConvId(tile.bot));
+      const held = conv && (conv.members || [])[0];
+      // Nothing has ever been started for this bot. The ordinary spawn path makes the pane and the
+      // conversation, and launcherMakeConv gives that conversation the bot's own fixed id — which
+      // is what every press after this one finds.
+      if (!held) return launcherSpawnTile(tile);
+      const live = agents.find(x => convMemberKey(x) === held.key);
+      if (live && live.agent === member.name) {
+        openConversation(conv.id);
+        openTerminal(live.pane_id);
+        showSpawnStatus(`${tile.label} is already running.`, 'success');
+        return true;
+      }
+      if (live && !endPane(live.pane_id)) {
+        showToast(`${tile.label} could not be ended — nothing was started.`);
+        return false;
+      }
+      return launcherBotContinue(tile, conv, held.key);
+    }
+
+    // Where a bot lives, written back onto the tile. The one place a press edits the tile it was
+    // made from, and the exception is the whole point of a bot: an ordinary tile is a template —
+    // the same roster pressed into whichever tree wants it, asked for every time — and a bot is a
+    // room, which is somewhere rather than anywhere. Asking again on every press would be asking
+    // the reader to re-answer a question that has one right answer already on screen.
+    function launcherBotHome(tile) {
+      const stored = loadLauncher().find(t => t.id === tile.id);
+      if (!stored || !tile.project_id || stored.project_id === tile.project_id) return;
+      putLauncherTile(Object.assign({}, stored, {project_id: tile.project_id}));
+      if (typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    // The start that continues a bot's thread. Not a batch and not launcherLanded: what lands here
+    // is a *replacement* for a member of a conversation that already exists, which is the intent
+    // start_dialog's respawn branch is written for — it copies the transcript, moves the member's
+    // key onto the new pane, and opens the thread.
+    function launcherBotContinue(tile, conv, key) {
+      const member = (tile.members || [])[0] || {};
+      // Named before the send and written down before that: the answer to a start is what a reload
+      // loses, and the note is what a tab coming back finds the pane by. Same mechanism, same
+      // two-minute window, as Restart in a conversation.
+      const ref = typeof convRespawnRef === 'function' ? convRespawnRef() : '';
+      const msg = launcherSpawnMsg(tile, member, ref);
+      startIntent = {conv: conv.id, replace: key};
+      // Nothing is said to it. A bot is a room the user comes back to, and an opening prompt typed
+      // at every press would be the one line in the thread nobody wrote.
+      startPrompt = '';
+      startStarter = member.at || NO_STARTER;
+      if (ref && typeof rememberConvRespawn === 'function') rememberConvRespawn(conv.id, key, ref);
+      showSpawnStatus(`Continuing ${tile.label}…`, 'busy');
+      ws.send(JSON.stringify(msg));
+      return true;
     }
 
     // What the sheet calls back into: the tile as stored, run in the Project just chosen. The
@@ -14532,22 +14805,35 @@
     // One pane has landed for a launcher intent. Called from openPendingStart, which owns the
     // "the poll has seen it" half; this owns what the tile asked for.
     async function launcherLanded(a, ql) {
-      // A `run`: the pane is a shell, and the command is what the tile is for. Through sendTextTo
-      // rather than the socket directly, so the arbitration guard, the chunk cap and the record of
-      // what the user sent all apply — this *is* the user typing a command, by proxy.
-      if (ql.command) {
+      // A `run` or a `term`: the pane is a shell, and a `run`'s command is what the tile is for.
+      // Through sendTextTo rather than the socket directly, so the arbitration guard, the chunk cap
+      // and the record of what the user sent all apply — this *is* the user typing a command, by
+      // proxy. Read off the tile's own action rather than off whether the intent carries a command:
+      // a `term` carries none by definition, and testing for the text sent it down the agent path,
+      // where it was adopted into a batch that does not exist.
+      if (launcherIsTerm(ql.tile)) {
         openTerminal(a.pane_id);
-        sendTextTo(a.pane_id, ql.command);
+        if (ql.command) sendTextTo(a.pane_id, ql.command);
         // The same note sendText makes for anything typed at a shell, so the command shows up in
         // the terminal's own history. A launcher press is still a command the user ran.
-        if (typeof noteTermCommand === 'function' && isShell(a.pane_id)) noteTermCommand(ql.command);
-        showSpawnStatus(`${ql.tile.label} — running.`, 'success');
+        if (ql.command && typeof noteTermCommand === 'function' && isShell(a.pane_id)) {
+          noteTermCommand(ql.command);
+        }
+        showSpawnStatus(ql.command ? `${ql.tile.label} — running.` : `${ql.tile.label} opened.`,
+                        'success');
         return;
       }
       const batch = ql.batch;
       // A batch cancelled or superseded while this start was in flight. The pane is real and stays;
-      // it is simply not adopted into a grouping that no longer exists.
-      if (!batch || batch !== launcherLive) { openTerminal(a.pane_id); return; }
+      // it is simply not adopted into a grouping that no longer exists. Said out loud rather than
+      // returned from quietly: the card at the foot is still spinning on this start, and nothing
+      // else is coming to stop it.
+      if (!batch || batch !== launcherLive) {
+        openTerminal(a.pane_id);
+        showSpawnStatus(`${a.label || a.agent || 'Session'} started — on its own, the launch it `
+                        + 'belonged to is over.', 'warning');
+        return;
+      }
       batch.panes.push(a);
       // Its first prompt, as soon as it is up. `agent start` has already blocked until herdr saw
       // the pane interactively ready, so there is nothing here to wait for — and waiting until the
@@ -14563,7 +14849,13 @@
         return;
       }
       const conv = launcherMakeConv(batch);
-      if (!conv) { openTerminal(a.pane_id); return; }
+      // At the conversation ceiling. launcherMakeConv has already said why in a toast; this is the
+      // other half of it, because the card is still spinning on a start that has in fact landed.
+      if (!conv) {
+        openTerminal(a.pane_id);
+        showSpawnStatus(`${batch.tile.label} started — ungrouped.`, 'warning');
+        return;
+      }
       renderConversations();
       openConversation(conv.id);
       if (launcherWantsArb(batch.tile)) return launcherAppoint(batch, conv);
@@ -14613,7 +14905,10 @@
       // conversation carrying it would show its brief as a third voice in the thread.
       const inside = batch.panes.slice(0, (batch.tile.members || []).length);
       const conv = {
-        id: 'c_' + Math.random().toString(36).slice(2, 10),
+        // A bot's conversation is found by its id rather than looked up by name, on every browser
+        // and after every restart — so the id is the bot's own and not this press's.
+        id: batch.tile.bot ? launcherBotConvId(batch.tile.bot)
+          : 'c_' + Math.random().toString(36).slice(2, 10),
         name: name, created: Date.now(), members: inside.map(convMemberOf),
       };
       saveConvIndex([conv].concat(items));
@@ -14704,8 +14999,10 @@
         + ` aria-label="Move ${escapeHtml(tile.label)} up"${i === 0 ? ' disabled' : ''}>↑</button>`
         + `<button class="ql-move" onclick="launcherMove('${escapeHtml(tile.id)}', 1)"`
         + ` aria-label="Move ${escapeHtml(tile.label)} down"${last ? ' disabled' : ''}>↓</button>`
-        + `<button class="ql-del" onclick="launcherDelete('${escapeHtml(tile.id)}')"`
-        + ` aria-label="Delete ${escapeHtml(tile.label)}">✕</button>`
+        + (launcherIsBot(tile)
+          ? ''
+          : `<button class="ql-del" onclick="launcherDelete('${escapeHtml(tile.id)}')"`
+            + ` aria-label="Delete ${escapeHtml(tile.label)}">✕</button>`)
         + `</div>`;
     }
 
@@ -14819,12 +15116,19 @@
                 {proj: true, title: p.host && p.host !== 'local' ? 'on ' + p.host : ''})).join('')
             : '<span class="ql-none">This relay has no Projects configured.</span>')
           + '</div></div>'
-          + `<label class="start-field">Name<input id="qlLaunchName" type="text"`
-          + ` maxlength="${LAUNCHER_LABEL_MAX}" autocapitalize="none" autocomplete="off"`
-          + ` placeholder="${escapeHtml(launcherNoun(tile))} — blank is fine"`
-          + ` value="${escapeHtml(launcherLaunch.name)}" /></label>`
-          + `<p class="ql-none">Every pane this starts wears the name and one shared tag, so a `
-          + 'second press of the same tile is never mistaken for this one.</p>'
+          // A bot is not named per press. There is one of it, it keeps the name on the tile, and a
+          // box asking what to call this launch would be asking about a launch that is not a new
+          // thing — see launcherBotNamed.
+          + (launcherIsBot(tile)
+            ? `<p class="ql-none">${escapeHtml(tile.label)} keeps its name and its conversation. `
+              + 'Pressing this opens the one that is there, or starts it again where it left off.'
+              + '</p>'
+            : `<label class="start-field">Name<input id="qlLaunchName" type="text"`
+              + ` maxlength="${LAUNCHER_LABEL_MAX}" autocapitalize="none" autocomplete="off"`
+              + ` placeholder="${escapeHtml(launcherNoun(tile))} — blank is fine"`
+              + ` value="${escapeHtml(launcherLaunch.name)}" /></label>`
+              + `<p class="ql-none">Every pane this starts wears the name and one shared tag, so a `
+              + 'second press of the same tile is never mistaken for this one.</p>')
           + '<div class="ql-actions">'
           + '<button class="ql-secondary" onclick="closeLauncherEdit()">Cancel</button>'
           // arm-btn is what draws the armed state — the orange fill draining over the arm window,
@@ -15030,7 +15334,11 @@
       return '<label class="start-field">Name<input id="qlName" type="text"'
         + ` maxlength="${LAUNCHER_LABEL_MAX}" autocapitalize="none" autocomplete="off"`
         + ` placeholder="what pressing this does" value="${escapeHtml(d.label || '')}" /></label>`
-        + '<div class="start-field">What it does<div class="badge-strip">'
+        + (launcherIsBot(d)
+          ? '<p class="ql-conv">' + launcherIcon('spawn') + '<span>A bot is one agent in one '
+            + 'conversation that outlives it. Change which agent below — the thread carries on '
+            + 'into whatever you pick.</span></p>'
+          : '<div class="start-field">What it does<div class="badge-strip">'
         + badgeHtml('Start agents', d.action === 'spawn', "launcherPickAction('spawn')",
                     {title: kinds.length ? 'Starts one or more sessions'
                                          : 'This relay starts nothing'})
@@ -15040,7 +15348,7 @@
         + badgeHtml('Run a command', d.action === 'run', "launcherPickAction('run')",
                     {title: terminal ? 'Opens a terminal and types this at it'
                                      : 'This relay has terminal mode switched off'})
-        + '</div></div>'
+        + '</div></div>')
         + '<div class="start-field">Project<div class="badge-strip">'
         + badgeHtml('Ask each time', !d.project_id, "launcherPickProject('')",
                     {title: 'A template — the Project is picked when the tile is pressed'})
@@ -15075,7 +15383,9 @@
         + launcherInsecureHtml(d)
         + '<p id="qlError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>'
         + '<div class="ql-actions">'
-        + (launcherEditing
+        // A bot has no Delete anywhere — not here and not in the list. removeLauncherTile refuses
+        // it either way; a button that is refused after the confirm is worse than no button.
+        + (launcherEditing && !launcherIsBot(d)
           ? `<button class="ql-secondary" onclick="launcherDelete('${escapeHtml(launcherEditing)}')">Delete</button>`
           : '<button class="ql-secondary" onclick="launcherDrawList()">Cancel</button>')
         + '<button id="qlSave" class="ql-primary" onclick="launcherSaveTile()">Save tile</button>'
@@ -15310,6 +15620,10 @@
     function launcherTileOf(d) {
       const tile = {id: d.id, label: String(d.label || '').trim(), action: d.action,
                     project_id: d.project_id};
+      // What makes this row a bot survives every edit of it. The form can change the harness, the
+      // Project and the name; it cannot turn a bot into an ordinary tile, because the thread on the
+      // other side of it would have nothing left that opens it.
+      if (d.bot) tile.bot = d.bot;
       // Absent rather than false, like every other optional field here: a tile that has never been
       // marked and one marked and unmarked are the same tile.
       if (d.insecure) tile.insecure = true;
@@ -16555,14 +16869,59 @@
     // A corrupt blob is no conversations, never a half-index — the contract parsePairs already
     // holds to, and for the same reason: a store that outlives the panes it describes will one day
     // be read by a version that did not write it.
+    // One member per pane. A key is [host, pane_id, agent, cwd], so two rows carrying the same one
+    // are the same pane drawn twice with one transcript behind both — a landing that joined as a
+    // new member when its replace intent no longer matched anything. Fixed at the source in
+    // start_dialog; read here so an index already carrying the duplicate reads clean, and is
+    // written clean by the next save rather than needing anyone to notice it.
+    //
+    // The first wins: it is the row the thread has been read under, and the one holding `was`.
+    function dedupeMembers(members) {
+      const seen = new Set();
+      return (members || []).filter(m => {
+        if (!m) return false;
+        if (!m.key) return true;
+        if (seen.has(m.key)) return false;
+        seen.add(m.key);
+        return true;
+      });
+    }
+
+    // Two auto conversations filing the same pane, which is what two browsers do when they meet a
+    // fresh pane at the same moment: neither index holds the other's row yet, so each mints one,
+    // and the state merge appends the loser's because appending what a browser created is exactly
+    // what it is for. The pane then has two records in the list, both drawing the one transcript
+    // its key names.
+    //
+    // Dropped on the way in rather than repaired on the way out: the row is a duplicate wherever
+    // it is read, and array order is the same in every browser — the relay's document first, local
+    // creations appended — so every browser drops the same one. Only between two `auto` rows, and
+    // only when every member of the later one is already filed by an earlier: a named conversation
+    // was asserted by somebody, and an auto one holding a pane nothing else holds is that pane's
+    // only record.
+    function dedupeAutoConvs(items) {
+      const filed = new Set();
+      const out = [];
+      for (const c of items) {
+        const keys = (c.members || []).map(m => m && m.key).filter(Boolean);
+        if (c.auto && keys.length && keys.every(k => filed.has(k))) continue;
+        if (c.auto) for (const k of keys) filed.add(k);
+        out.push(c);
+      }
+      return out;
+    }
+
     function parseConvIndex(raw) {
       try {
         const d = JSON.parse(raw || '');
         if (!d || d.version !== 1 || !Array.isArray(d.items)) return [];
-        return d.items.filter(c => c && c.id && typeof c.name === 'string' && Array.isArray(c.members))
+        return dedupeAutoConvs(
+          d.items.filter(c => c && c.id && typeof c.name === 'string' && Array.isArray(c.members))
           // The roster, not the recording cap: an ended member is the record of a session that
           // happened, and truncating it here would delete history on the next read of the index.
-          .map(c => Object.assign({}, c, { members: c.members.slice(-CONV_ROSTER_MAX) }));
+          .map(c => Object.assign({}, c, {
+            members: dedupeMembers(c.members).slice(-CONV_ROSTER_MAX),
+          })));
       } catch (e) { return []; }
     }
 
@@ -16820,9 +17179,12 @@
 
     // Called on the way out of every composer send. A prefill answers for one send: whether it was
     // used, edited or deleted, the next send starts from nothing.
-    function noteSent(text, paneId) {
+    // `via` names a send this app made rather than one the user typed — a Reset's `/clear` and the
+    // opening words replayed behind it. Nobody said those, and a thread that shows them as the
+    // reader's own prompts is a record of a conversation that did not happen.
+    function noteSent(text, paneId, via) {
       const now = Date.now();
-      const note = classifyVia(pendingTransfer, text, now);
+      const note = via ? { via: via } : classifyVia(pendingTransfer, text, now);
       pendingTransfer = null;
       // The prompt itself, straight into the transcript. Exact text, exact time, no reading back.
       convRecordSend(paneId, text, note.via === 'typed' ? null : note, now);
@@ -17387,7 +17749,7 @@
       const held = convHeld.get(key);
       if (!held) return;
       await convPut(held);
-      convNoteCounts(key, held.entries, Date.now());
+      convNoteCounts(key, held.entries, Date.now(), held.label);
     }
 
     // The one place the append-only rule (§5.1) is broken, and it is broken by the user, on a
@@ -17707,7 +18069,7 @@
     // `seen` here is the newest entry's own time, not the fold's — a first read that backfills an
     // afternoon of history would otherwise report the whole conversation as active just now, which
     // is the one thing the landing list is asked.
-    function convNoteCounts(key, entries, now) {
+    function convNoteCounts(key, entries, now, label) {
       const items = loadConvIndex();
       const last = convAt(entries[entries.length - 1]) || now;
       let hit = false;
@@ -17720,6 +18082,10 @@
           // in IndexedDB where there is room for them.
           m.last = String((entries[entries.length - 1] || {}).text || '')
             .replace(/\s+/g, ' ').trim().slice(0, 120);
+          // The name too, so a rename outlives the pane it was made on. The index stamps a label
+          // when a member joins and never again; the record's is written on every read, so this is
+          // where the two are kept in step. The landing card is drawn from the index alone.
+          if (label && m.label !== label) m.label = label;
           hit = true;
         }
       }
@@ -18358,6 +18724,19 @@
       return both.some(m => m.key === key) ? both : both.concat({key, label: paneLabel(partner)});
     }
 
+    // What a member is called *now*. Labels are stamped into the index and into every entry as they
+    // are written, which is right for a member whose pane has gone — that stamp is all there is
+    // left of what it was called. It is wrong for one still running: a rename is a correction, and
+    // a thread that keeps drawing the name the reader has just replaced is showing them the mistake
+    // they came to fix. So a live pane's own label wins wherever there is one.
+    function convMemberName(key) {
+      const live = key ? agents.find(x => convMemberKey(x) === key) : null;
+      const now = live ? paneLabel(live) : '';
+      if (now) return now;
+      for (let i = 1; i < arguments.length; i++) if (arguments[i]) return arguments[i];
+      return '';
+    }
+
     // A member is recording or it has ended, and that is derived rather than stored: a live pane
     // answers it, and a pane that has exited answers it by not being there. No lifecycle, no event
     // to miss, and a conversation whose panes have all gone is a full record rather than a
@@ -18768,10 +19147,10 @@
         const on = live.has(m.key);
         const facts = [spawn.role, spawn.project || spawn.cwd].filter(Boolean);
         return `<span class="conv-member${on ? '' : ' gone'}">` +
-          `<span class="who">${escapeHtml((rec && rec.label) || m.label || '')}</span>` +
+          `<span class="who">${escapeHtml(convMemberName(m.key, rec && rec.label, m.label))}</span>` +
           kindBadge(spawn.agent || (live.get(m.key) || {}).agent || '', live.get(m.key),
                     spawn.config) +
-          `${on ? '' : '<span class="tag">no longer live</span>'}` +
+          `${on ? '' : '<span class="tag">paused</span>'}` +
           `<span class="spawn">${escapeHtml(facts.join(' · '))}</span></span>`;
       }).join('') + '</button>';
     }
@@ -18871,8 +19250,13 @@
         // "rewrote it" are different facts about the same bubble.
         // An arbitrated send has no `from` pane: it was composed by the arbitrator out of what two
         // members said, so what the badge names is the arbitrator itself.
+        // `system` is this app's own send — a Reset's clear and the opening words replayed behind
+        // it. It goes on the user's side because that is the side prompts go on, and it says so
+        // for the same reason an arbitrated one does: nobody typed it.
         const from = user && e.via === 'arbitrator'
           ? `<span class="via" aria-hidden="true">${arbSign(12)}</span> arbitrator`
+          : user && e.via === 'system'
+          ? `<span class="via" aria-hidden="true">\u2699</span> app`
           : user && e.via && e.via !== 'typed' && e.from
           ? `<span class="via" aria-hidden="true">⇄</span> ${escapeHtml(e.from.label || 'another pane')}` +
             `${e.via === 'mixed' ? ' · edited' : ''}`
@@ -18891,7 +19275,9 @@
           ? (convViewRecs.find(r => r.key === key) || {}).spawn : null) || {};
         const config = (live && live.config) || spawn.config || me.config || '';
         const color = agentColor(agent) || 'var(--muted)';
-        const name = escapeHtml(e.label || me.label || '');
+        // The name it goes by now, not the one stamped when the words were recorded — see
+        // convMemberName. An ended member has no live pane and keeps its stamp.
+        const name = escapeHtml(convMemberName(key, e.label, me.label));
         // The same badge the pane list and the pair sheet use, beside the name: colour says which
         // member, and the badge says what it is — a thread of claude and codex reads as two
         // colleagues rather than as two colours.
@@ -19283,6 +19669,37 @@
       } catch (e) { return null; }
     }
 
+    // Every fingerprint one member's record can be under: the one its key names now, and the ones
+    // it carried before. A restart onto another harness — or into another checkout — moves the
+    // member to a bucket holding none of what it said before, and the pane ids on `was` cannot
+    // find those rows, because a pane id is only ever looked up inside a bucket.
+    function convKeyFingerprints(key, wasFp) {
+      const now = convKeyFingerprint(key);
+      const out = now ? [now] : [];
+      const seen = new Set(out.map(convFpKey));
+      for (const fp of wasFp || []) {
+        // Written by other browsers and by older builds, so it is checked rather than trusted.
+        if (!Array.isArray(fp) || fp.length < 3) continue;
+        const norm = [convNormHost(fp[0]), fp[1] || '', fp[2] || ''];
+        if (seen.has(convFpKey(norm))) continue;
+        seen.add(convFpKey(norm));
+        out.push(norm);
+      }
+      return out;
+    }
+
+    // What a member's `wasFp` becomes when its key moves, as a patch rather than a value: an empty
+    // list is not worth a field on every member of every conversation, and the ordinary restart —
+    // same harness, same directory, same bucket — produces exactly that.
+    function convWasFpPatch(member, oldKey, newKey) {
+      const before = convKeyFingerprint(oldKey), now = convKeyFingerprint(newKey);
+      const kept = ((member || {}).wasFp || []).filter(fp => Array.isArray(fp) && fp.length >= 3);
+      const same = !before || (now && convFpKey(before) === convFpKey(now))
+        || kept.some(fp => convFpKey(fp) === convFpKey(before));
+      const out = same ? kept : kept.concat([before]).slice(-CONV_WAS_MAX);
+      return out.length ? { wasFp: out } : {};
+    }
+
     // The member keys the last roster ask was made for. A fingerprint is `[host, agent, cwd]` and
     // several panes can share one — four claude panes in one repository do — so an answer that came
     // back truncated has to be refilled pane by pane, and this is what says which panes those are.
@@ -19316,7 +19733,19 @@
     // the ⟳, both of which are someone saying "now".
     function convLiveFetch(keys, force, background) {
       if (!background && !convLiveOn()) return;
-      const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
+      // Every bucket these members' words can be in, not only the ones they are in now: a member
+      // restarted onto another harness keeps its thread, and a thread missing everything said
+      // before the swap is the record disagreeing with the roster about who was talking.
+      const pastFps = convWasFpMap(keys);
+      const fps = [];
+      const asked = new Set();
+      for (const key of (keys || [])) {
+        for (const fp of convKeyFingerprints(key, pastFps.get(key))) {
+          if (asked.has(convFpKey(fp))) continue;
+          asked.add(convFpKey(fp));
+          fps.push(fp);
+        }
+      }
       if (!fps.length) return;
       // Whatever is on disk, before deciding anything: the watermark that says what to ask for
       // lives there now, and asking without it would re-fetch a window this browser already holds.
@@ -19433,7 +19862,13 @@
     // `was` is written by exactly one call — the respawn in openPendingStart that moves a member's
     // key from a dead pane to the new one. Nothing else may add to it, because nothing else knows
     // that two panes were the same session.
-    function convWasMap(keys) {
+    function convWasMap(keys) { return convMemberField(keys, 'was'); }
+
+    // The same walk for the fingerprints a member used to be under. Separate field, same rule: it
+    // is written where `was` is, by the one place a member's key moves.
+    function convWasFpMap(keys) { return convMemberField(keys, 'wasFp'); }
+
+    function convMemberField(keys, field) {
       const want = new Set(keys || []);
       const out = new Map();
       if (typeof loadConvIndex !== 'function') return out;
@@ -19454,7 +19889,7 @@
         for (const m of (c && c.members) || []) {
           // Array-checked: this document is written by other browsers and by older builds, and a
           // member carrying a string here would make `.includes` match on a substring.
-          if (m && want.has(m.key) && Array.isArray(m.was)) out.set(m.key, m.was);
+          if (m && want.has(m.key) && Array.isArray(m[field])) out.set(m.key, m[field]);
         }
       }
       return out;
@@ -19792,23 +20227,6 @@
     // which would draw every captured turn with the `~` that means "this time is a guess".
     const CONV_LIVE_AT_SRC = { poll: 'state', state: 'state', sent: 'sent', backfill: 'backfill' };
 
-    // A live row's key, in the spelling the roster uses. The rest of the view reads the key for
-    // colour, for which side of a pair a bubble goes on, and for the roster panel's hide-a-member
-    // filter, so a key that is right but spelled differently is a bubble drawn as a stranger.
-    //
-    // Two spellings exist for one host — see `convNormHost`. The relay's snapshot names the local
-    // host `local` and so does the record, and that ordinary case matches outright. But the
-    // browser's own key builder folds a missing host to '', so a pane that reached this app with no
-    // host at all is stored under a name its member key does not carry. Both are tried against the
-    // roster before either is believed.
-    function convLiveKey(t, roster) {
-      const pane = { pane_id: t.pane_id || '', agent: t.agent || '', cwd: t.cwd || '' };
-      const mine = convMemberKey(Object.assign({ host: t.host || '' }, pane));
-      if (!roster || roster.has(mine) || t.host !== 'local') return mine;
-      const bare = convMemberKey(Object.assign({ host: '' }, pane));
-      return roster.has(bare) ? bare : mine;
-    }
-
     // The record, in the shape the thread already renders. `keys` is the roster, so a row's member
     // index — which is what the standalone view picks a column from — is the position of its own
     // member rather than the order rows came back in. The buckets are per pane and each is already
@@ -19827,26 +20245,34 @@
       // keeps a respawned pane's history attached to it. Recorded, not inferred: a dead pane
       // sharing the fingerprint is not evidence of anything.
       const was = convWasMap(keys);
+      const pastFps = convWasFpMap(keys);
       for (const k of (keys || [])) {
-        const fp = convKeyFingerprint(k);
-        if (!fp) continue;
-        const bucket = convLiveCache.get(convFpKey(fp));
-        if (!bucket) continue;
         const mine = convPaneOfKey(k);
         const mineWas = was.get(k);
-        for (const t of bucket.turns) {
-          if (!convLiveRowIsMine(t, mine, mineWas)) continue;
-          // Two roster members can fold to one fingerprint — a pane respawned under a new id is the
-          // same pane to the record — and the bucket must not be drawn twice for them.
-          if (t.seq && seen.has(t.seq)) continue;
-          if (t.seq) seen.add(t.seq);
-          turns.push(t);
+        // The buckets this member's words can be in — its own, and the ones it was under before a
+        // restart moved it to another harness or another checkout.
+        for (const fp of convKeyFingerprints(k, pastFps.get(k))) {
+          const bucket = convLiveCache.get(convFpKey(fp));
+          if (!bucket) continue;
+          for (const t of bucket.turns) {
+            if (!convLiveRowIsMine(t, mine, mineWas)) continue;
+            // Two roster members can fold to one fingerprint — a pane respawned under a new id is
+            // the same pane to the record — and the bucket must not be drawn twice for them.
+            if (t.seq && seen.has(t.seq)) continue;
+            if (t.seq) seen.add(t.seq);
+            // Filed under the member that claimed it, not under the pane id the row carries. Those
+            // two differ for every row a restarted member left behind: the roster key moved to the
+            // new pane and the old one lives in `was`, so a key derived from the row is a key no
+            // roster holds — and every filter that works by member key, solo among them, then has
+            // nothing to match those bubbles against and leaves them on screen.
+            turns.push({turn: t, key: k});
+          }
         }
       }
-      turns.sort((a, b) => (a.at || 0) - (b.at || 0) || (a.seq || 0) - (b.seq || 0));
+      turns.sort((a, b) => (a.turn.at || 0) - (b.turn.at || 0) ||
+        (a.turn.seq || 0) - (b.turn.seq || 0));
 
-      return turns.map(t => {
-        const key = convLiveKey(t, at);
+      return turns.map(({turn: t, key}) => {
         return {
           who: CONV_LIVE_USER_KINDS.includes(t.kind) ? 'user' : 'agent',
           // `text` is the closing message the relay detected. `tail` is the last few lines it kept
@@ -21681,7 +22107,7 @@
     <span class="dot${pulseClass}" style="background:${color}" aria-hidden="true"></span>
     <div class="info"><div class="project">${paneChrome(a, false)}${host}</div><div class="meta">${paneBadge(a).trimStart()} ${cwd}</div></div>
     ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + a.pane_id, pane: a.pane_id, stop: true,
-                  aria: 'End ' + label, fire: `endPane('${a.pane_id}')`})}
+                  aria: 'Pause ' + label, fire: `endPane('${a.pane_id}')`})}
     <button class="pair-btn${paired ? ' paired' : ''}" aria-label="Pair ${label}" onclick="openPairDialog('${a.pane_id}',event)">${paired ? 'Paired' : 'Pair'}</button>
     <span class="chev" aria-hidden="true">›</span>
   </div>`;
@@ -21754,7 +22180,8 @@
     <span class="term-glyph" aria-hidden="true">$</span>
     <div class="info"><div class="project">${paneChrome(s)}${host}</div><div class="meta">${cwd}</div></div>
     ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + s.pane_id, pane: s.pane_id, stop: true,
-                  aria: 'End ' + paneLabel(s), fire: `endPane('${s.pane_id}')`})}
+                  rest: 'Close', ask: 'Close?', going: 'Closing…',
+                  aria: 'Close ' + paneLabel(s), fire: `endPane('${s.pane_id}')`})}
     <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
   </div>`;
     }
@@ -21852,12 +22279,17 @@
       const pending = typeof endPending === 'function'
         && (o.panes || [o.pane]).filter(Boolean).some(endPending);
       const armed = typeof armButtonArmed === 'function' && armButtonArmed(key);
-      const rest = o.rest || 'End';
-      const ask = o.ask || 'End?';
+      // Pause, not End: quitting a session leaves its seat in the conversation and its thread
+      // intact, and the row it leaves behind is the way back. A shell is the one caller with no
+      // seat to come back to, so it passes Close.
+      const rest = o.rest || 'Pause';
+      const ask = o.ask || 'Pause?';
+      const going = o.going || 'Pausing…';
       if (pending) {
         return `<button class="${o.cls} end-going" disabled` +
           ` data-arm-key="${escapeHtml(key)}"` +
-          ` aria-label="${escapeHtml(o.aria)} — ending">Ending…</button>`;
+          ` aria-label="${escapeHtml(o.aria)} — ${escapeHtml(going.replace('…', '').toLowerCase())}"` +
+          `>${escapeHtml(going)}</button>`;
       }
       return `<button class="${o.cls} arm-btn" data-arm-key="${escapeHtml(key)}"` +
         (armed ? ` data-armed="1" data-arm-label="${escapeHtml(rest)}"` : '') +
@@ -21895,7 +22327,7 @@
         const count = members.reduce((n, m) => n + (Number(m.messages) || 0), 0);
         const seen = Math.max(0, ...members.map(m => Number(m.seen) || 0));
         const live = members.map(m => agents.find(a => convMemberKey(a) === m.key)).filter(Boolean);
-        const names = members.map(m => escapeHtml(m.label || (agents.find(a => convMemberKey(a) === m.key) || {}).label || 'Former pane'));
+        const names = members.map(m => escapeHtml(convMemberName(m.key, m.label, 'Former pane')));
         // What each member is and where it is working, in the order of how much each source knows.
         // The member record, written when it joined; then the live pane, which is right for a
         // member that has come back under a new name; then the key itself, which carries the
@@ -22000,17 +22432,17 @@
             ` aria-label="Delete ${escapeHtml(r.c.name)}, its sessions and everything it recorded">` +
             `Delete</button>`
           : '') +
-        // The same control the roster panel calls End all, on the card, for the same reason the
+        // The same control the roster panel calls Pause all, on the card, for the same reason the
         // agent cards carry one: the list is where a session is recognised as finished, and going
         // into a conversation to close it is a trip taken only to press one button. Drawn only
         // where there is something running — an ended conversation is already where this leads.
         (r.liveNames.length
           // Ending… as soon as any member of it has a send in flight: the conversation is the
           // thing being ended, and one pane still on its way out is not a second question.
-          ? endBtnHtml({cls: 'end-btn', key: 'end-conversation:' + r.c.id, ask: 'End all?',
+          ? endBtnHtml({cls: 'end-btn', key: 'end-conversation:' + r.c.id, ask: 'Pause all?',
               panes: r.livePanes,
               stop: true, data: ` data-conv-id="${escapeHtml(r.c.id)}"`,
-              aria: `End every session in ${r.c.name}, keeping the transcripts`,
+              aria: `Pause every session in ${r.c.name}, keeping the transcripts`,
               fire: 'endConversation(this.dataset.convId)'})
           : '') +
         `</div>` +
@@ -22244,7 +22676,7 @@
     function renderConvPaneChrome(conv, recs, hidden, key, entries) {
       const who = document.getElementById('paneConvWho'), panel = document.getElementById('convPaneRoster');
       const n = (conv.members || []).length;
-      // The panel's actions read the thread that was drawn — Copy writes it out, Start again reads
+      // The panel's actions read the thread that was drawn — Copy writes it out, Restart reads
       // a member's spawn from it. Same variables as the standalone view's, for the same reason
       // convViewId is: the two are never on screen together.
       convViewRecs = recs;
@@ -22267,7 +22699,7 @@
       convPaneRosterHtml = '';
       convPaneRoster = false;
     }
-    // What the standalone view last drew, so Copy and Start again read the same thread the reader
+    // What the standalone view last drew, so Copy and Restart read the same thread the reader
     // is looking at rather than fetching it a second time and getting a different one.
     let convViewRecs = [], convViewEntries = [];
 
@@ -22299,22 +22731,22 @@
             : `<button class="conv-eye" data-key="${escapeHtml(m.key)}" aria-pressed="${out ? 'true' : 'false'}"` +
               ` onclick="toggleConvHidden(this.dataset.key)"` +
               ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>`) +
-          `<span class="who">${escapeHtml(rec.label || m.label || 'Former pane')}</span>` +
+          `<span class="who">${escapeHtml(convMemberName(m.key, rec.label, m.label, 'Former pane'))}</span>` +
           kindBadge((rec.spawn || {}).agent || (live.get(m.key) || {}).agent || '',
                     live.get(m.key), (rec.spawn || {}).config) +
-          `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'no longer live')}</span>` +
+          `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'paused')}</span>` +
           // The actions in a group of their own, so a row that runs out of width wraps them
           // together underneath instead of pushing the last one off the edge — the name, the badge
           // and the state stay on one line whatever the row holds.
           `<span class="conv-roster-acts">` +
-          // End, then the two ways back to the beginning, then Remove, and only then the way in.
-          // The ones that take something away sit together; Open is not one of them. End is offered
-          // only where there is something running to end — an ended row carries Start again in the
+          // Pause, then Reset, then the two ways to restart, then Remove, and only then the way
+          // in. The ones that take something away sit together; Open is not one of them. Pause is
+          // offered only where there is something running — a paused row carries Restart in the
           // same place, which is the other half of the same control: this row is where a member is
           // sent away and brought back.
           (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.key,
             pane: (live.get(m.key) || {}).pane_id, data: ` data-key="${escapeHtml(m.key)}"`,
-            aria: "End this member's session",
+            aria: "Pause this member's session, keeping its seat and its thread",
             fire: 'endConvMember(this.dataset.key)'}) : '') +
           // Same pane, back at its first turn: the harness's own clear, then the words this
           // session was started with. Asked twice — what it throws away is the agent's context,
@@ -22323,11 +22755,15 @@
             ` onclick="armButton(this, 'Reset?', () => convResetMember(this.dataset.key))"` +
             ` aria-label="Clear this member's session and start it over in the same pane">` +
             `Reset</button>` : '') +
-          // A new pane, with the same everything. Swap without the question — see convRestartMember.
-          (on && canRespawn(rec.spawn)
-            ? `<button class="conv-restart arm-btn" data-key="${escapeHtml(m.key)}"` +
-              ` onclick="armButton(this, 'Restart?', () => convRestartMember(this.dataset.key))"` +
-              ` aria-label="End this member and start the same session again">Restart</button>` : '') +
+          // One control, both halves of a row's life: a live member is ended first and a paused
+          // one is not, and either way what lands continues this member. The two variants — the
+          // same agent, or the harness left open — are items under it rather than buttons beside
+          // it: what used to be Restart, Swap, Start as… and Start again is one word on the row.
+          //
+          // Opening the menu is the first of the two taps every destructive control here takes,
+          // so an item fires on its own tap and nothing is armed. What it will start is written
+          // above the items, where the toast that used to carry it could not be read twice.
+          restartMenuHtml(m.key, rec, on) +
           `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.key)}"` +
           ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button>` +
@@ -22336,24 +22772,6 @@
           (on ? `<button class="conv-open" data-key="${escapeHtml(m.key)}"` +
             ` onclick="openConvMemberPane(this.dataset.key)"` +
             ` aria-label="Open this member's pane">Open</button>` : '') +
-          // Swapping the agent is a start whose destination happens to be a member that already
-          // exists, so it asks the Start dialog like every other start does — one place harnesses,
-          // roles and agent configs are listed, rather than a second smaller picker that would
-          // drift out of step with it. Offered on both halves of a row's life: an ended member is
-          // picked up by whatever is started next, and a live one is ended first, because a pane
-          // runs one CLI and there is no changing it underneath.
-          (canStartFromConv()
-            ? (on
-              ? `<button class="conv-swap arm-btn" data-key="${escapeHtml(m.key)}"` +
-                ` onclick="armButton(this, 'End and swap?', () => convSwapLive(this.dataset.key))"` +
-                ` aria-label="End this member and start a different agent in its place">Swap</button>`
-              : `<button class="conv-swap" data-key="${escapeHtml(m.key)}"` +
-                ` onclick="convSwapMember(this.dataset.key)"` +
-                ` aria-label="Start a different agent as this member">Start as\u2026</button>`)
-            : '') +
-          (!on && canRespawn(rec.spawn) ? `<button class="conv-again arm-btn" data-key="${escapeHtml(m.key)}"` +
-            ` onclick="convArmRespawn(this, this.dataset.key)"` +
-            ` aria-label="Start a new session and continue this conversation">Start again</button>` : '') +
           `</span></div>`;
       }).join('');
       // The tier, said where the button that changes it is. "How do I make this one mine" is the
@@ -22366,19 +22784,20 @@
         `<button class="conv-del arm-btn" onclick="armButton(this, 'Delete?', deleteConversation)"` +
         ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
         // Beside Delete because both end something, and apart from it in colour because they end
-        // very different things: Delete destroys the record, End stops the sessions and leaves it.
-        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id, ask: 'End all?',
-          rest: 'End all',
+        // very different things: Delete destroys the record, Pause stops the sessions and leaves
+        // it.
+        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id, ask: 'Pause all?',
+          rest: 'Pause all', going: 'Pausing…',
           panes: Array.from(live.values()).map(a => a.pane_id),
-          aria: 'End every session in this conversation, keeping the transcripts',
+          aria: 'Pause every session in this conversation, keeping the transcripts',
           fire: 'endConversation(convViewId)'}) +
-        // Beside End all, because they are the same question asked of every member at once. Reset
+        // Beside Pause all, because they are the same question asked of every member at once. Reset
         // keeps the panes and clears what is in them; Restart replaces them.
         `<button class="conv-reset arm-btn" onclick="armButton(this, 'Reset all?', convResetAll)"` +
         ` aria-label="Clear every session in this conversation and start each one over">` +
         `Reset all</button>` +
         `<button class="conv-restart arm-btn" onclick="armButton(this, 'Restart all?', convRestartAll)"` +
-        ` aria-label="End every session in this conversation and start each one again">` +
+        ` aria-label="Pause every session in this conversation and start each one again">` +
         `Restart all</button>` +
         `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
         `<button class="arm-btn" onclick="armButton(this, 'Duplicate?', duplicateConversation)"` +
@@ -22459,15 +22878,65 @@
         ? agentConfigRow(spawn.config) : null;
       const what = (row && row.label) || spawn.agent;
       if (spawn.config && !row) {
-        return `Agent config "${spawn.config}" is gone. Tap again to pick what to start instead.`;
+        return `Agent config "${spawn.config}" is gone — this opens the Start dialog instead.`;
       }
-      return `Tap again to start a new ${what} session in ${project.label || 'this Project'}.${moved}`;
+      return `Starts a new ${what} session in ${project.label || 'this Project'}.${moved}`;
     }
 
-    function convArmRespawn(btn, key) {
-      // Said on the arm, not on the fire: by the second tap the session is already starting.
-      if (armedEl !== btn) { const note = respawnNote(key); if (note) showToast(note); }
-      armButton(btn, 'Start again?', () => convRespawn(key));
+    // Which member's Restart menu is open. Held here rather than left to the DOM: the roster is
+    // redrawn on the poll, and a menu that shut itself under the thumb every three seconds is one
+    // nobody could reach the second item of. The same reason armButton keys its arm.
+    let convRestartMenuKey = '';
+
+    function convRestartMenuToggle(el) {
+      convRestartMenuKey = el.open ? (el.dataset.key || '') : '';
+    }
+
+    function closeRestartMenu() {
+      convRestartMenuKey = '';
+      if (typeof document === 'undefined' || !document.querySelectorAll) return;
+      for (const el of document.querySelectorAll('.conv-menu[open]')) el.open = false;
+    }
+
+    // A tap anywhere else closes it, the way an arm gives itself up to a tap that lands elsewhere.
+    document.addEventListener('click', (e) => {
+      if (!convRestartMenuKey) return;
+      if (e.target.closest && e.target.closest('.conv-menu')) return;
+      closeRestartMenu();
+    }, true);
+
+    // Every item here starts or ends a session, so every one of them is asked twice — the menu
+    // being open is not the question, it is only how the two ways of restarting are reached. Keyed
+    // like endBtnHtml's, so the arm survives the redraw that arrives between the taps.
+    function menuItemHtml(o) {
+      const armed = typeof armButtonArmed === 'function' && armButtonArmed(o.arm);
+      return `<button class="${o.cls} arm-btn" data-key="${escapeHtml(o.key)}"` +
+        ` data-arm-key="${escapeHtml(o.arm)}"` +
+        (armed ? ` data-armed="1" data-arm-label="${escapeHtml(o.rest)}"` : '') +
+        ` onclick="armButton(this, '${o.ask}', () => ${o.fire}, this.dataset.armKey)">` +
+        `${escapeHtml(armed ? o.ask : o.rest)}</button>`;
+    }
+
+    function restartMenuHtml(key, rec, on) {
+      const again = canRespawn(rec.spawn);
+      const other = canStartFromConv();
+      if (!again && !other) return '';
+      const k = escapeHtml(key);
+      const note = again ? respawnNote(key) : 'Opens the Start dialog to pick what to start.';
+      return `<details class="conv-menu" data-key="${k}"${convRestartMenuKey === key ? ' open' : ''}` +
+        ` ontoggle="convRestartMenuToggle(this)">` +
+        `<summary class="conv-restart-open"` +
+        ` aria-label="Restart this member${on ? ', ending what is running' : ''}, keeping its thread">` +
+        `Restart \u25be</summary>` +
+        `<div class="conv-menu-items">` +
+        (note ? `<p class="conv-menu-note">${escapeHtml(note)}</p>` : '') +
+        (again ? menuItemHtml({cls: 'conv-restart', key: key, arm: 'restart-member:' + key,
+          rest: on ? 'Restart \u2014 ends this session first' : 'Restart', ask: 'Restart?',
+          fire: 'convRestart(this.dataset.key)'}) : '') +
+        (other ? menuItemHtml({cls: 'conv-swap', key: key, arm: 'restart-as:' + key,
+          rest: 'Restart as\u2026', ask: 'Restart as?',
+          fire: 'convStartAs(this.dataset.key)'}) : '') +
+        `</div></details>`;
     }
 
     // A member is named by its fingerprint and not by a pane — the roster outlives the panes in it,
@@ -22494,8 +22963,11 @@
       // The live pane's Project first: a record's is what it was started under, and a member that
       // has been swapped once already may have moved since.
       openStartDialog((live && live.project_id) || spawn.project_id || '');
-      // After the open, which clears it — the same order reorder.js starts a pair with.
+      // After the open, which clears it — the same order reorder.js starts a pair with. `endFirst`
+      // is the pane submitStart quits on the way out, which is what makes this a swap rather than
+      // a second member: one pane runs one CLI.
       startIntent = { conv: conv.id, replace: key };
+      if (o.end) startIntent.endFirst = o.end;
       if (o.kind) {
         startAgentPick = o.kind;
         startCustomOpen = true;
@@ -22510,15 +22982,16 @@
       return true;
     }
 
-    // The same thing for a member still running. A pane runs one CLI, so there is no changing the
-    // agent in it — the session is ended and the dialog opened over the space it leaves. Asked
-    // twice by the button that calls this, because ending a live agent loses whatever it had not
-    // said yet.
-    function convSwapLive(key) {
+    // Restart as… — the same restart with the harness left open. A pane runs one CLI, so a member
+    // still running is ended to make room for what replaces it — but not here: the dialog comes
+    // first and the session is spent only once something has actually been chosen. Ending at the
+    // menu spent a running agent on a dialog the reader is free to close, and closing it then left
+    // them with a member paused that they never asked to pause and a pane sitting empty.
+    function convStartAs(key) {
+      closeRestartMenu();
       const live = agents.find(x => convMemberKey(x) === key);
-      if (live) endPane(live.pane_id);
       return convSwapMember(key, live
-        ? { note: 'Session ended. Pick what to start in its place.' } : null);
+        ? { end: live.pane_id, note: 'Pick what to start. This session ends when you do.' } : null);
     }
 
     // A restart names itself, so the pane it makes can be found again by equality rather than by
@@ -22704,21 +23177,37 @@
       // invoked that way there — `$ponytail`, `$caveman`. This is a slash command, and codex spells
       // those the same as everyone else: `$clear` would be typed at the composer as text.
       const cmd = RESET_CMD[agentHarness(live.agent)] || '/clear';
-      if (!sendTextTo(live.pane_id, cmd)) return false;
+      // Both sends marked as this app's own. Nobody typed either of them: the reader pressed
+      // Reset, and a thread that shows the clear and the opening words as their prompts is a
+      // record of a conversation that did not happen.
+      if (!sendTextTo(live.pane_id, cmd, 'system')) return false;
       // Second, and into the same pane, so the relay's per-pane lane keeps the order: the opening
       // words must arrive at a cleared session and not before it is cleared.
       const prompt = roleStarter(respawnStarter(rec.spawn || {}), live.agent);
-      if (prompt) sendTextTo(live.pane_id, agentSlash(prompt, live.agent));
+      if (prompt) sendTextTo(live.pane_id, agentSlash(prompt, live.agent), 'system');
       return true;
     }
 
-    // A pane runs one CLI and there is no restarting it in place, so this is the same End and the
-    // same Start again the row already offers, in one press.
-    function convRestartMember(key) {
+    // A pane runs one CLI and there is no restarting it in place, so a restart is Pause followed
+    // by a start, in one press — and on a member that is already paused, the start alone. One
+    // control for both halves of a row's life: what it means is the same either way, and which
+    // half a member is in is not a question the reader should have to answer before pressing.
+    function convRestart(key) {
+      closeRestartMenu();
+      // Everything convRespawn can refuse on, asked before anything is ended. It refuses in
+      // silence — a socket that is not open, a record it cannot start from — and by then the
+      // session was already quit, which leaves the member paused with the pane it was running in
+      // orphaned beside it and nothing on the row saying why.
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      const rec = (convViewRecs || []).find(r => r.key === key) || {};
+      if (!ws || !conv || !canRespawn(rec.spawn)) {
+        showToast('This session cannot be restarted — it was left as it is.');
+        return false;
+      }
       const live = agents.find(x => convMemberKey(x) === key);
       // A blocked (or just vanished) pane was not ended. Starting anyway leaves the old session
       // beside its supposed replacement, which is precisely what Restart promises not to do.
-      if (!live || !endPane(live.pane_id)) return false;
+      if (live && !endPane(live.pane_id)) return false;
       convRespawn(key);
       return true;
     }
@@ -22749,7 +23238,7 @@
       // the note by its own deadline — so a member whose start never produced a pane costs the
       // queue a pause rather than the rest of the list.
       if ((typeof pendingStart !== 'undefined' && pendingStart) || heldConvRespawn()) return;
-      convRestartMember(convRestartQueue.shift());
+      convRestart(convRestartQueue.shift());
     }
 
     function convResetAll() {
@@ -24683,7 +25172,7 @@
       let parsed = null;
       try { parsed = JSON.parse(key); } catch (e) {}
       // The key first. Failing that, the same key with the local host spelled the one way — a live
-      // row is keyed under whichever spelling its record carried (see `convLiveKey`), and the two
+      // row is keyed under whichever spelling its record carried (see `convLiveEntries`), and the two
       // must land on the same member. The host is part of that comparison and never dropped from
       // it: pane ids are unique per host and collide across them, so matching on a bare pane id
       // would address a stranger on another machine.
@@ -27428,7 +27917,7 @@
       // The element that was armed, and — for a keyed arm — whatever is standing in its place now.
       // A poll redraw replaces the node between the two taps, so by the time the arm expires the
       // one on screen is not the one this holds, and clearing only `armedEl` leaves a detached
-      // node tidied and a live button still saying "End all?" with nothing behind it.
+      // node tidied and a live button still saying "Pause all?" with nothing behind it.
       // Member keys are JSON fingerprints, so quoting one into a CSS selector makes the second
       // tap throw before it can run. Compare the dataset instead.
       const live = key && typeof document !== 'undefined' && document.querySelectorAll
@@ -27669,7 +28158,9 @@
     // One text into one pane, from whichever composer had it. The pane's own composer is one
     // caller; the conversation window's is the other, and it can be pointed at a pane nobody has
     // open — which is why this takes the pane rather than reading `activePane`.
-    function sendTextTo(paneId, text) {
+    // `via` is for a send this app composed on the reader's behalf — see noteSent. Left off, the
+    // send is classified the way every typed one is.
+    function sendTextTo(paneId, text, via) {
       // Both composers land here, which is why the arbitration guard is here and not in each of
       // them. It arms rather than refuses — see arbGuardSend.
       if (typeof arbGuardSend === 'function' && !arbGuardSend(paneId)) return false;
@@ -27678,7 +28169,7 @@
       // claims the user said what another agent said, and one that records a send the socket
       // dropped claims they said it at all. The whole text, not a chunk of it — what was sent is
       // one message, however many the wire took.
-      noteSent(text, paneId);
+      noteSent(text, paneId, via);
       lastSentText[paneId] = text;
       syncResend();
       return true;
