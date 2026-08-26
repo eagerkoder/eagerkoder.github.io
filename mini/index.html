@@ -4792,6 +4792,12 @@
       flex: 0 1 auto;
     }
 
+    /* Keep the pane identity readable on a phone; its controls get their own compact line. */
+    @media (max-width: 767px) {
+      .conv-roster-row { flex-wrap: wrap; }
+      .conv-roster-acts { flex-basis: 100%; justify-content: flex-start; }
+    }
+
     .conv-roster-row.gone .tag {
       color: var(--orange);
     }
