@@ -4752,7 +4752,7 @@
       font-size: 0.68rem;
       color: var(--text);
       padding: 3px 6px;
-      border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+      background: color-mix(in srgb, var(--surface) 88%, var(--border));
       border-radius: 6px;
     }
 
@@ -21422,6 +21422,19 @@
         `() => ${o.fire}, this.dataset.armKey)">${escapeHtml(armed ? ask : rest)}</button>`;
     }
 
+    function archiveBtnHtml(id, archived, name) {
+      const key = `archive:${id}`, rest = archived ? 'Unarchive' : 'Archive';
+      const ask = archived ? 'Unarchive?' : 'Archive?';
+      const fire = archived ? 'unarchiveConversation' : 'archiveConversation';
+      const armed = typeof armButtonArmed === 'function' && armButtonArmed(key);
+      return `<button class="archive-btn arm-btn" data-arm-key="${escapeHtml(key)}"` +
+        ` data-conv-id="${escapeHtml(id)}"` +
+        (armed ? ` data-armed="1" data-arm-label="${rest}"` : '') +
+        ` onclick="event.stopPropagation();armButton(this, '${ask}', ` +
+        `() => ${fire}(this.dataset.convId), this.dataset.armKey)"` +
+        ` aria-label="${rest} ${escapeHtml(name)}">${armed ? ask : rest}</button>`;
+    }
+
     function renderConversations() {
       const el = document.getElementById('conversations');
       if (!el) return;
@@ -21527,10 +21540,7 @@
         // one thing the auto tier cannot express, since that is about how a conversation was made
         // rather than whether anyone wants to look at it. Recorded on the conversation and not in
         // this browser, so a card put away on a phone is away on the desktop too.
-        `<button class="archive-btn" data-conv-id="${escapeHtml(r.c.id)}"` +
-        ` onclick="event.stopPropagation(); ${archived ? 'unarchiveConversation' : 'archiveConversation'}(this.dataset.convId)"` +
-        ` aria-label="${archived ? 'Unarchive' : 'Archive'} ${escapeHtml(r.c.name)}">` +
-        `${archived ? 'Unarchive' : 'Archive'}</button>` +
+        archiveBtnHtml(r.c.id, archived, r.c.name) +
         // Only in the archive, and only there. Putting a conversation away is the first of the two
         // steps — see purgeConversation for why that is the safeguard rather than a second dialog.
         (archived
