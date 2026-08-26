@@ -2215,8 +2215,7 @@
     }
 
     .conversation-count {
-      margin-left: auto;
-      flex: none;
+      margin-top: 4px;
       font-weight: 400;
       white-space: nowrap;
     }
@@ -4752,7 +4751,9 @@
       min-width: 0;
       font-size: 0.68rem;
       color: var(--text);
-      padding: 3px 0;
+      padding: 3px 6px;
+      border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+      border-radius: 6px;
     }
 
     .conv-roster-row.gone {
@@ -21522,8 +21523,6 @@
         // not a marker the app writes into what they typed (D4).
         `${r.c.auto ? '<span class="conversation-tier" title="Filed automatically, and dropped ' +
           'first when space runs out. Open it and rename it to keep it for good.">auto</span>' : ''}` +
-        `<span class="conversation-count">${r.count} ` +
-        `${r.count === 1 ? 'message' : 'messages'}</span>` +
         // Archiving is the reader saying "not now" about a conversation they mean to keep — the
         // one thing the auto tier cannot express, since that is about how a conversation was made
         // rather than whether anyone wants to look at it. Recorded on the conversation and not in
@@ -21555,6 +21554,7 @@
               fire: 'endConversation(this.dataset.convId)'})
           : '') +
         `</div>` +
+        `<div class="conversation-count">${r.count} ${r.count === 1 ? 'message' : 'messages'}</div>` +
         // What is in it, before what was said in it: which harnesses, and which Projects they are
         // working in. A conversation is recognised by its members long before its newest line is
         // read, and on a phone that line is the only other thing on the card.
