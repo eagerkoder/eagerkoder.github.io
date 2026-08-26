@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-08-25">
+  <meta name="app-built" content="2026-08-26">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -124,6 +124,10 @@
       /* kiro shared pi's green, which made the two indistinguishable in a list — and the kind is
          the whole thing a badge colour says. Magenta is what was left after purple went to agy. */
       --agent-kiro: #ff79c6;
+      /* opencode. Teal is what is left once orange, green, purple and magenta are spoken for, and
+         it has to stay clear of --shell's blue-cyan: a badge colour that reads as "terminal" is
+         worse than no badge colour. */
+      --agent-opencode: #73daca;
       /* Terminal panes. Deliberately not red/green/muted: those three mean agent status, and a
          shell has none. Named --shell rather than --term because --term-bg/--term-text already
          mean the pane's *content* — those two follow the theme, this one does not need to. */
@@ -167,6 +171,7 @@
       --agent-claude: #b74208;
       --agent-agy: #6a3ec4;
       --agent-kiro: #b0126e;
+      --agent-opencode: #116e66;
       --shell: #046fa0;
       /* Brightest surface in the theme, still a shade off white: the pane is what is being read,
          and it should sit forward of the shell around it without glaring. */
@@ -749,6 +754,13 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
+      /* A view scrolls down, never sideways. `overflow-y: auto` alone computes overflow-x to `auto`
+         as well — the pair cannot be `visible` and `auto` — so anything a few pixels wider than the
+         page, a long badge or a font that measures differently on the phone than in a test, turned
+         the whole list into something that wobbles left and right under a finger. The strips that
+         genuinely scroll sideways are their own scrollers inside this one and are unaffected. */
+      overflow-x: hidden;
+      overscroll-behavior-x: none;
     }
 
     /* Activity keeps its event log readable while the local wire summary stays pinned below it. */
@@ -1253,6 +1265,85 @@
       align-items: stretch;
     }
 
+    /* Compact: two lines a tile — the name, and under it the badges that say what pressing it
+       makes. The line that goes is the payload as *prose*: a command in monospace is what makes a
+       tile tall, and a reader of their own launcher already knows what their own tiles run. A
+       roster is badges, so it stays, shrunk to the size of the marks beside it.
+
+       Wider columns, because a name with nowhere to wrap needs the room; and no per-tile Edit,
+       since the corner it reserves is most of a compact tile. Editing is still one press away in
+       the section's own Edit. */
+    .launcher.compact {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+
+    /* A grid and not a wrapping flex row: what is wanted is a *shape* — glyph down the left, name
+       across the top, badges under it — and flex only ever wraps when a line runs out of room, so
+       a short name kept its badges up beside it and a long one pushed its marks onto a third line.
+       Four children, four cells, the same two lines whatever is in them. */
+    .launcher.compact .launcher-tile,
+    .launcher.compact .launcher-tile-wrap .launcher-tile {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 1px 6px;
+      min-height: 0;
+      padding: 6px 9px;
+    }
+
+    .launcher.compact .launcher-kind { grid-area: 1 / 1 / 3 / 2; }
+    .launcher.compact .launcher-name { grid-area: 1 / 2 / 2 / 4; }
+    .launcher.compact .launcher-tile .launcher-payload { grid-area: 2 / 2 / 3 / 3; }
+    .launcher.compact .launcher-badges { grid-area: 2 / 3 / 3 / 4; }
+
+    .launcher.compact .launcher-edit { display: none; }
+
+    /* The glyph stays, the word beside it goes: "SESSION" over every tile is the column heading of
+       a table nobody asked for, and the icon says the same thing in the space of a letter. */
+    .launcher.compact .launcher-kind span { display: none; }
+
+    .launcher.compact .launcher-name {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.75rem;
+    }
+
+    /* Named through the tile, so these outweigh the rules that lay a spawn tile's roster out — as
+       specific as a plain `.launcher.compact .launcher-payload`, and later in the sheet. */
+    .launcher.compact .launcher-tile .launcher-payload {
+      min-width: 0;
+      flex-wrap: nowrap;
+      overflow: hidden;
+      font-size: 0.5rem;
+      line-height: 1.2;
+    }
+
+    /* A command is prose, and prose is the line this mode exists to drop. A roster is badges, and
+       badges are what the second line is for. */
+    .launcher.compact .launcher-tile[data-action="run"] .launcher-payload,
+    .launcher.compact .launcher-tile[data-action="term"] .launcher-payload {
+      display: none;
+    }
+
+    /* Very small: the second line is a footnote to the name, not a second name. */
+    .launcher.compact .launcher-payload .badge {
+      font-size: 0.44rem;
+      padding: 0 3px;
+      letter-spacing: 0.01em;
+    }
+
+    .launcher.compact .launcher-plus { font-size: 0.5rem; }
+
+    /* The marks are never dropped, whatever the mode: `insecure` and `skip approvals` are facts
+       about what the press does, and a compact view that hid them would be a smaller tile that is
+       also a more dangerous one. */
+    .launcher.compact .launcher-badges {
+      margin-top: 0;
+      flex-wrap: nowrap;
+    }
+
     /* The header spans the grid at every width. The shared rule that does this only exists inside
        the desktop media query, because the sections it was written for are single-column until
        then and this one never is. */
@@ -1576,6 +1667,49 @@
     }
 
     .cfg-row:hover { border-color: var(--blue); }
+
+    /* The rows in a box of their own so the mode has something to be a class on — the launcher's
+       grid is shared with the tiles, and both sections have a compact of their own. */
+    .cfg-list {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 8px;
+    }
+
+    /* Compact is the same two lines, tightened, with the guarantee the full-size row does not make:
+       neither line may wrap into a third. A config is read by comparing it with the one above it,
+       and that only works while every row is the same height. */
+    .cfg-list.compact { gap: 4px; }
+
+    .cfg-list.compact .cfg-row {
+      gap: 0;
+      padding: 5px 9px;
+    }
+
+    .cfg-list.compact .cfg-line {
+      flex-wrap: nowrap;
+      overflow: hidden;
+      gap: 5px;
+    }
+
+    /* Each in turn, and the last one first: the name is the identity, so it is the one thing on
+       the row that is never the part cut off. */
+    .cfg-list.compact .cfg-line > * { flex: 0 0 auto; }
+    .cfg-list.compact .cfg-provider,
+    .cfg-list.compact .cfg-model,
+    .cfg-list.compact .cfg-key {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cfg-list.compact .cfg-provider { flex: 0 1 auto; font-size: 0.55rem; }
+    .cfg-list.compact .cfg-sub { font-size: 0.52rem; }
+    .cfg-list.compact .cfg-model { flex: 0 1 auto; }
+    .cfg-list.compact .cfg-row .badge { font-size: 0.55rem; padding: 0 4px; }
+    .cfg-list.compact .cfg-off-tag { font-size: 0.44rem; padding: 0 3px; }
+    .cfg-list.compact .launcher-band { margin: 4px 0 0; }
 
     .cfg-line {
       display: flex;
@@ -2043,6 +2177,18 @@
       cursor: pointer;
     }
 
+    /* A section control that is a state rather than an action says so where it is, the way the tab
+       strip and the arbitration filters do. */
+    .section-header .section-action[aria-pressed="true"] {
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    /* An icon in one of these is a glyph on a line of text: it needs centring, not a baseline. */
+    .section-header .section-action svg {
+      display: block;
+    }
+
     .agent {
       background: var(--surface);
       border-radius: 12px;
@@ -2251,6 +2397,35 @@
 
     .conversation-meta { margin-top: 4px; }
 
+    /* Compact: two lines a card. The name and its controls, then what is in it and how much of it
+       there is — which is what a reader of a long list is actually scanning for. What goes is the
+       prose: the newest line said, the member names, and the live roster the dot already reports.
+       A grid rather than a stack, so the count sits beside the badges instead of under them. */
+    #conversations.compact .conversation-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 2px 8px;
+      padding: 8px 12px;
+      margin-bottom: 6px;
+    }
+
+    #conversations.compact .conversation-title { grid-area: 1 / 1 / 2 / 3; }
+    #conversations.compact .conversation-meta.kinds { grid-area: 2 / 1 / 3 / 2; margin-top: 0; }
+
+    #conversations.compact .conversation-count {
+      grid-area: 2 / 2 / 3 / 3;
+      margin-top: 0;
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+
+    #conversations.compact .conversation-last,
+    #conversations.compact .conversation-meta.names,
+    #conversations.compact .conversation-meta.live {
+      display: none;
+    }
+
     .agent:active {
       transform: scale(0.99);
       box-shadow: none;
@@ -2362,16 +2537,22 @@
     }
 
     /* Filter belongs on the existing agent heading, not in a second strip above the cards. */
-    .section-header .agent-kind-filter {
+    /* Its own row under the Agents header, which keeps its title and its buttons. These are tags to
+       be tapped, and a control that shares a line with two buttons and a heading is the one that
+       loses the room. Wraps rather than scrolls: a harness list is short, and a strip that scrolled
+       would hide the filter that is on. */
+    .agent-kind-filter {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 4px;
+      margin: 0 0 8px;
     }
 
-    .section-header .agent-kind-filter .badge.pick {
-      padding: 1px 5px;
-      font-size: 0.6rem;
-      line-height: 1.4;
+    .agent-kind-filter .badge.pick {
+      padding: 2px 8px;
+      font-size: 0.65rem;
+      line-height: 1.5;
     }
 
     .chip-strip {
@@ -2577,27 +2758,18 @@
       padding: 8px 10px;
     }
 
-    /* The three centred dialogs become bottom sheets on a phone, and then obey the same two
-       numbers .sheet does: a dialog is `position: absolute` inside a `position: fixed` overlay, so
-       it is laid out against the layout viewport, which Safari does not shrink for the keyboard.
-       `bottom: 8px` alone put every field in the tile editor and the New agent form behind it.
-       arbModal is in the list too — it was the one this rule missed, and it has fields as well. */
+    /* The three centred dialogs become bottom sheets on a phone. Their overlay is already the
+       visible frame — see .app-overlay — so both numbers here are of that frame and neither has
+       anything to say about the keyboard. arbModal is in the list because it has fields too; the
+       rule this replaced had never named it. */
     @media (max-width: 767px) {
       #newAgentModal [role="dialog"],
       #arbModal [role="dialog"],
       #launcherModal [role="dialog"] {
         top: auto !important;
-        bottom: calc(8px + var(--kb-inset, 0px));
+        bottom: 8px;
         transform: translateX(-50%) !important;
-        max-height: min(calc(100dvh - 16px),
-                        calc(var(--vv-height, 100dvh) - 16px)) !important;
-        transition: bottom 120ms ease-out;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        #newAgentModal [role="dialog"],
-        #arbModal [role="dialog"],
-        #launcherModal [role="dialog"] { transition: none; }
+        max-height: calc(100% - 16px) !important;
       }
     }
 
@@ -2814,91 +2986,154 @@
       font-size: 0.75rem;
     }
 
-    /* The landing page's own search, fixed to the foot. Not a sheet: it has no way in and no way
-       out, it is simply there while the landing page is, so it is styled as a bar rather than as a
-       dialog. The results grow upwards out of it and are capped at half the screen, because the
-       thing being searched for is behind them. */
+    /* The landing page's own search. Not a sheet: it has no way in and no way out, it is simply
+       there while the landing page is — so it is a bubble floating over the list rather than a bar
+       closing it, and the results grow upwards out of it.
+
+       What is pinned is the *frame*, not the bubble: the same trick the sheets use, see
+       .app-overlay. It is laid out against the visual viewport, so the keyboard is not over it —
+       the keyboard is outside it. A box fixed to the layout viewport with a `bottom` offset cannot
+       do that, because Safari does not shrink the layout viewport, so every offset from its foot
+       is measured from behind the keyboard. The frame itself is transparent and click-through;
+       only what is inside it takes a tap. */
     #landingSearch {
       position: fixed;
       left: 0;
       right: 0;
-      /* Raised off the edge rather than sitting on it: a bar flush with the bottom reads as part
-         of the browser's own chrome, and on a phone it is where the home indicator lives. */
-      /* Halfway up the bottom half of the screen, not against its edge: it floats over the list
-         rather than ending it, and a thumb reaches it without stretching past the fold.
-         Above the keyboard it summons, like the sheets — see --kb-inset in utils.js. A search box
-         that types into itself from behind the keyboard is the one place this cannot be skipped. */
-      bottom: calc(25dvh + var(--kb-inset, 0px) + env(safe-area-inset-bottom, 0px));
+      top: var(--vv-top, 0px);
+      height: var(--vv-height, 100dvh);
       z-index: 90;
-      /* Narrower than the page it floats over, so it reads as a thing on top of the list rather
-         than as the list's last row. */
-      width: min(calc(100% - 56px), 460px);
-      margin-inline: auto;
-    }
-
-    /* Glass, not a panel: it sits over the list it searches, so what is under it stays legible
-       through it. Backdrop-filter is progressive — where it is not supported the colour-mix alone
-       still reads as a raised control. */
-    /* The glyph rides inside the bubble at its left, where a search box's icon is expected to be
-       — it is what says the pill is a search box before anything is typed into it. Pointer events
-       off, or the tap that should land in the field lands on the picture of a magnifier. */
-    .landing-search-icon {
-      position: absolute;
-      left: 15px;
-      bottom: 0;
-      top: auto;
-      margin-bottom: 13px;
-      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+      /* At the foot of what is visible, clear of the status bar that is always there — its height
+         is measured rather than assumed, because it carries the safe-area inset itself and grows
+         with whatever it is saying. See syncLandingSearch. */
+      padding-bottom: calc(var(--status-h, 56px) + 12px);
       pointer-events: none;
-      z-index: 1;
     }
 
-    #landingSearch input {
-      width: 100%;
+    #landingSearch[hidden] { display: none; }
+
+    /* Open on a touch screen the frame stops being click-through: a tap outside the results is a
+       tap that dismisses the search, and it must not also press whatever card it landed over.
+       Touch only — with a mouse, focusing the field and then scrolling the list behind it is an
+       ordinary thing to do, and a full-screen catcher would eat the wheel with it. */
+    @media (pointer: coarse) {
+      #landingSearch.open { pointer-events: auto; }
+
+      /* 16px, and only on a phone: iOS zooms the page when a field smaller than that takes focus,
+         and the page it zooms is one whose body is `overflow: hidden` — so what the reader gets is
+         a landing page that pans sideways and will not pan back. The app's other fields are all
+         inside a sheet that is dismissed afterwards; this one is on the page itself. */
+      #landingSearch input { font-size: 16px; }
+    }
+
+    /* Narrower than the page it floats over, so it reads as a thing on top of the list rather than
+       as the list's last row. The box sets its own width — see below, it has two. */
+    #landingSearch > * { pointer-events: auto; }
+
+    #landingSearchResults { width: min(calc(100% - 56px), 460px); }
+
+    /* The bubble itself: the pill, the glass and the glyph are the wrapper's, and the field
+       inside it is bare. The icon used to be positioned against this box while the field was the
+       visible pill — which works only while the field is flush against one edge of it, and broke
+       the moment the closed state moved. One element carries the look, one carries the text.
+
+       A <label>, so the tap that lands on the glyph or on the padding beside it focuses the field
+       anyway — the whole pill is the control, and a closed one is mostly padding. */
+    #landingSearch .landing-search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       box-sizing: border-box;
-      padding: 11px 16px 11px 38px;
-      border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      padding: 0 14px;
+      cursor: text;
+      /* Closed it is half a bar, centred over the page. Open it is the full width of the frame.
+         One declaration apart, and the same element throughout: the text, the focus and the caret
+         are never handed from one node to another mid-gesture. */
+      width: min(calc(50% - 28px), 230px);
+      transition: width 180ms ease;
+      /* The one border in the app meant to be seen from across the page: this floats over cards
+         that each carry a border of their own, and at --border it read as one more of them. */
+      border: 1.5px solid color-mix(in srgb, var(--blue) 60%, var(--border));
       border-radius: 999px;
+      /* Glass, not a panel: it sits over the list it searches, so what is under it stays legible
+         through it. Backdrop-filter is progressive — where it is not supported the colour-mix
+         alone still reads as a raised control. */
       background: color-mix(in srgb, var(--surface) 72%, transparent);
       backdrop-filter: blur(14px) saturate(140%);
       -webkit-backdrop-filter: blur(14px) saturate(140%);
+      /* Two shadows: the near one lifts it off whatever card is under it, the far one is the drop
+         that says it is not part of the list at all. */
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28), 0 14px 36px rgba(0, 0, 0, 0.45);
+    }
+
+    #landingSearch.open .landing-search-box {
+      width: min(calc(100% - 56px), 460px);
+    }
+
+    /* The glyph, first in the row, where a search box's icon is expected to be. It is what says
+       the pill is a search box; the placeholder beside it says so in a word. */
+    .landing-search-icon {
+      flex: 0 0 auto;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    /* Bare inside the pill: no border, no background, no shadow of its own. */
+    #landingSearch input {
+      flex: 1 1 auto;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 11px 0;
+      border: 0;
+      background: none;
+      box-shadow: none;
       color: var(--text);
       font-family: inherit;
       font-size: var(--input-font, 13px);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     }
 
-    #landingSearch input:focus {
-      outline: none;
+    #landingSearch input:focus { outline: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      #landingSearch .landing-search-box { transition: none; }
+    }
+
+    /* The focus ring belongs to the pill, since the pill is what the reader sees. */
+    #landingSearch .landing-search-box:focus-within {
       border-color: var(--blue);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 22%, transparent),
+                  0 14px 36px rgba(0, 0, 0, 0.45);
     }
 
-    /* Its own scroller above the box. The rows are the picker's, so a pane found here looks like
-       the same pane found anywhere else. */
+    /* Its own scroller above the bubble. The rows are the picker's, so a pane found here looks
+       like the same pane found anywhere else. */
     #landingSearchResults {
-      /* Of what is actually on screen, not of the layout viewport the keyboard is drawn over —
-         and never past the top of the visible half the bar itself floats in. */
-      max-height: min(45dvh, calc(var(--vv-height, 100dvh) - 25dvh - 140px));
+      /* Of the frame, which is what is on screen — the keyboard is outside it. Of its height,
+         for the reason the frame's own padding is: a percentage here would be of the width. */
+      max-height: calc(var(--vv-height, 100dvh) * 0.45);
       overflow-y: auto;
       /* The rows carry their own bottom border; the panel's radius has to clip the last one. */
       overflow-x: hidden;
       margin: 0 0 8px;
-      border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      border: 1.5px solid color-mix(in srgb, var(--blue) 40%, var(--border));
       border-radius: 14px;
       background: color-mix(in srgb, var(--surface) 82%, transparent);
       backdrop-filter: blur(14px) saturate(140%);
       -webkit-backdrop-filter: blur(14px) saturate(140%);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28), 0 14px 36px rgba(0, 0, 0, 0.45);
     }
 
+    /* The rows sit on the panel's glass; their own surface would repaint it opaque. */
     #landingSearchResults .pair-pick { background: none; }
     #landingSearchResults .pair-pick:last-child { border-bottom: none; }
 
-    /* Room for the bar, or the last card on the page is behind it and unreachable. */
-    /* The bar floats over the list rather than at its foot, so this is only enough to keep the
-       very last card from ending underneath it. */
+    /* Enough that the last card does not end underneath the closed button. */
     body.landing-search-on #agentListView {
-      padding-bottom: 24px;
+      padding-bottom: 72px;
     }
 
     /* A session that has already ended. Dimmer than a live pane, and it has to stay legible: this
@@ -4998,6 +5233,22 @@
        hid under it.
        A class and not six inline styles, because an inline `bottom` outranks every rule here and
        the next sheet would be copied from the same line. */
+    /* Every sheet and dialog opens inside one of these, and this is the one place the keyboard is
+       dealt with. `inset: 0` — what all twelve used to carry inline — pins a box to the *layout*
+       viewport, which iOS Safari neither shrinks for the keyboard nor moves when it scrolls the
+       page to reveal a focused field. The frame the user can actually see is the visual viewport,
+       and utils.js publishes exactly that: where it starts and how tall it is. Pinned to it, a
+       sheet's `bottom: 0` means the bottom of the screen on every platform, with no per-sheet
+       arithmetic to get wrong — and a field low in a form stays above the keyboard because the
+       whole overlay ends where the keyboard begins. */
+    .app-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--vv-top, 0px);
+      height: var(--vv-height, 100dvh);
+    }
+
     .sheet {
       position: absolute;
       left: 50%;
@@ -5011,19 +5262,11 @@
       border-top-left-radius: 16px;
       border-top-right-radius: 16px;
       padding-bottom: env(safe-area-inset-bottom, 8px);
-      /* The keyboard's height on Safari, 0 everywhere the layout viewport already shrank. */
-      bottom: var(--kb-inset, 0px);
-      /* And never taller than what is left above it. The sheet's own share of the screen is the
-         first term; the second is the hard ceiling once a keyboard has taken most of it. */
-      max-height: min(var(--sheet-max, 80dvh),
-                      calc(var(--vv-height, 100dvh) - 56px));
+      /* The foot of the overlay, which is the foot of what is visible. */
+      bottom: 0;
+      /* And never taller than the frame it is in, less room for whatever is above it. */
+      max-height: min(var(--sheet-max, 80dvh), calc(100% - 56px));
       overflow-y: auto;
-      /* A keyboard appearing moves this; without a transition it jumps. */
-      transition: bottom 120ms ease-out;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .sheet { transition: none; }
     }
 
     /* A class rather than the inline styles it used to carry: an inline background outranks every
@@ -7592,15 +7835,18 @@
   <!-- Fixed to the foot of the landing page, hidden everywhere else — see syncLandingSearch. The
        results sit above the box rather than below it, so the finger that is typing is not on top
        of what it is looking for. -->
-  <div class="landing-search" id="landingSearch" hidden>
+  <div class="landing-search" id="landingSearch" hidden onclick="landingSearchBackdrop(event)">
     <div class="landing-search-results" id="landingSearchResults" hidden></div>
-    <svg class="landing-search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
-         stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="landingSearchInput" type="search" placeholder="Search panes and conversations"
-           aria-label="Search panes and conversations" autocomplete="off"
-           autocorrect="off" autocapitalize="none" spellcheck="false"
-           oninput="renderLandingSearch()" onkeydown="landingSearchKey(event)" />
+    <label class="landing-search-box" for="landingSearchInput">
+      <svg class="landing-search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="landingSearchInput" type="search" placeholder="Search"
+             aria-label="Search panes and conversations" autocomplete="off"
+             autocorrect="off" autocapitalize="none" spellcheck="false"
+             oninput="renderLandingSearch()" onkeydown="landingSearchKey(event)"
+             onfocus="openLandingSearch()" onblur="landingSearchBlur()" />
+    </label>
   </div>
 
   <div class="view" id="timelineView" style="display:none;padding:12px;">
@@ -8170,7 +8416,7 @@
   </div>
 
   <!-- Command palette -->
-  <div id="cmdPalette" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="cmdPalette" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closePalette()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       class="sheet" style="--sheet-max:50dvh;overflow:hidden">
@@ -8188,7 +8434,7 @@
 
   <!-- Start session, and New terminal — one sheet, because the questions are the same ones
      minus the agent. Rendered only when the relay advertises start_options. -->
-  <div id="startSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="startSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeStart()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       class="sheet">
@@ -8263,7 +8509,7 @@
        question — which other pane — so they are one sheet, and only the words on the button at the
        bottom and what it does with the answer differ. Frontend only; the relay knows nothing of
        pairs or of conversations. -->
-  <div id="pickSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="pickSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closePicker()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div class="pick-panel">
       <div class="pick-head">
@@ -8297,7 +8543,7 @@
   <!-- Conversation editor — membership is the user's list, so one sheet does both jobs: join or
        leave the conversations that exist, and name a new one. Frontend only; the relay knows
        nothing of conversations, and nothing here goes on the wire. -->
-  <div id="convSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="convSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeConvDialog()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       class="sheet">
@@ -8331,7 +8577,7 @@
        sheet rather than a banner on the log: the log is a reading of everything the session did
        and keeps growing, and this is the one question asked at the one moment somebody is stood
        at a stopped session with a finger over a button. -->
-  <div id="arbResumeSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="arbResumeSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeArbResume()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
@@ -8344,7 +8590,7 @@
     </div>
   </div>
 
-  <div id="arbSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="arbSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeArbDetail()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
@@ -8362,7 +8608,7 @@
        a harness, the Project it is spawned beside, and the first thing to say to it. Centred rather
        than raised from the bottom, because it is opened from a menu in the middle of the screen and
        a sheet sliding up under the composer would land under the keyboard. -->
-  <div id="newAgentModal" style="display:none;position:fixed;inset:0;z-index:121;">
+  <div id="newAgentModal" class="app-overlay" style="display:none;z-index:121;">
     <div onclick="closeNewAgent()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div role="dialog" aria-label="New agent"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
@@ -8416,7 +8662,7 @@
 
        Three sections because there are three decisions, and they were previously interleaved: who
        decides, and the two it is deciding between. -->
-  <div id="arbModal" style="display:none;position:fixed;inset:0;z-index:120;">
+  <div id="arbModal" class="app-overlay" style="display:none;z-index:120;">
     <div onclick="closeArbSetup()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div role="dialog" aria-label="Arbitrate this conversation"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
@@ -8436,7 +8682,7 @@
        One dialog and two views: the list of tiles, where they are reordered and deleted, and the
        form for one of them. Reordering a handful of tiles is two arrows, not a drag layer, and a
        second dialog to hold them would be a second thing to close. -->
-  <div id="launcherModal" style="display:none;position:fixed;inset:0;z-index:121;">
+  <div id="launcherModal" class="app-overlay" style="display:none;z-index:121;">
     <div onclick="closeLauncherEdit()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div role="dialog" aria-label="Launcher"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
@@ -8450,7 +8696,7 @@
   </div>
 
   <!-- Recent — every live pane, agents and terminals, in the order this device opened them. -->
-  <div id="recentSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="recentSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeRecentSheet()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div role="dialog" aria-label="Recent panes"
       class="sheet">
@@ -8473,7 +8719,7 @@
   </div>
 
   <!-- Transfer — picks the instruction, then prefills the partner's composer. Never sends. -->
-  <div id="transferSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="transferSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeTransfer()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
       class="sheet">
@@ -8501,7 +8747,7 @@
   <!-- Tab order — drag the rows. A sheet and not the list itself, because the list's innerHTML
        is rewritten on every poll and would take a live drag with it. This is built once on open
        and left alone until it closes, so the only thing that can move a row is a finger. -->
-  <div id="orderSheet" style="display:none;position:fixed;inset:0;z-index:100;">
+  <div id="orderSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeOrder()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div id="orderPanel"
       class="sheet">
@@ -8974,8 +9220,15 @@
         // Pinch-zoom shrinks the visual viewport too, and that is the user looking closer rather
         // than a widget taking space. Resizing the page to the zoomed frame would reflow it under
         // their fingers; zooming back out fires this again and restores the fit.
-        if (vv.scale > 1.01) return;
-        document.body.style.height = vv.height + 'px';
+        //
+        // The *measurements* below are published either way, and that is the whole of this fix:
+        // they used to be skipped along with the reflow, so anything that had zoomed the page kept
+        // whatever numbers were current before it. iOS zooms of its own accord whenever a focused
+        // field renders under 16px — which is every field in this app since they were set to the
+        // composer's size — so the one moment the sheets most need these numbers was the one
+        // moment they stopped being written, and every sheet stayed where the keyboard now is.
+        const zoomed = vv.scale > 1.01;
+        if (!zoomed) document.body.style.height = vv.height + 'px';
         // The same measurement, published for anything that *cannot* be sized by shrinking the
         // body: a `position: fixed` element is laid out against the layout viewport, which the
         // keyboard does not shrink on Safari, so `bottom: 0` puts it behind the keyboard however
@@ -8986,9 +9239,16 @@
         root.setProperty('--kb-inset',
                          Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + 'px');
         root.setProperty('--vv-height', vv.height + 'px');
+        // Where the visible frame starts. Safari scrolls the *layout* viewport to reveal a focused
+        // field, which moves the visual frame down the page; an overlay pinned with `inset: 0` is
+        // pinned to the layout viewport and does not follow. With this, the overlays are laid out
+        // against the frame the user can actually see — see .app-overlay — and no sheet inside one
+        // has to do keyboard arithmetic of its own.
+        root.setProperty('--vv-top', vv.offsetTop + 'px');
         // Safari also scrolls the layout viewport up to reveal the focused field, taking the
-        // header off screen. With the body already short enough to fit, there is nothing to reveal.
-        if (vv.offsetTop) window.scrollTo(0, 0);
+        // header off screen. With the body already short enough to fit, there is nothing to reveal
+        // — but while zoomed the body was left alone, and scrolling back would fight the reveal.
+        if (vv.offsetTop && !zoomed) window.scrollTo(0, 0);
       };
       vv.addEventListener('resize', fit);
       vv.addEventListener('scroll', fit);
@@ -9058,6 +9318,43 @@
     let startOptions = null, startProjectId = null, startMode = 'agent';
     // Pairs live only in this browser. The relay has no pair message and stores no pair data.
     let pairs = [], pairSource = null, pairPartner = null, transferSelection = '';
+
+    // --- Compact sections ---
+    //
+    // Three sections draw a list of things the reader mostly recognises by name: the launcher's
+    // tiles, the agent configs under them, and the conversation cards. Each is worth its full
+    // height the first week and a page of scrolling by the second, so each carries a toggle that
+    // drops it to two lines a row. One switch, one icon and one place to store the answer, because
+    // three copies of a two-line preference is how the three of them end up behaving differently.
+    //
+    // In localStorage rather than in the shared documents: this is about the screen it is drawn on,
+    // not about the tiles, the configs or the conversations.
+    const COMPACT_ICON =
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" aria-hidden="true">'
+      + '<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/>'
+      + '<line x1="4" y1="17" x2="20" y2="17"/></svg>';
+
+    function compactOn(key) {
+      try { return localStorage.getItem(key) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function toggleCompact(key, render) {
+      try { localStorage.setItem(key, compactOn(key) ? 'off' : 'on'); }
+      catch (e) { /* private mode: session-only */ }
+      if (typeof render === 'function') render();
+    }
+
+    // aria-pressed rather than two icons: the button is a state, and swapping the glyph under the
+    // reader's finger is how a toggle stops reading as one thing. The redraw is named rather than
+    // captured, so this stays a string a section header can concatenate.
+    function compactButton(key, render, label) {
+      return `<button class="section-action" onclick="toggleCompact('${key}', ${render})"`
+        + ` aria-pressed="${compactOn(key) ? 'true' : 'false'}"`
+        + ' title="Two lines a row: the name, and the badges under it"'
+        + ` aria-label="${label}">${COMPACT_ICON}</button>`;
+    }
 
   </script>
   <script>
@@ -13587,17 +13884,28 @@
         + '</button>';
     }
 
+    // A row is a name, a provider, a model and a key — two lines of it at full size, and two lines
+    // still when compact, but with nothing allowed to wrap into a third. See compactButton.
+    const CFG_COMPACT_KEY = 'herdr_cfg_compact';
+
     function agentConfigsHtml() {
       // Nothing to draw without a provider: aliases need something to be aliases *of*. Stock
       // providers make this available without a file; an actually empty list still has no action.
       if (!agentConfigProviders().length) return '';
       const bands = agentConfigBands();
       return '<div class="section-header" style="margin-top:18px">Agent configs'
+        + (bands.length
+          ? compactButton(CFG_COMPACT_KEY, 'renderLauncher', 'Compact configs') : '')
         + '<button class="section-action" onclick="openAgentConfig(\'\')"'
         + ' title="Add a config" aria-label="Add an agent config">+ New</button></div>'
+        // The rows in a box of their own, because the mode is a class and the launcher's own grid
+        // is where they would otherwise hang: a section cannot be told apart from its neighbour by
+        // a class on the element they share.
         + (bands.length
-          ? bands.map(b => `<div class="launcher-band">${escapeHtml(b.kind)}</div>`
-            + b.rows.map(agentConfigRowHtml).join('')).join('')
+          ? `<div class="cfg-list${compactOn(CFG_COMPACT_KEY) ? ' compact' : ''}">`
+            + bands.map(b => `<div class="launcher-band">${escapeHtml(b.kind)}</div>`
+              + b.rows.map(agentConfigRowHtml).join('')).join('')
+            + '</div>'
           : '<div class="cfg-empty">No configs yet. + New names one — a model and a key, against'
             + ' a provider this relay already has.</div>');
     }
@@ -13976,6 +14284,11 @@
       return out;
     }
 
+    // Compact is two lines a tile: the kind's glyph and the name, and the badges under them. The
+    // payload as prose goes — a keypad of twenty tiles is a page of scrolling at full size, and the
+    // reader of one already knows what their own tiles run. See compactButton in utils.js.
+    const LAUNCHER_COMPACT_KEY = 'herdr_launcher_compact';
+
     function renderLauncher() {
       const el = document.getElementById('launcher');
       if (!el) return;
@@ -13989,9 +14302,14 @@
       // Two controls, and + is always the right-hand one. Adding a tile used to be reachable only
       // through Edit once the first tile existed — an entry point that moves as soon as it has
       // been used once, which is the shape of a button people stop finding.
+      const compact = compactOn(LAUNCHER_COMPACT_KEY);
+      // The class is set from the document every draw, and not toggled where the button is: a
+      // repaint from another browser's tile arriving would otherwise drop it.
+      el.classList.toggle('compact', compact);
       el.innerHTML = '<div class="section-header">Launcher'
         + (tiles.length
-          ? '<button class="section-action" onclick="openLauncherEdit()"'
+          ? compactButton(LAUNCHER_COMPACT_KEY, 'renderLauncher', 'Compact tiles')
+            + '<button class="section-action" onclick="openLauncherEdit()"'
             + ' title="Edit, reorder and delete tiles" aria-label="Edit the launcher">Edit</button>'
           : '')
         + '<button class="section-action" onclick="openLauncherNew()"'
@@ -15086,20 +15404,32 @@
       codex: { speaker: '•', result: ['└', '│'], user: ['›'] },
       pi: { speaker: '⏺', result: ['$'], user: ['›'], ends: ['⋯'], indent: 1, composer: false },
       // OpenCode puts the user's messages, every tool block and the composer itself behind one
-      // `┃`, and prints nothing at all in column 0 — so it has no speaker glyph, no result glyph
-      // and no block starts. `messages: false` says so: Summary and the ↓↑ pill are switched off
-      // rather than left to find nothing, because its reasoning and its answer are both plain
-      // prose at the same indent with no boundary between them. The blue user rule is the one
-      // thing that can be got right here, and it is worth getting right: the pane is a wall of
-      // `┃` and the rule is what shows where your own questions were.
+      // `┃` in column 2, and everything it says itself is plain prose indented five. So the bar is
+      // not a speaker glyph: it is what *opens* a block and what closes one, and the reply is the
+      // prose under it — the same positional shape agy and kiro have, two columns over. `indent: 2`
+      // is what moves the whole gutter reading there; column 0 in an opencode pane is a space on
+      // every line, so read there it finds no marker anywhere and nothing ever starts.
+      //
+      // `endLine` is the three things opencode draws that are not prose: `Thought:` opens a run of
+      // reasoning, `⚙` is a tool call drawn inside it, and `▣  Build · GPT-OSS-120B · 8.0s` is the
+      // stamp it rules every finished turn off with. The stamp is the boundary the profile turns
+      // on — it is the only mark between the end of an answer and the start of the next turn.
       //
       // Which `┃` is yours is a question about the whole run, not the line. A run holding a `$`
       // is a command and everything under it is that command's output; a run closed by `╹` is
       // the composer box at the foot; and a run reaching the top of what was read was cut off
       // mid-block, so its opener is not here to check. Each of those was read as user input by
       // the line-at-a-time version, on a real pane.
+      //
+      // What is left over: opencode's `1 message reverted / ctrl+x r or /redo to restore` notice
+      // is a `┃` box drawn exactly like a prompt box, above a composer, with nothing under it —
+      // which is also the shape of a prompt sent a moment ago and not yet answered. There is no
+      // rule that separates the two without reading the words, and dropping a real prompt from the
+      // record is the worse of the two mistakes, so the notice is read as one.
       opencode: {
-        speaker: null, result: [], messages: false, endLine: /^\s*Thought:/,
+        speaker: null, result: [], user: [], ends: ['┃'],
+        indent: 2, opens: ['┃'], composer: false,
+        endLine: /^\s*(?:Thought:|[▣⚙]\s)/, chrome: /^\s*╹/,
         userLine: (row, rows, i) => {
           if (!/^\s*┃\s+\S/.test(row || '') || /^\s*┃\s+\$/.test(row)) return false;
           if (!rows) return false;
@@ -15147,8 +15477,9 @@
       },
     };
 
-    // The character in a harness's gutter column, which is column 0 everywhere but pi.
-    function gutterOf(row, g) { return (row || '')[g.indent || 0]; }
+    // The character in a harness's gutter column, which is column 0 everywhere but pi and opencode.
+    // '' rather than undefined on a line too short to have one, so callers can `.trim()` it.
+    function gutterOf(row, g) { return (row || '')[g.indent || 0] || ''; }
 
     // How far above the bottom of a read the live composer may be found. The footer is a rule, an
     // empty input line, one or two blanks and a status bar; ten rows covers that and stops a
@@ -15268,6 +15599,10 @@
     // the nearest one dropped every message agy wrapped a tool call above, including the closing
     // one, which is the message the whole feature exists to find.
     //
+    // "Column 0" throughout is the harness's *gutter* column, which is column 0 for every harness
+    // but opencode — it draws the same shape two columns in, and reading column 0 there finds a
+    // space on every line of the pane and so no marker anywhere.
+    //
     // The prompt gutter wraps too, and its continuation is indented rather than column-0, which
     // makes it indistinguishable from a reply by shape alone. A blank line is what tells them
     // apart: agy answers a prompt through a tool call or a thought, never off the next row, so an
@@ -15278,22 +15613,23 @@
       // A line that closes a block is a marker, and never opens one.
       if (g.endLine && g.endLine.test(row)) return false;
       if (g.speaker) return gutterOf(row, g) === g.speaker;
-      if (!row.trim() || /^\S/.test(row)) return false;
+      if (!row.trim() || gutterOf(row, g).trim()) return false;
       for (let j = i - 1; j >= 0; j--) {
         const above = rows[j] || '';
         if (!above.trim()) continue;
-        if (!g.opens) return /^\S/.test(above);
+        if (!g.opens) return !!gutterOf(above, g).trim();
         const gap = j < i - 1;
         for (let k = j; k >= 0; k--) {
           const line = rows[k] || '';
           if (!line.trim()) return false;
           // A prompt opens the reply to it, wherever the harness draws it. kiro indents its
-          // prompts exactly as it indents everything else, so the walk back to column 0 would run
-          // straight past one — and a turn answered without running a tool has no column-0 line
+          // prompts exactly as it indents everything else, so the walk back to the gutter would
+          // run straight past one — and a turn answered without running a tool has no marker line
           // anywhere in it, which is the whole answer lost rather than a line of it.
           if (g.userLine && g.userLine(line, rows, k)) return gap;
-          if (!/^\S/.test(line)) return false;
-          if (g.opens.includes(line[0])) return gap || !(g.user || []).includes(line[0]);
+          const ch = gutterOf(line, g);
+          if (!ch.trim()) return false;
+          if (g.opens.includes(ch)) return gap || !(g.user || []).includes(ch);
         }
         return false;
       }
@@ -20337,6 +20673,7 @@
       // kiro before pi: `startsWith('pi')` does not match it, but the two shared --green until
       // kiro got a badge of its own, and a reader cannot tell two kinds apart by one colour.
       if (k.startsWith('kiro')) return 'var(--agent-kiro)';
+      if (k.startsWith('opencode')) return 'var(--agent-opencode)';
       if (k.startsWith('pi')) return 'var(--green)';
       if (k.startsWith('agy')) return 'var(--agent-agy)';
       return '';
@@ -21350,11 +21687,15 @@
     // must not move under the tap, while the cards are "what is going on right now" and the pane
     // that just moved is the one being looked for. A pane this browser has never watched move
     // sorts last and keeps snapshot order, which is what a fresh reload shows.
-    function agentCards(list) {
+    function byRecent(list) {
       return list.map((agent, index) => ({agent, index}))
         .sort((a, b) => (lastSeen[b.agent.pane_id] || 0) - (lastSeen[a.agent.pane_id] || 0)
           || a.index - b.index)
-        .map(x => agentCard(x.agent)).join('');
+        .map(x => x.agent);
+    }
+
+    function agentCards(list) {
+      return byRecent(list).map(agentCard).join('');
     }
 
     // `note` rides in the header at reduced weight, the same way the blocked count does. A section
@@ -21372,8 +21713,13 @@
     function addOrderButton() {
       const header = document.querySelector('#agents .section-header');
       if (!header) return;
+      // The kind filter on a line of its own under the header, not inside it. In the header it was
+      // competing for the same row as the title and the two right-hand buttons — on a phone that
+      // row is full before the first badge is drawn, and the badges are the part that got squeezed.
+      // Under it they are a strip of tags at full size, which is what a thing meant to be tapped
+      // has to be.
       const filter = agentKindsHtml(agents);
-      if (filter) header.insertAdjacentHTML('beforeend', filter);
+      if (filter) header.insertAdjacentHTML('afterend', filter);
       header.insertAdjacentHTML('beforeend',
         '<button class="section-action" onclick="openOrder()"' +
         ' title="The order of the tab strip. The cards below are newest-first."' +
@@ -21424,8 +21770,10 @@
         ? sectionNewHtml(`openStartDialog(activeProject, event, 'terminal')`,
             'Open a terminal — it asks which Project', 'Open a new terminal') : '';
       if (!list.length && !plus) return '';
+      // Newest-first, the same rule the agent cards follow: a terminal is a pane like any other,
+      // and a list that sorted by one thing above and another below would be two lists.
       return `<div class="section-header">Terminals${plus}</div>`
-        + orderedAgents(list).map(terminalCard).join('');
+        + byRecent(list).map(terminalCard).join('');
     }
 
     function pairsHtml() {
@@ -21523,6 +21871,8 @@
         ` aria-label="${rest} ${escapeHtml(name)}">${armed ? ask : rest}</button>`;
     }
 
+    const CONV_COMPACT_KEY = 'herdr_conv_compact';
+
     function renderConversations() {
       const el = document.getElementById('conversations');
       if (!el) return;
@@ -21602,6 +21952,9 @@
       // The + is drawn whether or not there is anything under it, which is the one place this
       // section differs from the others: an entry point that only appears once you already have a
       // conversation cannot be how the first one is made.
+      // Two lines a card: the name and what is in it. Offered in every mode, the archive included
+      // — a long archive is exactly the list somebody wants smaller. See compactButton.
+      const compactControl = compactButton(CONV_COMPACT_KEY, 'renderConversations', 'Compact cards');
       const newControl = `<button class="section-action conv-new" onclick="newConversation()"` +
         ` title="Start an empty conversation and add panes to it"` +
         ` aria-label="Start a new conversation">+ New</button>`;
@@ -21656,10 +22009,10 @@
         // What is in it, before what was said in it: which harnesses, and which Projects they are
         // working in. A conversation is recognised by its members long before its newest line is
         // read, and on a phone that line is the only other thing on the card.
-        (r.badges ? `<div class="conversation-meta">${r.badges}</div>` : '') +
+        (r.badges ? `<div class="conversation-meta kinds">${r.badges}</div>` : '') +
         (r.last ? `<div class="conversation-last">${escapeHtml(r.last)}</div>` : '') +
-        `<div class="conversation-meta">${r.names.join(' · ')}</div>` +
-        `<div class="conversation-meta">${r.liveNames.length ? 'Live: ' + r.liveNames.join(', ') : 'No live members'}` +
+        `<div class="conversation-meta names">${r.names.join(' · ')}</div>` +
+        `<div class="conversation-meta live">${r.liveNames.length ? 'Live: ' + r.liveNames.join(', ') : 'No live members'}` +
         `${r.seen ? ' · Last activity ' + fmtAgo(new Date(Math.min(r.seen, now))) : ''}</div></div>`;
       const archivedRows = list.archived.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
       const activeRows = list.shown.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
@@ -21668,10 +22021,11 @@
       // is on screen: + New makes a named conversation, and the other mode's button would be a
       // second exit that lands somewhere the reader did not ask for.
       const mode = archiveOn || autoOn;
+      el.classList.toggle('compact', compactOn(CONV_COMPACT_KEY));
       el.innerHTML = `<div class="section-header">` +
         `${archiveOn ? 'Archived conversations' : autoOn ? 'Auto conversations' : 'Conversations'}` +
-        `${mode ? (archiveOn ? archiveControl : autoControl)
-          : autoControl + archiveControl + newControl}</div>` +
+        `${mode ? (archiveOn ? archiveControl : autoControl) + compactControl
+          : compactControl + autoControl + archiveControl + newControl}</div>` +
         (archiveOn ? archivedRows.map(r => card(r, true)).join('')
         : autoOn ? autoRows.map(r => card(r, false)).join('')
         : activeRows.length ? activeRows.map(r => card(r, false)).join('')
@@ -23050,6 +23404,13 @@
       const list = document.getElementById('agentListView');
       const show = landingSearchOn() && !!list && list.style.display !== 'none';
       bar.hidden = !show;
+      // The bar it has to sit above. Measured on every view change rather than guessed: the status
+      // bar carries the safe-area inset and grows with the text in it.
+      const status = document.querySelector('.status-bar');
+      if (status) {
+        document.documentElement.style.setProperty(
+          '--status-h', Math.round(status.getBoundingClientRect().height) + 'px');
+      }
       // Not 'landing-search': that is the bar's own class, and a body wearing it turns every
       // `.landing-search input` rule in the sheet into a rule about every input in the app —
       // which is exactly what it did, and what stretched a toggle in the tile editor to 137px.
@@ -23057,35 +23418,130 @@
       if (!show) clearLandingSearch();
     }
 
+    // Open is a class on the frame and nothing else — no second element, no stored flag to fall
+    // out of step with what is on screen.
+    function openLandingSearch() {
+      const bar = document.getElementById('landingSearch');
+      if (bar) bar.classList.add('open');
+    }
+
+    function closeLandingSearch() {
+      const bar = document.getElementById('landingSearch');
+      if (bar) bar.classList.remove('open');
+    }
+
+    // A tap on a result blurs the field before it fires, so this waits a beat and then asks where
+    // the focus actually went. Text that was typed keeps it open: closing over a live query would
+    // throw away the thing the reader is in the middle of.
+    function landingSearchBlur() {
+      setTimeout(() => {
+        const bar = document.getElementById('landingSearch');
+        const input = document.getElementById('landingSearchInput');
+        if (!bar || !input || input.value.trim()) return;
+        if (bar.contains(document.activeElement)) return;
+        closeLandingSearch();
+      }, 180);
+    }
+
     function clearLandingSearch() {
       const input = document.getElementById('landingSearchInput');
       if (input) input.value = '';
       const out = document.getElementById('landingSearchResults');
       if (out) { out.innerHTML = ''; out.hidden = true; }
+      closeLandingSearch();
     }
 
-    // Everything on the landing page that can be gone *to*: the live panes, and the conversations
-    // — including the auto ones and the archived ones, which are the two the page itself keeps
-    // behind a mode. A search that could only reach what is already on screen would be a filter.
-    // Read on every keystroke, so a pane that arrived while the box was open is findable.
+    // Every section of the landing page, as one list of things that can be gone *to*. Not a
+    // filter over what is on screen: the conversations behind the Auto and Archive modes are in
+    // here, and so is a tile whose section is switched off. Read on every keystroke, so anything
+    // that arrived while the box was open is findable.
+    //
+    // Each group carries the words its section is *called*, and those words are searched with the
+    // row's own — so "terminal" lists the terminals, "tile" the launcher, "pair" the pairs, and
+    // nobody has to remember what a thing was named to find out what there is.
     function landingSearchGroups() {
       const groups = [];
-      const panes = agents.concat(shells).map(a => pickPaneRow(a));
-      if (panes.length) groups.push({head: 'Panes', rows: panes, go: id => jumpToPane(id)});
-      const convs = (typeof convLandingList === 'function' ? convLandingList().all : []).map(c => ({
-        id: c.id,
-        name: c.name || 'Conversation',
-        glyph: typeof convGlyph === 'function' ? convGlyph(c) : '#',
-        note: c.archived ? 'Archived' : (c.auto ? 'Auto' : ''),
-        meta: (c.members || []).map(m => escapeHtml(m.label || '')).filter(Boolean).join(', '),
-      }));
-      if (convs.length) groups.push({head: 'Conversations', rows: convs,
-        go: id => openConversation(id)});
+      const add = (head, words, rows, go) => { if (rows.length) groups.push({head, words, rows, go}); };
+
+      // `seen` on every row that has a clock: two rows that answer the query equally well are
+      // ordered by which one was last looked at, which is the same question the cards above are
+      // sorted by. A row without one sorts last among its equals rather than being special-cased.
+      const seenOf = a => lastSeen[a.pane_id] || 0;
+      const paneRow = a => Object.assign(pickPaneRow(a), {seen: seenOf(a)});
+
+      add('Agents', 'agent agents pane panes session sessions',
+        agents.map(paneRow), id => jumpToPane(id));
+
+      add('Terminals', 'terminal terminals shell shells console command line',
+        shells.map(paneRow), id => jumpToPane(id));
+
+      // A pair is not a pane, so it opens the first half of itself — the two are side by side in
+      // the strip from there, which is the whole point of having paired them.
+      const healthy = (typeof pairs === 'undefined' ? [] : pairs)
+        .filter(p => typeof pairHealth !== 'function' || pairHealth(p, agents).state === 'healthy');
+      add('Pairs', 'pair pairs paired partner', healthy.map(p => {
+        const live = (p.members || []).map(m => agents.find(a => memberMatches(m, a))).filter(Boolean);
+        return {id: p.id || p.name, name: p.name || 'Pair', glyph: '⇄',
+          meta: live.map(a => escapeHtml(paneLabel(a))).join(' ⇄ '),
+          // A pair is as recent as its liveliest half — the pane last read is the one the reader
+          // was in, and the pair is how they get back to it.
+          seen: live.reduce((n, a) => Math.max(n, seenOf(a)), 0),
+          color: live.length ? statusColor(live[0]) : ''};
+      }), id => {
+        const pair = healthy.find(p => (p.id || p.name) === id);
+        const first = ((pair || {}).members || []).map(m => agents.find(a => memberMatches(m, a)))
+          .filter(Boolean)[0];
+        if (first) jumpToPane(first.pane_id);
+      });
+
+      // What a tile *is* rather than only what it was called: the command it runs or the roster it
+      // starts, which is the same evidence the tile itself carries under its name. A tile found
+      // here is pressed the way a tile is pressed — through the confirm sheet, never straight into
+      // a start.
+      const tiles = typeof loadLauncher === 'function' ? loadLauncher() : [];
+      add('Launcher', 'tile tiles launcher launch template templates shortcut',
+        tiles.map(t => ({id: t.id, name: t.label || 'Tile', glyph: '▤',
+          project: t.project || t.project_id || '',
+          meta: escapeHtml(typeof launcherPreview === 'function' ? launcherPreview(t) : (t.command || '')),
+          note: t.action === 'run' ? 'Command' : t.action === 'terminal' ? 'Terminal' : 'Agents'})),
+        id => launcherPress(id));
+
+      add('Conversations', 'conversation conversations thread threads chat auto archive archived',
+        (typeof convLandingList === 'function' ? convLandingList().all : []).map(c => ({
+          id: c.id,
+          name: c.name || 'Conversation',
+          glyph: typeof convGlyph === 'function' ? convGlyph(c) : '#',
+          note: c.archived ? 'Archived' : (c.auto ? 'Auto' : ''),
+          seen: typeof convSeenAt === 'function' ? convSeenAt(c) : 0,
+          meta: (c.members || []).map(m => escapeHtml(m.label || '')).filter(Boolean).join(', '),
+        })), id => openConversation(id));
+
       return groups;
     }
 
+    // The row's own words, plus what its section is called. One extra field rather than one long
+    // string, because pickMatch requires each typed word to be found inside a single field —
+    // which is what stops a three-letter subsequence wandering across two of them and matching
+    // everything. "terminal build" therefore means the terminal called build, not either.
+    function landingHay(row, group) {
+      return pickHay(row).concat(group.words || []);
+    }
+
+    // How well a row answers what was typed, so the order is the answer's and not the section's.
+    // Per typed word, the strongest thing that word did anywhere in the row: the start of a name
+    // beats the middle of one, both beat a hit in the meta or in the section's own keywords, and
+    // last is a subsequence — which is a match the reader did not ask for so much as allow.
+    function landingScore(row, group, q) {
+      const name = String(row.name || '').toLowerCase();
+      const fields = landingHay(row, group);
+      return q.split(/\s+/).filter(Boolean).reduce((n, w) => n + (
+        name.startsWith(w) ? 8 : name.includes(w) ? 6
+          : fields.some(f => f.includes(w)) ? 4
+            : subsequence(name, w) ? 2 : 1), 0);
+    }
+
     function landingRowHtml(group, row) {
-      return `<button class="pair-pick" data-group="${group}" data-id="${escapeHtml(row.id)}" ` +
+      return `<button class="pair-pick" data-group="${escapeHtml(group)}" data-id="${escapeHtml(row.id)}" ` +
         `onclick="landingSearchGo(this.dataset.group, this.dataset.id)">` +
         `<span class="dot" style="background:${row.color || 'var(--muted)'}" aria-hidden="true"></span>` +
         `<span class="kind" aria-hidden="true">${row.glyph || '⬛'}</span>` +
@@ -23100,28 +23556,56 @@
       if (!input || !out) return;
       const q = input.value.trim().toLowerCase();
       if (!q) { out.innerHTML = ''; out.hidden = true; return; }
-      let shown = 0, html = '';
-      landingSearchGroups().forEach((g, i) => {
-        const rows = g.rows.filter(r => pickMatch(pickHay(r), q))
-          .slice(0, LANDING_SEARCH_MAX - shown);
-        if (!rows.length) return;
-        shown += rows.length;
-        html += `<div class="pair-head">${escapeHtml(g.head)}</div>` +
-          rows.map(r => landingRowHtml(i, r)).join('');
-      });
+      // Every match in the app first, then the strongest few of them — and only then split back
+      // into sections. Ranking inside a group and spending the budget group by group meant the
+      // first section could eat all of it on weak subsequence hits: "ter" filled the page with
+      // panes whose names merely contain those three letters in order, and the Terminals section
+      // it plainly asks for never got a row. Nothing changes at "term" except that the weak
+      // matches stop matching — which is the section order deciding, not the query.
+      const groups = landingSearchGroups();
+      const hits = [];
+      groups.forEach(g => g.rows.forEach(r => {
+        if (pickMatch(landingHay(r, g), q)) hits.push({g, row: r, score: landingScore(r, g, q)});
+      }));
+      // Best match first, and among equals the one last looked at — a name typed halfway is
+      // usually the pane the reader has been in all morning.
+      hits.sort((a, b) => b.score - a.score || (b.row.seen || 0) - (a.row.seen || 0));
+      const keep = hits.slice(0, LANDING_SEARCH_MAX);
+      // Drawn in section order, each section keeping the ranking above: a list that jumped between
+      // sections row by row would be ordered by a score nobody can see.
+      const html = groups.map(g => {
+        const rows = keep.filter(h => h.g === g).map(h => h.row);
+        if (!rows.length) return '';
+        return `<div class="pair-head">${escapeHtml(g.head)}</div>` +
+          rows.map(r => landingRowHtml(g.head, r)).join('');
+      }).join('');
       out.innerHTML = html || `<p class="pair-empty">Nothing here matches "${escapeHtml(q)}".</p>`;
       out.hidden = false;
     }
 
     // The groups are rebuilt rather than held: a row tapped a minute after it was drawn should go
     // where that pane is now, and an id that has since gone is a no-op rather than a stale jump.
+    // Addressed by the section's name and not by its place in the list — a group with nothing in
+    // it is not drawn, so the numbering moves whenever a section empties.
     function landingSearchGo(group, id) {
-      const g = landingSearchGroups()[Number(group)];
+      const g = landingSearchGroups().find(x => x.head === group);
       if (!g || !g.rows.some(r => r.id === id)) return;
       clearLandingSearch();
       const input = document.getElementById('landingSearchInput');
       if (input) input.blur();
       g.go(id);
+    }
+
+    // A tap on the frame and not on anything in it. Open, the frame takes pointer events on a
+    // touch screen — see the CSS — so this is what that tap is for: it closes the search and goes
+    // no further. Without it the tap fell through to whatever card was under the bar and opened a
+    // pane the reader was only trying to dismiss a keyboard over.
+    function landingSearchBackdrop(e) {
+      const bar = document.getElementById('landingSearch');
+      if (!bar || e.target !== bar) return;
+      clearLandingSearch();
+      const input = document.getElementById('landingSearchInput');
+      if (input) input.blur();
     }
 
     function landingSearchKey(e) {
