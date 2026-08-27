@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-08-26">
+  <meta name="app-built" content="2026-08-27">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -2674,6 +2674,57 @@
       color: var(--blue);
     }
 
+    /* The way into the full list when the strip cannot hold what is in it. Hidden until the strip
+       actually overflows — see syncProjectOverflow, which measures rather than counts, because
+       whether twelve chips fit is a question about the width of a phone and the length of twelve
+       names. */
+    /* The scroller and the way out of it, side by side. min-width on the scroller because a flex
+       item's default minimum is its content, which for a strip of chips is the whole strip — it
+       would push the button off the screen instead of scrolling. */
+    .chip-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .chip-row .chip-strip {
+      flex: 1 1 auto;
+      min-width: 0;
+      /* No inset of its own: the cards under this row and the heading over it start at the
+         section's edge, and a filter for those cards that starts 12px in from them reads as a
+         third margin nobody chose. Vertical padding stays — that is the gap to the heading. */
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    .chip-more {
+      flex: 0 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      line-height: 1.2;
+    }
+
+    .chip-more[aria-expanded="true"] {
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    /* The dock's chip menu, in the page's flow under the strip. Aligned with the chips above it
+       rather than the panel edge, so the list reads as that strip opened out. */
+    #projectMenu {
+      width: auto;
+      margin: 0 12px 8px;
+    }
+
+    /* The dock gives its own copy of this component a display through .dock's button rules; this
+       one is on the landing page, where nothing else does. */
+    #projectMenu .menu-item {
+      display: flex;
+      align-items: center;
+    }
+
     .start-field {
       display: flex;
       flex-direction: column;
@@ -2878,6 +2929,23 @@
     }
 
     .conv-glyph { display: block; }
+
+    /* The Project card's folder, sized and seated like the agent card's robot so the two lists
+       read as one column. Blue rather than the agent's pink or the conversation's green: three
+       kinds of card on one page, three marks, and the colour is half of what tells them apart. */
+    .project-kind {
+      display: inline-flex;
+      align-items: center;
+      margin-right: 6px;
+      color: var(--blue);
+    }
+
+    .project-glyph {
+      width: 1.05em;
+      height: 1.05em;
+      vertical-align: -0.15em;
+      flex-shrink: 0;
+    }
 
     .order-row .info,
     .pair-pick .info {
@@ -3256,6 +3324,42 @@
       font-size: 0.7rem;
       color: var(--muted);
       margin-top: 2px;
+    }
+
+    /* Compact: one line a card. The name and what it is on the same line, and the second line's
+       prose gone — the working directory under a session, the session count under a Project. Both
+       lists live in #agents, so the switch is a class on the container and the card says which
+       list it belongs to. See compactButton in utils.js. */
+    #agents.projects-compact .agent.project-card,
+    #agents.agents-compact .agent:not(.project-card) {
+      padding: 8px 12px;
+      margin-bottom: 6px;
+    }
+
+    #agents.projects-compact .agent.project-card .info,
+    #agents.agents-compact .agent:not(.project-card) .info {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    /* Both halves clip rather than wrap: a card that grows a second line in compact mode is the
+       one thing this mode is for stopping. */
+    #agents.projects-compact .agent.project-card .project,
+    #agents.projects-compact .agent.project-card .meta,
+    #agents.agents-compact .agent:not(.project-card) .project,
+    #agents.agents-compact .agent:not(.project-card) .meta {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 0;
+    }
+
+    /* The path is the first thing to go: it is the longest part of the line and the least of what
+       a name is recognised by. The harness badge beside it stays. */
+    #agents.agents-compact .agent:not(.project-card) .cwd {
+      display: none;
     }
 
     /* Terminal view */
@@ -7562,7 +7666,13 @@
         grid-column: 1 / -1;
       }
 
-      .chip-strip {
+      /* A band's own furniture spans the grid; only cards are laid out in columns. The kind
+         filter was left out of this when it arrived, so on a two-column desktop it took the first
+         cell and pushed the first agent card into the second column — one card starting 350px in
+         from the left edge every other section began at. */
+      .chip-row,
+      .chip-strip,
+      .agent-kind-filter {
         grid-column: 1 / -1;
       }
     }
@@ -8495,6 +8605,33 @@
 
   <!-- Start session, and New terminal — one sheet, because the questions are the same ones
      minus the agent. Rendered only when the relay advertises start_options. -->
+  <!-- Making a Project is making a directory under a root and nothing else — no agent, no pane,
+       no placement to answer. Its own small sheet rather than a third mode of the start sheet:
+       every other field there is a question about a session, and a sheet that hid all of them
+       would be this one wearing the other's markup. -->
+  <div id="newProjectSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeNewProject()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div
+      style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,8px)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">New project</span>
+        <button onclick="closeNewProject()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <!-- Drawn only when there is a choice to make: one root is not a question. -->
+        <div id="newProjectRootRow" hidden style="display:none"></div>
+        <label class="start-field">Folder name<input id="newProjectName" type="text" maxlength="64"
+            autocapitalize="none" autocomplete="off" placeholder="what this project is called"
+            onkeydown="if(event.key==='Enter')submitNewProject()" /></label>
+        <p id="newProjectError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
+        <button id="newProjectSubmit" onclick="submitNewProject()"
+          style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:var(--bg);font-weight:600;font-size:0.85rem;cursor:pointer">Create
+          project</button>
+      </div>
+    </div>
+  </div>
+
   <div id="startSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeStart()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
@@ -8514,6 +8651,10 @@
              route already knows where it is starting, and a picker there would be a second way to
              change something the user already chose by where they tapped. -->
         <div id="startProjectRow" hidden style="display:none"></div>
+        <!-- A root's subdirectories are Projects in their own right, so starting somewhere new
+             under one is naming a directory. Drawn only where the relay says a start may make one
+             (`root` on the Project), and never for a terminal — open_terminal refuses `child`. -->
+        <div id="startChildRow" hidden style="display:none"></div>
         <!-- Hidden whole for a terminal: there is no agent to choose and no role for it to play.
              Everything below this — where it goes, what it is called — is the same question. -->
         <div id="startAgentRows" style="display:flex;flex-direction:column;gap:12px">
@@ -9380,6 +9521,41 @@
     let activeWorkspace = null;
     let activeTab = null;
     let projects = [], activeProject = null;
+
+    // Which Projects to put first. A roster derived from a directory listing is in whatever order
+    // the config file and the filesystem happened to produce, and past about a dozen entries the
+    // one you want is off the end of a strip you have to swipe. Most-recently-picked first, and
+    // everything else in roster order behind it — sort is stable, so a browser that has picked
+    // nothing sees exactly what it saw before this existed.
+    //
+    // This browser's own list, in localStorage and not in shared state: which Projects *this*
+    // hand reaches for is not a fact about the work, and a phone and a laptop disagreeing about
+    // it is each of them being right.
+    const PROJECT_RECENT_KEY = 'herdr_project_recent';
+    const PROJECT_RECENT_MAX = 32;
+
+    function projectRecent() {
+      try {
+        const v = JSON.parse(localStorage.getItem(PROJECT_RECENT_KEY) || '[]');
+        return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
+      } catch (e) { return []; }
+    }
+
+    function noteProjectUse(id) {
+      if (!id) return;
+      const next = [id, ...projectRecent().filter(x => x !== id)].slice(0, PROJECT_RECENT_MAX);
+      try { localStorage.setItem(PROJECT_RECENT_KEY, JSON.stringify(next)); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
+    // Containers are dropped: a root marked that way is a place projects live rather than one to
+    // work in. It stays on the roster — a pane sitting directly in it still has to be named
+    // something — it is simply never offered as somewhere to go.
+    function projectsForPicking() {
+      const rank = projectRecent();
+      const at = p => { const i = rank.indexOf(p.id); return i < 0 ? Infinity : i; };
+      return projects.filter(p => !p.container).sort((a, b) => at(a) - at(b));
+    }
     // Absence of start_options is the feature gate: no message, no Start session control.
     // startMode is which of the two things the shared dialog is currently asking about.
     let startOptions = null, startProjectId = null, startMode = 'agent';
@@ -12418,6 +12594,9 @@
           if (typeof launcherFailed === 'function') launcherFailed();
         }
       }
+      else if (msg.type === 'command_result' && msg.command === 'create_project') {
+        newProjectResult(msg);
+      }
       else if (msg.type === 'command_result' && msg.command === 'set_slot') {
         if (!msg.ok) { showToast(msg.error || 'Could not adjust the pane'); }
         else if (activePane === msg.pane_id) {
@@ -12693,7 +12872,22 @@
       applySections();
     }
 
+    // Compact is one line a card: the name and its badge, without the path under an agent or the
+    // session note under a Project. Two keys and not one, because the two lists share #agents and
+    // are read at different lengths — twenty projects is a keypad, twenty sessions is a feed.
+    // See compactButton in utils.js.
+    const PROJECTS_COMPACT_KEY = 'herdr_projects_compact';
+
     function renderBodyMain() {
+      // Set from storage on every draw rather than toggled where the buttons are: a snapshot
+      // arriving two seconds later rewrites this element, and a class hung on it by a click would
+      // go with it. Here it survives, whichever of the branches below draws the page.
+      const box = document.getElementById('agents');
+      if (box) {
+        box.classList.toggle('projects-compact', compactOn(PROJECTS_COMPACT_KEY));
+        box.classList.toggle('agents-compact',
+          typeof AGENTS_COMPACT_KEY === 'string' && compactOn(AGENTS_COMPACT_KEY));
+      }
       if (projects.length) { renderProjects(); return; }
       const workspaces = [...new Set(agents.map(a => a.workspace_id).filter(Boolean))];
       if (workspaces.length <= 1) {
@@ -12711,15 +12905,37 @@
     function renderProjects() {
       if (activeProject && !projects.some(p => p.id === activeProject)) activeProject = null;
       let html = hoistHtml(ofKind(agents));
-      html += `<div class="chip-strip"><span class="chip-label">Projects</span>`;
+      // Most-recently-picked first, containers left out. Same list drives the cards below, so the
+      // strip and what it filters never disagree about which order Projects are in.
+      const picks = projectsForPicking();
+      // A heading like every other one on this page, with the thing that makes a Project hanging
+      // off its right the way Reorder tabs and + hang off the Agents header. The chips go on their
+      // own line under it: they are a filter over what follows, not part of its title.
+      html += `<div class="section-header projects-header">Projects`
+        // Compact first, + last: the same right-hand order the Launcher header uses, because + is
+        // the one that makes something rather than changing how what is there is read.
+        + (picks.length ? compactButton(PROJECTS_COMPACT_KEY, 'renderBody', 'Compact projects') : '')
+        + (startOptions && projects.some(p => p.root)
+          ? '<button class="section-action" onclick="openNewProject(event)">+ Project</button>' : '')
+        + `</div>`;
+      html += `<div class="chip-row"><div class="chip-strip" id="projectChips">`;
       html += `<button class="chip${activeProject === null ? ' active' : ''}" onclick="selectProject(null)">All</button>`;
-      for (const p of projects) {
+      for (const p of picks) {
         const list = agents.filter(a => a.project_id === p.id);
-        html += `<button class="chip${activeProject === p.id ? ' active' : ''}${alertClass(groupKind(list))}" onclick="selectProject('${p.id}')">${p.label}</button>`;
+        html += `<button class="chip${activeProject === p.id ? ' active' : ''}${alertClass(groupKind(list))}" onclick="selectProject('${p.id}')">${escapeHtml(p.label)}</button>`;
       }
       html += `</div>`;
+      // Beside the scroller, not inside it: a button floating over the last chip is a button
+      // sitting on top of something you were trying to read. Drawn always and shown only when the
+      // strip overflows, so the measurement reveals it rather than inserting it — inserting it
+      // would change the width it just measured.
+      html += `<button class="chip chip-more" id="projectMore" hidden aria-haspopup="menu"`
+        + ` aria-expanded="${projectMenuOpen}" aria-label="Every project"`
+        + ` onclick="toggleProjectMenu()">···</button>`;
+      html += `</div>`;
+      html += projectMenuHtml(picks);
       if (activeProject === null) {
-        html += projects.map(projectCard).join('');
+        html += picks.map(projectCard).join('');
         // Every agent, flat, exactly the way Terminals are listed below it. A Project card is a
         // filter, not the only door in: a session visible in a card's count was two taps away and
         // is now one. Whatever needs you is already hoisted to the top, so it is not repeated.
@@ -12743,6 +12959,62 @@
           : section('Agents', [], agentKind ? `No ${agentKind} sessions` : 'No sessions');
       }
       document.getElementById('agents').innerHTML = html;
+      syncProjectOverflow();
+    }
+
+    // Whether the full list under the strip is open. Module state rather than the DOM's: the list
+    // is written into #agents, which is rebuilt on every snapshot, and a menu that closed itself
+    // every two seconds would be a menu nobody could read to the end of.
+    let projectMenuOpen = false;
+
+    function projectMenuHtml(picks) {
+      const item = (id, label) =>
+        `<button class="menu-item" role="menuitemradio" aria-checked="${activeProject === id}"`
+        + ` onclick="selectProject(${id === null ? 'null' : `'${id}'`})">`
+        + `<span class="tick">${activeProject === id ? '✓' : ''}</span>${escapeHtml(label)}</button>`;
+      // Every Project, including the ones the strip is showing. A list of only what is hidden
+      // changes what it holds as the window resizes, which is a list you cannot learn.
+      return `<div class="chip-menu" id="projectMenu" role="menu"${projectMenuOpen ? '' : ' hidden'}>`
+        + item(null, 'All') + picks.map(p => item(p.id, p.label || p.id)).join('')
+        + `</div>`;
+    }
+
+    function toggleProjectMenu() {
+      projectMenuOpen = !projectMenuOpen;
+      render();
+    }
+
+    // Measured, not counted. Whether the chips fit is a question about the width of this screen
+    // and the length of these names, and nothing else can answer it.
+    function syncProjectOverflow() {
+      const strip = document.getElementById('projectChips');
+      const more = document.getElementById('projectMore');
+      const menu = document.getElementById('projectMenu');
+      if (!strip || !more) return;
+      // Taken out of the row before the row is measured. It is what the measurement decides about,
+      // so leaving it in would let a window widened past the last chip keep the button alive on
+      // the width of the button itself.
+      more.hidden = true;
+      const over = strip.scrollWidth > strip.clientWidth + 1;
+      more.hidden = !over;
+      // A window widened until everything fits takes the list with it: the control that opened it
+      // is gone, and a list with no way back to it is a list that cannot be closed.
+      if (!over && projectMenuOpen) {
+        projectMenuOpen = false;
+        if (menu) menu.hidden = true;
+      }
+    }
+
+    window.addEventListener('resize', syncProjectOverflow);
+
+    // The mark a Project card leads with, the way an agent card leads with its robot and a
+    // conversation card with its bubble: a folder, which is what a Project is on disk. Inline, like
+    // both of those — one file, no request, and it takes the colour it is given.
+    function projectGlyph() {
+      return '<svg class="project-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + '<path d="M3 7.5a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.7.9l.8 1.2H19a2 2 0 0 1 2 2v8.9a2 2 0 0 1'
+        + '-2 2H5a2 2 0 0 1-2-2z"/></svg>';
     }
 
     function projectCard(p) {
@@ -12765,9 +13037,9 @@
       const start = startOptions
         ? `<button class="chip chip-add" aria-label="Start session in ${p.label}" onclick="openStartDialog('${p.id}',event)">+ Start</button>`
         : '';
-      return `<div class="agent" role="button" tabindex="0" aria-label="${p.label}, ${meta}" onclick="selectProject('${p.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectProject('${p.id}')}">
+      return `<div class="agent project-card" role="button" tabindex="0" aria-label="${p.label}, ${meta}" onclick="selectProject('${p.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectProject('${p.id}')}">
     <span class="dot" style="background:${color}" aria-hidden="true"></span>
-    <div class="info"><div class="project">${p.label}${host}</div><div class="meta">${meta}</div></div>
+    <div class="info"><div class="project"><span class="project-kind" aria-hidden="true">${projectGlyph()}</span>${p.label}${host}</div><div class="meta">${meta}</div></div>
     ${start}
     <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
   </div>`;
@@ -12895,7 +13167,14 @@
 
     // A workspace ID from one Project means nothing under another, and leaving it set
     // silently filters the new Project down to nothing.
-    function selectProject(id) { activeProject = id; activeWorkspace = null; activeTab = null; render(); }
+    function selectProject(id) {
+      activeProject = id;
+      projectMenuOpen = false;   // picking from the list is the list's whole purpose
+      noteProjectUse(id);   // null is "All", which is not a Project and is never remembered
+      activeWorkspace = null;
+      activeTab = null;
+      render();
+    }
     function selectWorkspace(id) { activeWorkspace = id; activeTab = null; render(); }
     function backToWorkspaces() { activeWorkspace = null; activeTab = null; render(); }
     function selectTab(id) { activeTab = id; render(); }
@@ -13417,13 +13696,36 @@
       row.hidden = !startAskProject;
       row.style.display = startAskProject ? '' : 'none';
       if (!startAskProject) return;
+      const pick = projectsForPicking();
       row.innerHTML = '<div class="start-field">Project<div class="badge-strip">'
-        + (projects.length
-          ? projects.map(p => badgeHtml(p.label || p.id, p.id === startProjectId,
+        + (pick.length
+          ? pick.map(p => badgeHtml(p.label || p.id, p.id === startProjectId,
               `startPickProject('${escapeHtml(p.id)}')`,
               {proj: true, title: p.host && p.host !== 'local' ? 'on ' + p.host : ''})).join('')
           : '<span class="field-note">This relay has no Projects configured.</span>')
         + '</div></div>';
+    }
+
+    // A root is a Project whose subdirectories are Projects, so a start into one may name a
+    // directory that is not there yet: the relay makes it and the next scan adopts it, which is
+    // the same row a directory made by hand would have produced. Optional — left empty the start
+    // lands in the root itself, which is what every start did before the field existed.
+    //
+    // Rebuilt on every pick rather than kept: a name typed under one root means nothing under
+    // another, and a stale value would ride along on a start the user believes is going to the
+    // root itself.
+    function renderStartChild() {
+      const row = document.getElementById('startChildRow');
+      if (!row) return;
+      const p = projects.find(x => x.id === startProjectId);
+      const show = !!(p && p.root && startMode !== 'terminal');
+      row.hidden = !show;
+      row.style.display = show ? '' : 'none';
+      row.innerHTML = show
+        ? '<label class="start-field">New folder <span class="field-note">optional</span>'
+          + '<input id="startChild" type="text" maxlength="64" autocapitalize="none"'
+          + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`
+        : '';
     }
 
     // Picking one redraws the rest: placement is answered against what that Project has running,
@@ -13433,6 +13735,7 @@
       startProjectId = id;
       syncStartProjectBadge();
       renderStartProjects();
+      renderStartChild();
       renderStartTarget();
       if (document.getElementById('startSubmit').disabled) {
         document.getElementById('startPlacement').value = 'new_workspace';
@@ -13462,6 +13765,7 @@
       startAskProject = !projectId || !projects.some(x => x.id === projectId);
       syncStartProjectBadge();
       renderStartProjects();
+      renderStartChild();
       document.getElementById('startTitle').textContent = terminal ? 'New terminal' : 'Start session';
       document.getElementById('startAgentRows').style.display = terminal ? 'none' : '';
       document.getElementById('startSubmit').textContent = terminal ? 'Open terminal' : 'Start session';
@@ -13507,6 +13811,84 @@
       // live button that silently does nothing is worse than one that says it is not ready yet.
       if (!startProjectId) document.getElementById('startSubmit').disabled = true;
       document.getElementById('startSheet').style.display = 'block';
+    }
+
+    // --- New project ---
+    //
+    // A Project is a directory under a root, so making one is a mkdir the relay does and nothing
+    // more: the next scan lists the root, finds the directory, and derives the same row it would
+    // have derived for one made by hand. No pane, no agent, nothing to place.
+    let newProjectRoot = null;
+
+    function newProjectRoots() { return projects.filter(p => p.root); }
+
+    function renderNewProjectRoots() {
+      const row = document.getElementById('newProjectRootRow');
+      const roots = newProjectRoots();
+      // One root is not a question. Asking it anyway would be a tap that has one answer.
+      const show = roots.length > 1;
+      row.hidden = !show;
+      row.style.display = show ? '' : 'none';
+      row.innerHTML = show
+        ? '<div class="start-field">Under<div class="badge-strip">'
+          + roots.map(p => badgeHtml(p.label || p.id, p.id === newProjectRoot,
+              `pickNewProjectRoot('${escapeHtml(p.id)}')`, {proj: true})).join('')
+          + '</div></div>'
+        : '';
+    }
+
+    function pickNewProjectRoot(id) {
+      newProjectRoot = id;
+      renderNewProjectRoots();
+    }
+
+    function openNewProject(ev) {
+      if (ev) ev.stopPropagation();
+      const roots = newProjectRoots();
+      if (!roots.length) return;
+      // Opens under the Project being looked at when that Project is itself a root — the common
+      // case for "another one of these" — and on the first root otherwise.
+      const here = roots.find(p => p.id === activeProject);
+      newProjectRoot = (here || roots[0]).id;
+      document.getElementById('newProjectName').value = '';
+      setNewProjectError('');
+      document.getElementById('newProjectSubmit').disabled = false;
+      renderNewProjectRoots();
+      document.getElementById('newProjectSheet').style.display = 'block';
+      document.getElementById('newProjectName').focus();
+    }
+
+    function closeNewProject() {
+      document.getElementById('newProjectSheet').style.display = 'none';
+      newProjectRoot = null;
+    }
+
+    function setNewProjectError(text) {
+      const el = document.getElementById('newProjectError');
+      el.textContent = text || '';
+      el.style.display = text ? '' : 'none';
+    }
+
+    function submitNewProject() {
+      if (!ws || !newProjectRoot) return;
+      // A field holding only spaces looks empty and is not. The relay is the one place that says
+      // which names are names, so every non-empty value goes there unchanged.
+      const name = document.getElementById('newProjectName').value || '';
+      if (!name) { setNewProjectError('Name the folder this project lives in'); return; }
+      setNewProjectError('');
+      document.getElementById('newProjectSubmit').disabled = true;
+      ws.send(JSON.stringify({type: 'create_project', project_id: newProjectRoot, name: name}));
+    }
+
+    // The roster arrives on its own `projects` broadcast, so there is nothing to add here: the
+    // sheet closes and the Project it made is selected, which the broadcast has already drawn.
+    function newProjectResult(msg) {
+      const el = document.getElementById('newProjectSheet');
+      if (!el || el.style.display === 'none') return;
+      document.getElementById('newProjectSubmit').disabled = false;
+      if (!msg.ok) { setNewProjectError(msg.error || 'Could not create that project'); return; }
+      closeNewProject();
+      if (msg.project_id) selectProject(msg.project_id);
     }
 
     function closeStart() {
@@ -13582,6 +13964,18 @@
       // Only when it is on. The relay's default is a session that asks before it acts, and saying
       // so on the wire would be a longer way of saying nothing.
       if (!terminal && startUnattendedOn()) msg.unattended = true;
+      // Only an agent start carries it, and only a root draws the field. Trimmed, like the Name
+      // field above: the spaces a phone keyboard puts either side of a word are not part of what
+      // anyone typed, and trimming cannot make an unacceptable name acceptable — whitespace is
+      // not in the charset the relay checks, so the same names are refused either way.
+      //
+      // A field holding *only* spaces is sent as it stands rather than trimmed away to nothing:
+      // it looks empty and is not, and dropping it would start the session in the root while the
+      // user believed they had named a folder. The relay refuses it and says so.
+      const childField = terminal ? null : document.getElementById('startChild');
+      const raw = childField ? (childField.value || '') : '';
+      const child = raw.trim() || raw;
+      if (child) msg.child = child;
       if (placement !== 'split') msg.slot = slotFor();
       // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
       // answered that for an agent, this answers it for the other message. Omitted, not empty — the
@@ -15110,8 +15504,8 @@
             : '<p class="ql-none">This tile is a template — pick the Project to start it in.</p>')
           + launcherRosterHtml(tile)
           + '<div class="start-field">Project<div class="badge-strip">'
-          + (projects.length
-            ? projects.map(p => badgeHtml(p.label || p.id, p.id === tile.project_id,
+          + (projectsForPicking().length
+            ? projectsForPicking().map(p => badgeHtml(p.label || p.id, p.id === tile.project_id,
                 `launcherLaunchProject('${escapeHtml(p.id)}')`,
                 {proj: true, title: p.host && p.host !== 'local' ? 'on ' + p.host : ''})).join('')
             : '<span class="ql-none">This relay has no Projects configured.</span>')
@@ -15352,8 +15746,8 @@
         + '<div class="start-field">Project<div class="badge-strip">'
         + badgeHtml('Ask each time', !d.project_id, "launcherPickProject('')",
                     {title: 'A template — the Project is picked when the tile is pressed'})
-        + (projects.length
-          ? projects.map(p => badgeHtml(p.label || p.id, p.id === d.project_id,
+        + (projectsForPicking().length
+          ? projectsForPicking().map(p => badgeHtml(p.label || p.id, p.id === d.project_id,
               `launcherPickProject('${escapeHtml(p.id)}')`,
               {proj: true, title: p.host && p.host !== 'local' ? 'on ' + p.host : ''})).join('')
           : '<span class="ql-none">This relay has no Projects configured.</span>')
@@ -22090,7 +22484,7 @@
       const color = statusColor(a);
       const pulseClass = a.status === 'working' ? ' pulse' : '';
       const host = a.host && a.host !== 'local' ? ` <span style="color:var(--orange);font-size:0.6rem">@${a.host}</span>` : '';
-      const cwd = a.cwd ? `<span style="font-family:monospace;opacity:0.7">${a.cwd.split('/').slice(-2).join('/')}</span>` : '';
+      const cwd = a.cwd ? `<span class="cwd" style="font-family:monospace;opacity:0.7">${a.cwd.split('/').slice(-2).join('/')}</span>` : '';
       // Escaped once here rather than at each aria-label: a pane can be renamed to anything with a
       // quote in it, and an attribute that breaks out of itself is not a cosmetic bug.
       const label = escapeHtml(paneLabel(a));
@@ -22145,8 +22539,12 @@
     // group is currently on top, so it stays visible without a second heading above status groups.
     // Appended after the list is written rather than built into section(), which has no way of
     // knowing which of its calls came first.
+    const AGENTS_COMPACT_KEY = 'herdr_agents_compact';
+
     function addOrderButton() {
-      const header = document.querySelector('#agents .section-header');
+      // Not simply the first heading: the Projects strip draws one above every agent group, and
+      // these two buttons are about the tab strip and the agents in it.
+      const header = document.querySelector('#agents .section-header:not(.projects-header)');
       if (!header) return;
       // The kind filter on a line of its own under the header, not inside it. In the header it was
       // competing for the same row as the title and the two right-hand buttons — on a phone that
@@ -22155,6 +22553,8 @@
       // has to be.
       const filter = agentKindsHtml(agents);
       if (filter) header.insertAdjacentHTML('afterend', filter);
+      header.insertAdjacentHTML('beforeend',
+        compactButton(AGENTS_COMPACT_KEY, 'renderBody', 'Compact sessions'));
       header.insertAdjacentHTML('beforeend',
         '<button class="section-action" onclick="openOrder()"' +
         ' title="The order of the tab strip. The cards below are newest-first."' +
