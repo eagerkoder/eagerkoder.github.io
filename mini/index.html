@@ -5376,6 +5376,61 @@
       cursor: default;
     }
 
+    /* The identity table. Wider than a phone by construction — an agent id, a pane id, a host, a
+       project and a working directory do not fit in 390 points and shortening any of them would
+       defeat the point of showing them — so it scrolls inside its own box rather than making the
+       dialog scroll sideways. */
+    .conv-ids {
+      overflow-x: auto;
+      padding: 12px 16px 16px;
+    }
+
+    .conv-ids table {
+      border-collapse: collapse;
+      font-size: 0.68rem;
+      width: 100%;
+    }
+
+    .conv-ids th {
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 600;
+      padding: 4px 10px 6px 0;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .conv-ids td {
+      border-bottom: 1px solid var(--border);
+      padding: 6px 10px 6px 0;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    /* The ids themselves in the pane's own face: they are read character by character when they
+       are read at all, and that is the one thing a proportional font is bad at. */
+    .conv-ids .mono {
+      font-family: 'SF Mono', 'Menlo', monospace;
+    }
+
+    /* A member whose pane has gone is still a member, and its row still carries the id that will
+       find it again. Dimmed, not hidden. */
+    .conv-ids tr.gone td {
+      color: var(--muted);
+    }
+
+    .conv-ids .missing {
+      color: var(--muted);
+      opacity: 0.6;
+    }
+
+    .conv-ids .conv-ids-note {
+      color: var(--muted);
+      font-size: 0.62rem;
+      margin: 10px 0 0;
+      white-space: normal;
+    }
+
     /* The menu items are listed too, and not because they differ: their resting rule names an
        element as well as two classes, so it outweighs this one on background and border and the
        drain would never be seen. Same declarations, enough specificity to be reached. */
@@ -8916,6 +8971,26 @@
     </div>
   </div>
 
+  <!-- What a conversation's members *are*, as opposed to what they are doing. The roster row shows
+       a name, a badge and a state; this shows the identity underneath it — the agent id a member
+       is followed by, and the pane it is sitting in, which are two different facts that the rest
+       of the app is careful never to confuse. Asked once, when something looks wrong, so it is a
+       dialog rather than more columns on a row used every day. -->
+  <div id="convIdsModal" class="app-overlay" style="display:none;z-index:121;">
+    <div onclick="closeConvIds()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div role="dialog" aria-label="Member identities"
+      style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:720px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1" id="convIdsTitle">Members</span>
+        <button id="convIdsCopy" onclick="convIdsCopy()"
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:0.65rem;padding:4px 8px;cursor:pointer">Copy</button>
+        <button onclick="closeConvIds()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="convIdsBody"></div>
+    </div>
+  </div>
+
   <!-- Recent — every live pane, agents and terminals, in the order this device opened them. -->
   <div id="recentSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeRecentSheet()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
@@ -9000,6 +9075,25 @@
     function activeAgent() {
       if (!activePane) return null;
       return agents.find(a => activeAid ? a.aid === activeAid : a.pane_id === activePane) || null;
+    }
+
+    // Whether a `pane_content` answer is for the pane on screen.
+    //
+    // The relay echoes back the address that selected the content, so an echoed `aid` is the aid
+    // of the pane it read — an answer to what was asked, not a claim about what is open. It can
+    // therefore only ever confirm a match; it must never refuse one. Requiring it to equal
+    // `activeAid` did refuse one, for every pane opened without an aid to hand: a notification's
+    // deep link, the conversation view's pane switcher, the pair strip. `refreshPane` addresses
+    // those by resolving the pane id to a live agent — which has an aid — so the read went out
+    // carrying one while `activeAid` was still null, the echo disagreed with it, and the content
+    // was filed as a background read of somebody else's pane. The pane painted nothing and said
+    // "loading" for ever, while the same pane opened from the agent list was fine.
+    function paneContentIsOpen(msg) {
+      if (!activePane) return false;
+      // Opened *as* an agent: the aid is the stronger answer, and the one that keeps a recycled
+      // pane id from painting the colleague that inherited it.
+      if (activeAid && msg.aid) return msg.aid === activeAid;
+      return msg.pane_id === activePane;
     }
 
     // How a pane is named on the wire. Both fields when there is an id to send: `aid` is what the
@@ -12061,9 +12155,11 @@
 
     // A jump is a destination, so the panel the user was in is left behind rather than closed back
     // into — openTerminal pushes the pane onto the walk, and the panel stays where it was on it.
-    function jumpToPane(paneId) {
+    // `aid` where the caller has the agent in hand. Optional because most callers have only a pane
+    // id — a notification, a transfer's destination — and a pane id alone still opens the pane.
+    function jumpToPane(paneId, aid) {
       hidePanels();
-      openTerminal(paneId);
+      openTerminal(paneId, aid);
     }
 
     function toggleSettings() {
@@ -12894,8 +12990,7 @@
         renderBandwidth();
         renderQuickActions();  // the approval buttons belong on screen the moment it blocks
         syncConvBadge();
-      } else if (msg.type === 'pane_content' && (msg.pane_id !== activePane ||
-                 (msg.aid && msg.aid !== activeAid))) {
+      } else if (msg.type === 'pane_content' && !paneContentIsOpen(msg)) {
         // A pane that is in a conversation, read because its turn just ended. Recorded, never
         // drawn: recordPane ignores any pane no conversation names, so a stray read is harmless.
         const pane = msg.aid ? agents.find(a => a.aid === msg.aid) : paneOf(msg.pane_id);
@@ -23516,7 +23611,9 @@
       convSetView(live, conv.id);
       // No "return to this conversation" carried along: the conversation is the entry behind this
       // one on the walk, and Back is that entry.
-      jumpToPane(live.pane_id);
+      // As the agent, not as the pane: this row was resolved from a member key to a live colleague
+      // a line ago, and that is the identity the pane should be opened under.
+      jumpToPane(live.pane_id, live.aid);
     }
 
     let convStandaloneToken = 0, convStandaloneHtml = '';
@@ -23753,6 +23850,11 @@
         ` aria-label="Pause every session in this conversation and start each one again">` +
         `Restart all</button>` +
         `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
+        // Beside Copy, and for the same reason: neither one changes anything. What a member *is*
+        // — the agent id it is followed by, the pane it is in now — is nowhere on the row, and it
+        // is exactly what somebody needs when a row is drawn in a place they did not expect.
+        `<button onclick="openConvIds()" aria-label="Show each member's agent id and pane">` +
+        `List</button>` +
         `<button class="arm-btn" onclick="armButton(this, 'Duplicate?', duplicateConversation)"` +
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
         `Duplicate</button>` +
@@ -23765,6 +23867,117 @@
           ? `<button onclick="openNewAgent()" aria-label="Start a new agent in this conversation">` +
             `New agent</button>` : '') +
         `</div>${tier}</div>`;
+    }
+
+    // --- Member identities ---------------------------------------------------------------------
+    //
+    // A member is followed by its `aid` and filed under a pane-shaped key, so "which agent is this
+    // row" and "which terminal is it in" are two questions with two answers. Every control on the
+    // roster resolves one into the other and none of them shows either, which is fine until they
+    // disagree — a pane recycled, an agent moved, a relay too old to mint ids — and then there is
+    // nowhere in the app that says what the browser actually holds. This is that place.
+    //
+    // Read-only on purpose. Nothing here is a control: a table that could also repair something
+    // would be a table people press, and what it is for is being believed.
+    let convIdsFor = '';
+
+    // The fields, once, so the table and the clipboard cannot drift apart.
+    const CONV_ID_COLS = [
+      ['Member', 'name'], ['Harness', 'agent'], ['Agent id', 'aid'], ['Pane', 'pane'],
+      ['Host', 'host'], ['Project', 'project'], ['State', 'state'], ['Msgs', 'messages'],
+      ['Directory', 'cwd'],
+    ];
+
+    function convIdsRows(conv) {
+      const live = new Map(agents.map(x => [convMemberKey(x), x]));
+      const recs = (typeof convViewRecs !== 'undefined' && convViewRecs) || [];
+      const off = convHidden(conv.id);
+      return (conv.members || []).map(m => {
+        const rec = recs.find(r => r.key === m.key) || {};
+        const pane = live.get(m.key) || null;
+        const spawn = rec.spawn || {};
+        // The key is the only thing that survives a pane closing, so it answers host and cwd for a
+        // member nothing is running for. It is a fingerprint of where the member *was*, which is
+        // the honest answer to "where is it" when the answer is "nowhere".
+        let host = '', cwd = '';
+        try {
+          const parts = JSON.parse(m.key);
+          if (Array.isArray(parts)) { host = parts[0] || ''; cwd = parts[3] || ''; }
+        } catch (e) { /* a key this browser cannot read still has every other column */ }
+        return {
+          key: m.key,
+          live: !!pane,
+          name: convMemberName(m.key, rec.label, m.label, 'Former pane'),
+          agent: (pane && pane.agent) || spawn.agent || m.agent || '',
+          // Off the pane first: the member's own copy is what was true when it was last written,
+          // and convFollowAids folds the live one back onto it. Where the two differ the pane is
+          // right, and showing the stale one would make this table the thing that is wrong.
+          aid: (pane && pane.aid) || m.aid || '',
+          pane: pane ? pane.pane_id : convKeyPaneId(m.key),
+          host: (pane && pane.host) || host || 'local',
+          project: pane ? (pane.project_id || '') : (spawn.project_id || m.project || ''),
+          state: off.has(m.key) ? 'hidden' : (pane ? 'recording' : 'paused'),
+          messages: String(m.messages || 0),
+          cwd: (pane && pane.cwd) || spawn.cwd || cwd,
+          // Every pane this member has sat in before this one. The whole reason the key is not the
+          // identity, kept where the identity is being read.
+          was: (m.was || []).join(' '),
+        };
+      });
+    }
+
+    function convIdsHtml(conv) {
+      const rows = convIdsRows(conv);
+      const cell = (r, f) => {
+        const v = r[f];
+        if (!v) return '<td class="missing">—</td>';
+        const mono = f === 'aid' || f === 'pane' || f === 'cwd';
+        // The panes a member has been in before, on the pane it is in now: it is the same fact,
+        // and a column of its own would be empty for every member that has never moved.
+        const title = f === 'pane' && r.was ? ` title="Previously ${escapeHtml(r.was)}"` : '';
+        return `<td class="${mono ? 'mono' : ''}"${title}>${escapeHtml(String(v))}` +
+          (f === 'pane' && !r.live ? ' <span class="missing">(gone)</span>' : '') + '</td>';
+      };
+      const body = rows.map(r => `<tr class="${r.live ? '' : 'gone'}">` +
+        CONV_ID_COLS.map(c => cell(r, c[1])).join('') + '</tr>').join('');
+      return '<div class="conv-ids"><table><thead><tr>' +
+        CONV_ID_COLS.map(c => `<th>${escapeHtml(c[0])}</th>`).join('') +
+        `</tr></thead><tbody>${body}</tbody></table>` +
+        `<p class="conv-ids-note">This conversation is ` +
+        `<span class="mono">${escapeHtml(conv.id || '')}</span>. A member is followed by its agent ` +
+        `id, not by its pane — a pane id is herdr's and gets recycled. An empty agent id is a ` +
+        `member last written by a relay too old to mint them; it is filled in the next time that ` +
+        `member is seen running.</p></div>`;
+    }
+
+    function openConvIds() {
+      const conv = loadConvIndex().find(c => c.id === convCurrentId());
+      if (!conv) return;
+      convIdsFor = conv.id;
+      const body = document.getElementById('convIdsBody');
+      if (body) body.innerHTML = convIdsHtml(conv);
+      const title = document.getElementById('convIdsTitle');
+      if (title) title.textContent = `Members · ${conv.name || 'Conversation'}`;
+      const box = document.getElementById('convIdsModal');
+      if (box) box.style.display = 'block';
+    }
+
+    function closeConvIds() {
+      convIdsFor = '';
+      const box = document.getElementById('convIdsModal');
+      if (box) box.style.display = 'none';
+    }
+
+    // Tab-separated, because the thing anybody does with this is paste it at an agent, and the one
+    // format every agent already reads is a table it can see the columns of.
+    function convIdsCopy() {
+      const conv = loadConvIndex().find(c => c.id === convIdsFor);
+      if (!conv) return;
+      const line = r => CONV_ID_COLS.map(c => r[c[1]] || '').join('\t');
+      const text = [`# ${conv.name || 'Conversation'} (${conv.id})`,
+                    CONV_ID_COLS.map(c => c[0]).join('\t')]
+        .concat(convIdsRows(conv).map(line)).join('\n');
+      writeClipboard(text, () => showToast('Copied', 'info'));
     }
 
     // The starter role a session was begun as, from the record or — for a record that predates it —
@@ -27108,7 +27321,7 @@
       if (at) { openTerminal(at); return; }
       const conv = loadConvIndex().find(c => c.id === convCurrentId());
       if (!conv) return;
-      const live = arbMemberRows(conv, ''), free = arbArbiterRows(conv, undefined, '');
+      const live = arbSlotRows(conv, undefined, ''), free = arbArbiterRows(conv, undefined, '');
       // Refused only when the dialog could do nothing about it. A missing member or a missing
       // arbitrator is a slot away now that each one can start its own — what is not answerable
       // from here is a relay that will not start agents at all, or a conversation whose own
@@ -27259,6 +27472,24 @@
         .map(x => ({key: convMemberKey(x), pane: x, label: paneLabel(x)}));
       const have = new Set(rows.map(r => r.key));
       return rows.concat(arbMemberRows(conv, except).filter(r => !r.pane && !have.has(r.key)));
+    }
+
+    // What a member slot offers: this conversation's roster first, then every other pane in the
+    // project. The roster is what somebody almost always means, so it stays at the top of the
+    // list — but it is not the whole answer, and treating it as one made the two member slots the
+    // only place in this dialog where a pane sitting right there could not be picked. A
+    // conversation is this browser's grouping of transcripts; a session is three terminals. The
+    // relay has never asked whether a member is in the conversation (`check_participants`), only
+    // that it is live, local, unheld and in one project, so the narrower list was refusing what
+    // the wire would have taken.
+    //
+    // The arbitrator's own row set is reused rather than re-derived: which pane may be written to
+    // and which may referee is the same question, and the one difference — an agent cannot be both
+    // — is already answered by `duplicate_participant` and said earlier by `arbCheckSetup`.
+    function arbSlotRows(conv, project, except) {
+      const rows = arbMemberRows(conv, except);
+      const have = new Set(rows.map(r => r.key));
+      return rows.concat(arbArbiterRows(conv, project, except).filter(r => !have.has(r.key)));
     }
 
     // Whether a paused member can be brought back at all — the same record-shaped question the
@@ -27830,7 +28061,7 @@
       const free = arbArbiterRows(conv, arbPickedProject(conv, at), mine);
       // Members too, and for the same reason: a member of another session is a pane that session
       // is deciding about, and enrolling it here would put two arbitrators over one terminal.
-      const rows = arbMemberRows(conv, mine);
+      const rows = arbSlotRows(conv, arbPickedProject(conv, at), mine);
       if (el) el.innerHTML = arbSetupHtml(rows, free, at, !!mine, holding || arbHoldNote());
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
@@ -28040,8 +28271,11 @@
     // three members, or with every other pane busy, silently had no arbitration at all and no way
     // to find out why. Both reasons are things a person can act on, so both are said out loud.
     function arbWhyNot(live, free, project) {
+      // "this project" and not "this conversation": a member slot offers every pane in the
+      // project now, so a room with one member in a project with two other agents is not short of
+      // anybody, and saying it was sent people looking for a member they did not need.
       const why = live.length < 2
-        ? 'Arbitration watches two agents talk. This conversation has ' +
+        ? 'Arbitration watches two agents talk. This project has ' +
           (live.length === 1 ? 'one agent in it.' : 'none in it.')
         : project === null
         ? 'Arbitration needs everyone in one project, and this conversation spans more than one.'
@@ -28124,7 +28358,7 @@
       // Members that can be woken, not panes that are running. A conversation whose sessions have
       // all been paused is exactly the one somebody opens this dialog on, and counting live panes
       // told them it had none in it — about a roster every row of which has a Restart.
-      const live = arbMemberRows(conv, except);
+      const live = arbSlotRows(conv, undefined, except);
       const scope = at.arbScope.trim();
       const picks = [at.arbFirst, at.arbSecond];
       const roles = ['arbRoleFirst', 'arbRoleSecond'].map(arbRoleValue);
