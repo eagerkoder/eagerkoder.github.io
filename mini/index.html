@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-08-29">
+  <meta name="app-built" content="2026-08-30">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -8989,11 +8989,39 @@
 
     <script>
     let ws = null, agents = [], activePane = null, refreshInterval = null, userScrolledUp = false;
+    // Which *agent* the open pane is, as opposed to which pane it is. A pane id is herdr's
+    // per-server counter, so two hosts polled by one relay both report w1:p1 and `activePane`
+    // alone cannot say which of them was tapped. Set beside it, cleared with it.
+    let activeAid = null;
+
+    // The agent in the open pane. Every caller used to write this find itself, keyed on the pane
+    // id, and so every caller picked whichever host sorted first. The fallback is not decoration:
+    // a relay too old to mint ids sends none, and there behaviour is exactly what it always was.
+    function activeAgent() {
+      if (!activePane) return null;
+      return agents.find(a => activeAid ? a.aid === activeAid : a.pane_id === activePane) || null;
+    }
+
+    // How a pane is named on the wire. Both fields when there is an id to send: `aid` is what the
+    // relay routes on when two hosts' pane counters collide, `pane_id` is what a relay too old to
+    // read the field still needs. Takes an agent, or the pane id of one this browser cannot name.
+    function paneAddr(a) {
+      if (typeof a === 'string' || !a) return { pane_id: a || null };
+      return a.aid ? { pane_id: a.pane_id, aid: a.aid } : { pane_id: a.pane_id };
+    }
     // When the socket went down, or 0 while it is up. The only record this app has that it was away:
     // `prevStatuses` survives a dropped socket, so a long outage with no reload looks like a
     // continuous session to everything else. Cleared by the first snapshot after the reconnect,
     // which is the one place that has to read it.
     let wsDownSince = 0;
+    // The agents this relay knows that have no live pane, from the same snapshot as `agents`.
+    // Empty against a relay too old to mint agent ids, which sends no `retired` key at all — its
+    // presence is the feature gate, as `shells` is for terminal mode.
+    //
+    // This is what a member's Restart is built from when this browser never watched it start. The
+    // spawn details used to live only in the local transcript record, so a member whose pane died
+    // in another browser could be offered nothing but "Restart as…".
+    let retiredAgents = [];
     // The last text sent to each pane, for Resend. In memory and not persisted: a prompt worth
     // repeating is one from the session you are in, and a button that fires a week-old transfer
     // into a live agent on the first tap after a reload is a worse offer than no button.
@@ -10368,33 +10396,70 @@
       return 'p_' + Math.random().toString(36).slice(2, 10);
     }
 
-    // All four fields, because herdr reuses a pane_id after a pane closes. A matching pane_id
-    // with a different cwd is a different session, and pasting into it is the worst failure here.
+    // The agent, when both sides know one. A pair is two *colleagues* on one job, and a colleague
+    // outlives the pane it is sitting in — so a member pinned to an agent id survives the restart,
+    // the herdr reboot and the recycled pane id that used to take the pair down with them.
+    //
+    // Otherwise all four fields, because herdr reuses a pane_id after a pane closes: a matching
+    // pane_id with a different cwd is a different session, and pasting into it is the worst
+    // failure here. That is still the answer for a pair made before agent ids existed, and for a
+    // relay too old to send one — and `healPairs` writes the id in the first time it re-points,
+    // so a pair only stays on this path while nothing has moved.
     function memberMatches(m, a) {
+      if (m.aid && a.aid) return m.aid === a.aid;
       return a.pane_id === m.pane_id && (a.host || 'local') === (m.host || 'local') &&
         a.agent === m.agent && (a.cwd || '') === (m.cwd || '');
     }
 
     function recentFingerprint(a) {
-      return { pane_id: a.pane_id, host: a.host || 'local', agent: a.agent, cwd: a.cwd || '' };
+      return { pane_id: a.pane_id, host: a.host || 'local', agent: a.agent, cwd: a.cwd || '',
+               // The one field that is not a description of a pane. Empty against a relay that
+               // does not mint them, which is what keeps the fingerprint above the answer.
+               aid: a.aid || '' };
     }
 
+    // One clause, and it is the whole of what stale means: a member no live pane answers to.
+    //
+    // There used to be a second — a pane id reported by more than one host — because every lookup
+    // below was keyed on that bare id and would have picked whichever host sorted first. The
+    // lookups take an agent now and resolve through memberMatches, and the relay accepts an `aid`
+    // as an address, so there is nothing left for it to stand in for. It went in the same change
+    // that made them unambiguous and not before; see the decision log, the agent is the address.
     function pairHealth(pair, list) {
       for (const m of pair.members) {
-        if (list.filter(a => a.pane_id === m.pane_id).length > 1)
-          return { state: 'stale', reason: `${m.pane_id} is reported by more than one host` };
         if (!list.some(a => memberMatches(m, a)))
           return { state: 'stale', reason: `${m.role || m.agent} (${m.pane_id}) is no longer running` };
       }
       return { state: 'healthy', reason: '' };
     }
 
-    function pairFor(list, paneId) {
+    // All three take a live agent, not a pane id. A pane id is herdr's per-server counter and two
+    // hosts report the same ones, so a pair found by one is whichever pair was written first.
+    // memberMatches prefers the agent id and falls back to the four-field fingerprint, which is
+    // host-qualified either way.
+    function pairFor(list, agent) {
+      if (!agent) return null;
+      return list.find(p => p.members.some(m => memberMatches(m, agent))) || null;
+    }
+
+    // "Does any pair name this pane slot" — a different question from which pair a live agent is
+    // in, and the only one two callers can ask. savePair drops by pane id so that a stale pair over
+    // the same slot goes with it, and the warning shown before it does has to see what it will
+    // drop; repointPair names a pane that has already gone, which no live agent answers to.
+    function pairNaming(list, paneId) {
       return list.find(p => p.members.some(m => m.pane_id === paneId)) || null;
     }
 
-    function memberOf(pair, paneId) { return pair.members.find(m => m.pane_id === paneId); }
-    function partnerOf(pair, paneId) { return pair.members.find(m => m.pane_id !== paneId); }
+    function memberOf(pair, agent) { return pair.members.find(m => memberMatches(m, agent)); }
+
+    // The other member, by position. A pair is exactly two (parsePairs enforces it), so this is
+    // total where "the first member that is not this agent" is not: an agent both members match —
+    // a degenerate pair over one pane — would find nothing and the strip would read `.pane_id` off
+    // undefined. An agent in neither answers the first member, which is what a pane id nobody
+    // recognised always did.
+    function partnerOf(pair, agent) {
+      return pair.members[pair.members.indexOf(memberOf(pair, agent)) === 0 ? 1 : 0];
+    }
 
     // Same host only: a bare pane_id cannot be routed unambiguously across hosts.
     function pairCandidates(list, source) {
@@ -11767,7 +11832,11 @@
       // The open pane, when it is in no pair. Same rule the project scope already follows: a strip
       // that cannot show the pane on screen is worse than one carrying an extra tab. Untinted, so
       // it reads as the exception it is.
-      const openPane = activePane && !out.some(a => a.pane_id === activePane) ? paneOf(activePane) : null;
+      // activeAgent first: paneOf is keyed on the pane id and would answer the wrong host's row
+      // for the open pane when two of them report the same id. paneOf still covers a shell,
+      // which has no agent and so no id to be found by.
+      const openPane = activePane && !out.some(a => a.pane_id === activePane)
+        ? (activeAgent() || paneOf(activePane)) : null;
       if (openPane) out.push(openPane);
       return out;
     }
@@ -11926,7 +11995,7 @@
     // What the bottom right says about the open pane, and whether that reads as good news.
     // Returns [word, tone] where tone is '' | 'on' | 'alert'.
     function paneStatusWord() {
-      const agent = activePane ? agents.find(x => x.pane_id === activePane) : null;
+      const agent = activeAgent();
       if (agent && AGENT_WORDS.includes(agent.status)) {
         return [agent.status, agent.status === 'blocked' ? 'alert'
           : agent.status === 'working' ? 'on' : ''];
@@ -12714,6 +12783,7 @@
         // Not `msg.shells || []` — a relay with terminal mode off sends no key at all, and this
         // has to read as "no terminals" rather than crash the next .filter.
         shells = Array.isArray(msg.shells) ? msg.shells : [];
+        retiredAgents = Array.isArray(msg.retired) ? msg.retired : [];
         // A pane told to quit is only finished once it turns up as a shell, and a snapshot is the
         // only thing that says so. Before the render, so the pane it exits is gone from this one.
         if (typeof endTick === 'function') endTick();
@@ -12758,6 +12828,9 @@
         // by the id the start named itself with. After openPendingStart, so a start this tab does
         // still hold the answer for lands the ordinary way, with its opening words.
         if (typeof convLandPending === 'function') convLandPending();
+        // After the notes, which are the explicit half of the same job: a member a note already
+        // moved is on its pane by the time this looks, and this then finds nothing to do.
+        if (typeof convFollowAids === 'function') convFollowAids();
         // Restart all, one member per landing. After the two above, which are what clear the way
         // for the next one — see convRestartStep.
         if (typeof convRestartStep === 'function') convRestartStep();
@@ -12821,10 +12894,12 @@
         renderBandwidth();
         renderQuickActions();  // the approval buttons belong on screen the moment it blocks
         syncConvBadge();
-      } else if (msg.type === 'pane_content' && msg.pane_id !== activePane) {
+      } else if (msg.type === 'pane_content' && (msg.pane_id !== activePane ||
+                 (msg.aid && msg.aid !== activeAid))) {
         // A pane that is in a conversation, read because its turn just ended. Recorded, never
         // drawn: recordPane ignores any pane no conversation names, so a stray read is harmless.
-        if (convRecordable(msg)) recordPane(msg.pane_id, (msg.content || '').split('\n'));
+        const pane = msg.aid ? agents.find(a => a.aid === msg.aid) : paneOf(msg.pane_id);
+        if (pane && convRecordable(msg)) recordPane(pane, (msg.content || '').split('\n'));
       } else if (msg.type === 'pane_content') {
         const el = document.getElementById('termContent');
         const prevHeight = el.scrollHeight;
@@ -12861,7 +12936,7 @@
         drawSel();
         // After the pane is drawn: recording must never be what a user waits on, and it runs on
         // the rows the read already produced.
-        if (convRecordable(msg)) recordPane(activePane, paneRows);
+        if (convRecordable(msg)) recordPane(activeAgent() || activePane, paneRows);
       }
     }
 
@@ -13415,7 +13490,7 @@
         // Not when either pane is in a pair already: savePair drops it, and the warning
         // choosePartner has just written is the one thing that must not be auto-answered.
         // Nor when saving refuses — at the pair ceiling the dialog stays up holding the reason.
-        if (![intent.pair, a.pane_id].some(id => pairFor(pairs, id))) savePair();
+        if (![intent.pair, a.pane_id].some(id => pairNaming(pairs, id))) savePair();
         const paired = !pairSource;   // savePair closes the dialog; a refusal leaves it open
         if (prompt) sendTextTo(a.pane_id, prompt);
         showSpawnStatus(`${a.label || a.agent || 'Session'} started` +
@@ -13453,7 +13528,7 @@
         // Not while the conversation window is up. A start made from a conversation is a request
         // for another colleague in it, not a request to stop reading it — and the member has just
         // appeared in the roster behind this.
-        if (!convWindowOpen()) openTerminal(a.pane_id);
+        if (!convWindowOpen()) openTerminal(a.pane_id, a.aid);
         else if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
         showSpawnStatus(conv ? `${a.label || a.agent || 'Session'} continued "${conv.name}".`
           : `${a.label || a.agent || 'Session'} started.`, 'success');
@@ -13464,7 +13539,7 @@
       // Nor out of the conversation window, which is the same rule about the same reader: a panel
       // is not `activePane`, so without naming it here every start made from one navigated away.
       // Unless the start was a Duplicate, which is a request made from that very pane.
-      if (intent === 'open' || (!activePane && !convWindowOpen())) openTerminal(a.pane_id);
+      if (intent === 'open' || (!activePane && !convWindowOpen())) openTerminal(a.pane_id, a.aid);
       if (prompt) sendTextTo(a.pane_id, prompt);
       showSpawnStatus(`${a.label || a.agent || 'Session'} started.`, 'success');
     }
@@ -13489,7 +13564,7 @@
     // Same harness, same Project, same tab, no dialog. Everything the dialog would have asked is
     // answered from the pane it was asked from — which is the whole point of the item.
     function duplicatePane() {
-      const a = activePane ? agents.find(x => x.pane_id === activePane) : null;
+      const a = activeAgent();
       if (!ws || !canDuplicate(a)) return;
       // Same agent means the same agent config — and an alias the relay no longer offers is not a
       // reason to quietly bring the copy up on the stock endpoint under the same name. The dialog
@@ -13531,7 +13606,7 @@
     // Spawn into the Project the open pane belongs to, without going back to the list to find
     // the card for it. Same dialog, same validation — only the Project is answered in advance.
     function startInThisProject() {
-      const a = agents.find(x => x.pane_id === activePane);
+      const a = activeAgent();
       if (!a || !a.project_id) return;
       openStartDialog(a.project_id);
     }
@@ -14280,7 +14355,21 @@
       let moved = false;
       for (const pair of pairs) {
         pair.members = pair.members.map(m => {
-          if (agents.some(a => memberMatches(m, a))) return m;
+          const live = agents.find(a => memberMatches(m, a));
+          if (live) {
+            // Found — but not necessarily where it is recorded. memberMatches pins the *agent*, and
+            // an agent moves between panes; everything else here finds a member by pane id, so a
+            // member matched on its id alone is one pairFor, memberOf and the strip cannot look up.
+            // The pair reads healthy and draws on nothing. Re-stamped instead, which is also how an
+            // id gets into a pair written before the relay minted any.
+            // Compared as whole fingerprints, not pane id alone: an agent that moved *hosts* can
+            // keep its pane id, since those are per-server counters. Left as it was, the member
+            // still names the old host and every lookup goes to the wrong machine.
+            const fp = recentFingerprint(live), was = recentFingerprint(m);
+            if (Object.keys(fp).every(k => fp[k] === was[k])) return m;
+            moved = true;
+            return Object.assign({}, m, fp);
+          }
           const same = agents.filter(a => !claimed.has(a.pane_id) &&
             (a.host || 'local') === (m.host || 'local') &&
             a.agent === m.agent && (a.cwd || '') === (m.cwd || ''));
@@ -14330,8 +14419,10 @@
     // a restart elsewhere is not a reason to rewrite it.
     function repointPair(oldPaneId, next) {
       if (!oldPaneId || !next || oldPaneId === next.pane_id) return false;
-      const pair = pairFor(pairs, oldPaneId);
-      if (!pair || pairFor(pairs, next.pane_id)) return false;
+      // By pane id: `oldPaneId` names a pane that has gone, so there is no live agent for pairFor
+      // to match it with. This is the pre-`aid` repair.
+      const pair = pairNaming(pairs, oldPaneId);
+      if (!pair || pairNaming(pairs, next.pane_id)) return false;
       pair.members = pair.members.map(m => m.pane_id === oldPaneId
         ? Object.assign({}, m, recentFingerprint(next)) : m);
       savePairs();
@@ -15142,7 +15233,7 @@
       const live = agents.find(x => convMemberKey(x) === held.key);
       if (live && live.agent === member.name) {
         openConversation(conv.id);
-        openTerminal(live.pane_id);
+        openTerminal(live.pane_id, live.aid);
         showSpawnStatus(`${tile.label} is already running.`, 'success');
         return true;
       }
@@ -15281,7 +15372,7 @@
       // a `term` carries none by definition, and testing for the text sent it down the agent path,
       // where it was adopted into a batch that does not exist.
       if (launcherIsTerm(ql.tile)) {
-        openTerminal(a.pane_id);
+        openTerminal(a.pane_id, a.aid);
         if (ql.command) sendTextTo(a.pane_id, ql.command);
         // The same note sendText makes for anything typed at a shell, so the command shows up in
         // the terminal's own history. A launcher press is still a command the user ran.
@@ -15298,7 +15389,7 @@
       // returned from quietly: the card at the foot is still spinning on this start, and nothing
       // else is coming to stop it.
       if (!batch || batch !== launcherLive) {
-        openTerminal(a.pane_id);
+        openTerminal(a.pane_id, a.aid);
         showSpawnStatus(`${a.label || a.agent || 'Session'} started — on its own, the launch it `
                         + 'belonged to is over.', 'warning');
         return;
@@ -15313,7 +15404,7 @@
       // Only a tile with no roster at all, which launcherValid already refuses. Kept as the guard
       // it is: everything below assumes there is something to put in the conversation.
       if (!launcherWantsConv(batch.tile)) {
-        openTerminal(a.pane_id);
+        openTerminal(a.pane_id, a.aid);
         showSpawnStatus(`${batch.tile.label} started.`, 'success');
         return;
       }
@@ -15321,7 +15412,7 @@
       // At the conversation ceiling. launcherMakeConv has already said why in a toast; this is the
       // other half of it, because the card is still spinning on a start that has in fact landed.
       if (!conv) {
-        openTerminal(a.pane_id);
+        openTerminal(a.pane_id, a.aid);
         showSpawnStatus(`${batch.tile.label} started — ungrouped.`, 'warning');
         return;
       }
@@ -17988,8 +18079,10 @@
       return !msg.source || msg.source === 'recent-unwrapped';
     }
 
-    function recordPane(paneId, rows) {
-      const a = paneId ? paneOf(paneId) : null;
+    function recordPane(pane, rows) {
+      // A caller holding a live agent has an unambiguous address. Do not throw that away for its
+      // pane id: two hosts can use the same one.
+      const a = typeof pane === 'string' ? paneOf(pane) : pane;
       if (!a || !profileFor(a.agent)) return;
       const key = convMemberKey(a);
       if (!convReferenced().has(key)) return;
@@ -18034,7 +18127,7 @@
       // Against this record's own sends: a prompt drawn the way the agent's reply is drawn comes
       // back as one block holding both, and cutting it needs to know what was typed (§convSplitEcho).
       const fresh = convUnmergeSent(paneMessages(rows, a.agent), held.entries);
-      const live = paneOf(a.pane_id) || a;
+      const live = (a.aid ? agents.find(x => x.aid === a.aid) : paneOf(a.pane_id)) || a;
       const working = live.status === 'working';
       const label = paneLabel(a) || held.label || '';
       // The turn's own clock. Zero until this browser has seen the pane end a turn, which is what
@@ -18331,7 +18424,7 @@
       // Fixed source and length. `visible` is the live frame with the terminal's own breaks left in
       // and they land mid-word, so a turn read that way records a message no reader would recognise.
       ws.send(JSON.stringify(
-        { type: 'read_pane', pane_id: paneId, lines: 200, source: 'recent-unwrapped' }));
+        Object.assign({ type: 'read_pane', lines: 200, source: 'recent-unwrapped' }, paneAddr(a))));
     }
 
     // T2 — the recovery nobody asks for (§2.4).
@@ -18461,7 +18554,7 @@
       // (§2.5), and the recorder does not care which of the two brought the rows.
       if (a.pane_id === activePane) { paneLines = lines; refreshPane(); }
       else ws.send(JSON.stringify(
-        { type: 'read_pane', pane_id: a.pane_id, lines: lines, source: 'recent-unwrapped' }));
+        Object.assign({ type: 'read_pane', lines: lines, source: 'recent-unwrapped' }, paneAddr(a))));
       return true;
     }
 
@@ -18812,7 +18905,13 @@
     // disagree about that — one is a press the reader just made, the other a recovery that must
     // never move anybody — so neither the opening prompt, the toast, nor opening the terminal
     // belongs here.
-    async function convLandMember(a, convId, replaceKey, ref) {
+    // `moveOnly` is for the caller nobody pressed. The fallback below — join as a new member when
+    // the transcript could not be carried — is right for a press: the reader asked for this pane to
+    // be in this conversation, and a thread that starts fresh is better than no pane at all. It is
+    // wrong for the follow, which is bookkeeping: a member that cannot be *moved* must be left
+    // exactly where it is, or the conversation grows a second row for one agent — the dead pane and
+    // the live one, side by side, both wearing the same name.
+    async function convLandMember(a, convId, replaceKey, ref, moveOnly) {
       const next = a && convMemberKey(a);
       if (!next || !convId) return null;
       // The pair goes with it. A restart is the same colleague in a new pane, and the pair record
@@ -18839,23 +18938,49 @@
       // second row for a key that is already in the list. Two members, one pane, both drawing the
       // same transcript.
       const already = (conv.members || []).some(m => m.key === next);
-      conv.members = continued && prior
-        ? conv.members.map(m => m.key === prior.key
-          ? Object.assign({}, m, convWasFpPatch(m, prior.key, next), {
-              key: next, label: prior.label || paneLabel(a),
-              // The pane this member continues. This is the only place a member's key moves from
-              // one pane to another, so it is the only place succession is a fact rather than a
-              // guess — and the guess it replaces handed a quit agent's words to every
-              // conversation running the same harness in the same directory.
-              was: (m.was || []).concat(convKeyPaneId(prior.key))
-                .filter(Boolean).slice(-CONV_WAS_MAX),
-              // convWasFpPatch above names the bucket the record kept this member in, where the
-              // restart moved it to a different one — another harness, or another checkout. The
-              // pane ids here cannot find those rows on their own: a pane id is only ever looked
-              // up inside a fingerprint's bucket.
-            })
-          : m)
-        : (already ? conv.members : (conv.members || []).concat(convMemberOf(a)));
+      // The row moves when the transcript was carried over, and also when it could not be but the
+      // relay says this is the same agent. A refusal there is not evidence of a different
+      // colleague: it means the new pane already has a thread of its own that something else still
+      // names, which is a fact about storage, not about who is sitting in the pane. Joining as a
+      // second member on that basis gave one agent two rows in one conversation — its dead pane and
+      // its live one, side by side under the same name. One agent is one member, and the id is what
+      // says so.
+      const move = prior && (continued || (a.aid && prior.aid === a.aid));
+      // Nothing to do rather than something to regret. See moveOnly above.
+      if (moveOnly && !move) return null;
+      if (move && already) {
+        // The row it was going to become is already in the list: the conversation is holding both
+        // halves of one agent, which is the state the fallback below used to leave behind. The
+        // merge keeps the live row and folds the dead one's history of panes into it, so a landing
+        // is also the repair for a duplicate an older build wrote.
+        conv.members = conv.members
+          .map(m => (m.key === next
+            ? Object.assign({}, m, {
+                label: m.label || prior.label || paneLabel(a),
+                was: (prior.was || []).concat(convKeyPaneId(prior.key), m.was || [])
+                  .filter(Boolean).slice(-CONV_WAS_MAX),
+              })
+            : m))
+          .filter(m => m !== prior);
+      } else {
+        conv.members = move
+          ? conv.members.map(m => m.key === prior.key
+            ? Object.assign({}, m, convWasFpPatch(m, prior.key, next), {
+                key: next, label: prior.label || paneLabel(a),
+                // The pane this member continues. This is the only place a member's key moves from
+                // one pane to another, so it is the only place succession is a fact rather than a
+                // guess — and the guess it replaces handed a quit agent's words to every
+                // conversation running the same harness in the same directory.
+                was: (m.was || []).concat(convKeyPaneId(prior.key))
+                  .filter(Boolean).slice(-CONV_WAS_MAX),
+                // convWasFpPatch above names the bucket the record kept this member in, where the
+                // restart moved it to a different one — another harness, or another checkout. The
+                // pane ids here cannot find those rows on their own: a pane id is only ever looked
+                // up inside a fingerprint's bucket.
+              })
+            : m)
+          : (already ? conv.members : (conv.members || []).concat(convMemberOf(a)));
+      }
       // The note is spent. Cleared in the same write as the succession it described, so no tab can
       // read an index where the member has moved and the note still says it is coming.
       if (ref) {
@@ -18900,6 +19025,76 @@
       }
     }
 
+    // One follow per agent at a time, for the same reason convLanding exists: convLandMember
+    // awaits a database and the poll is 3s.
+    const convFollowing = new Set();
+
+    // The member follows its agent, wherever herdr has put it.
+    //
+    // A pane id is a slot: herdr assigns it, herdr reuses it, and it changes on a respawn, a kill,
+    // a herdr restart, a reboot. The colleague in it does not change, and the relay now says so —
+    // every pane carries the id of the agent in it, minted once and kept across every pane that
+    // agent goes on to occupy.
+    //
+    // Two jobs, both of them on the ordinary snapshot:
+    //
+    //   the fold — a member whose key names a live pane takes that pane's agent id, which is how
+    //   a roster written before any of this existed acquires one without a migration step
+    //
+    //   the follow — a member whose pane is gone, whose agent is sitting in another one, is moved
+    //   onto it: the transcript carried over the seam, the pair repointed, the row moved. Exactly
+    //   what a restart the reader watched has always done, now done in every browser instead of
+    //   only in the one whose tab was open at the time
+    //
+    // Nothing here opens anything or says anything to a pane: the reader may be anywhere, and did
+    // not ask to be moved. See the identity decision log.
+    async function convFollowAids() {
+      if (!agents.length) return;
+      // Not against an index that has not arrived, for the same reason convLandPending waits.
+      if (typeof stateSyncPending === 'function' && stateSyncPending()) return;
+      const byAid = new Map();
+      for (const a of agents) if (a && a.aid) byAid.set(a.aid, a);
+      if (!byAid.size) return;   // a relay older than agent ids: nothing to fold and nothing to follow
+      const live = new Set(agents.map(x => convMemberKey(x)));
+      let folded = false;
+      const items = loadConvIndex();
+      const follow = [];
+      for (const c of items) {
+        const named = new Set((c.members || []).map(m => m && m.key));
+        for (const m of (c.members || [])) {
+          if (!m || !m.key) continue;
+          if (live.has(m.key)) {
+            const here = agents.find(x => convMemberKey(x) === m.key);
+            if (here && here.aid && m.aid !== here.aid) { m.aid = here.aid; folded = true; }
+            continue;
+          }
+          const moved = m.aid ? byAid.get(m.aid) : null;
+          // Not onto a pane this conversation already names. herdr recycles pane ids and a member
+          // may have been moved by something else a moment ago; two rows drawing one transcript is
+          // the failure convLandMember's own `already` guard exists for, reached from here.
+          // And not where some *other* member of this conversation is already that agent: two rows
+          // for one colleague — the dead pane and the live one, both wearing the same name — is
+          // the thing this whole mechanism exists to prevent.
+          const twice = moved && (c.members || []).some(o => o !== m && o && o.aid === moved.aid);
+          if (moved && !twice && !named.has(convMemberKey(moved))) {
+            follow.push({conv: c.id, key: m.key, pane: moved});
+          }
+        }
+      }
+      if (folded) saveConvIndex(items);
+      for (const f of follow) {
+        if (convFollowing.has(f.key)) continue;
+        convFollowing.add(f.key);
+        try {
+          const conv = await convLandMember(f.pane, f.conv, f.key, '', true);
+          if (conv) {
+            renderConversations();
+            if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+          }
+        } finally { convFollowing.delete(f.key); }
+      }
+    }
+
     // --- Conversation membership ---
     // Which conversations a pane is in, and the two edits that answer it: join one, or name a new
     // one. Membership is the whole of "is this recorded" (§3), so this is the switch — and it is
@@ -18913,7 +19108,11 @@
 
     function convMemberOf(a) {
       return { key: convMemberKey(a), added: Date.now(), label: paneLabel(a),
-        agent: a.agent || '', project: a.project || '' };
+        agent: a.agent || '', project: a.project || '',
+        // The colleague, as opposed to the pane it is sitting in. `key` names a pane and is what
+        // the transcript is filed under; this is what says the member is still *there* after the
+        // pane it was in has been recycled. Empty against a relay that does not mint them.
+        aid: a.aid || '' };
     }
 
     function openConvDialog(paneId) {
@@ -18925,9 +19124,9 @@
       // The pair is offered as a second member only while it is healthy: a stale pair's partner is
       // a pane this browser has not verified, and seeding a member from it would record a
       // fingerprint nothing on the other end matches.
-      const pair = pairFor(pairs, paneId);
+      const pair = pairFor(pairs, convSource);
       const partner = pair && pairHealth(pair, agents).state === 'healthy'
-        ? agents.find(x => x.pane_id === partnerOf(pair, paneId).pane_id) : null;
+        ? agents.find(x => memberMatches(partnerOf(pair, convSource), x)) : null;
       const row = document.getElementById('convPairRow');
       row.hidden = !partner;
       row.style.display = partner ? 'flex' : 'none';
@@ -19011,10 +19210,10 @@
         setConvError(`Already at ${CONV_CONV_MAX} conversations — leave one first.`); return;
       }
       const members = [convMemberOf(convSource)];
-      const pair = pairFor(pairs, convSource.pane_id);
+      const pair = pairFor(pairs, convSource);
       const row = document.getElementById('convPairRow');
       if (!row.hidden && document.getElementById('convPair').checked && pair) {
-        const partner = agents.find(x => x.pane_id === partnerOf(pair, convSource.pane_id).pane_id);
+        const partner = agents.find(x => memberMatches(partnerOf(pair, convSource), x));
         if (partner) members.push(convMemberOf(partner));
       }
       saveConvIndex([{
@@ -19323,7 +19522,16 @@
       // A pane the index already files is not fresh, whoever filed it. The seen list is this
       // browser's own memory and a second browser has none of it, so membership is what survives
       // being handed an index built somewhere else.
-      for (const c of items) for (const m of (c && c.members) || []) if (m && m.key) had.add(m.key);
+      // And the same test on the agent rather than the slot. A pane id is a slot herdr recycles, so
+      // an agent that moved between polls arrives here wearing a key no conversation names while
+      // being, in every sense that matters, already filed. Without this it was filed again, and
+      // again on the next poll — which is how one restart left three auto conversations behind.
+      const hadAid = new Set();
+      for (const c of items) for (const m of (c && c.members) || []) {
+        if (!m) continue;
+        if (m.key) had.add(m.key);
+        if (m.aid) hadAid.add(m.aid);
+      }
       // Only a pane an agent is running in has messages to record — the same gate the menu item
       // uses, so a harness the app cannot read is not filed under a record it can never write to.
       // A pane a restart in flight is about to continue a thread onto is not a fresh pane. Filing
@@ -19331,6 +19539,7 @@
       // is one convContinueTranscript refuses to write over — so the thread it was started to
       // continue would gain a second member instead of carrying on.
       const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
+        && !(a.aid && hadAid.has(a.aid))
         && profileFor(a.agent)
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
@@ -19410,9 +19619,9 @@
     // is left.
     function convPairMembers(a, conv) {
       const members = conv.members || [];
-      const pair = pairFor(pairs, a.pane_id);
+      const pair = pairFor(pairs, a);
       if (!pair || pairHealth(pair, agents).state !== 'healthy') return null;
-      const partner = agents.find(x => memberMatches(partnerOf(pair, a.pane_id), x));
+      const partner = agents.find(x => memberMatches(partnerOf(pair, a), x));
       if (!partner || !convsForPane(partner).length) return null;
       const key = convMemberKey(partner);
       // Roster order, not pair order: it is what the two columns are assigned from, so narrowing
@@ -19575,7 +19784,7 @@
       const entries = hidden.size ? composed.entries.filter(shows) : composed.entries;
       const all = hidden.size ? composed.all.filter(shows) : composed.all;
       const thread = members === conv.members ? conv : Object.assign({}, conv, {members});
-      const paired = joint && (conv.pair_id || pairFor(pairs, a.pane_id)) && members.length === 2;
+      const paired = joint && (conv.pair_id || pairFor(pairs, a)) && members.length === 2;
       // Nobody else is speaking here, so the bubbles take the width back off the empty column.
       box.classList.toggle('conv-solo', !joint);
       // While the panel is open it is this conversation the actions act on. convViewId is "the
@@ -19793,7 +20002,7 @@
       const live = agents.find(x => convMemberKey(x) === key);
       if (!ws || !live || live.status !== 'working') return;
       armButton(btn, 'Esc?', () => {
-        ws.send(JSON.stringify({ type: 'send_keys', pane_id: live.pane_id, keys: ['Escape'] }));
+        ws.send(JSON.stringify(Object.assign({ type: 'send_keys', keys: ['Escape'] }, paneAddr(live))));
         showToast(`Sent Escape to ${paneLabel(live)}`, 'info');
         burstPoll();
       });
@@ -20095,7 +20304,7 @@
       // Learn teaches a gutter glyph and a trim from pane lines. A bubble has neither.
       document.getElementById('selLearn').hidden = true;
       // The sheet's own gate: it is the prefill-and-stop path, and that path is built on a pair.
-      const pair = pairFor(pairs, activePane);
+      const pair = pairFor(pairs, activeAgent());
       document.getElementById('selTransfer').hidden =
         !pair || pairHealth(pair, agents).state !== 'healthy';
     }
@@ -21353,7 +21562,7 @@
         !!paneProfile && !blockContaining(paneRows, agentOf(activePane), a);
       // Transfer is the reason this feature exists, but the button only means something while
       // this pane is half of a live pair.
-      document.getElementById('selTransfer').hidden = !pairFor(pairs, activePane);
+      document.getElementById('selTransfer').hidden = !pairFor(pairs, activeAgent());
     }
 
     // A handle whose end scrolled out of view stops at the edge rather than leaving with it.
@@ -21618,7 +21827,7 @@
       enter.textContent = enterSendsOn() ? 'Enter inserts a newline' : 'Enter sends the line';
       document.getElementById('tabScope').value = tabScope();
       renderTabScopeHint();
-      const a = agents.find(x => x.pane_id === activePane);
+      const a = activeAgent();
       const start = document.getElementById('menuStart');
       // Absent, not disabled, when the pane's Project is unknown or Projects are off: a start
       // needs a project_id, and there is nothing useful to open the dialog on without one.
@@ -22080,7 +22289,9 @@
         // right edge carries what only matters here — the pair this pane is already in, which is
         // what makes choosing it a replacement rather than an addition.
         groups: () => [{head: 'Partner', rows: pairCandidates(agents, pairSource).map(a => {
-          const existing = pairFor(pairs, a.pane_id);
+          // By pane id: the note says what choosing this row would replace, and saving
+          // replaces by pane id.
+          const existing = pairNaming(pairs, a.pane_id);
           return pickPaneRow(a, existing ? {note: `in "${existing.name}"`} : null);
         })}],
         extra: pairStartRow,
@@ -22141,7 +22352,9 @@
       document.getElementById('pairRoleB').value = paneLabel(pairPartner);
       document.getElementById('pairFields').style.display = 'flex';
       // Name what is being replaced — a silent replacement is how a user loses a pair they meant to keep.
-      const clashes = [pairSource, pairPartner].map(p => pairFor(pairs, p.pane_id)).filter(Boolean);
+      // By pane id, because savePair drops by pane id: the warning has to name exactly what
+      // saving will replace, stale pairs over these slots included.
+      const clashes = [pairSource, pairPartner].map(p => pairNaming(pairs, p.pane_id)).filter(Boolean);
       const names = [...new Set(clashes.map(p => p.name))];
       setPairError(names.length ? `Saving replaces the existing pair ${names.map(n => `"${n}"`).join(' and ')}.` : '', true);
       renderPicker();
@@ -22173,7 +22386,7 @@
     // is not always the pane being read. Unset means the open pane, which is what the pane menu asks
     // about.
     function unpair(paneId) {
-      const pair = pairFor(pairs, paneId || activePane);
+      const pair = pairFor(pairs, paneId ? paneOf(paneId) : activeAgent());
       if (!pair) return;
       // The arm is what asked; the menu it was armed in is still open behind it. Both menus, because
       // either can be the one holding the armed button.
@@ -22198,8 +22411,8 @@
       // After the healing and never before: a pair whose member was restarted is healthy again the
       // moment healPairs re-points it, and ageing it first would count that restart as absence.
       agePairs();
-      const pair = activePane ? pairFor(pairs, activePane) : null;
-      const mineLive = activePane ? agents.find(a => a.pane_id === activePane) : null;
+      const mineLive = activeAgent();
+      const pair = pairFor(pairs, mineLive);
       // Which pane you are in, by name and harness. Not a pair fact — the answer is the same
       // whether this pane is paired, whether the pair is healthy, and whether the composer is
       // unfolded, so it is shown on all of them. Pairing state is told by the controls beside it.
@@ -22225,7 +22438,7 @@
         return;
       }
       const health = pairHealth(pair, agents);
-      const partner = partnerOf(pair, activePane);
+      const partner = partnerOf(pair, mineLive);
       const ok = health.state === 'healthy';
       // Read the partner's name from the live snapshot, not from the pair record: the record holds
       // the name captured at pin time, so renaming a pane would leave a stale name on this button.
@@ -22272,7 +22485,7 @@
       // nagging about it is worse than treating a blank field as "leave it alone".
       if (!label || label === a.label) return;
       if (label.length > 32) { showToast('Name must be 32 characters or fewer.'); return; }
-      ws.send(JSON.stringify({ type: 'rename_pane', pane_id: activePane, label: label }));
+      ws.send(JSON.stringify(Object.assign({ type: 'rename_pane', label: label }, paneAddr(activeAgent() || activePane))));
       // Nothing is applied here — the command_result branch does it once herdr has accepted the
       // rename, and an `error` reply surfaces instead if the relay is too old to know the message.
     }
@@ -22280,13 +22493,17 @@
     // Jump to the other half of the pair without going back through the agent list. Refuses on a
     // stale pair for the same reason transfer does — the target has not been verified.
     function switchToPartner() {
-      const pair = activePane ? pairFor(pairs, activePane) : null;
+      const mine = activeAgent();
+      const pair = pairFor(pairs, mine);
       if (!pair || pairHealth(pair, agents).state !== 'healthy') return;
       const keepComposer = document.activeElement === document.getElementById('termInput');
-      const to = partnerOf(pair, activePane).pane_id;
+      // The live agent behind the partner member, not the pane id recorded on it: that is where
+      // the partner *is*, and it is what carries the aid the new pane is then opened under.
+      const to = agents.find(x => memberMatches(partnerOf(pair, mine), x));
+      if (!to) return;
       // Before the switch, because the thread the partner opens on is read during it.
-      carryConvToPane(paneOf(activePane), paneOf(to));
-      openTerminal(to);
+      carryConvToPane(mine, to);
+      openTerminal(to.pane_id, to.aid);
       if (keepComposer) document.getElementById('termInput').focus();
       if (window.cue) cue('page');
     }
@@ -22465,7 +22682,7 @@
       if (keys.size > 1) { showToast('Select messages from one agent to transfer.'); return null; }
       const source = keys.size ? agents.find(a => convMemberKey(a) === keys.values().next().value) : paneOf(activePane);
       if (!source) return null;
-      const pair = pairFor(pairs, source.pane_id);
+      const pair = pairFor(pairs, source);
       if (!pair || pairHealth(pair, agents).state !== 'healthy') return null;
       // The ruler's range wins when there is one: it is the deliberate selection, and on a phone
       // the native one is usually empty anyway. Capture before anything can steal it — switching
@@ -22478,8 +22695,8 @@
     function openTransfer() {
       const source = claimTransfer();
       if (!source) return;
-      const pair = pairFor(pairs, source.pane_id);
-      const partner = partnerOf(pair, transferSource);
+      const pair = pairFor(pairs, source);
+      const partner = partnerOf(pair, source);
       const live = agents.find(a => a.pane_id === partner.pane_id);
       document.getElementById('transferTarget').textContent =
         (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
@@ -22516,12 +22733,12 @@
     // context, so it must never end in a send. The sheet's path, and the pane view's.
     function doTransfer(shortcutIndex) {
       const source = paneOf(transferSource || activePane);
-      const pair = source && pairFor(pairs, source.pane_id);
+      const pair = source && pairFor(pairs, source);
       if (!pair || pairHealth(pair, agents).state !== 'healthy') {
         document.getElementById('transferPreview').textContent = 'Pair is no longer live; reopen it after choosing a live partner.';
         return;
       }
-      const partner = partnerOf(pair, source.pane_id);
+      const partner = partnerOf(pair, source);
       return prefillTransfer(source, partner.pane_id,
         transferInstruction(shortcutIndex >= 0 ? [shortcutIndex] : [], partner.pane_id),
         err => { document.getElementById('transferPreview').textContent = err; });
@@ -22537,8 +22754,8 @@
     // Everything both paths share, and the only place that writes the composer. `onError` is how
     // the two differ: the sheet has a preview to put the reason in, a chip has a toast.
     function prefillTransfer(source, targetPaneId, instruction, onError) {
-      const pair = pairFor(pairs, source.pane_id);
-      const mine = pair ? memberOf(pair, source.pane_id) : null;
+      const pair = pairFor(pairs, source);
+      const mine = pair ? memberOf(pair, source) : null;
       // The role when the pair sheet was given one, the pane's live label when it was not. A pair
       // built by the Start dialog carries a bare fingerprint with no role at all
       // (recentFingerprint), and the receiving agent was being told the text came from "undefined".
@@ -22832,8 +23049,8 @@
       // Said apart to a screen reader too: "needs you" on a finished pane is a false alarm that
       // costs more when the colour and the blink are not there to correct it.
       const note = kind === 'blocked' ? ', needs you' : kind === 'done' ? ', finished' : '';
-      const paired = pairFor(pairs, a.pane_id);
-      return `<div class="agent${kind ? ' attention' : ''}${kind === 'done' ? ' alert-done' : ''}" role="button" tabindex="0" aria-label="${label}, ${a.status}${note}" onclick="openTerminal('${a.pane_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${a.pane_id}')}">
+      const paired = pairFor(pairs, a);
+      return `<div class="agent${kind ? ' attention' : ''}${kind === 'done' ? ' alert-done' : ''}" role="button" tabindex="0" aria-label="${label}, ${a.status}${note}" onclick="openTerminal('${a.pane_id}','${a.aid || ''}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${a.pane_id}','${a.aid || ''}')}">
     <span class="dot${pulseClass}" style="background:${color}" aria-hidden="true"></span>
     <div class="info"><div class="project">${paneChrome(a, false)}${host}</div><div class="meta">${paneBadge(a).trimStart()} ${cwd}</div></div>
     ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + a.pane_id, pane: a.pane_id, stop: true,
@@ -23580,6 +23797,35 @@
       return roles.includes(spawn.role) ? spawn.role : roles[0];
     }
 
+    // What a member was started as, from wherever the answer still is.
+    //
+    // This browser's own transcript record first: it is the richer of the two and it is what has
+    // always been used. Then the relay's registry, which is the answer for a member whose pane
+    // ended before *this* browser ever recorded it — another browser started it, or this one had
+    // its storage cleared. Until the registry existed such a member could be offered nothing but
+    // "Restart as…", in every browser but the one that happened to be watching.
+    //
+    // Matched by agent id and by nothing else. A pane id is a slot herdr recycles, and resolving a
+    // dead member by resemblance is how one agent's history ends up in another's conversation.
+    function spawnOf(key) {
+      const recs = (typeof convViewRecs !== 'undefined' && convViewRecs) || [];
+      const own = (recs.find(r => r.key === key) || {}).spawn;
+      if (own && own.agent && own.project_id) return own;
+      const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
+      if (!rows.length) return own || null;
+      const member = loadConvIndex().reduce(
+        (found, c) => found || (c.members || []).find(m => m && m.key === key), null);
+      const row = member && member.aid && rows.find(x => x.aid === member.aid);
+      if (!row) return own || null;
+      // The registry's fields under whatever the local record already knew, so a browser holding
+      // half an answer keeps its half.
+      return Object.assign({
+        agent: row.agent || '', project_id: row.project_id || '', project: row.project || '',
+        cwd: row.cwd || '', host: row.host || '', config: row.config || '',
+        role: row.role || '', starter: row.starter || '', label: row.label || '',
+      }, own || {});
+    }
+
     // canDuplicate's predicate, read off a record rather than off a pane: the relay willing to
     // start, a Project it still knows, and a harness inside the allowlist. Everything it refuses
     // gets no button rather than a refusal after the tap.
@@ -23602,7 +23848,7 @@
     // been repointed since, the two disagree, and pretending they agree is the one thing this
     // must not do.
     function respawnNote(key) {
-      const rec = convViewRecs.find(r => r.key === key), spawn = rec && rec.spawn;
+      const spawn = spawnOf(key);
       if (!canRespawn(spawn)) return '';
       const project = projects.find(p => p.id === spawn.project_id) || {};
       const where = agents.find(x => x.project_id === spawn.project_id && x.cwd);
@@ -23654,7 +23900,7 @@
     }
 
     function restartMenuHtml(key, rec, on) {
-      const again = canRespawn(rec.spawn);
+      const again = canRespawn(spawnOf(key));
       const other = canStartFromConv();
       if (!again && !other) return '';
       const k = escapeHtml(key);
@@ -23750,8 +23996,8 @@
 
     function convRespawn(key) {
       const conv = loadConvIndex().find(c => c.id === convViewId);
-      const rec = convViewRecs.find(r => r.key === key);
-      const spawn = rec && rec.spawn;
+      const rec = convViewRecs.find(r => r.key === key) || {};
+      const spawn = spawnOf(key);
       if (!ws || !conv || !canRespawn(spawn)) return;
       // This member's own restart, already in flight — the press before this one, whose answer went
       // down with the tab or was spent somewhere else. Continued onto the pane it made rather than
@@ -23813,6 +24059,16 @@
       // clears the same note.
       msg.ref = convRespawnRef();
       startIntent.ref = msg.ref;
+      // Which agent this start brings back, so the relay binds the new pane to it rather than
+      // inferring it from a seat. The inference is right most of the time and is what carries an
+      // agent across a herdr restart nobody asked for — but a restart *is* asked for, and the one
+      // moment it cannot infer is this one: the pane being replaced is quit and the new one
+      // started, and the relay can see both in a single poll.
+      const member = (conv.members || []).find(m => m.key === key);
+      if (member && member.aid) msg.aid = member.aid;
+      // And which opening prompt it is being started with, kept by the relay against that agent —
+      // so the next browser to restart it asks for the same one whether or not it watched this.
+      if (startStarter) msg.starter = startStarter;
       convNotePending(conv.id, msg.ref, key, '');
       ws.send(JSON.stringify(msg));
     }
@@ -24302,7 +24558,7 @@
       const shownKeys = shown.map(m => m.key);
       const openKey = activePane ? convMemberKey(paneOf(activePane)) : '';
       const twoCol = shownKeys.length === 2 && !!(conv.pair_id ||
-        agents.some(x => shownKeys.includes(convMemberKey(x)) && pairFor(pairs, x.pane_id)));
+        agents.some(x => shownKeys.includes(convMemberKey(x)) && pairFor(pairs, x)));
       const rightKey = shownKeys.includes(openKey) ? openKey : shownKeys[1];
       const visible = e => !hidden.has(e.key || keys[0]);
       const entries = hidden.size ? composed.entries.filter(visible) : composed.entries;
@@ -24447,12 +24703,16 @@
       if (typeof syncBranchBadges === 'function') syncBranchBadges();
     }
 
-    function openTerminal(paneId) {
+    // `aid` is optional and is the caller's answer to "which agent is this", which a pane id
+    // cannot give when two hosts report the same one. Callers holding the agent pass it; the ones
+    // resuming from a stored pane id — a notification, a transfer target, an arbitration link —
+    // have only the id, and get exactly the behaviour they always had.
+    function openTerminal(paneId, aid) {
       // Opening over an already-open pane leaves the old poller running otherwise, and every
       // switch adds another read_pane every 3s. Cleared here rather than in each caller, because
       // switchToPartner and the header chips both land straight on this without closing first.
       clearInterval(refreshInterval);
-      activePane = paneId; paneLines = 200; userScrolledUp = false;
+      activePane = paneId; activeAid = aid || null; paneLines = 200; userScrolledUp = false;
       paneSource = 'recent-unwrapped';  // a clear belongs to the pane it was made on
       noteRecent(paneId);
       noteVisit(paneId);
@@ -24507,7 +24767,7 @@
     }
 
     function closeTerminal() {
-      activePane = null; clearInterval(refreshInterval);
+      activePane = null; activeAid = null; clearInterval(refreshInterval);
       syncPaneLoading();  // after activePane, so a pane closed mid-wait takes the pill with it
       closeFireMenu();
       disarmClear();
@@ -24911,8 +25171,8 @@
     // otherwise defaulting to whichever member happened to sort first — which is a fact about the
     // row, not about the message.
     function dockPairTarget(source, list) {
-      const pair = source && pairFor(pairs, source.pane_id);
-      const partner = pair && partnerOf(pair, source.pane_id);
+      const pair = source && pairFor(pairs, source);
+      const partner = pair && partnerOf(pair, source);
       return partner && list.some(a => a.pane_id === partner.pane_id) ? partner.pane_id : '';
     }
 
@@ -25030,7 +25290,7 @@
       const to = paneOf(dockAddressed());
       if (!to) return '';
       const name = escapeHtml(paneLabel(to));
-      const pair = pairFor(pairs, to.pane_id);
+      const pair = pairFor(pairs, to);
       const open = `closeDockMenu('optMenu'); openPairDialog('${escapeHtml(to.pane_id)}')`;
       if (!pair) {
         return `<button class="menu-item" role="menuitem" onclick="${open}" ` +
@@ -26490,7 +26750,7 @@
       const qa = document.getElementById('quickActions');
       if (!activePane) { setQuickActions(qa, ''); return; }
       syncResend();
-      const a = agents.find(x => x.pane_id === activePane);
+      const a = activeAgent();
       const blocked = a && a.status === 'blocked';
       // The nav row carries the fold control, so it also has to survive the bar being switched
       // off — folded with an empty bar would leave no way back to the composer.
@@ -26645,7 +26905,7 @@
     const POLL_MS = 3000, IDLE_POLL_MS = 12000;
     let lastPaneRead = 0;
     function paneIsIdle() {
-      const a = activePane ? agents.find(x => x.pane_id === activePane) : null;
+      const a = activeAgent();
       return !!a && a.status === 'idle';
     }
     // auto=true is the interval. Every other caller — the refresh button, Load more, a key that
@@ -26660,7 +26920,8 @@
       if (ws && activePane) {
         lastPaneRead = Date.now();
         ws.send(JSON.stringify(
-          { type: 'read_pane', pane_id: activePane, lines: paneLines, source: paneSource }));
+          Object.assign({ type: 'read_pane', lines: paneLines, source: paneSource },
+                        paneAddr(activeAgent() || activePane))));
       }
     }
 
@@ -27005,8 +27266,8 @@
     // disagree about which members are recoverable. Guarded by `typeof` because this module is
     // drawn before the conversation window has ever loaded its records.
     function arbCanWake(key) {
-      if (typeof canRespawn !== 'function' || typeof convViewRecs === 'undefined') return false;
-      return canRespawn(((convViewRecs || []).find(r => r.key === key) || {}).spawn);
+      if (typeof canRespawn !== 'function' || typeof spawnOf !== 'function') return false;
+      return canRespawn(spawnOf(key));
     }
 
     // Whether the thread shows what the arbitrator decided, as bubbles among the messages. A
@@ -28723,7 +28984,7 @@
     function adjustPane() {
       if (!ws || !activePane) return;
       showToast('Adjusting pane…');
-      ws.send(JSON.stringify({ type: 'set_slot', pane_id: activePane, slot: slotFor() }));
+      ws.send(JSON.stringify(Object.assign({ type: 'set_slot', slot: slotFor() }, paneAddr(activeAgent()))));
     }
     // --- Clear screen, and Quit ---
     // Both send a line to whatever is running in the pane, and which line depends on the kind:
@@ -29007,14 +29268,19 @@
         // Dropped before the send: a second refusal puts it straight back, and holding it in two
         // places at once is how a message gets sent twice.
         menuHeld.delete(a.pane_id);
-        submitText(a.pane_id, text);
+        submitText(a, text);
       }
       // A pane that is no longer in the snapshot has ended, and text held for one is not going
       // anywhere. Dropped here rather than left to accumulate for the life of the page.
       for (const id of Array.from(menuHeld.keys())) if (!seen.has(id)) menuHeld.delete(id);
     }
 
-    function submitText(paneId, text) {
+    // Takes an agent or a bare pane id. The maps below key on the pane id either way — they record
+    // what this browser sent where, which is a fact about the pane — while the wire gets the fuller
+    // address, so a send still reaches the right host when two of them report this pane id.
+    function submitText(pane, text) {
+      const addr = paneAddr(pane === activePane ? (activeAgent() || pane) : pane);
+      const paneId = addr.pane_id;
       if (!text || !paneId || !ws || ws.readyState !== 1) return false;
       lastSubmitted.set(paneId, text);
       // One message per chunk. Nothing before the last one submits, so they land in the agent's
@@ -29023,7 +29289,7 @@
       if (!parts.length) return false;
       try {
         parts.forEach((part, i) => ws.send(JSON.stringify(
-          { type: 'send_text', pane_id: paneId, text: part, submit: i === parts.length - 1 })));
+          Object.assign({ type: 'send_text', text: part, submit: i === parts.length - 1 }, addr))));
       } catch (e) {
         // A socket that closed between the guard above and the write. Nothing was submitted.
         showToast('Not connected — that was not sent.');
@@ -29093,8 +29359,8 @@
       i.focus();
       closeFireMenu();
     }
-    function sendKey(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: [k] })); setTimeout(refreshPane, 300); }
-    function sendKeys(k) { if (!ws || !activePane) return; ws.send(JSON.stringify({ type: 'send_keys', pane_id: activePane, keys: k })); setTimeout(refreshPane, 300); }
+    function sendKey(k) { if (!ws || !activePane) return; ws.send(JSON.stringify(Object.assign({ type: 'send_keys', keys: [k] }, paneAddr(activeAgent() || activePane)))); setTimeout(refreshPane, 300); }
+    function sendKeys(k) { if (!ws || !activePane) return; ws.send(JSON.stringify(Object.assign({ type: 'send_keys', keys: k }, paneAddr(activeAgent() || activePane)))); setTimeout(refreshPane, 300); }
 
     // --- Nav Tray (collie-style) ---
     let keyQueue = [], armedMod = null, ctrlConfirm = null;
@@ -29342,11 +29608,11 @@
     function respond(t) {
       if (!ws || !activePane) return;
       if (window.cue) cue('success');
-      ws.send(JSON.stringify({ type: 'respond', pane_id: activePane, text: t }));
+      ws.send(JSON.stringify(Object.assign({ type: 'respond', text: t }, paneAddr(activeAgent() || activePane))));
       // Optimistic, and corrected by the next poll: the prompt has been answered, so the approval
       // buttons go now rather than lingering for up to three seconds over an agent that is
       // already working. Re-rendered rather than emptied, so back and forward survive it.
-      const a = agents.find(x => x.pane_id === activePane);
+      const a = activeAgent();
       if (a) a.status = 'busy';
       renderQuickActions();
       setTimeout(refreshPane, 500);
@@ -29371,7 +29637,7 @@
     // whether or not the composer has focus.
     document.addEventListener('keydown', e => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        if (!activePane || !pairFor(pairs, activePane)) return;
+        if (!activePane || !pairFor(pairs, activeAgent())) return;
         e.preventDefault();
         switchToPartner();
       }
@@ -29494,7 +29760,7 @@
     };
 
     function getAgentCommands() {
-      const a = agents.find(x => x.pane_id === activePane);
+      const a = activeAgent();
       if (!a) return [];
       const key = (a.agent || '').toLowerCase();
       if (COMMANDS[key]) return COMMANDS[key];
