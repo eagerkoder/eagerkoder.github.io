@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-08-30">
+  <meta name="app-built" content="2026-08-31">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -19802,7 +19802,7 @@
       // Roster order, not pair order: it is what the two columns are assigned from, so narrowing
       // the roster must not also swap which side each pane is drawn on.
       const both = members.filter(m => m.aid === convMemberKey(a) || m.aid === key);
-      return both.some(m => m.aid === key) ? both : both.concat({key, label: paneLabel(partner)});
+      return both.some(m => m.aid === key) ? both : both.concat({aid: key, label: paneLabel(partner)});
     }
 
     // What a member is called *now*. Labels are stamped into the index and into every entry as they
@@ -23543,7 +23543,7 @@
       if (members.length < 2) return '';
       const hidden = convHidden(id);
       const shown = members.filter(m => !hidden.has(m.aid));
-      return shown.length === 1 ? shown[0].key : '';
+      return shown.length === 1 ? shown[0].aid : '';
     }
 
     function convSetSolo(id, key) {
@@ -23579,7 +23579,7 @@
       // nobody. First member then, which is what an unaddressed composer already gets.
       const addressed = live ? convMemberKey(live) : '';
       const key = members.some(m => m.aid === addressed)
-        ? addressed : ((members[0] || {}).key || '');
+        ? addressed : ((members[0] || {}).aid || '');
       convSetSolo(convViewId, key);
     }
 
@@ -24457,7 +24457,7 @@
           // A member built from a record instead of from a pane: the session has ended, so there is
           // no paneLabel to ask and the record's own label is the only name it has left.
           const rec = recs.find(r => r.key === key);
-          if (rec) add.push({key: key, added: Date.now(), label: rec.label || ''});
+          if (rec) add.push({aid: key, added: Date.now(), label: rec.label || ''});
         }
         if (!add.length) return false;
         conv.members = (conv.members || []).concat(add);
@@ -27458,9 +27458,10 @@
               s.event_at || 0].join('|');
     }
 
-    // A key that is not a member key. Every real one is a JSON array of four strings, so this
-    // cannot collide with a pane — which matters because the thread filters, colours and hides
-    // bubbles by key, and an arbitrator bubble must not answer to any of it.
+    // A key that is not a member key. Every real one is an agent id — `a_` and twelve base36
+    // characters, minted by the relay and never by a client — so this cannot collide with one,
+    // which matters because the thread filters, colours and hides bubbles by key, and an
+    // arbitrator bubble must not answer to any of it.
     const ARB_ENTRY_KEY = 'arbitrator';
 
     // The arbitrator's decisions as thread entries, for the conversation being read.
@@ -29189,8 +29190,10 @@
       // A poll redraw replaces the node between the two taps, so by the time the arm expires the
       // one on screen is not the one this holds, and clearing only `armedEl` leaves a detached
       // node tidied and a live button still saying "Pause all?" with nothing behind it.
-      // Member keys are JSON fingerprints, so quoting one into a CSS selector makes the second
-      // tap throw before it can run. Compare the dataset instead.
+      // Read off the dataset rather than matched in a selector: the arm key is whatever the
+      // caller had to name — a member's agent id, a conversation id, a label someone typed — and
+      // a selector built out of one throws on the character it did not expect, which loses the
+      // second tap rather than the styling.
       const live = key && typeof document !== 'undefined' && document.querySelectorAll
         ? Array.from(document.querySelectorAll('[data-arm-key]'))
           .find(el => el.dataset.armKey === key) : null;
@@ -29411,6 +29414,19 @@
       const addr = paneAddr(pane === activePane ? (activeAgent() || pane) : pane);
       const paneId = addr.pane_id;
       if (!text || !paneId || !ws || ws.readyState !== 1) return false;
+      // The relay has this pane but has not yet said which agent is in it. It refuses the send for
+      // the same reason nothing durable may be written against such a pane — a transcript row would
+      // name an identity that is about to change — so this is a refusal either way, and refusing
+      // here is the one that keeps the message. Returning false leaves it in the composer, which is
+      // what every caller does with a false. The relay's guard stays authoritative: this one is
+      // absent from an older page and cannot be the only one.
+      const live = typeof pane === 'string' ? (typeof paneOf === 'function' && paneOf(paneId))
+        : pane;
+      if (live && live.unresolved) {
+        showToast(`${paneLabel(live) || paneId} is still being identified — try again in a moment.`,
+                  'info');
+        return false;
+      }
       lastSubmitted.set(paneId, text);
       // One message per chunk. Nothing before the last one submits, so they land in the agent's
       // composer as one text; the relay handles a connection's messages in order.
