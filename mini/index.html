@@ -22683,9 +22683,11 @@
       if (!source) return;
       const pair = pairFor(pairs, source);
       const partner = partnerOf(pair, source);
-      const live = agents.find(a => a.pane_id === partner.pane_id);
+      // The live pane behind the member, found by its id: a pair member is an agent id and
+      // carries no pane_id at all, so the pane it is sitting in is a fact about the snapshot.
+      const live = agents.find(a => memberMatches(partner, a));
       document.getElementById('transferTarget').textContent =
-        (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
+        (live ? paneLabel(live) : '') || partner.role || partner.label || partner.agent || partner.aid;
       // The harness badge and the live dot, exactly as the agent list draws them: this sheet
       // prefills a composer in another pane, and a name alone is not enough to be sure which.
       document.getElementById('transferBadge').innerHTML =
@@ -22724,9 +22726,11 @@
         document.getElementById('transferPreview').textContent = 'Pair is no longer live; reopen it after choosing a live partner.';
         return;
       }
-      const partner = partnerOf(pair, source);
-      return prefillTransfer(source, partner.pane_id,
-        transferInstruction(shortcutIndex >= 0 ? [shortcutIndex] : [], partner.pane_id),
+      // Where the partner is now, not where the pair says it was — the record holds an agent id
+      // and nothing else. A live pair means every member has a pane, so this is found.
+      const target = agents.find(a => memberMatches(partnerOf(pair, source), a));
+      return prefillTransfer(source, target,
+        transferInstruction(shortcutIndex >= 0 ? [shortcutIndex] : [], target.pane_id),
         err => { document.getElementById('transferPreview').textContent = err; });
     }
 
@@ -22739,7 +22743,7 @@
 
     // Everything both paths share, and the only place that writes the composer. `onError` is how
     // the two differ: the sheet has a preview to put the reason in, a chip has a toast.
-    function prefillTransfer(source, targetPaneId, instruction, onError) {
+    function prefillTransfer(source, target, instruction, onError) {
       const pair = pairFor(pairs, source);
       const mine = pair ? memberOf(pair, source) : null;
       // The role when the pair sheet was given one, the pane's live label when it was not. A pair
@@ -22760,7 +22764,7 @@
       // this pane, and this is the point at which the user has committed to it.
       learnFromSelection();
       closeTransfer();
-      openTerminal(targetPaneId);
+      openTerminal(target.pane_id, target.aid);
       const input = document.getElementById('termInput');
       // Whatever was already typed is kept, under the quote: a transfer that overwrote it would
       // throw away a message someone was in the middle of writing, and a payload with a note of
@@ -24812,6 +24816,10 @@
     // resuming from a stored pane id — a notification, a transfer target, an arbitration link —
     // have only the id, and get exactly the behaviour they always had.
     function openTerminal(paneId, aid) {
+      // A pane id is the whole of what this opens. Without one the pane view comes up over
+      // nothing — a composer typing into a pane that does not exist — and the snapshot's "that
+      // pane ended" cleanup cannot take it down again, being guarded on activePane being set.
+      if (!paneId) return;
       // Opening over an already-open pane leaves the old poller running otherwise, and every
       // switch adds another read_pane every 3s. Cleared here rather than in each caller, because
       // switchToPartner and the header chips both land straight on this without closing first.
@@ -25277,7 +25285,10 @@
     function dockPairTarget(source, list) {
       const pair = source && pairFor(pairs, source);
       const partner = pair && partnerOf(pair, source);
-      return partner && list.some(a => a.pane_id === partner.pane_id) ? partner.pane_id : '';
+      // By agent id: a pair member has no pane_id on it, so who is in the row is answered by
+      // matching the member against the live panes rather than by reading a pane off the record.
+      const live = partner && list.find(a => memberMatches(partner, a));
+      return live ? live.pane_id : '';
     }
 
     // Kept honest against the row it is drawn from: a target that has exited falls back — to the
