@@ -9863,6 +9863,65 @@
       return serverBody;
     }
 
+    // --- What a rejected write cost, in ids ---
+    //
+    // A conflict adopts the relay's document and rebases only the rows in this browser's outbox —
+    // rows it *created* and nothing else has. An edit to a row that already existed is dropped with
+    // nothing said: a member added, a label typed, a tile edited, all silently reverted. The window
+    // is not the 500 ms debounce. A write already in flight, a reconnect carrying a revision from
+    // before the laptop slept, a tab reopened in the morning — all arrive here, and the last two
+    // are hours wide.
+    //
+    // This is not a fix; it is the measurement the fix is gated on. Ids only, never content: a
+    // label is something a person typed, and this leaves the browser. See the decision log's P3
+    // gate — the relay owning membership is built when the loss is measured, not when it is feared.
+    function stateDropRows(name, winBody, loseBody, carried) {
+      const shape = STATE_SHAPE[name];
+      if (!shape || !shape.list || winBody == null || loseBody == null) return [];
+      let win, lose;
+      try { win = JSON.parse(winBody); lose = JSON.parse(loseBody); }
+      catch (e) { return []; }
+      const key = shape.list;
+      if (!win || !lose || !Array.isArray(win[key]) || !Array.isArray(lose[key])) return [];
+      const kept = new Map(win[key].filter(r => r && r.id).map(r => [r.id, r]));
+      const out = [];
+      for (const row of lose[key]) {
+        if (!row || !row.id || carried.has(row.id)) continue;
+        const theirs = kept.get(row.id);
+        // A row this browser held that the winner does not: deleted elsewhere, or created here
+        // long enough ago that the outbox has let go of it. Either way this browser's copy is
+        // about to stop existing.
+        if (!theirs) { out.push({id: row.id, aid: '', field: 'row'}); continue; }
+        // A roster edit, which is the one this exists to count. Compared by agent id on both
+        // sides, so a member added here and not there is named and a member removed here is too.
+        const mine = new Set((row.members || []).map(m => m && m.aid).filter(Boolean));
+        const yours = new Set((theirs.members || []).map(m => m && m.aid).filter(Boolean));
+        for (const aid of mine) if (!yours.has(aid)) out.push({id: row.id, aid: aid, field: 'joined'});
+        for (const aid of yours) if (!mine.has(aid)) out.push({id: row.id, aid: aid, field: 'left'});
+        // Everything else about the row, as one fact rather than field by field: what is being
+        // counted is "an edit was lost", and naming which key it was in would start describing
+        // content. `members` is compared above and taken out of both sides first.
+        const bare = r => JSON.stringify(Object.assign({}, r, {members: null}));
+        if (bare(row) !== bare(theirs)) out.push({id: row.id, aid: '', field: 'edit'});
+      }
+      return out;
+    }
+
+    // Over the socket the client already has, because a browser cannot write to a file and a
+    // console line nobody reads is cleared by the next reload. A relay too old to know the message
+    // ignores it, which is the ordinary state of a page deployed separately from its relay.
+    function stateNoteDrop(name, revSent, revHeld, dropped, kept) {
+      if (!dropped.length) return;
+      if (!stateSocket || stateSocket.readyState !== 1) return;
+      try {
+        stateSocket.send(JSON.stringify({
+          type: 'client_event', event: 'state_conflict_drop',
+          at: Date.now(), name: name, rev_sent: revSent || 0, rev_held: revHeld || 0,
+          dropped: dropped.slice(0, 200), kept: kept,
+        }));
+      } catch (e) { /* a socket that will not carry a measurement is not worth an error path */ }
+    }
+
     function stateRead(name) {
       try { return localStorage.getItem(STATE_DOCS[name].key); }
       catch (e) { return null; }  // private mode: nothing stored, nothing to sync
@@ -10131,7 +10190,13 @@
       // plain adopt it has always been: their loser is dropped, not retried, because retrying is
       // what turns a guarded last-write-wins back into an unguarded one.
       const pending = statePending(name);
-      const merged = pending ? stateMerge(name, remote, stateRead(name), pending) : null;
+      const mine = stateRead(name);
+      const merged = pending ? stateMerge(name, remote, mine, pending) : null;
+      // Before anything is adopted, because after it this browser's own copy is gone.
+      stateNoteDrop(name, stateRev[name], msg.rev,
+                    stateDropRows(name, merged === null ? remote : merged, mine,
+                                  pending || new Set()),
+                    pending ? pending.size : 0);
       stateRev[name] = msg.rev || 0;
       stateHeld[name] = remote;
       stateInFlight.delete(name);
@@ -10217,7 +10282,11 @@
     // Pure, dependency-free, and extracted verbatim by tests/test_pairs.js. Keep it that way:
     // anything here that touches the DOM, ws, or localStorage breaks the tests silently.
     const PAIRS_KEY = 'herdr_pairs';
-    const PAIRS_VERSION = 1;
+    // 2 since a pair member became an agent id. Version 1 is refused rather than read: its members
+    // are pane fingerprints and there is nothing in the document itself that turns one into an id.
+    // The relay's boot migration rewrites the shared document, so what a browser holding a version
+    // 1 body is missing is one connection, not its pairs. See relay/migrate_identity.py.
+    const PAIRS_VERSION = 2;
     const MAX_PAIRS = 32;
     // The relay's cap on one `send_text` message, and no longer a cap on what may be sent: text
     // past it is split into this many characters at a time and typed into the same composer, then
@@ -10481,7 +10550,7 @@
       try { data = JSON.parse(raw); } catch (e) { return []; }
       if (!data || data.version !== PAIRS_VERSION || !Array.isArray(data.pairs)) return [];
       return data.pairs.filter(p => p && typeof p.id === 'string' && Array.isArray(p.members) &&
-        p.members.length === 2 && p.members.every(m => m && m.pane_id));
+        p.members.length === 2 && p.members.every(m => m && m.aid));
     }
 
     function newPairId() {
@@ -10490,58 +10559,74 @@
       return 'p_' + Math.random().toString(36).slice(2, 10);
     }
 
-    // The agent, when both sides know one. A pair is two *colleagues* on one job, and a colleague
-    // outlives the pane it is sitting in — so a member pinned to an agent id survives the restart,
-    // the herdr reboot and the recycled pane id that used to take the pair down with them.
+    // A pair member is an agent id, and matching is that id and nothing else.
     //
-    // Otherwise all four fields, because herdr reuses a pane_id after a pane closes: a matching
-    // pane_id with a different cwd is a different session, and pasting into it is the worst
-    // failure here. That is still the answer for a pair made before agent ids existed, and for a
-    // relay too old to send one — and `healPairs` writes the id in the first time it re-points,
-    // so a pair only stays on this path while nothing has moved.
+    // It used to be all four of `[pane_id, host, agent, cwd]`, because herdr reuses a pane_id after
+    // a pane closes and a matching id with a different cwd is a different session. That made a pair
+    // a statement about two *panes*, so every restart broke it and `healPairs` re-pointed it by
+    // guessing which live pane was the same seat. The relay decides that once now, and the answer
+    // is the id.
     function memberMatches(m, a) {
-      if (m.aid && a.aid) return m.aid === a.aid;
-      return a.pane_id === m.pane_id && (a.host || 'local') === (m.host || 'local') &&
-        a.agent === m.agent && (a.cwd || '') === (m.cwd || '');
+      return !!(m && a && m.aid && a.aid && m.aid === a.aid);
     }
 
+    // What a pair records about a colleague. The id is the whole of the identity; the rest is so
+    // the strip can say who is missing without a live pane to read it off.
+    function pairMemberOf(a) {
+      return { aid: a.aid || '', role: a.role || '', agent: a.agent || '',
+               label: a.label || '' };
+    }
+
+    // What the *recents* log records about a pane that was visited. Still a fingerprint, and still
+    // the four fields, because that log is about panes and not about colleagues: a terminal has no
+    // agent id at all, and "the last five things I opened" is a list of slots. The id rides along
+    // so an agent that moved panes is still recognised as one visit rather than two.
     function recentFingerprint(a) {
       return { pane_id: a.pane_id, host: a.host || 'local', agent: a.agent, cwd: a.cwd || '',
-               // The one field that is not a description of a pane. Empty against a relay that
-               // does not mint them, which is what keeps the fingerprint above the answer.
                aid: a.aid || '' };
     }
 
-    // One clause, and it is the whole of what stale means: a member no live pane answers to.
+    // Three states, and only one of them is broken.
     //
-    // There used to be a second — a pane id reported by more than one host — because every lookup
-    // below was keyed on that bare id and would have picked whichever host sorted first. The
-    // lookups take an agent now and resolve through memberMatches, and the relay accepts an `aid`
-    // as an address, so there is nothing left for it to stand in for. It went in the same change
-    // that made them unambiguous and not before; see the decision log, the agent is the address.
-    function pairHealth(pair, list) {
+    // This used to be two — healthy, or "stale: (pane) is no longer running" — because a member was
+    // a pane and a pane that stopped existing was the end of the pair. A colleague whose pane is
+    // gone has not gone anywhere: the relay still holds its id, its spawn details and its history,
+    // and Restart puts it back in a new pane. So:
+    //
+    //   live — its agent has a pane right now, and everything on the strip works
+    //   away — the agent exists and can be restarted; the strip names it and offers Restart
+    //   gone — no such agent at all, which is the only pair that is actually broken
+    //
+    // `retired` is the relay's list of agents with no pane. Absent — a caller that has not got one,
+    // or a relay too old to send it — everything unfound reads `away` rather than `gone`: "I cannot
+    // see it" is not evidence that it does not exist, and `gone` is what deletes a pair a week
+    // later.
+    function pairHealth(pair, list, retired) {
+      let worst = { state: 'live', reason: '' };
       for (const m of pair.members) {
-        if (!list.some(a => memberMatches(m, a)))
-          return { state: 'stale', reason: `${m.role || m.agent} (${m.pane_id}) is no longer running` };
+        if ((list || []).some(a => memberMatches(m, a))) continue;
+        const known = !retired || (retired || []).some(r => r && r.aid === m.aid);
+        const who = m.label || m.role || m.agent || m.aid;
+        if (known) {
+          if (worst.state === 'live') worst = { state: 'away', reason: `${who} has no pane` };
+        } else {
+          return { state: 'gone', reason: `${who} is no longer an agent this relay knows` };
+        }
       }
-      return { state: 'healthy', reason: '' };
+      return worst;
     }
 
-    // All three take a live agent, not a pane id. A pane id is herdr's per-server counter and two
-    // hosts report the same ones, so a pair found by one is whichever pair was written first.
-    // memberMatches prefers the agent id and falls back to the four-field fingerprint, which is
-    // host-qualified either way.
+    // All of these take a live agent, never a pane id: a pane id is herdr's per-server counter and
+    // two hosts report the same ones, so a pair found by one is whichever pair was written first.
     function pairFor(list, agent) {
       if (!agent) return null;
       return list.find(p => p.members.some(m => memberMatches(m, agent))) || null;
     }
 
-    // "Does any pair name this pane slot" — a different question from which pair a live agent is
-    // in, and the only one two callers can ask. savePair drops by pane id so that a stale pair over
-    // the same slot goes with it, and the warning shown before it does has to see what it will
-    // drop; repointPair names a pane that has already gone, which no live agent answers to.
-    function pairNaming(list, paneId) {
-      return list.find(p => p.members.some(m => m.pane_id === paneId)) || null;
+    // "Does any pair name this agent" — the same question `pairFor` answers, asked with an id
+    // rather than with a live pane, which is what the callers holding only a start's answer have.
+    function pairNaming(list, aid) {
+      return (aid && list.find(p => p.members.some(m => m.aid === aid))) || null;
     }
 
     function memberOf(pair, agent) { return pair.members.find(m => memberMatches(m, agent)); }
@@ -11918,7 +12003,7 @@
     function pairedTabs(list) {
       const out = [];
       pairs.forEach((pair, i) => {
-        if (pairHealth(pair, agents).state !== 'healthy') return;
+        if (pairHealth(pair, agents, retiredAgents).state !== 'live') return;
         const both = pair.members.map(m => list.find(a => memberMatches(m, a))).filter(Boolean);
         both.forEach((a, half) => out.push({...a, pairTint: PAIR_TINTS[i % PAIR_TINTS.length],
           pairEnd: half === both.length - 1}));
@@ -11976,7 +12061,7 @@
       if (scope === 'thread' && activePane) {
         const open = paneOf(activePane);
         const conv = open ? convViewConv(open) : null;
-        const keys = new Set(((conv && conv.members) || []).map(m => m.key));
+        const keys = new Set(((conv && conv.members) || []).map(m => m.aid));
         if (keys.size) live = live.filter(a =>
           keys.has(convMemberKey(a)) || a.pane_id === activePane);
       }
@@ -12803,7 +12888,10 @@
           // openTerminal reads the snapshot for the pane's title and its pair. Starting a session
           // is asking to work in it, so landing on the list and hunting for it is a step nobody
           // wanted.
-          pendingStart = msg.pane_id || null;
+          // Only a terminal. An agent start names itself, and the pane it made comes back carrying
+          // that name — so its landing is keyed by the ref rather than by whichever answer arrived
+          // last, which is what two starts pressed seconds apart used to overwrite each other in.
+          if (msg.command === 'open_terminal') pendingStart = msg.pane_id || null;
         }
         else {
           const error = withRetryHint(msg.error ||
@@ -12815,6 +12903,10 @@
           // launcher's is dropped here, because only it is mid-sequence: launcherFailed ends the
           // batch rather than leaving half a roster to be grouped by a pane that never comes.
           if (typeof launcherFailed === 'function') launcherFailed();
+          // The entry the refused start was waiting under, if it named itself. Without this it sits
+          // in the map until START_INTENT_MS, and a pane herdr later gives the same ref to — it
+          // cannot, but a browser cannot know that — would land on an intent that failed.
+          if (typeof startsInFlight !== 'undefined' && msg.ref) startsInFlight.delete(msg.ref);
         }
       }
       else if (msg.type === 'command_result' && msg.command === 'create_project') {
@@ -12919,14 +13011,25 @@
           }
         }
         openPendingStart();
+        // Every agent start this browser is still waiting on, each landed against its own intent.
+        if (typeof landStarted === 'function') landStarted();
         // Any start made for a conversation whose answer this tab is not holding — because the
         // reader changed view, opened another agent, reloaded, or is in a second tab — picked up
         // by the id the start named itself with. After openPendingStart, so a start this tab does
         // still hold the answer for lands the ordinary way, with its opening words.
         if (typeof convLandPending === 'function') convLandPending();
-        // After the notes, which are the explicit half of the same job: a member a note already
-        // moved is on its pane by the time this looks, and this then finds nothing to do.
-        if (typeof convFollowAids === 'function') convFollowAids();
+        // `convFollowAids` was called here, every poll, to fold a live pane's agent id onto a
+        // member row and to move a member whose pane had gone onto the pane its agent was in. A
+        // member is its agent now, so there is nothing to fold and nowhere to follow.
+        //
+        // What is here instead runs once in the life of the page and then answers immediately: the
+        // transcripts this browser wrote under pane keys, moved onto the agent ids the relay's boot
+        // migration put in the roster. On the snapshot rather than at load because it reads the
+        // index, and the index is not this browser's until the shared documents have arrived.
+        if (typeof convRekeyTranscripts === 'function'
+            && !(typeof stateSyncPending === 'function' && stateSyncPending())) {
+          convRekeyTranscripts();
+        }
         // Restart all, one member per landing. After the two above, which are what clear the way
         // for the next one — see convRestartStep.
         if (typeof convRestartStep === 'function') convRestartStep();
@@ -13437,6 +13540,102 @@
     }
 
   </script>
+  <!-- Before start_dialog.js, which holds the landing, and before every module that starts
+       anything: the intent map is where a start in flight waits and they all write to it. -->
+  <script>
+// What each start in flight was asked for.
+//
+// A start is a request with two halves that arrive seconds apart: the intent, which the press
+// knows, and the pane, which only the next poll knows. Something has to hold the first until the
+// second turns up, and for a long time that something was a handful of scalars — which works for
+// exactly one start at a time.
+//
+// On 2026-08-30 two restarts were pressed three seconds apart. The second press overwrote the
+// first's intent while the first's pane was still coming up, the first pane to land took the
+// second's replace intent, and one colleague's member row was moved onto another colleague's pane
+// in a conversation it had nothing to do with. See
+// `.workflow/07_dev_notes/2026-08-30_quick_actions_incident.md`.
+//
+// So a start names itself, the relay puts that name on the pane it makes, and the intent waits
+// here under the same name. Two starts in flight are two entries and cannot reach each other.
+//
+// Loaded before start_dialog.js, which holds the landing itself.
+
+    // What the next successful start was asked for, when it was asked for from inside a pane:
+    // 'open' to land in it regardless, {pair: paneId} to come back to the pair dialog with it
+    // chosen. null — every other route in — keeps the old deferring behaviour. Set at request
+    // time and cleared when it is acted on, so an abandoned dialog cannot claim a later start.
+    let startIntent = null;
+    // What the next successful start opens with: the starter role's prompt, or '' for a start made
+    // without one. Kept apart from startIntent because it is a different question — where the new
+    // pane lands versus what it is told first — and every route in can ask both.
+    let startPrompt = '';
+    // *Which* starter that was, as a SHORTCUTS `at`. The prompt is text and cannot be asked again
+    // what it was; this is the name, and it is what makes a restart open the same way.
+    let startStarter = '';
+
+    // What each start *in flight* was asked for, keyed by the name that start gave itself.
+    //
+    // The three scalars above are where a press assembles its intent, and they were also where it
+    // waited — which works for exactly one start at a time. On 2026-08-30 two restarts were pressed
+    // three seconds apart: the second press overwrote the first's intent while the first's pane was
+    // still coming up, and the first pane to land took the second's replace intent into a
+    // conversation it had nothing to do with, moving one colleague's member row onto another
+    // colleague's pane. See `.workflow/07_dev_notes/2026-08-30_quick_actions_incident.md`.
+    //
+    // So the wait happens here instead. `sendStart` snapshots the scalars against the ref it puts
+    // on the wire, and the pane that comes back carrying that ref is landed against its own entry
+    // and nobody else's.
+    const startsInFlight = new Map();   // ref -> {intent, prompt, starter, at}
+    // A start that never lands stops being anyone's business. Long enough to outlast a slow agy
+    // coming up on a loaded machine, short enough that an abandoned one is not still waiting when
+    // the reader starts something else five minutes later.
+    const START_INTENT_MS = 300000;
+
+    function newStartRef() {
+      return typeof convRespawnRef === 'function' ? convRespawnRef()
+        : 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+
+    // Every `start_agent` this app sends goes through here. The ref is what the pane will carry, so
+    // it is also the only honest key for what the pane is *for*.
+    //
+    // `open_terminal` does not: the relay refuses an unexpected field outright and a terminal
+    // carries no ref, so it keeps the single pending slot below — one terminal at a time, which is
+    // what the Run tile and the Start sheet ask for anyway.
+    function sendStart(msg) {
+      if (!ws || !msg) return '';
+      msg.ref = msg.ref || newStartRef();
+      startsInFlight.set(msg.ref, {intent: startIntent, prompt: startPrompt,
+                                   starter: startStarter, at: Date.now()});
+      // Cleared as they are captured. A press that has said what it wants must not leave it lying
+      // where the next press reads it — that is the whole of the defect this replaces.
+      startIntent = null;
+      startPrompt = '';
+      startStarter = '';
+      ws.send(JSON.stringify(msg));
+      return msg.ref;
+    }
+
+    // Panes that have arrived carrying a ref this browser is waiting on, landed against their own
+    // intent. Called from the same place openPendingStart is, on every snapshot.
+    async function landStarted() {
+      if (!startsInFlight.size) return;
+      const cutoff = Date.now() - START_INTENT_MS;
+      for (const [ref, held] of Array.from(startsInFlight)) {
+        if (held.at < cutoff) { startsInFlight.delete(ref); continue; }
+        // Both lists, for the same reason openPendingStart reads both.
+        const a = agents.concat(typeof shells !== 'undefined' && shells ? shells : [])
+          .find(x => x && x.ref === ref);
+        if (!a) continue;
+        // Spent before landing, not after: landStart can throw on a half-rendered snapshot, and an
+        // entry that survived that would land the same pane again on every poll from then on.
+        startsInFlight.delete(ref);
+        await landStart(a, held.intent, held.prompt, held.starter);
+      }
+    }
+
+  </script>
   <script>
     // --- Start session dialog ---
     function fillSelect(id, options) {
@@ -13500,20 +13699,9 @@
       return out;
     }
 
-    // A session the relay just started, waiting for the poll to catch up so it can be opened.
+    // A terminal the relay just opened, waiting for the poll to catch up so it can be opened. Only
+    // a terminal: an agent start names itself and is waited on by ref in start_intent.js.
     let pendingStart = null;
-    // What the next successful start was asked for, when it was asked for from inside a pane:
-    // 'open' to land in it regardless, {pair: paneId} to come back to the pair dialog with it
-    // chosen. null — every other route in — keeps the old deferring behaviour. Set at request
-    // time and cleared when it is acted on, so an abandoned dialog cannot claim a later start.
-    let startIntent = null;
-    // What the next successful start opens with: the starter role's prompt, or '' for a start made
-    // without one. Kept apart from startIntent because it is a different question — where the new
-    // pane lands versus what it is told first — and every route in can ask both.
-    let startPrompt = '';
-    // *Which* starter that was, as a SHORTCUTS `at`. The prompt is text and cannot be asked again
-    // what it was; this is the name, and it is what makes a restart open the same way.
-    let startStarter = '';
 
     // pane_id -> the `at` it was started under. Written by whoever starts a session, read by
     // convSpawn so a conversation records what the session *was* rather than guessing it back off
@@ -13547,6 +13735,9 @@
       return typeof openPanelId === 'function' && openPanelId() === 'convView';
     }
 
+    // A terminal that has come up. Terminals carry no ref, so this is still the one pending slot —
+    // and it can be, because nothing about a terminal is a conversation membership: the worst a
+    // crossed pair of them can do is type a Run tile's command into the other one's shell.
     async function openPendingStart() {
       if (!pendingStart) return;
       // Both lists: an opened terminal arrives in `shells`, and looking only at `agents` would
@@ -13557,19 +13748,23 @@
       // and a pending id that survives that would reopen the pane on every poll from then on.
       pendingStart = null;
       const intent = startIntent;
+      const prompt = startPrompt;
+      const starter = startStarter;
       startIntent = null;
-      // Read once here for the same reason: a start that never came up must not leave its opening
-      // words to be said to whatever is started next.
-      //
+      startPrompt = '';
+      startStarter = '';
+      await landStart(a, intent, prompt, starter);
+    }
+
+    // One pane, landed against the intent that asked for it. Everything below reads that intent and
+    // nothing reads a global, which is what makes two starts in flight independent of each other.
+    async function landStart(a, intent, promptText, starterAt) {
       // Written for the pane that actually landed, not for the harness the caller had in mind when
       // it resolved the text. Those two disagree more often than they look: a member swapped from
       // one harness to another, a start whose kind came off a stale record, an alias resolved
       // somewhere that only knew its id. The pane is the one place the answer is a fact, and
       // agentSlash is idempotent, so a prompt already in the right form passes through untouched.
-      const prompt = startPrompt ? agentSlash(startPrompt, a.agent) : '';
-      const starterAt = startStarter;
-      startPrompt = '';
-      startStarter = '';
+      const prompt = promptText ? agentSlash(promptText, a.agent) : '';
       // Before anything below opens, joins or sends: the first thing that happens to this pane may
       // be a record of it, and a record taken before this is one that learned nothing.
       notePaneStarter(a.pane_id, starterAt);
@@ -13585,7 +13780,10 @@
         // Not when either pane is in a pair already: savePair drops it, and the warning
         // choosePartner has just written is the one thing that must not be auto-answered.
         // Nor when saving refuses — at the pair ceiling the dialog stays up holding the reason.
-        if (![intent.pair, a.pane_id].some(id => pairNaming(pairs, id))) savePair();
+        // By agent id, which is what a pair member is. Reading the source pane out of the roster
+        // rather than trusting the intent: the intent carries a pane id, and the question is
+        // about the colleague sitting in it.
+        if (![paneOf(intent.pair), a].some(p => p && pairNaming(pairs, p.aid))) savePair();
         const paired = !pairSource;   // savePair closes the dialog; a refusal leaves it open
         if (prompt) sendTextTo(a.pane_id, prompt);
         showSpawnStatus(`${a.label || a.agent || 'Session'} started` +
@@ -13614,7 +13812,7 @@
       // succession itself is convLandMember's — this is the fast path into it, and the only one
       // that still holds the opening words.
       if (intent && intent.conv) {
-        const conv = await convLandMember(a, intent.conv, intent.replace || '', intent.ref || '');
+        const conv = await convLandMember(a, intent.conv, intent.ref || '');
         // Started with something to say to it. The send goes through the same path a typed message
         // does, so the conversation records it as the user's — it is, and a first instruction that
         // was missing from the thread would be a turn nobody could see the start of. After the
@@ -13695,7 +13893,7 @@
       // "Architect 2" rather than as a second pane with the same name.
       startIntent = 'open';
       showSpawnStatus(`Duplicating ${a.label || a.agent || 'session'}…`, 'busy');
-      ws.send(JSON.stringify(msg));
+      sendStart(msg);
     }
 
     // Spawn into the Project the open pane belongs to, without going back to the list to find
@@ -14218,7 +14416,10 @@
         endPane(startIntent.endFirst);
         startIntent = Object.assign({}, startIntent, {endFirst: ''});
       }
-      ws.send(JSON.stringify(msg));
+      // A terminal has no ref to be waited on by, and keeps the pending slot. An agent goes out
+      // named, so two submits in the same few seconds cannot land on each other's intent.
+      if (terminal) ws.send(JSON.stringify(msg));
+      else sendStart(msg);
     }
 
     // --- Recents ---
@@ -14338,7 +14539,7 @@
     // no status, and the members that do have their own rows here.
     function recentConvRow(c) {
       const n = (c.members || []).length;
-      const live = (c.members || []).filter(m => agents.some(a => convMemberKey(a) === m.key)).length;
+      const live = (c.members || []).filter(m => agents.some(a => convMemberKey(a) === m.aid)).length;
       const meta = `${n} pane${n === 1 ? '' : 's'}` + (live ? ` · ${live} live` : '');
       return `<button class="pair-pick${c.id === convViewId ? ' on' : ''}" ` +
         `onclick="closeRecentSheet(); openConversation('${escapeHtml(c.id)}')">` +
@@ -14426,63 +14627,21 @@
       if (typeof stateSyncMark === 'function') stateSyncMark('pairs');
     }
 
-    // A restart is the same colleague in a new pane, so the pair that named the dead one follows it
-    // across. Members are pinned by pane_id (memberMatches), which a restart always changes — so a
-    // pair went stale the moment its member was restarted, which is what took the switch button,
-    // the partner's name and its badge off the strip and left a "no longer running" line instead.
+    // `healPairs` was here. A pair member was pinned by pane id, herdr changes that on every
+    // restart, and the pair went stale the moment its member came back — so this walked every dead
+    // member, looked for exactly one live pane on the same host, harness and directory, and moved
+    // the member onto it. An inference, written into durable state, on every poll.
     //
-    // The same repair, for every way a pane can come back that this browser did not ask for: herdr
-    // restarted, the workspace was reopened, the agent was launched again from the terminal. A
-    // pane_id is herdr's and not ours, and a pair pinned to one that no longer exists simply stops
-    // being found — the strip vanishes from both panes with nothing said about why, which is what
-    // "some panes show it and others do not" looks like from the outside.
-    //
-    // A dead member is re-pointed at the pane that is unmistakably the same seat: same host, same
-    // harness, same cwd, and exactly one such pane not already spoken for. Ambiguity is left alone
-    // — two claude panes in one directory are two colleagues, and guessing between them would put
-    // one agent's work in the other's terminal.
-    function healPairs() {
-      const claimed = new Set();
-      for (const p of pairs) for (const m of p.members) {
-        const live = agents.find(a => memberMatches(m, a));
-        if (live) claimed.add(live.pane_id);
-      }
-      let moved = false;
-      for (const pair of pairs) {
-        pair.members = pair.members.map(m => {
-          const live = agents.find(a => memberMatches(m, a));
-          if (live) {
-            // Found — but not necessarily where it is recorded. memberMatches pins the *agent*, and
-            // an agent moves between panes; everything else here finds a member by pane id, so a
-            // member matched on its id alone is one pairFor, memberOf and the strip cannot look up.
-            // The pair reads healthy and draws on nothing. Re-stamped instead, which is also how an
-            // id gets into a pair written before the relay minted any.
-            // Compared as whole fingerprints, not pane id alone: an agent that moved *hosts* can
-            // keep its pane id, since those are per-server counters. Left as it was, the member
-            // still names the old host and every lookup goes to the wrong machine.
-            const fp = recentFingerprint(live), was = recentFingerprint(m);
-            if (Object.keys(fp).every(k => fp[k] === was[k])) return m;
-            moved = true;
-            return Object.assign({}, m, fp);
-          }
-          const same = agents.filter(a => !claimed.has(a.pane_id) &&
-            (a.host || 'local') === (m.host || 'local') &&
-            a.agent === m.agent && (a.cwd || '') === (m.cwd || ''));
-          if (same.length !== 1) return m;
-          claimed.add(same[0].pane_id);
-          moved = true;
-          return Object.assign({}, m, recentFingerprint(same[0]));
-        });
-      }
-      if (moved) savePairs();
-      return moved;
-    }
+    // A member is an agent id now. It survives the restart, the herdr reboot and the recycled pane
+    // id, so there is nothing to heal — and the one rule this had that was worth keeping, "exactly
+    // one candidate for this seat", is the relay's adoption rule, decided once for every browser
+    // instead of re-derived by whichever one had a tab open. See `agent_ids.resolve` rule 3.
 
-    // How long a pair whose partner never came back is kept. A pair is two panes on one job; once
-    // one of them has been gone a week the pinned fingerprint names no colleague — herdr has
-    // handed that pane id to somebody else several times over by then. Until the week is up it is
-    // left exactly as it is: a partner can be down for a day and still be the pair, and healPairs
-    // above is what brings it back when it returns.
+    // How long a pair whose partner never came back is kept. A pair is two colleagues on one job;
+    // once one of them has been gone a week — not its pane, the *agent*, which the relay would
+    // still be offering for Restart if it were coming back — the pair names nobody. A member that
+    // merely has no pane is `away` and is not counted against this: an agent can be down for a day
+    // and still be the pair.
     const PAIR_STALE_MS = 7 * 24 * 3600 * 1000;
 
     // Judged only against a roster. An empty `agents` is "the relay has not answered yet", not
@@ -14495,7 +14654,7 @@
       const kept = [];
       let changed = false;
       for (const p of pairs) {
-        if (pairHealth(p, agents).state === 'healthy') {
+        if (pairHealth(p, agents, retiredAgents).state !== 'gone') {
           if (p.stale) { delete p.stale; changed = true; }
           kept.push(p);
           continue;
@@ -14510,19 +14669,9 @@
       return true;
     }
 
-    // Never over a pane that is already in a pair of its own: that is a pairing the user made, and
-    // a restart elsewhere is not a reason to rewrite it.
-    function repointPair(oldPaneId, next) {
-      if (!oldPaneId || !next || oldPaneId === next.pane_id) return false;
-      // By pane id: `oldPaneId` names a pane that has gone, so there is no live agent for pairFor
-      // to match it with. This is the pre-`aid` repair.
-      const pair = pairNaming(pairs, oldPaneId);
-      if (!pair || pairNaming(pairs, next.pane_id)) return false;
-      pair.members = pair.members.map(m => m.pane_id === oldPaneId
-        ? Object.assign({}, m, recentFingerprint(next)) : m);
-      savePairs();
-      return true;
-    }
+    // `repointPair` was here, for the same reason and with the same answer: a restart used to move
+    // a pair member from the dead pane's id onto the live one's, and a member that is an agent id
+    // is already on whichever pane herdr has put its agent in.
 
     // --- Line width ---
     // herdr hands back scrollback already hard-wrapped at the pane's column count, so every long
@@ -15369,7 +15518,7 @@
       startStarter = member.at || NO_STARTER;
       if (ref && typeof convNotePending === 'function') convNotePending(conv.id, ref, key, '');
       showSpawnStatus(`Continuing ${tile.label}…`, 'busy');
-      ws.send(JSON.stringify(msg));
+      sendStart(msg);
       return true;
     }
 
@@ -15410,7 +15559,10 @@
       showSpawnStatus(batch.members.length > 1
         ? `Starting ${member.name} (${batch.sent} of ${batch.members.length})…`
         : `Starting ${member.name}…`, 'busy');
-      ws.send(JSON.stringify(launcherSpawnMsg(batch.tile, member)));
+      // A batch's members go out one at a time, but "one at a time" has always meant "one *send* at
+      // a time" — the pane for member one is still coming up when member two is sent. Each carries
+      // its own ref, so each lands against the batch state it was sent with.
+      sendStart(launcherSpawnMsg(batch.tile, member));
       return true;
     }
 
@@ -15452,6 +15604,14 @@
       const batch = launcherLive;
       launcherLive = null;
       startIntent = null;
+      // And whatever this batch already has in flight. A start that was refused has no pane coming,
+      // and one sent before the refusal belongs to a batch that is now over — landing either of
+      // them later would put a member into a conversation the user was just told did not happen.
+      if (typeof startsInFlight !== 'undefined') {
+        for (const [ref, held] of Array.from(startsInFlight)) {
+          if (held && held.intent && held.intent.ql) startsInFlight.delete(ref);
+        }
+      }
       if (batch.panes.length) {
         showToast(`Started ${batch.panes.length} of ${batch.members.length} — the rest did not.`);
       }
@@ -17426,21 +17586,20 @@
         ? { at: end, at_src: 'state' } : { at: now, at_src: 'read' }));
     }
 
-    // Which pane a transcript belongs to. Not the pane_id alone: herdr recycles those, and a
-    // recycled id landing on a dead session's transcript would inherit words that pane never said,
-    // which is the worst failure this feature has.
+    // Whose transcript this is. The agent id and nothing else: the relay mints it once, keeps it
+    // across every pane that agent goes on to occupy, and never gives it to another agent. A
+    // member key, a transcript key and a `conv_view` entry are all this string.
+    //
+    // It used to be `[host, pane_id, agent, cwd]` — the pane, described. herdr recycles pane ids
+    // and moves a session between them for reasons that have nothing to do with the session, so
+    // that key moved under its owner on every restart, and nine functions existed to chase it. All
+    // of them are gone; this line is what replaced them.
+    //
+    // Empty for a pane the relay could not identify — an `unresolved` one, or any pane at all
+    // against a relay older than 2026-08-29. An empty key is not a member and not a transcript:
+    // nothing durable is written about a pane nobody can name. See invariant I2.
     function convMemberKey(a) {
-      return a ? JSON.stringify([a.host || '', a.pane_id || '', a.agent || '', a.cwd || '']) : '';
-    }
-
-    // The pane a member key was made from. Only the pane_id is recoverable as a fact about a live
-    // terminal — the rest of the key describes a session that has usually ended by the time anyone
-    // asks. Used by a restart, to find what the dead pane was still named in.
-    function convKeyPaneId(key) {
-      try {
-        const parts = JSON.parse(key);
-        return Array.isArray(parts) ? String(parts[1] || '') : '';
-      } catch (e) { return ''; }
+      return (a && a.aid) || '';
     }
 
     // When a conversation last had anything said in it, across its members. `convNoteCounts` stamps
@@ -17524,41 +17683,23 @@
     // A corrupt blob is no conversations, never a half-index — the contract parsePairs already
     // holds to, and for the same reason: a store that outlives the panes it describes will one day
     // be read by a version that did not write it.
-    // One member per pane. A key is [host, pane_id, agent, cwd], so two rows carrying the same one
-    // are the same pane drawn twice with one transcript behind both — a landing that joined as a
-    // new member when its replace intent no longer matched anything. Fixed at the source in
-    // start_dialog; read here so an index already carrying the duplicate reads clean, and is
-    // written clean by the next save rather than needing anyone to notice it.
-    //
-    // The first wins: it is the row the thread has been read under, and the one holding `was`.
-    function dedupeMembers(members) {
-      const seen = new Set();
-      return (members || []).filter(m => {
-        if (!m) return false;
-        if (!m.key) return true;
-        if (seen.has(m.key)) return false;
-        seen.add(m.key);
-        return true;
-      });
-    }
 
-    // Two auto conversations filing the same pane, which is what two browsers do when they meet a
+    // Two auto conversations filing the same agent, which is what two browsers do when they meet a
     // fresh pane at the same moment: neither index holds the other's row yet, so each mints one,
     // and the state merge appends the loser's because appending what a browser created is exactly
-    // what it is for. The pane then has two records in the list, both drawing the one transcript
-    // its key names.
+    // what it is for. The agent then has two records in the list, both drawing its one transcript.
     //
     // Dropped on the way in rather than repaired on the way out: the row is a duplicate wherever
     // it is read, and array order is the same in every browser — the relay's document first, local
     // creations appended — so every browser drops the same one. Only between two `auto` rows, and
     // only when every member of the later one is already filed by an earlier: a named conversation
-    // was asserted by somebody, and an auto one holding a pane nothing else holds is that pane's
-    // only record.
+    // was asserted by somebody, and an auto one holding an agent nothing else holds is that
+    // agent's only record.
     function dedupeAutoConvs(items) {
       const filed = new Set();
       const out = [];
       for (const c of items) {
-        const keys = (c.members || []).map(m => m && m.key).filter(Boolean);
+        const keys = (c.members || []).map(m => m && m.aid).filter(Boolean);
         if (c.auto && keys.length && keys.every(k => filed.has(k))) continue;
         if (c.auto) for (const k of keys) filed.add(k);
         out.push(c);
@@ -17566,16 +17707,58 @@
       return out;
     }
 
+    // The index is at version 2 once its members are keyed by agent id. `CONV_INDEX_VERSION` is
+    // what orders the two halves of that change: the relay migrates the shared document at boot
+    // and stamps the marker, and everything below reads an `aid` because it can only ever be
+    // handed a body carrying one.
+    const CONV_INDEX_VERSION = 2;
+
+    // A version 1 index, read once and turned into a version 2 one.
+    //
+    // The relay migrates the *shared* document, which is where every browser's index comes from.
+    // This is for the two bodies it cannot reach: this browser's own `localStorage`, written by the
+    // build before this one, and a body from a relay too old to have migrated anything. Nothing is
+    // inferred and nothing is dropped — a row that already carries an `aid` is keyed by it, and a
+    // row that does not is kept, readable, and a member of nothing. That is the same "parked" the
+    // relay's migration writes, reached by a browser that has less to go on.
+    function convMigrateMembers(members) {
+      return (members || []).map(m => {
+        if (!m || !m.key) return m;
+        const row = Object.assign({}, m);
+        delete row.key; delete row.was; delete row.wasFp;
+        delete row.superseded; delete row.superseded_at;
+        if (m.aid) row.from = m.key; else row.parked = true;
+        return row;
+      });
+    }
+
+    // One agent is at most one member of a conversation — I5, held by the key rather than by a
+    // repair pass. A duplicate can still arrive from an older browser's document, and the first
+    // wins: it is the row the thread has been read under.
+    function oneRowPerAgent(members) {
+      const seen = new Set();
+      return (members || []).filter(m => {
+        if (!m) return false;
+        if (!m.aid) return true;          // an ended or parked row is a record, not a member
+        if (seen.has(m.aid)) return false;
+        seen.add(m.aid);
+        return true;
+      });
+    }
+
     function parseConvIndex(raw) {
       try {
         const d = JSON.parse(raw || '');
-        if (!d || d.version !== 1 || !Array.isArray(d.items)) return [];
+        if (!d || !Array.isArray(d.items)) return [];
+        if (d.version !== 1 && d.version !== CONV_INDEX_VERSION) return [];
+        const old = d.version === 1;
         return dedupeAutoConvs(
           d.items.filter(c => c && c.id && typeof c.name === 'string' && Array.isArray(c.members))
           // The roster, not the recording cap: an ended member is the record of a session that
           // happened, and truncating it here would delete history on the next read of the index.
           .map(c => Object.assign({}, c, {
-            members: dedupeMembers(c.members).slice(-CONV_ROSTER_MAX),
+            members: oneRowPerAgent(old ? convMigrateMembers(c.members) : c.members)
+              .slice(-CONV_ROSTER_MAX),
           })));
       } catch (e) { return []; }
     }
@@ -17746,29 +17929,29 @@
       const named = new Map();
       for (const c of convs || []) {
         for (const m of (c && c.members) || []) {
-          if (!m || !m.key) continue;
-          if (!named.has(m.key)) named.set(m.key, []);
-          named.get(m.key).push(c.name || 'Untitled');
+          if (!m || !m.aid) continue;
+          if (!named.has(m.aid)) named.set(m.aid, []);
+          named.get(m.aid).push(c.name || 'Untitled');
         }
       }
       const rows = [];
       for (const [key, rec] of records) {
         if (!rec) continue;
         const entries = rec.entries || [];
-        const fp = typeof convKeyFingerprint === 'function' && typeof convFpKey === 'function'
-          ? convFpKey(convKeyFingerprint(key)) : key;
+        // A bucket in the relay-record cache is keyed by the agent, which is what a transcript is
+        // keyed by too — so these are the same string and there is nothing to derive.
+        const fp = key;
         rows.push({
           key: key,
-          // The label the recorder stamped, then the pane id the key carries. A transcript always
-          // has one or the other: the pane id is in the key by construction.
-          name: rec.label || (typeof convKeyPaneId === 'function' ? convKeyPaneId(key) : '') || 'Pane',
+          // The label the recorder stamped, then the agent id itself. A transcript always has one
+          // or the other: the id is the key by construction.
+          name: rec.label || key || 'Pane',
           agent: rec.agent || '',
           msgCount: entries.length,
           bytes: convStoredBytes(rec),
           fp: fp,
-          // The relay's record for the same pane, held in memory for this session. A fingerprint
-          // is per host+agent+cwd and a key is per pane, so two panes of one agent in one directory
-          // share a bucket: this is what the Live thread cost to fetch, not a second transcript.
+          // The relay's record for the same agent, held in memory for this session — what the Live
+          // thread cost to fetch, not a second transcript.
           liveBytes: cached.get(fp) || 0,
           open: live.has(key),
           convs: named.get(key) || [],
@@ -17783,7 +17966,7 @@
     // transcripts, but it is the part that is there even for a conversation whose panes never
     // recorded a word.
     function calcConvIndexBytes(convs) {
-      return convStoredBytes({ version: 1, items: convs || [] });
+      return convStoredBytes({ version: CONV_INDEX_VERSION, items: convs || [] });
     }
 
     function sortConvAnalyticsRows(rows, col, dir) {
@@ -18043,47 +18226,54 @@
       }
     }
 
-    // A deliberate conversation restart is the one safe exception to per-pane identity: the user
-    // chose the dead member and asked its replacement to continue the same thread. Copy its record
-    // under the new physical pane key; the old key remains for any other conversation that still
-    // names that ended session.
-    // The record a replacement starts life with. The transcript continues; the identity does not.
-    // `spawn` describes the pane that ended — its harness, its label, the agent config it came up
-    // under — and a member swapped from oclaude to stock codex would go on wearing all three,
-    // because convSpawn falls back to what was recorded before whenever the live pane does not say.
-    // The starter is the one part that carries: it is the role this member is in the conversation
-    // for, and nothing else remembers it once the browser that watched the start reloads.
-    function convContinued(old, newKey, label) {
-      return Object.assign({}, old, {
-        key: newKey, label: label || old.label || '', entries: (old.entries || []).slice(),
-        spawn: {starter: ((old.spawn || {}).starter) || ''},
-        // The new pane cannot be aligned to the old pane's output. Keep the continuation boundary
-        // until its first completed turn, then append that whole turn after this history.
-        continued: true, backfilled: true, depth: 0, lastTurn: 0,
-      });
+    // --- The one-time transcript re-key ---
+    //
+    // Every transcript in this browser is filed under the key its member had when it was written,
+    // and until 2026-08-30 that key was `[host, pane_id, agent, cwd]`. The relay's boot migration
+    // re-keys the shared roster and leaves each migrated member carrying `from` — the pane key its
+    // words are still on disk under. This is the other half: copy each of those records onto the
+    // agent id, once.
+    //
+    // Once per browser and not once per fleet, because IndexedDB is per browser and no other
+    // participant can reach it. Idempotent, and never destructive: a record already at the new key
+    // is left exactly as it is — a second browser's copy, or this one's after a restart wrote a
+    // turn — and the old record is not deleted, so a downgrade still finds it and eviction reclaims
+    // it in its own time.
+    let convRekeyDone = false;
+
+    async function convRekeyTranscripts() {
+      if (convRekeyDone) return 0;
+      convRekeyDone = true;
+      const moves = new Map();
+      for (const c of loadConvIndex()) {
+        for (const m of (c && c.members) || []) {
+          if (m && m.aid && m.from && !moves.has(m.aid)) moves.set(m.aid, m.from);
+        }
+      }
+      if (!moves.size) return 0;
+      let moved = 0;
+      for (const [aid, from] of moves) {
+        try {
+          const [held, old] = await convGet([aid, from]);
+          const already = (held && held.key === aid) ? held : null;
+          const source = [held, old].find(r => r && r.key === from);
+          if (already || !source) continue;
+          if (await convPut(Object.assign({}, source, { key: aid }))) moved++;
+        } catch (e) { /* one record that will not copy is not the rest of them */ }
+      }
+      return moved;
     }
 
-    async function convContinueTranscript(oldKey, newKey, label) {
-      if (!oldKey || !newKey || oldKey === newKey) return true;
-      const old = convHeld.get(oldKey) || (await convGet([oldKey]))[0];
-      if (!old) return true;
-      // herdr recycles pane IDs, and a key is [host, pane_id, agent, cwd] — so the replacement can
-      // land on a key some *other* ended session already recorded under. Copying over it would
-      // delete a transcript a conversation still names. Refused instead: the caller falls back to
-      // joining as a new member, which is what a restart did before it could continue anything.
-      const taken = convHeld.get(newKey) || (await convGet([newKey]))[0];
-      if (taken && (taken.entries || []).length && convReferenced().has(newKey)) return false;
-      const next = convContinued(old, newKey, label);
-      if (!(await convPut(next))) return false;
-      convHeld.set(newKey, next);
-      return true;
-    }
+    // A transcript is keyed by the agent that said it, so a restart lands on the key the thread
+    // is already under and there is nothing to carry across. `convContinued` and
+    // `convContinueTranscript` copied one pane's record onto another's key and marked the seam;
+    // both are gone, along with the `continued` flag they wrote. See the identity decision log.
 
     // Which keys any conversation still names. Read from the index, which is why the index is the
     // synchronous half: eviction must not wait on a database to know what is protected.
     function convReferenced() {
       const out = new Set();
-      for (const c of loadConvIndex()) for (const m of c.members || []) out.add(m.key);
+      for (const c of loadConvIndex()) for (const m of c.members || []) out.add(m.aid);
       return out;
     }
 
@@ -18093,7 +18283,7 @@
     // auto conversation is the whole promotion — there is no keep switch and no archive.
     function convKept() {
       const out = new Set();
-      for (const c of loadConvIndex()) if (!c.auto) for (const m of c.members || []) out.add(m.key);
+      for (const c of loadConvIndex()) if (!c.auto) for (const m of c.members || []) out.add(m.aid);
       return out;
     }
 
@@ -18179,6 +18369,11 @@
       // pane id: two hosts can use the same one.
       const a = typeof pane === 'string' ? paneOf(pane) : pane;
       if (!a || !profileFor(a.agent)) return;
+      // Nothing is filed under a key that is about to change. A pane the relay has not identified
+      // is one it is still bringing up, and a transcript written under this key now is one the
+      // member it belongs to will never find. The same lines are read again on the poll after its
+      // id lands. See convLandMember for why the flag and not a missing `aid`.
+      if (a.unresolved) return;
       const key = convMemberKey(a);
       if (!convReferenced().has(key)) return;
       return convQueue(key, () => recordPaneNow(a, key, rows));
@@ -18228,6 +18423,13 @@
       // The turn's own clock. Zero until this browser has seen the pane end a turn, which is what
       // makes a first read a backfill and not an append.
       const end = turnEnd(a.pane_id);
+      // A restart, and the one thing about it that still matters here. The transcript no longer
+      // moves — the key is the agent — so a respawned agent lands straight back on its own record,
+      // and its brand-new terminal would otherwise be read as scrollback and backfilled into the
+      // history it already holds. Same agent, different pane: the succession is a *recorded* fact
+      // rather than the inference `convContinueTranscript` used to make on the way through.
+      if (held.pane && a.pane_id && held.pane !== a.pane_id) held.continued = true;
+      held.pane = a.pane_id || held.pane || '';
       // Once per transcript, and not once per *empty* transcript: a prompt committed at the send
       // can reach a new record before its pane has ever been read, and that must not cost the pane
       // its history. Records written before this flag existed were all written from reads.
@@ -18282,7 +18484,8 @@
       let before = [], add = [], noteGap = false;
       if (held.continued) {
         // A replacement pane starts with a fresh terminal. Its first finished turn belongs after
-        // the copied record, not before it as scrollback and not against it as an overlap anchor.
+        // the record it already holds, not before it as scrollback and not against it as an
+        // overlap anchor.
         if (end) {
           add = sentTurnEntries(body, held.entries, now, end);
           if (add.length) { held.lastTurn = end; held.continued = false; }
@@ -18715,7 +18918,7 @@
       if (convMemberKey(a) === key) return true;
       const conv = convViewConv(a);
       return !!conv && convViewOn(a) && convJointOn() &&
-        pairedConvMembers(a, conv).some(m => m.key === key);
+        pairedConvMembers(a, conv).some(m => m.aid === key);
     }
 
     // The count and the last message time the landing list renders, kept per member rather than
@@ -18731,7 +18934,7 @@
       const last = convAt(entries[entries.length - 1]) || now;
       let hit = false;
       for (const c of items) for (const m of c.members || []) {
-        if (m.key === key) {
+        if (m.aid === key) {
           m.messages = entries.length;
           m.seen = last;
           // Enough of the newest message to recognise it on a card, and no more: this lives in
@@ -18763,8 +18966,8 @@
       const items = loadConvIndex();
       let hit = false;
       for (const c of items) for (const m of c.members || []) {
-        if (!(keys || []).includes(m.key)) continue;
-        const entries = convLiveEntries([m.key]);
+        if (!(keys || []).includes(m.aid)) continue;
+        const entries = convLiveEntries([m.aid]);
         if (!entries.length) continue;
         const last = entries[entries.length - 1] || {};
         const messages = Math.max(Number(m.messages) || 0, entries.length);
@@ -18857,7 +19060,7 @@
         const next = new Set((Array.isArray(pending) ? pending : []).filter(id => here.has(id)));
         for (const c of kept) if (c && c.id && !before.has(c.id)) next.add(c.id);
         localStorage.setItem(CONV_PENDING_KEY, JSON.stringify(Array.from(next)));
-        localStorage.setItem(CONV_INDEX_KEY, JSON.stringify({ version: 1, items: kept }));
+        localStorage.setItem(CONV_INDEX_KEY, JSON.stringify({ version: CONV_INDEX_VERSION, items: kept }));
       } catch (e) { /* private mode: this session only */ }
       // A half-written message and the agent it was addressed to belong to a conversation, so they
       // go when it does. Here rather than in deleteConversation: the cap evicts conversations too,
@@ -18916,7 +19119,7 @@
       const conv = items.find(c => c.id === convId);
       if (!conv) return false;
       if (key) {
-        const m = (conv.members || []).find(x => x.key === key);
+        const m = (conv.members || []).find(x => x.aid === key);
         if (!m) return false;
         m.pending = {ref: ref, at: Date.now()};
       } else {
@@ -18939,7 +19142,7 @@
       for (const c of loadConvIndex()) {
         for (const m of (c && c.members) || []) {
           if (m && convPendingLive(m.pending) && m.pending.ref === ref) {
-            return {conv: c, key: m.key};
+            return {conv: c, key: m.aid};
           }
         }
         for (const p of (c && c.pending) || []) {
@@ -18952,7 +19155,7 @@
     // This member's own note, so a second press can tell the first one is still in flight.
     function convMemberPending(convId, key) {
       const conv = loadConvIndex().find(c => c.id === convId);
-      const m = conv && (conv.members || []).find(x => x.key === key);
+      const m = conv && (conv.members || []).find(x => x.aid === key);
       return m && convPendingLive(m.pending) ? m.pending : null;
     }
 
@@ -18989,95 +19192,42 @@
       return hit;
     }
 
-    // One landing per ref at a time. convLandMember awaits a database and the poll is 3s, so a
-    // second snapshot would otherwise start the same succession over the top of the first.
+    // One landing per ref at a time. convLandMember reads the index and the poll is 3s, so a
+    // second snapshot would otherwise start the same join over the top of the first.
     const convLanding = new Set();
 
-    // A pane joins a conversation as the member a start was made for: the transcript carried over
-    // the seam, the pair repointed, the roster's row moved from the old key to this pane's.
+    // A pane's agent joins a conversation, because a start was made for it.
     //
-    // The whole of the succession and nothing about what happens on screen. Its two callers
-    // disagree about that — one is a press the reader just made, the other a recovery that must
-    // never move anybody — so neither the opening prompt, the toast, nor opening the terminal
-    // belongs here.
-    // `moveOnly` is for the caller nobody pressed. The fallback below — join as a new member when
-    // the transcript could not be carried — is right for a press: the reader asked for this pane to
-    // be in this conversation, and a thread that starts fresh is better than no pane at all. It is
-    // wrong for the follow, which is bookkeeping: a member that cannot be *moved* must be left
-    // exactly where it is, or the conversation grows a second row for one agent — the dead pane and
-    // the live one, side by side, both wearing the same name.
-    async function convLandMember(a, convId, replaceKey, ref, moveOnly) {
-      const next = a && convMemberKey(a);
-      if (!next || !convId) return null;
-      // The pair goes with it. A restart is the same colleague in a new pane, and the pair record
-      // names panes by id — so without this the strip in the surviving partner reported the pair
-      // stale and dropped the switch, the name and the badge.
-      if (replaceKey) repointPair(convKeyPaneId(replaceKey), a);
-      // The copy happens before the index is read, and the index is read again after it. The
-      // recorder writes members' previews on every poll, so an index loaded before an await and
-      // saved after it puts back a snapshot taken seconds ago — and the copy is the one step here
-      // that waits on a database. A refusal (quota, a blocked store) falls back to joining as a
-      // new member rather than dropping the pane out of the conversation altogether.
-      const replacing = ((loadConvIndex().find(c => c.id === convId) || {}).members || [])
-        .find(m => m.key === replaceKey);
-      const continued = replacing &&
-        await convContinueTranscript(replacing.key, next, replacing.label).catch(() => false);
+    // This used to be a *succession*: the transcript copied over the seam, the pair repointed, the
+    // roster's row moved from the dead pane's key onto the live one's. All of that existed because
+    // the key named a pane. It names the agent now, so a restart arrives already holding its own
+    // thread, its own pair and its own row — and the only thing left to do is the one thing this
+    // function was ever really for.
+    //
+    // `replaceKey` is the member the start was made to continue. It is no longer moved anywhere:
+    // if it is the same agent, it is already this row; if it is not, the honest answer is a new
+    // member, which is what the join below writes. It is still taken, because a caller that names
+    // it is saying which conversation this pane belongs in.
+    async function convLandMember(a, convId, ref) {
+      const aid = a && convMemberKey(a);
+      if (!aid || !convId) return null;
+      // Not yet. `unresolved` is the relay saying it has this pane but cannot yet say which agent
+      // is in it — a pane it has just created, whose start is still arriving. It is on screen,
+      // because hiding a pane the user just started is a worse fault than showing an anonymous
+      // one, but nothing durable may be written against it: a membership is the most durable thing
+      // this app writes about a pane. The caller keeps its intent, and the next poll lands it with
+      // a name behind it. `aid` being empty says the same thing about a relay too old to mint one.
+      if (a.unresolved) return null;
       const items = loadConvIndex();
       const conv = items.find(c => c.id === convId);
       if (!conv) return null;
-      const prior = (conv.members || []).find(m => m.key === (replacing || {}).key);
-      // Whether this pane is already one of this conversation's members. The fallback below joins
-      // as a new member, which is right for a pane the conversation has never held and wrong for
-      // one it already names: herdr recycles pane ids, and a replace intent that no longer matches
-      // — a second landing, a member moved by the restart before it — would otherwise append a
-      // second row for a key that is already in the list. Two members, one pane, both drawing the
-      // same transcript.
-      const already = (conv.members || []).some(m => m.key === next);
-      // The row moves when the transcript was carried over, and also when it could not be but the
-      // relay says this is the same agent. A refusal there is not evidence of a different
-      // colleague: it means the new pane already has a thread of its own that something else still
-      // names, which is a fact about storage, not about who is sitting in the pane. Joining as a
-      // second member on that basis gave one agent two rows in one conversation — its dead pane and
-      // its live one, side by side under the same name. One agent is one member, and the id is what
-      // says so.
-      const move = prior && (continued || (a.aid && prior.aid === a.aid));
-      // Nothing to do rather than something to regret. See moveOnly above.
-      if (moveOnly && !move) return null;
-      if (move && already) {
-        // The row it was going to become is already in the list: the conversation is holding both
-        // halves of one agent, which is the state the fallback below used to leave behind. The
-        // merge keeps the live row and folds the dead one's history of panes into it, so a landing
-        // is also the repair for a duplicate an older build wrote.
-        conv.members = conv.members
-          .map(m => (m.key === next
-            ? Object.assign({}, m, {
-                label: m.label || prior.label || paneLabel(a),
-                was: (prior.was || []).concat(convKeyPaneId(prior.key), m.was || [])
-                  .filter(Boolean).slice(-CONV_WAS_MAX),
-              })
-            : m))
-          .filter(m => m !== prior);
-      } else {
-        conv.members = move
-          ? conv.members.map(m => m.key === prior.key
-            ? Object.assign({}, m, convWasFpPatch(m, prior.key, next), {
-                key: next, label: prior.label || paneLabel(a),
-                // The pane this member continues. This is the only place a member's key moves from
-                // one pane to another, so it is the only place succession is a fact rather than a
-                // guess — and the guess it replaces handed a quit agent's words to every
-                // conversation running the same harness in the same directory.
-                was: (m.was || []).concat(convKeyPaneId(prior.key))
-                  .filter(Boolean).slice(-CONV_WAS_MAX),
-                // convWasFpPatch above names the bucket the record kept this member in, where the
-                // restart moved it to a different one — another harness, or another checkout. The
-                // pane ids here cannot find those rows on their own: a pane id is only ever looked
-                // up inside a fingerprint's bucket.
-              })
-            : m)
-          : (already ? conv.members : (conv.members || []).concat(convMemberOf(a)));
+      // I5, by construction. A second row for one agent is not written, so nothing has to find it
+      // afterwards and take it out again.
+      if (!(conv.members || []).some(m => m && m.aid === aid)) {
+        conv.members = (conv.members || []).concat(convMemberOf(a));
       }
-      // The note is spent. Cleared in the same write as the succession it described, so no tab can
-      // read an index where the member has moved and the note still says it is coming.
+      // The note is spent. Cleared in the same write as the join it described, so no tab can read
+      // an index where the member has arrived and the note still says it is coming.
       if (ref) {
         for (const m of conv.members) if (m && m.pending && m.pending.ref === ref) delete m.pending;
         if (Array.isArray(conv.pending)) {
@@ -19110,7 +19260,7 @@
         if (!found) continue;
         convLanding.add(a.ref);
         try {
-          const conv = await convLandMember(a, found.conv.id, found.key, a.ref);
+          const conv = await convLandMember(a, found.conv.id, a.ref);
           if (conv) {
             showSpawnStatus(`${paneLabel(a)} continued "${conv.name}".`, 'success');
             renderConversations();
@@ -19120,75 +19270,10 @@
       }
     }
 
-    // One follow per agent at a time, for the same reason convLanding exists: convLandMember
-    // awaits a database and the poll is 3s.
-    const convFollowing = new Set();
-
-    // The member follows its agent, wherever herdr has put it.
-    //
-    // A pane id is a slot: herdr assigns it, herdr reuses it, and it changes on a respawn, a kill,
-    // a herdr restart, a reboot. The colleague in it does not change, and the relay now says so —
-    // every pane carries the id of the agent in it, minted once and kept across every pane that
-    // agent goes on to occupy.
-    //
-    // Two jobs, both of them on the ordinary snapshot:
-    //
-    //   the fold — a member whose key names a live pane takes that pane's agent id, which is how
-    //   a roster written before any of this existed acquires one without a migration step
-    //
-    //   the follow — a member whose pane is gone, whose agent is sitting in another one, is moved
-    //   onto it: the transcript carried over the seam, the pair repointed, the row moved. Exactly
-    //   what a restart the reader watched has always done, now done in every browser instead of
-    //   only in the one whose tab was open at the time
-    //
-    // Nothing here opens anything or says anything to a pane: the reader may be anywhere, and did
-    // not ask to be moved. See the identity decision log.
-    async function convFollowAids() {
-      if (!agents.length) return;
-      // Not against an index that has not arrived, for the same reason convLandPending waits.
-      if (typeof stateSyncPending === 'function' && stateSyncPending()) return;
-      const byAid = new Map();
-      for (const a of agents) if (a && a.aid) byAid.set(a.aid, a);
-      if (!byAid.size) return;   // a relay older than agent ids: nothing to fold and nothing to follow
-      const live = new Set(agents.map(x => convMemberKey(x)));
-      let folded = false;
-      const items = loadConvIndex();
-      const follow = [];
-      for (const c of items) {
-        const named = new Set((c.members || []).map(m => m && m.key));
-        for (const m of (c.members || [])) {
-          if (!m || !m.key) continue;
-          if (live.has(m.key)) {
-            const here = agents.find(x => convMemberKey(x) === m.key);
-            if (here && here.aid && m.aid !== here.aid) { m.aid = here.aid; folded = true; }
-            continue;
-          }
-          const moved = m.aid ? byAid.get(m.aid) : null;
-          // Not onto a pane this conversation already names. herdr recycles pane ids and a member
-          // may have been moved by something else a moment ago; two rows drawing one transcript is
-          // the failure convLandMember's own `already` guard exists for, reached from here.
-          // And not where some *other* member of this conversation is already that agent: two rows
-          // for one colleague — the dead pane and the live one, both wearing the same name — is
-          // the thing this whole mechanism exists to prevent.
-          const twice = moved && (c.members || []).some(o => o !== m && o && o.aid === moved.aid);
-          if (moved && !twice && !named.has(convMemberKey(moved))) {
-            follow.push({conv: c.id, key: m.key, pane: moved});
-          }
-        }
-      }
-      if (folded) saveConvIndex(items);
-      for (const f of follow) {
-        if (convFollowing.has(f.key)) continue;
-        convFollowing.add(f.key);
-        try {
-          const conv = await convLandMember(f.pane, f.conv, f.key, '', true);
-          if (conv) {
-            renderConversations();
-            if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
-          }
-        } finally { convFollowing.delete(f.key); }
-      }
-    }
+    // `convFollowAids` was here: the fold that wrote a live pane's agent id onto a member row, and
+    // the follow that moved a member whose pane had gone onto the pane its agent was in now. Both
+    // were chasing a key that named a pane. A member is its agent, so there is nothing to fold and
+    // nowhere to follow — the row is already the colleague, wherever herdr has put it.
 
     // --- Conversation membership ---
     // Which conversations a pane is in, and the two edits that answer it: join one, or name a new
@@ -19198,7 +19283,7 @@
 
     function convsForPane(a) {
       const key = convMemberKey(a);
-      return key ? loadConvIndex().filter(c => (c.members || []).some(m => m.key === key)) : [];
+      return key ? loadConvIndex().filter(c => (c.members || []).some(m => m.aid === key)) : [];
     }
 
     function convMemberOf(a) {
@@ -19220,7 +19305,7 @@
       // a pane this browser has not verified, and seeding a member from it would record a
       // fingerprint nothing on the other end matches.
       const pair = pairFor(pairs, convSource);
-      const partner = pair && pairHealth(pair, agents).state === 'healthy'
+      const partner = pair && pairHealth(pair, agents, retiredAgents).state === 'live'
         ? agents.find(x => memberMatches(partnerOf(pair, convSource), x)) : null;
       const row = document.getElementById('convPairRow');
       row.hidden = !partner;
@@ -19257,7 +19342,7 @@
       // Same row as the pair sheet's candidates: a list of things to pick reads as one when the
       // rows run the full width. The tick is membership, and tapping is the toggle.
       box.innerHTML = '<div class="pair-head">Conversations</div>' + items.map(c => {
-        const on = (c.members || []).some(m => m.key === key);
+        const on = (c.members || []).some(m => m.aid === key);
         const n = (c.members || []).length;
         const msgs = (c.members || []).reduce((t, m) => t + (m.messages || 0), 0);
         const meta = `${n} member${n > 1 ? 's' : ''}` + (msgs ? ` · ${msgs} messages` : '');
@@ -19275,7 +19360,7 @@
       const items = loadConvIndex();
       const conv = items.find(c => c.id === id);
       if (!conv) return;
-      const at = (conv.members || []).findIndex(m => m.key === key);
+      const at = (conv.members || []).findIndex(m => m.aid === key);
       if (at >= 0) {
         // Leaving stops the recording and keeps what was recorded: the transcript is only evicted
         // once space runs out, and until then re-joining picks the thread back up.
@@ -19416,7 +19501,7 @@
       if (!from || !to || !convViewOn(from)) return;
       const conv = convViewConv(from);
       const key = to && convMemberKey(to);
-      if (!conv || !key || !(conv.members || []).some(m => m.key === key)) return;
+      if (!conv || !key || !(conv.members || []).some(m => m.aid === key)) return;
       convSetView(to, conv.id);
     }
 
@@ -19617,24 +19702,19 @@
       // A pane the index already files is not fresh, whoever filed it. The seen list is this
       // browser's own memory and a second browser has none of it, so membership is what survives
       // being handed an index built somewhere else.
-      // And the same test on the agent rather than the slot. A pane id is a slot herdr recycles, so
-      // an agent that moved between polls arrives here wearing a key no conversation names while
-      // being, in every sense that matters, already filed. Without this it was filed again, and
-      // again on the next poll — which is how one restart left three auto conversations behind.
-      const hadAid = new Set();
+      // The key is the agent, so "already filed" is one test rather than two: this used to check
+      // the slot and then the agent separately, because a pane id is a slot herdr recycles and an
+      // agent that moved between polls arrived wearing a key no conversation named while being, in
+      // every sense that mattered, already filed.
       for (const c of items) for (const m of (c && c.members) || []) {
-        if (!m) continue;
-        if (m.key) had.add(m.key);
-        if (m.aid) hadAid.add(m.aid);
+        if (m && m.aid) had.add(m.aid);
       }
       // Only a pane an agent is running in has messages to record — the same gate the menu item
       // uses, so a harness the app cannot read is not filed under a record it can never write to.
-      // A pane a restart in flight is about to continue a thread onto is not a fresh pane. Filing
-      // it here would put its key in a conversation of its own, and a key some conversation names
-      // is one convContinueTranscript refuses to write over — so the thread it was started to
-      // continue would gain a second member instead of carrying on.
+      // A pane a restart in flight is about to join to a conversation is not a fresh pane: filing
+      // it here would give it an auto conversation of its own a moment before the landing puts it
+      // in the one it was started for.
       const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
-        && !(a.aid && hadAid.has(a.aid))
         && profileFor(a.agent)
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
@@ -19679,7 +19759,7 @@
       const items = loadConvIndex().map(c => {
         const members = c.members || [];
         if (!c.auto || members.length <= CONV_AUTO_ROSTER_MAX) return c;
-        const drop = new Set(members.filter(m => !live.has(m.key))
+        const drop = new Set(members.filter(m => !live.has(m.aid))
           .sort((a, b) => (a.added || 0) - (b.added || 0))
           .slice(0, members.length - CONV_AUTO_ROSTER_MAX));
         if (!drop.size) return c;
@@ -19715,14 +19795,14 @@
     function convPairMembers(a, conv) {
       const members = conv.members || [];
       const pair = pairFor(pairs, a);
-      if (!pair || pairHealth(pair, agents).state !== 'healthy') return null;
+      if (!pair || pairHealth(pair, agents, retiredAgents).state !== 'live') return null;
       const partner = agents.find(x => memberMatches(partnerOf(pair, a), x));
       if (!partner || !convsForPane(partner).length) return null;
       const key = convMemberKey(partner);
       // Roster order, not pair order: it is what the two columns are assigned from, so narrowing
       // the roster must not also swap which side each pane is drawn on.
-      const both = members.filter(m => m.key === convMemberKey(a) || m.key === key);
-      return both.some(m => m.key === key) ? both : both.concat({key, label: paneLabel(partner)});
+      const both = members.filter(m => m.aid === convMemberKey(a) || m.aid === key);
+      return both.some(m => m.aid === key) ? both : both.concat({key, label: paneLabel(partner)});
     }
 
     // What a member is called *now*. Labels are stamped into the index and into every entry as they
@@ -19744,7 +19824,11 @@
     // half-cleaned one.
     function convRecordingMembers(conv) {
       const live = new Set(agents.map(x => convMemberKey(x)));
-      return (conv.members || []).filter(m => live.has(m.key));
+      // Derived and nothing else. `superseded` used to be checked here too: a row named a pane its
+      // member had already left, and a stranger landing on that recycled number made an ended
+      // member look like it had started recording again. An agent id is never handed to anybody
+      // else, so there is no stranger to exclude.
+      return (conv.members || []).filter(m => live.has(m.aid));
     }
 
     // Put entries into a thread at the time they happened, without disturbing the thread.
@@ -19854,7 +19938,7 @@
       // of several panes says they are: one piece of work.
       const members = pairedConvMembers(a, conv);
       const joint = convJointOn() && members.length > 1;
-      const want = joint ? members.map(m => m.key) : [key];
+      const want = joint ? members.map(m => m.aid) : [key];
       const composed = await convCompose(conv, want);
       if (token !== convViewToken) return;
       const recs = composed.recs;
@@ -20119,7 +20203,7 @@
     // passes -1 to say so.
     function convHeadHtml(conv, key, count, total, mine) {
       const n = total >= 0 ? total : (conv.members || []).reduce(
-        (t, m) => t + (count >= 0 && m.key === key ? count : (m.messages || 0)), 0);
+        (t, m) => t + (count >= 0 && m.aid === key ? count : (m.messages || 0)), 0);
       // A select and not a tap-to-cycle: cycling hides how many groupings this pane is in, and the
       // count is the information. One conversation draws the name it always drew.
       const name = (mine || []).length > 1
@@ -20143,13 +20227,13 @@
       const live = new Map(agents.map(x => [convMemberKey(x), x]));
       return `<button class="conv-members" onclick="this.classList.toggle('open')"
         aria-label="Who is in this conversation">` + (conv.members || []).map(m => {
-        const rec = recs.find(r => r.key === m.key);
+        const rec = recs.find(r => r.key === m.aid);
         const spawn = (rec && rec.spawn) || {};
-        const on = live.has(m.key);
+        const on = live.has(m.aid);
         const facts = [spawn.role, spawn.project || spawn.cwd].filter(Boolean);
         return `<span class="conv-member${on ? '' : ' gone'}">` +
-          `<span class="who">${escapeHtml(convMemberName(m.key, rec && rec.label, m.label))}</span>` +
-          kindBadge(spawn.agent || (live.get(m.key) || {}).agent || '', live.get(m.key),
+          `<span class="who">${escapeHtml(convMemberName(m.aid, rec && rec.label, m.label))}</span>` +
+          kindBadge(spawn.agent || (live.get(m.aid) || {}).agent || '', live.get(m.aid),
                     spawn.config) +
           `${on ? '' : '<span class="tag">paused</span>'}` +
           `<span class="spawn">${escapeHtml(facts.join(' · '))}</span></span>`;
@@ -20401,7 +20485,7 @@
       // The sheet's own gate: it is the prefill-and-stop path, and that path is built on a pair.
       const pair = pairFor(pairs, activeAgent());
       document.getElementById('selTransfer').hidden =
-        !pair || pairHealth(pair, agents).state !== 'healthy';
+        !pair || pairHealth(pair, agents, retiredAgents).state !== 'live';
     }
 
   </script>
@@ -20443,17 +20527,17 @@
     // past this — see `convLiveSync` — so the cadence costs freshness only while nothing happens.
     const CONV_LIVE_EVERY = 5000;
 
-    // The record, one bucket per pane fingerprint rather than one answer per roster, so a pane in
-    // two conversations is fetched once and the second thread draws with no round trip.
+    // The record, one bucket per agent rather than one answer per roster, so a colleague in two
+    // conversations is fetched once and the second thread draws with no round trip.
     //
-    //   Map<fpKey, { turns: Array, syncedTo: number, lastFetch: number,
-    //                 depth: {paneId: rows}, ended: {paneId: true} }>
+    //   Map<aid, { turns: Array, syncedTo: number, lastFetch: number,
+    //              depth: number, ended: boolean }>
     //
-    // `depth` is how many rows of each pane this browser has asked to keep — CONV_LIVE_ROWS until a
-    // reader walks back, and raised a window at a time by `convLiveOlder`. `ended` is the pane the
-    // record had nothing older for, which is what lets the button say so rather than go quiet.
+    // `depth` is how many rows this browser has asked to keep — CONV_LIVE_ROWS until a reader walks
+    // back, and raised a window at a time by `convLiveOlder`. `ended` says the record had nothing
+    // older, which is what lets the button say so rather than go quiet.
     //
-    // `syncedTo` is the id this fingerprint has been *answered through*, which is not the same as
+    // `syncedTo` is the id this agent has been *answered through*, which is not the same as
     // the id of its newest turn. A roster query covers every member jointly, so a member that
     // produced nothing is still proven empty up to the highest id the answer carried. Storing the
     // newest-turn id instead would make a quiet pane look permanently stale and re-ask for its
@@ -20505,32 +20589,35 @@
       return !h || h === 'local' ? 'local' : h;
     }
 
-    function convFpKey(fp) {
-      if (!fp) return '';
-      if (Array.isArray(fp)) {
-        return JSON.stringify([convNormHost(fp[0]), fp[1] || '', fp[2] || '']);
-      }
-      return String(fp);
-    }
+    // A bucket is one agent's rows, filed under its `aid`.
+    //
+    // It was a *fingerprint* — `[host, agent, cwd]`, the member key with the pane id taken out —
+    // because a pane id changed on every restart and the fingerprint was what survived one. It
+    // also buckets four claude panes in one checkout together, so every read out of it had to
+    // sort the rows back out by pane id, by a `was` chain of the panes a member had occupied, and
+    // by a `wasFp` chain of the buckets it had been under. `convFpKey`, `convKeyFingerprint`,
+    // `convKeyFingerprints`, `convWasFpPatch`, `convWasMap`, `convWasFpMap`, `convLiveRowIsMine`
+    // and `convLiveRefill` were all that sorting. They are gone: an agent id survives the restart
+    // *and* names one colleague, so the bucket is already the answer.
 
-    function convLiveBucket(fpKey) {
-      let bucket = convLiveCache.get(fpKey);
+    function convLiveBucket(aid) {
+      let bucket = convLiveCache.get(aid);
       if (!bucket) {
-        bucket = { turns: [], syncedTo: 0, lastFetch: 0, depth: {}, ended: {} };
-        convLiveCache.set(fpKey, bucket);
+        bucket = { turns: [], syncedTo: 0, lastFetch: 0, depth: 0, ended: false };
+        convLiveCache.set(aid, bucket);
       }
       return bucket;
     }
 
-    // What this browser is keeping of the relay's record, per fingerprint, for the storage panel.
+    // What this browser is keeping of the relay's record, per agent, for the storage panel.
     //
     // Measured off the in-memory buckets rather than by reading the store back: they are written
     // through, so they are what is on disk, and the panel must not open a second transaction per
     // draw to learn what it already has.
     function convLiveCacheBytes() {
       const out = new Map();
-      for (const [fpKey, bucket] of convLiveCache) {
-        try { out.set(fpKey, JSON.stringify(bucket.turns || []).length); } catch (e) { /* skip */ }
+      for (const [aid, bucket] of convLiveCache) {
+        try { out.set(aid, JSON.stringify(bucket.turns || []).length); } catch (e) { /* skip */ }
       }
       return out;
     }
@@ -20663,50 +20750,7 @@
       showToast(on ? 'Reading the relay’s record' : 'Reading this browser’s transcript');
     }
 
-    // A member key is [host, pane_id, agent, cwd]; a fingerprint is that key with the pane id taken
-    // out. herdr changes pane ids on every restart — the lesson `healPairs` exists for — so the
-    // fingerprint is what survives a respawn and what the record is indexed by.
-    function convKeyFingerprint(key) {
-      try {
-        const p = JSON.parse(key);
-        return Array.isArray(p) && p.length >= 4 ? [convNormHost(p[0]), p[2] || '', p[3] || ''] : null;
-      } catch (e) { return null; }
-    }
-
-    // Every fingerprint one member's record can be under: the one its key names now, and the ones
-    // it carried before. A restart onto another harness — or into another checkout — moves the
-    // member to a bucket holding none of what it said before, and the pane ids on `was` cannot
-    // find those rows, because a pane id is only ever looked up inside a bucket.
-    function convKeyFingerprints(key, wasFp) {
-      const now = convKeyFingerprint(key);
-      const out = now ? [now] : [];
-      const seen = new Set(out.map(convFpKey));
-      for (const fp of wasFp || []) {
-        // Written by other browsers and by older builds, so it is checked rather than trusted.
-        if (!Array.isArray(fp) || fp.length < 3) continue;
-        const norm = [convNormHost(fp[0]), fp[1] || '', fp[2] || ''];
-        if (seen.has(convFpKey(norm))) continue;
-        seen.add(convFpKey(norm));
-        out.push(norm);
-      }
-      return out;
-    }
-
-    // What a member's `wasFp` becomes when its key moves, as a patch rather than a value: an empty
-    // list is not worth a field on every member of every conversation, and the ordinary restart —
-    // same harness, same directory, same bucket — produces exactly that.
-    function convWasFpPatch(member, oldKey, newKey) {
-      const before = convKeyFingerprint(oldKey), now = convKeyFingerprint(newKey);
-      const kept = ((member || {}).wasFp || []).filter(fp => Array.isArray(fp) && fp.length >= 3);
-      const same = !before || (now && convFpKey(before) === convFpKey(now))
-        || kept.some(fp => convFpKey(fp) === convFpKey(before));
-      const out = same ? kept : kept.concat([before]).slice(-CONV_WAS_MAX);
-      return out.length ? { wasFp: out } : {};
-    }
-
-    // The member keys the last roster ask was made for. A fingerprint is `[host, agent, cwd]` and
-    // several panes can share one — four claude panes in one repository do — so an answer that came
-    // back truncated has to be refilled pane by pane, and this is what says which panes those are.
+    // The agent ids the last roster ask was made for.
     let convLiveAsked = [];
 
     // "Ask the relay again on the way through." Called where something has happened that the record
@@ -20715,21 +20759,18 @@
     // Passing no keys invalidates every bucket, which is what the callers that do not know whose
     // thread is on screen want.
     function convLiveInvalidate(keys) {
-      const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
-      const buckets = fps.length
-        ? fps.map(fp => convLiveCache.get(convFpKey(fp))).filter(Boolean)
+      const buckets = (keys || []).length
+        ? (keys || []).map(aid => convLiveCache.get(aid)).filter(Boolean)
         : Array.from(convLiveCache.values());
       for (const bucket of buckets) bucket.lastFetch = 0;
     }
 
-    // Does any live pane under this fingerprint hold a turn past what this bucket has been answered
-    // through? `turn` is the relay's own row id, from its own writes, so the two are comparable —
-    // and a relay too old to send it says nothing here, leaving the cadence to do the work.
-    function convLiveNewer(fp, bucket) {
+    // Does this agent's pane hold a turn past what this bucket has been answered through? `turn`
+    // is the relay's own row id, from its own writes, so the two are comparable — and a relay too
+    // old to send it says nothing here, leaving the cadence to do the work.
+    function convLiveNewer(aid, bucket) {
       if (typeof agents === 'undefined' || !Array.isArray(agents)) return false;
-      const key = convFpKey(fp);
-      return agents.some(a => Number(a.turn) > (bucket.syncedTo || 0)
-        && convFpKey([a.host, a.agent, a.cwd]) === key);
+      return agents.some(a => a.aid === aid && Number(a.turn) > (bucket.syncedTo || 0));
     }
 
     // One query for the whole roster. Sent only when the answer on hand cannot serve: a member with
@@ -20737,20 +20778,8 @@
     // the ⟳, both of which are someone saying "now".
     function convLiveFetch(keys, force, background) {
       if (!background && !convLiveOn()) return;
-      // Every bucket these members' words can be in, not only the ones they are in now: a member
-      // restarted onto another harness keeps its thread, and a thread missing everything said
-      // before the swap is the record disagreeing with the roster about who was talking.
-      const pastFps = convWasFpMap(keys);
-      const fps = [];
-      const asked = new Set();
-      for (const key of (keys || [])) {
-        for (const fp of convKeyFingerprints(key, pastFps.get(key))) {
-          if (asked.has(convFpKey(fp))) continue;
-          asked.add(convFpKey(fp));
-          fps.push(fp);
-        }
-      }
-      if (!fps.length) return;
+      const aids = [...new Set((keys || []).filter(Boolean))];
+      if (!aids.length) return;
       // Whatever is on disk, before deciding anything: the watermark that says what to ask for
       // lives there now, and asking without it would re-fetch a window this browser already holds.
       // The render that follows draws from the same buckets, so a thread is on screen either way.
@@ -20765,24 +20794,24 @@
         // Only when there is nothing to show. With the record on disk, a relay that is down or a
         // phone with no signal is a thread that is behind, not a thread that is empty — and saying
         // "cannot be read right now" over rows the reader is looking at is simply false.
-        const held = fps.some(fp => (convLiveCache.get(convFpKey(fp)) || {}).turns?.length);
+        const held = aids.some(aid => (convLiveCache.get(aid) || {}).turns?.length);
         convLiveError = held ? '' : 'Not connected — the relay’s record cannot be read right now.';
         return;
       }
       const now = Date.now();
       let needsFetch = !!force;
-      // A fingerprint restored from disk carries a watermark from another session, possibly from
+      // A bucket restored from disk carries a watermark from another session, possibly from
       // another copy of the relay's database. Its first ask is the window, and it is a delta after
       // that — see convLiveVerified.
-      for (const fp of fps) {
-        if (!convLiveVerified.has(convFpKey(fp))) { force = true; needsFetch = true; }
+      for (const aid of aids) {
+        if (!convLiveVerified.has(aid)) { force = true; needsFetch = true; }
       }
       // The floor over the roster, not the ceiling: the buckets were last answered by different
       // queries, so the only id every member is proven current through is the lowest of them. A
       // member with no bucket has been answered through nothing, and the query goes out whole.
       let syncedTo = Infinity;
-      for (const fp of fps) {
-        const bucket = convLiveCache.get(convFpKey(fp));
+      for (const aid of aids) {
+        const bucket = convLiveCache.get(aid);
         if (!bucket) { syncedTo = 0; needsFetch = true; continue; }
         if (bucket.syncedTo < syncedTo) syncedTo = bucket.syncedTo;
         if (now - bucket.lastFetch >= CONV_LIVE_EVERY) needsFetch = true;
@@ -20791,14 +20820,22 @@
         // whose pane painted nothing yet is held back by the relay for up to HERDR_LATE_TURN_MS
         // and lands with no status change behind it — the invalidate convReadTurnEnd sent when the
         // turn ended fetched a record that had not been written yet, and nothing said so.
-        if (convLiveNewer(fp, bucket)) needsFetch = true;
+        if (convLiveNewer(aid, bucket)) needsFetch = true;
       }
       if (!needsFetch) return;
 
-      for (const fp of fps) convLiveBucket(convFpKey(fp)).lastFetch = now;
+      for (const aid of aids) convLiveBucket(aid).lastFetch = now;
 
-      convLiveAsked = (keys || []).slice();
-      const payload = { type: 'conv_log', fingerprints: fps, last: CONV_LIVE_ROWS };
+      convLiveAsked = aids.slice();
+      const payload = { type: 'conv_log', aids: aids, last: CONV_LIVE_ROWS };
+      // Turns recorded before agents had ids carry none, so no `aids` query can reach them. The
+      // fingerprints of the members that are live right now are asked for alongside — and a row
+      // with no `aid` is drawn only against the member whose pane it names *now*, which is a fact
+      // about a running terminal and not a resemblance. There is nothing to backfill those rows
+      // from: the registry never recorded occupancy before it existed. See the decision log's
+      // known residue.
+      const fps = convLegacyFingerprints(aids);
+      if (fps.length) payload.fingerprints = fps;
       // A delta only when every member is proven current through the same id. `force` still asks
       // for the window, because the reader pressing ⟳ is asking for the record and not for the
       // difference — a row edited or pruned behind this client's back is repaired by that ask and
@@ -20806,6 +20843,24 @@
       if (!force && syncedTo > 0 && syncedTo !== Infinity) payload.since_id = syncedTo;
       ws.send(JSON.stringify(payload));
       convLiveAskSent(1);
+    }
+
+    // The fingerprints of the live panes these agents are in, for the pre-identity half of the
+    // record. Empty for a member whose agent has no pane, which is the honest answer: an ended
+    // session's old rows carry no id and nothing running can vouch for which pane they came from.
+    function convLegacyFingerprints(aids) {
+      if (typeof agents === 'undefined' || !Array.isArray(agents)) return [];
+      const want = new Set(aids);
+      const out = [], seen = new Set();
+      for (const a of agents) {
+        if (!a || !want.has(a.aid)) continue;
+        const fp = [convNormHost(a.host), a.agent || '', a.cwd || ''];
+        const k = JSON.stringify(fp);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(fp);
+      }
+      return out;
     }
 
     // A fresh browser starts with no transcript cache, so a landing page of conversations it has
@@ -20823,7 +20878,7 @@
         const seen = c => Math.max(0, ...((c.members || []).map(m => Number(m.seen) || 0)));
         return seen(b) - seen(a) || (Number(b.created) || 0) - (Number(a.created) || 0);
       }).slice(0, 5);
-      const keys = [...new Set(recent.flatMap(c => (c.members || []).map(m => m.key)).filter(Boolean))];
+      const keys = [...new Set(recent.flatMap(c => (c.members || []).map(m => m.aid)).filter(Boolean))];
       convLiveFetch(keys, false, true);
     }
 
@@ -20833,20 +20888,9 @@
     // `convLiveOlder` raised, and without reading it this would discard every backfilled row on
     // the same tick it arrived — the walk back would fetch, trim, and show nothing.
     function convLiveTrim(turns, depth) {
-      const kept = [];
-      const seen = new Map();
-      // Backwards: the newest end is the end that is kept, which is the same end the relay's own
-      // window keeps.
-      for (let i = turns.length - 1; i >= 0; i--) {
-        const t = turns[i];
-        const pane = t.pane_id || '';
-        const cap = Math.min((depth && depth[pane]) || CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
-        const n = seen.get(pane) || 0;
-        if (n >= cap) continue;
-        seen.set(pane, n + 1);
-        kept.push(t);
-      }
-      return kept.reverse();
+      const cap = Math.min(depth || CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
+      // The newest end is the end that is kept, which is the same end the relay's own window keeps.
+      return turns.length > cap ? turns.slice(turns.length - cap) : turns;
     }
 
     // --- Walking one thread backwards, because a reader asked ---
@@ -20860,78 +20904,20 @@
     // unchanged: nothing walks back on its own, because the rows are the reader's disk and the
     // relay's time, and neither should be spent on history nobody asked to see.
 
-    // The predecessors of each member being drawn, by member key. Read out of the index rather than
-    // passed down: these functions are handed member keys, and succession is a fact about a member.
-    //
-    // `was` is written by exactly one call — the respawn in openPendingStart that moves a member's
-    // key from a dead pane to the new one. Nothing else may add to it, because nothing else knows
-    // that two panes were the same session.
-    function convWasMap(keys) { return convMemberField(keys, 'was'); }
-
-    // The same walk for the fingerprints a member used to be under. Separate field, same rule: it
-    // is written where `was` is, by the one place a member's key moves.
-    function convWasFpMap(keys) { return convMemberField(keys, 'wasFp'); }
-
-    function convMemberField(keys, field) {
-      const want = new Set(keys || []);
-      const out = new Map();
-      if (typeof loadConvIndex !== 'function') return out;
-      const all = loadConvIndex();
-      // A duplicated conversation can deliberately share a current pane while carrying a different
-      // predecessor chain. The thread on screen owns its chain; scanning every conversation would
-      // let its duplicate attach history it never claimed.
-      //
-      // Only when that conversation is one of the ones being asked about, though. This is called
-      // for the pane's own thread as well as the window's, and a pane read outside any conversation
-      // is drawn while `convViewId` still holds whichever window was open last — see convOlderKeys,
-      // which draws the same distinction for the same reason. Scoping to a conversation that does
-      // not contain the key would drop a respawn's `was` and put the walk back at the wrong pane.
-      const current = typeof convViewId !== 'undefined' && convViewId
-        ? all.find(c => c && c.id === convViewId
-            && (c.members || []).some(m => m && want.has(m.key))) : null;
-      for (const c of current ? [current] : all) {
-        for (const m of (c && c.members) || []) {
-          // Array-checked: this document is written by other browsers and by older builds, and a
-          // member carrying a string here would make `.includes` match on a substring.
-          if (m && want.has(m.key) && Array.isArray(m[field])) out.set(m.key, m[field]);
-        }
-      }
-      return out;
-    }
-
-    function convPaneOfKey(k) {
-      try { return (JSON.parse(k) || [])[1] || ''; } catch (e) { return ''; }
-    }
-
-    // A row belongs to the pane that produced it. The one exception is a respawn, and a respawn is
-    // recorded rather than guessed.
-    //
-    // This used to adopt any dead pane that shared the fingerprint, on the reasoning that a pane
-    // with no live claimant must be a predecessor. It is not: a fingerprint is `[host, agent, cwd]`
-    // and several panes share one by design, so quitting an agent handed its words to every other
-    // conversation running that harness in that directory — attributed to a member that had never
-    // been in the same room as it. "No longer live" says nothing about which pane succeeded which.
-    function convLiveRowIsMine(t, mine, was) {
-      const pid = t.pane_id || '';
-      return !pid || pid === mine || (was || []).includes(pid);
-    }
-
     // The oldest row this browser holds for one member, which is the id the next window back is
     // asked for. 0 when it holds nothing — there is no window before nothing, and the ordinary
     // forward fetch is what that member needs.
-    function convLiveOldestSeq(key, was) {
-      const oldest = convLiveOldest(key, was);
+    function convLiveOldestSeq(aid) {
+      const oldest = convLiveOldest(aid);
       return oldest ? oldest.seq : 0;
     }
 
-    function convLiveOldest(key, was) {
-      const fp = convKeyFingerprint(key);
-      const bucket = fp && convLiveCache.get(convFpKey(fp));
+    function convLiveOldest(aid) {
+      const bucket = aid && convLiveCache.get(aid);
       if (!bucket) return null;
-      const mine = convPaneOfKey(key);
       let oldest = null;
       for (const t of bucket.turns) {
-        if (!t.seq || !convLiveRowIsMine(t, mine, was)) continue;
+        if (!t.seq) continue;
         if (!oldest || t.seq < oldest.seq) oldest = t;
       }
       return oldest;
@@ -20939,106 +20925,49 @@
 
     // Whether there is a window back left to ask for, per member. Three ways to be finished, and
     // the button has to be able to tell all three from "not yet asked": the record said it had
-    // nothing older, the pane is at the ceiling, or this browser holds nothing to walk back from.
+    // nothing older, the member is at the ceiling, or this browser holds nothing to walk back from.
     function convLiveCanLoadOlder(keys) {
       if (!convLiveOn()) return false;
-      const was = convWasMap(keys);
-      return (keys || []).some(key => {
-        const fp = convKeyFingerprint(key);
-        const bucket = fp && convLiveCache.get(convFpKey(fp));
-        if (!bucket) return false;
-        const pane = convPaneOfKey(key);
-        if (bucket.ended[pane]) return false;
-        if ((bucket.depth[pane] || CONV_LIVE_ROWS) >= CONV_LIVE_DEEP_MAX) return false;
-        return convLiveOldestSeq(key, was.get(key)) > 0;
+      return (keys || []).some(aid => {
+        const bucket = aid && convLiveCache.get(aid);
+        if (!bucket || bucket.ended) return false;
+        if ((bucket.depth || CONV_LIVE_ROWS) >= CONV_LIVE_DEEP_MAX) return false;
+        return convLiveOldestSeq(aid) > 0;
       });
     }
 
-    // One window back for every member that has one, asked pane by pane.
+    // One window back for every member that has one, asked member by member.
     //
-    // Pane-scoped rather than over the roster, and not because it is tidier: `until_id` is one
+    // One ask each rather than one over the roster, and not because it is tidier: `until_id` is one
     // member's oldest row, and several members do not share one. Asked jointly, the member with
     // the oldest row would set the bound for all of them and the others would be handed a window
     // they already hold.
     function convLiveOlder(keys) {
       if (!ws || ws.readyState !== 1) return 0;
-      const was = convWasMap(keys);
       let asked = 0;
-      for (const key of (keys || [])) {
-        const fp = convKeyFingerprint(key);
-        if (!fp) continue;
-        const fpKey = convFpKey(fp);
-        const bucket = convLiveCache.get(fpKey);
-        if (!bucket) continue;
-        const pane = convPaneOfKey(key);
-        if (bucket.ended[pane]) continue;
-        const have = Math.min(bucket.depth[pane] || CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
+      for (const aid of (keys || [])) {
+        const bucket = aid && convLiveCache.get(aid);
+        if (!bucket || bucket.ended) continue;
+        const have = Math.min(bucket.depth || CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
         if (have >= CONV_LIVE_DEEP_MAX) continue;
-        const oldest = convLiveOldest(key, was.get(key));
+        const oldest = convLiveOldest(aid);
         if (!oldest) continue;
-        // A respawn inherits rows from its prior pane id. The relay must filter that old physical
-        // pane, while depth and the end marker still belong to the current logical member.
-        const sourcePane = oldest.pane_id || pane;
         // Raised before the answer, not after it: the trim runs on the tick the rows land, and a
         // ceiling still at one window would throw them away before anything drew them.
-        //
-        // Both keys, because the trim counts by the pane id on the *row* and the ceiling is asked
-        // about the member: raising only the member's would cap the arriving rows at one window
-        // and stall the walk. That gives a respawned member a generous cap on each physical pane
-        // it spans, but not a larger walk — presses stop at the member's own ceiling, so what is
-        // actually fetched is still CONV_LIVE_DEEP_MAX rows however they split.
-        bucket.depth[pane] = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
-        bucket.depth[sourcePane] = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
-        const payload = { type: 'conv_log', fingerprints: [fp], pane: sourcePane,
-                          until_id: oldest.seq, last: CONV_LIVE_ROWS };
-        if (sourcePane !== pane) {
-          payload.owner_pane = pane;
-          // The same answer, remembered locally, for a relay too old to echo it back. This page is
-          // deployed separately from the relay and can be any age relative to it — against one that
-          // has not been restarted the end marker would otherwise land on the dead pane, and the
-          // reader would never be told the walk had reached the bottom.
-          (bucket.owner || (bucket.owner = {}))[sourcePane] = pane;
-        }
-        ws.send(JSON.stringify(payload));
+        bucket.depth = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
+        ws.send(JSON.stringify({ type: 'conv_log', aids: [aid],
+                                 until_id: oldest.seq, last: CONV_LIVE_ROWS }));
         asked++;
       }
       if (asked) convLiveAskSent(asked);
       return asked;
     }
 
-    // A window that did not reach the end, spent again on one pane at a time.
-    //
-    // The record is asked by fingerprint, because that is what survives herdr renumbering every
-    // pane on restart. But a fingerprint is an agent in a directory, not a pane: four claude panes
-    // in one repository are one fingerprint and 400 turns, and the relay answers the newest 200 of
-    // them — cut further by a 64 KB bound. Whoever spoke most recently takes the whole window, and
-    // a pane with 181 turns of its own renders a handful. Which is not "the relay has nothing for
-    // this pane"; it is this client asking a question whose answer it then throws most of away.
-    //
-    // So when the answer says it was truncated, ask again for each pane the roster actually names.
-    // `pane` narrows the same query, so each of those windows is spent on one pane. Once only, per
-    // fingerprint per cadence — a pane-scoped answer never triggers another round.
-    function convLiveRefill(fingerprints) {
-      if (!ws || ws.readyState !== 1) return;
-      const wanted = new Set((fingerprints || []).map(convFpKey));
-      const now = Date.now();
-      const sent = new Set();
-      for (const key of convLiveAsked) {
-        const fp = convKeyFingerprint(key);
-        if (!fp) continue;
-        const fpKey = convFpKey(fp);
-        if (!wanted.has(fpKey)) continue;
-        let pane = '';
-        try { pane = (JSON.parse(key) || [])[1] || ''; } catch (e) { continue; }
-        if (!pane || sent.has(pane)) continue;
-        sent.add(pane);
-        const bucket = convLiveBucket(fpKey);
-        bucket.refilled = now;
-        ws.send(JSON.stringify(
-          { type: 'conv_log', fingerprints: [fp], pane: pane, last: CONV_LIVE_ROWS }));
-      }
-      if (sent.size) convLiveAskSent(sent.size);
-    }
+    // `convLiveRefill` was here. A truncated roster answer used to be asked again pane by pane,
+    // because a bucket was a fingerprint: four claude panes in one repository shared one, the
+    // relay answered the newest window over all of them together, and whoever spoke last took the
+    // lot. A bucket is one colleague now, so a truncated answer means that colleague alone has
+    // more than a window — which is what Load older is for and there is no narrower question left.
 
     // The control, at the top of the thread rather than floating over it: it is about the oldest
     // bubble, so it belongs above the oldest bubble — which is also where the reader's eye already
@@ -21046,26 +20975,20 @@
     // which of the reasons that is: the ceiling and the bottom of the record are different answers.
     function convOlderHtml(keys) {
       if (!convLiveOn()) return '';
-      const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
-      if (!fps.some(fp => (convLiveCache.get(convFpKey(fp)) || {}).answered)) return '';
+      if (!(keys || []).some(aid => (convLiveCache.get(aid) || {}).answered)) return '';
       if (convLiveCanLoadOlder(keys)) {
         return '<div class="conv-older"><button class="conv-older-btn" ' +
           'onclick="convLoadOlder(this)" ' +
           'title="Ask the relay for the window before the oldest message here">' +
           '↑ Load older</button></div>';
       }
-      const was = convWasMap(keys);
-      const deep = (keys || []).some(key => {
-        const fp = convKeyFingerprint(key);
-        const bucket = fp && convLiveCache.get(convFpKey(fp));
-        return bucket && (bucket.depth[convPaneOfKey(key)] || 0) > CONV_LIVE_ROWS;
-      });
+      const deep = (keys || []).some(aid => ((convLiveCache.get(aid) || {}).depth || 0)
+        > CONV_LIVE_ROWS);
       if (!deep) return '';
-      const ceiling = (keys || []).some(key => {
-        const fp = convKeyFingerprint(key);
-        const bucket = fp && convLiveCache.get(convFpKey(fp));
-        return bucket && (bucket.depth[convPaneOfKey(key)] || 0) >= CONV_LIVE_DEEP_MAX
-          && !bucket.ended[convPaneOfKey(key)] && convLiveOldestSeq(key, was.get(key)) > 0;
+      const ceiling = (keys || []).some(aid => {
+        const bucket = convLiveCache.get(aid);
+        return bucket && (bucket.depth || 0) >= CONV_LIVE_DEEP_MAX && !bucket.ended
+          && convLiveOldestSeq(aid) > 0;
       });
       return '<div class="conv-older"><span class="conv-older-end">' + (ceiling
         ? `As far back as this device keeps — ${CONV_LIVE_DEEP_MAX} messages a pane`
@@ -21097,11 +21020,11 @@
            && convPaneRoster ? convViewId : '');
       const conv = id && typeof loadConvIndex === 'function'
         ? loadConvIndex().find(c => c.id === id) : null;
-      if (inWindow) return conv ? (conv.members || []).map(m => m.key) : [];
+      if (inWindow) return conv ? (conv.members || []).map(m => m.aid) : [];
       const a = (typeof activePane !== 'undefined' && activePane && typeof paneOf === 'function')
         ? paneOf(activePane) : null;
       const mine = a ? convMemberKey(a) : '';
-      const roster = conv ? (conv.members || []).map(m => m.key) : [];
+      const roster = conv ? (conv.members || []).map(m => m.aid) : [];
       if (roster.length) return roster;
       return mine ? [mine] : [];
     }
@@ -21134,83 +21057,77 @@
       // queried roster current — including the members it returned nothing for.
       let answeredThrough = 0;
       const touched = new Set();
-      // Which rows each fingerprint answered with, so the window ask below can drop what the relay
+      // Which rows each agent answered with, so the window ask below can drop what the relay
       // no longer returns. The merge is otherwise append-only, and a row can stop being part of
       // the record behind this browser's back — pruned, or marked as a copy of another row. Kept
       // for ever, it is a duplicate bubble no reload and no refresh can clear.
       const answered = new Map();
+      // The agent whose pane a row came out of, for a row the record cannot name itself. Only ever
+      // a pane that is running *now*: an id-less row is history from before the relay minted them,
+      // and the one thing that can still say whose it is is a live terminal with that pane id.
+      const byPane = new Map();
+      if (typeof agents !== 'undefined' && Array.isArray(agents)) {
+        for (const a of agents) if (a && a.aid && a.pane_id) byPane.set(a.pane_id, a.aid);
+      }
       for (const t of turns) {
-        const fpKey = convFpKey([t.host, t.agent, t.cwd]);
-        const bucket = convLiveBucket(fpKey);
+        const aid = t.aid || byPane.get(t.pane_id || '') || '';
+        if (!aid) continue;             // nobody can say whose it is; it is not drawn as anybody's
+        const bucket = convLiveBucket(aid);
         const seq = t.seq || 0;
         if (seq > answeredThrough) answeredThrough = seq;
-        if (!answered.has(fpKey)) answered.set(fpKey, new Set());
-        answered.get(fpKey).add(seq);
+        if (!answered.has(aid)) answered.set(aid, new Set());
+        answered.get(aid).add(seq);
         if (seq && bucket.turns.some(x => x.seq === seq)) continue;
         bucket.turns.push(t);
-        touched.add(fpKey);
+        touched.add(aid);
       }
 
-      // The window ask alone: a delta, a pane-scoped answer and a backfill each carry a slice of
-      // the record by design, and dropping what they did not name would delete the rest of it.
-      // Bounded below by the oldest row the answer carried, because everything under that is
-      // outside the window this query asked about — including whatever Load older fetched.
-      if (msg.since_id == null && !msg.pane && msg.until_id == null) {
-        for (const [fpKey, seqs] of answered) {
-          const bucket = convLiveCache.get(fpKey);
+      // The window ask alone: a delta and a backfill each carry a slice of the record by design,
+      // and dropping what they did not name would delete the rest of it. Bounded below by the
+      // oldest row the answer carried, because everything under that is outside the window this
+      // query asked about — including whatever Load older fetched.
+      if (msg.since_id == null && msg.until_id == null) {
+        for (const [aid, seqs] of answered) {
+          const bucket = convLiveCache.get(aid);
           if (!bucket) continue;
           const lo = Math.min(...seqs);
           const kept = bucket.turns.filter(t => (t.seq || 0) < lo || seqs.has(t.seq || 0));
-          if (kept.length !== bucket.turns.length) { bucket.turns = kept; touched.add(fpKey); }
+          if (kept.length !== bucket.turns.length) { bucket.turns = kept; touched.add(aid); }
         }
       }
 
-      // Every fingerprint the query named, whether it answered with rows or with silence. The relay
+      // Every agent the query named, whether it answered with rows or with silence. The relay
       // echoes the request back for exactly this: without it an empty answer is indistinguishable
       // from one that was never asked, and a quiet pane would never come up to date.
-      for (const fp of (Array.isArray(msg.fingerprints) ? msg.fingerprints : [])) {
-        const fpKey = convFpKey(fp);
-        const bucket = convLiveBucket(fpKey);
+      for (const aid of (Array.isArray(msg.aids) ? msg.aids : [])) {
+        const bucket = convLiveBucket(aid);
         // Heard from, this session, against this relay: the next ask for it can be a delta.
-        // Not for a pane-scoped answer, which carries one pane out of the fingerprint's several —
-        // taking its highest id as the watermark would tell the next delta that every *other*
-        // pane sharing this fingerprint is current through an id it was never asked about, and
-        // their rows would never arrive at all.
-        // `until_id` as well as `pane`: a backfill's highest id is *older* than this bucket's
-        // watermark, so taking it as one would wind the bucket backwards and make the next delta
-        // re-fetch every turn in between. The relay echoes it back for exactly this check.
-        if (!msg.pane && msg.until_id == null) {
-          convLiveVerified.add(fpKey);
+        //
+        // `until_id` excluded: a backfill's highest id is *older* than this bucket's watermark, so
+        // taking it as one would wind the bucket backwards and make the next delta re-fetch every
+        // turn in between. The relay echoes it back for exactly this check.
+        if (msg.until_id == null) {
+          convLiveVerified.add(aid);
           if (answeredThrough > bucket.syncedTo) bucket.syncedTo = answeredThrough;
           bucket.lastFetch = now;
           bucket.answered = true;
         }
-        // The record had nothing before what this browser already holds. Recorded per pane so the
-        // reader is told the walk is over rather than handed a button that does nothing — and so
-        // the depth this ask raised is not spent again on a question with no answer.
-        if (msg.until_id != null && msg.pane && !turns.length) {
-          bucket.ended[msg.owner_pane || (bucket.owner || {})[msg.pane] || msg.pane] = true;
-        }
-        touched.add(fpKey);
+        // The record had nothing before what this browser already holds — so the reader is told the
+        // walk is over rather than handed a button that does nothing, and the depth this ask
+        // raised is not spent again on a question with no answer.
+        if (msg.until_id != null && !turns.length) bucket.ended = true;
+        touched.add(aid);
       }
 
-      for (const fpKey of touched) {
-        const bucket = convLiveCache.get(fpKey);
+      for (const aid of touched) {
+        const bucket = convLiveCache.get(aid);
         bucket.turns.sort((a, b) => (a.at || 0) - (b.at || 0) || (a.seq || 0) - (b.seq || 0));
         // The same ceiling a single query carries, held across the deltas that follow it: without
-        // this a session left open all day grows a bucket without bound.
-        //
-        // Counted per pane rather than over the bucket, because the bucket is a fingerprint and the
-        // thread is a pane. Over the bucket, the busiest pane sharing a fingerprint evicts the
-        // quiet one's history down to nothing — the reader opens a pane with 181 turns behind it
-        // and is shown whatever is left of 200 after its neighbours took theirs.
+        // this a session left open all day grows a bucket without bound. Over the bucket, which is
+        // one colleague — it used to be counted per pane inside a fingerprint's bucket, because
+        // the busiest pane sharing a fingerprint would otherwise evict its neighbours' history.
         bucket.turns = convLiveTrim(bucket.turns, bucket.depth);
       }
-
-      // A roster answer that did not fit is asked again, pane by pane. Never off a pane-scoped
-      // answer: that one being truncated means the pane alone has more than a window, and there is
-      // no narrower question left to ask.
-      if (convLiveTruncated && !msg.pane) convLiveRefill(msg.fingerprints);
 
       // Kept, so the next session starts where this one got to. Not awaited: the thread below is
       // drawn from memory and a disk write is not something a reader should wait behind.
@@ -21260,38 +21177,17 @@
       const at = new Map((keys || []).map((k, i) => [k, i]));
       const turns = [];
       const seen = new Set();
-      // A bucket is a fingerprint, and a fingerprint has no pane id in it — that is what lets one
-      // survive the restart that renumbers every pane. But it also means two panes running the same
-      // agent in the same directory share a bucket, and "show this pane only" would draw both: the
-      // thread would be filtered by agent, which is not what the reader asked for.
-      //
-      // So a row belongs to the member whose pane id it carries, and to nobody else — unless that
-      // member has recorded itself as the successor of the pane the row came from, which is what
-      // keeps a respawned pane's history attached to it. Recorded, not inferred: a dead pane
-      // sharing the fingerprint is not evidence of anything.
-      const was = convWasMap(keys);
-      const pastFps = convWasFpMap(keys);
+      // A bucket is one agent, so a row in it belongs to that member and to nobody else. There is
+      // no sorting to do here at all: the pane-id filter, the `was` chain of panes a member had
+      // occupied and the `wasFp` chain of buckets it had been under were all consequences of a
+      // bucket being `[host, agent, cwd]`, which four claude panes in one checkout share.
       for (const k of (keys || [])) {
-        const mine = convPaneOfKey(k);
-        const mineWas = was.get(k);
-        // The buckets this member's words can be in — its own, and the ones it was under before a
-        // restart moved it to another harness or another checkout.
-        for (const fp of convKeyFingerprints(k, pastFps.get(k))) {
-          const bucket = convLiveCache.get(convFpKey(fp));
-          if (!bucket) continue;
-          for (const t of bucket.turns) {
-            if (!convLiveRowIsMine(t, mine, mineWas)) continue;
-            // Two roster members can fold to one fingerprint — a pane respawned under a new id is
-            // the same pane to the record — and the bucket must not be drawn twice for them.
-            if (t.seq && seen.has(t.seq)) continue;
-            if (t.seq) seen.add(t.seq);
-            // Filed under the member that claimed it, not under the pane id the row carries. Those
-            // two differ for every row a restarted member left behind: the roster key moved to the
-            // new pane and the old one lives in `was`, so a key derived from the row is a key no
-            // roster holds — and every filter that works by member key, solo among them, then has
-            // nothing to match those bubbles against and leaves them on screen.
-            turns.push({turn: t, key: k});
-          }
+        const bucket = k && convLiveCache.get(k);
+        if (!bucket) continue;
+        for (const t of bucket.turns) {
+          if (t.seq && seen.has(t.seq)) continue;
+          if (t.seq) seen.add(t.seq);
+          turns.push({turn: t, key: k});
         }
       }
       turns.sort((a, b) => (a.turn.at || 0) - (b.turn.at || 0) ||
@@ -21474,8 +21370,8 @@
       if (!e || (!e.branch && !e.commit)) return none;
       const key = e.key || '';
       const was = seen.get(key) || {};
-      // One map, two kinds of key. A member key is `[host, pane, agent, cwd]` and a checkout key is
-      // `host|cwd`, so neither can be mistaken for the other.
+      // One map, two kinds of key. A member key is an agent id and a checkout key is `host|cwd`,
+      // so neither can be mistaken for the other.
       const where = convGitWhere(e);
       const there = seen.get(where) || {};
       let before = '';
@@ -21522,9 +21418,8 @@
       if (convLiveError) return `<p class="conv-empty">${escapeHtml(convLiveError)}</p>`;
       // `answered`, not "has a bucket": a bucket is opened when the question goes out, so asking
       // that instead would tell a reader the record is empty while the answer is still in flight.
-      const fps = (keys || []).map(convKeyFingerprint).filter(Boolean);
-      const answered = fps.length
-        ? fps.every(fp => (convLiveCache.get(convFpKey(fp)) || {}).answered)
+      const answered = (keys || []).length
+        ? (keys || []).every(aid => (convLiveCache.get(aid) || {}).answered)
         : Array.from(convLiveCache.values()).some(b => b.answered);
       if (!answered) {
         return '<p class="conv-empty">Reading the relay’s record…</p>';
@@ -22010,7 +21905,7 @@
         return;
       }
       if (scope === 'pairs') {
-        const n = pairs.filter(p => pairHealth(p, agents).state === 'healthy').length;
+        const n = pairs.filter(p => pairHealth(p, agents, retiredAgents).state === 'live').length;
         el.textContent = n
           ? `Paired panes only, two to a colour. ${n} pair${n > 1 ? 's' : ''} running.`
           : 'Paired panes only — nothing is paired right now, so the strip holds just this pane.';
@@ -22078,10 +21973,7 @@
     });
 
     function fingerprint(a, role) {
-      return {
-        pane_id: a.pane_id, host: a.host || 'local', role: role,
-        agent: a.agent, cwd: a.cwd || ''
-      };
+      return Object.assign(pairMemberOf(a), { role: role });
     }
 
     // Every existing lookup is agents.find(...), which returns undefined for a terminal and takes
@@ -22384,9 +22276,9 @@
         // right edge carries what only matters here — the pair this pane is already in, which is
         // what makes choosing it a replacement rather than an addition.
         groups: () => [{head: 'Partner', rows: pairCandidates(agents, pairSource).map(a => {
-          // By pane id: the note says what choosing this row would replace, and saving
-          // replaces by pane id.
-          const existing = pairNaming(pairs, a.pane_id);
+          // By agent: the note says what choosing this row would replace, and saving replaces
+          // whichever pair already names either colleague.
+          const existing = pairNaming(pairs, a.aid);
           return pickPaneRow(a, existing ? {note: `in "${existing.name}"`} : null);
         })}],
         extra: pairStartRow,
@@ -22447,9 +22339,9 @@
       document.getElementById('pairRoleB').value = paneLabel(pairPartner);
       document.getElementById('pairFields').style.display = 'flex';
       // Name what is being replaced — a silent replacement is how a user loses a pair they meant to keep.
-      // By pane id, because savePair drops by pane id: the warning has to name exactly what
-      // saving will replace, stale pairs over these slots included.
-      const clashes = [pairSource, pairPartner].map(p => pairNaming(pairs, p.pane_id)).filter(Boolean);
+      // By agent, because savePair drops by agent: the warning has to name exactly what saving
+      // will replace.
+      const clashes = [pairSource, pairPartner].map(p => pairNaming(pairs, p.aid)).filter(Boolean);
       const names = [...new Set(clashes.map(p => p.name))];
       setPairError(names.length ? `Saving replaces the existing pair ${names.map(n => `"${n}"`).join(' and ')}.` : '', true);
       renderPicker();
@@ -22461,8 +22353,9 @@
       if (!name) { setPairError('Pair name is required'); return; }
       const roleA = document.getElementById('pairRoleA').value.trim() || paneLabel(pairSource);
       const roleB = document.getElementById('pairRoleB').value.trim() || paneLabel(pairPartner);
-      const ids = [pairSource.pane_id, pairPartner.pane_id];
-      const kept = pairs.filter(p => !p.members.some(m => ids.includes(m.pane_id)));
+      const ids = [pairSource.aid, pairPartner.aid].filter(Boolean);
+      if (ids.length !== 2) { setPairError('The relay has not named both of these panes yet.'); return; }
+      const kept = pairs.filter(p => !p.members.some(m => ids.includes(m.aid)));
       if (kept.length >= MAX_PAIRS) { setPairError(`Already at ${MAX_PAIRS} pairs — remove one first`); return; }
       pairs = kept.concat([{
         id: newPairId(), name: name.slice(0, 64),
@@ -22500,11 +22393,8 @@
     function renderPairStrip() {
       const strip = document.getElementById('pairStrip');
       const menu = document.getElementById('termMenuPair');
-      // Before the lookup: a pair whose panes have been restarted is found by this and by nothing
-      // else, and being asked "is this pane paired" is the moment to answer it honestly.
-      healPairs();
-      // After the healing and never before: a pair whose member was restarted is healthy again the
-      // moment healPairs re-points it, and ageing it first would count that restart as absence.
+      // A pair whose members have been restarted needs no repair — they are agent ids, and the
+      // agent is in whichever pane herdr has put it in. `healPairs` was called here.
       agePairs();
       const mineLive = activeAgent();
       const pair = pairFor(pairs, mineLive);
@@ -22532,14 +22422,15 @@
           : '';
         return;
       }
-      const health = pairHealth(pair, agents);
+      const health = pairHealth(pair, agents, retiredAgents);
       const partner = partnerOf(pair, mineLive);
-      const ok = health.state === 'healthy';
+      const ok = health.state === 'live';
       // Read the partner's name from the live snapshot, not from the pair record: the record holds
       // the name captured at pin time, so renaming a pane would leave a stale name on this button.
-      // Falls back to the pinned name, then the pane ID, so the button is never blank.
-      const live = agents.find(a => a.pane_id === partner.pane_id);
-      const partnerName = (live ? paneLabel(live) : '') || partner.role || partner.pane_id;
+      // Falls back to the pinned name, so the button is never blank.
+      const live = agents.find(a => memberMatches(partner, a));
+      const partnerName = (live ? paneLabel(live) : '')
+        || partner.label || partner.role || partner.agent || 'Partner';
       // Rebuilt wholesale, so the placement class has to be reapplied with it.
       strip.className = 'pair-strip' + (ok ? '' : ' stale') +
         (currentPairPlace() === 'bottom' ? ' at-bottom' : '');
@@ -22590,7 +22481,7 @@
     function switchToPartner() {
       const mine = activeAgent();
       const pair = pairFor(pairs, mine);
-      if (!pair || pairHealth(pair, agents).state !== 'healthy') return;
+      if (!pair || pairHealth(pair, agents, retiredAgents).state !== 'live') return;
       const keepComposer = document.activeElement === document.getElementById('termInput');
       // The live agent behind the partner member, not the pane id recorded on it: that is where
       // the partner *is*, and it is what carries the aid the new pane is then opened under.
@@ -22778,7 +22669,7 @@
       const source = keys.size ? agents.find(a => convMemberKey(a) === keys.values().next().value) : paneOf(activePane);
       if (!source) return null;
       const pair = pairFor(pairs, source);
-      if (!pair || pairHealth(pair, agents).state !== 'healthy') return null;
+      if (!pair || pairHealth(pair, agents, retiredAgents).state !== 'live') return null;
       // The ruler's range wins when there is one: it is the deliberate selection, and on a phone
       // the native one is usually empty anyway. Capture before anything can steal it — switching
       // panes clears both.
@@ -22829,7 +22720,7 @@
     function doTransfer(shortcutIndex) {
       const source = paneOf(transferSource || activePane);
       const pair = source && pairFor(pairs, source);
-      if (!pair || pairHealth(pair, agents).state !== 'healthy') {
+      if (!pair || pairHealth(pair, agents, retiredAgents).state !== 'live') {
         document.getElementById('transferPreview').textContent = 'Pair is no longer live; reopen it after choosing a live partner.';
         return;
       }
@@ -23262,7 +23153,7 @@
 
     function pairsHtml() {
       const rows = pairs.map(pair => {
-        if (pairHealth(pair, agents).state !== 'healthy') return '';
+        if (pairHealth(pair, agents, retiredAgents).state !== 'live') return '';
         const [left, right] = pair.members.map(member => agents.find(a => memberMatches(member, a)));
         return `<div class="pair-row" role="group" aria-label="${escapeHtml(pair.name)}">` +
           agentCard(left) + `<span class="pair-link" aria-label="paired with">↔</span>` + agentCard(right) + `</div>`;
@@ -23374,22 +23265,17 @@
         const members = c.members || [];
         const count = members.reduce((n, m) => n + (Number(m.messages) || 0), 0);
         const seen = Math.max(0, ...members.map(m => Number(m.seen) || 0));
-        const live = members.map(m => agents.find(a => convMemberKey(a) === m.key)).filter(Boolean);
-        const names = members.map(m => escapeHtml(convMemberName(m.key, m.label, 'Former pane')));
+        const live = members.map(m => agents.find(a => convMemberKey(a) === m.aid)).filter(Boolean);
+        const names = members.map(m => escapeHtml(convMemberName(m.aid, m.label, 'Former pane')));
         // What each member is and where it is working, in the order of how much each source knows.
         // The member record, written when it joined; then the live pane, which is right for a
-        // member that has come back under a new name; then the key itself, which carries the
-        // harness and the directory of every member ever recorded, including the ones that predate
-        // the fields above. The directory's last segment is a guess at the Project and is the last
-        // resort for exactly that reason — a member filed before this existed still shows where it
-        // was working, and one filed since shows what the relay calls it.
+        // member that has come back under a new name. The key used to be a third source — it was
+        // `[host, pane_id, agent, cwd]` — and an agent id describes nothing, which is the point of
+        // it.
         const badgeValues = members.map(m => {
-          const pane = agents.find(a => convMemberKey(a) === m.key) || {};
-          let key = [];
-          try { key = JSON.parse(m.key || '[]'); } catch (e) { /* a member key from before this */ }
-          const cwd = key[3] || '';
-          return { agent: m.agent || pane.agent || key[2] || '',
-            project: m.project || pane.project || cwd.split('/').filter(Boolean).pop() || '' };
+          const pane = agents.find(a => convMemberKey(a) === m.aid) || {};
+          return { agent: m.agent || pane.agent || '',
+            project: m.project || pane.project || '' };
         });
         // Unique, because a conversation of four claudes in one Project is one badge and one
         // Project — the card says what is in it, not how many.
@@ -23592,8 +23478,8 @@
     // own thread adds once it is open, not something this picks.
     function convVisibleLive(conv) {
       const hidden = convHidden(conv.id);
-      return (conv.members || []).filter(m => !hidden.has(m.key))
-        .map(m => agents.find(a => convMemberKey(a) === m.key)).find(Boolean) || null;
+      return (conv.members || []).filter(m => !hidden.has(m.aid))
+        .map(m => agents.find(a => convMemberKey(a) === m.aid)).find(Boolean) || null;
     }
 
     function openConvPane() {
@@ -23656,7 +23542,7 @@
       const members = (conv && conv.members) || [];
       if (members.length < 2) return '';
       const hidden = convHidden(id);
-      const shown = members.filter(m => !hidden.has(m.key));
+      const shown = members.filter(m => !hidden.has(m.aid));
       return shown.length === 1 ? shown[0].key : '';
     }
 
@@ -23668,8 +23554,8 @@
       // named to bring back. The composer can be addressing a pane outside this conversation, so
       // this is reachable by pressing the solo switch at the wrong moment. Guarded here rather
       // than at the switch because this is what every caller routes through.
-      const solo = members.some(m => m.key === key) ? key : '';
-      const rest = members.filter(m => m.key !== solo).map(m => m.key);
+      const solo = members.some(m => m.aid === key) ? key : '';
+      const rest = members.filter(m => m.aid !== solo).map(m => m.aid);
       const all = convHiddenAll();
       // Off is the empty list and not a shorter one: leaving whatever was hidden before solo began
       // would make the X put the reader somewhere they never chose.
@@ -23692,7 +23578,7 @@
       // pointed at a pane this conversation has never heard of, and soloing that is soloing
       // nobody. First member then, which is what an unaddressed composer already gets.
       const addressed = live ? convMemberKey(live) : '';
-      const key = members.some(m => m.key === addressed)
+      const key = members.some(m => m.aid === addressed)
         ? addressed : ((members[0] || {}).key || '');
       convSetSolo(convViewId, key);
     }
@@ -23768,22 +23654,22 @@
       const live = new Map(agents.map(x => [convMemberKey(x), x]));
       const off = hidden || new Set();
       const rows = (conv.members || []).map(m => {
-        const rec = recs.find(r => r.key === m.key) || {};
-        const on = live.has(m.key);
-        const out = off.has(m.key);
+        const rec = recs.find(r => r.key === m.aid) || {};
+        const on = live.has(m.aid);
+        const out = off.has(m.aid);
         return `<div class="conv-roster-row${on ? '' : ' gone'}${out ? ' hidden-member' : ''}">` +
           // Folding a member out of the thread, and nothing more. Beside the name because that is
           // what it acts on, and pressed rather than checked because the row already says which
           // state it is in by how it is drawn.
           // Not on the pane whose thread this is: hiding it would leave the reader on an empty
           // screen with the way back on the thing they just hid.
-          (m.key === reading ? '<span class="conv-eye reading" aria-hidden="true">◉</span>'
-            : `<button class="conv-eye" data-key="${escapeHtml(m.key)}" aria-pressed="${out ? 'true' : 'false'}"` +
+          (m.aid === reading ? '<span class="conv-eye reading" aria-hidden="true">◉</span>'
+            : `<button class="conv-eye" data-key="${escapeHtml(m.aid)}" aria-pressed="${out ? 'true' : 'false'}"` +
               ` onclick="toggleConvHidden(this.dataset.key)"` +
               ` aria-label="${out ? 'Show' : 'Hide'} this member in the thread">${out ? '◌' : '◉'}</button>`) +
-          `<span class="who">${escapeHtml(convMemberName(m.key, rec.label, m.label, 'Former pane'))}</span>` +
-          kindBadge((rec.spawn || {}).agent || (live.get(m.key) || {}).agent || '',
-                    live.get(m.key), (rec.spawn || {}).config) +
+          `<span class="who">${escapeHtml(convMemberName(m.aid, rec.label, m.label, 'Former pane'))}</span>` +
+          kindBadge((rec.spawn || {}).agent || (live.get(m.aid) || {}).agent || '',
+                    live.get(m.aid), (rec.spawn || {}).config) +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'paused')}</span>` +
           // The actions in a group of their own, so a row that runs out of width wraps them
           // together underneath instead of pushing the last one off the edge — the name, the badge
@@ -23794,14 +23680,14 @@
           // offered only where there is something running — a paused row carries Restart in the
           // same place, which is the other half of the same control: this row is where a member is
           // sent away and brought back.
-          (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.key,
-            pane: (live.get(m.key) || {}).pane_id, data: ` data-key="${escapeHtml(m.key)}"`,
+          (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.aid,
+            pane: (live.get(m.aid) || {}).pane_id, data: ` data-key="${escapeHtml(m.aid)}"`,
             aria: "Pause this member's session, keeping its seat and its thread",
             fire: 'endConvMember(this.dataset.key)'}) : '') +
           // Same pane, back at its first turn: the harness's own clear, then the words this
           // session was started with. Asked twice — what it throws away is the agent's context,
           // which nothing here can bring back.
-          (on ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.key)}"` +
+          (on ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
             ` onclick="armButton(this, 'Reset?', () => convResetMember(this.dataset.key))"` +
             ` aria-label="Clear this member's session and start it over in the same pane">` +
             `Reset</button>` : '') +
@@ -23813,13 +23699,13 @@
           // Opening the menu is the first of the two taps every destructive control here takes,
           // so an item fires on its own tap and nothing is armed. What it will start is written
           // above the items, where the toast that used to carry it could not be read twice.
-          restartMenuHtml(m.key, rec, on) +
-          `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.key)}"` +
+          restartMenuHtml(m.aid, rec, on) +
+          `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.aid)}"` +
           ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button>` +
           // Every live member, not only whichever one the header's button would pick: the header
           // opens the first, and a conversation of four is exactly where that is the wrong one.
-          (on ? `<button class="conv-open" data-key="${escapeHtml(m.key)}"` +
+          (on ? `<button class="conv-open" data-key="${escapeHtml(m.aid)}"` +
             ` onclick="openConvMemberPane(this.dataset.key)"` +
             ` aria-label="Open this member's pane">Open</button>` : '') +
           `</span></div>`;
@@ -23893,35 +23779,29 @@
       const recs = (typeof convViewRecs !== 'undefined' && convViewRecs) || [];
       const off = convHidden(conv.id);
       return (conv.members || []).map(m => {
-        const rec = recs.find(r => r.key === m.key) || {};
-        const pane = live.get(m.key) || null;
+        const rec = recs.find(r => r.key === m.aid) || {};
+        const pane = live.get(m.aid) || null;
         const spawn = rec.spawn || {};
-        // The key is the only thing that survives a pane closing, so it answers host and cwd for a
-        // member nothing is running for. It is a fingerprint of where the member *was*, which is
-        // the honest answer to "where is it" when the answer is "nowhere".
-        let host = '', cwd = '';
-        try {
-          const parts = JSON.parse(m.key);
-          if (Array.isArray(parts)) { host = parts[0] || ''; cwd = parts[3] || ''; }
-        } catch (e) { /* a key this browser cannot read still has every other column */ }
+        // Where the member *was*, for one nothing is running for. The key used to carry it — it
+        // was `[host, pane_id, agent, cwd]` — and now the transcript's own spawn record does, which
+        // is the honest answer to "where is it" when the answer is "nowhere".
+        const away = (typeof retiredAgents !== 'undefined' && retiredAgents || [])
+          .find(r => r && r.aid === m.aid) || {};
         return {
-          key: m.key,
+          key: m.aid,
           live: !!pane,
-          name: convMemberName(m.key, rec.label, m.label, 'Former pane'),
+          name: convMemberName(m.aid, rec.label, m.label, 'Former pane'),
           agent: (pane && pane.agent) || spawn.agent || m.agent || '',
-          // Off the pane first: the member's own copy is what was true when it was last written,
-          // and convFollowAids folds the live one back onto it. Where the two differ the pane is
-          // right, and showing the stale one would make this table the thing that is wrong.
-          aid: (pane && pane.aid) || m.aid || '',
-          pane: pane ? pane.pane_id : convKeyPaneId(m.key),
-          host: (pane && pane.host) || host || 'local',
+          // The member key itself. It is the identity, so the row and the column agree by
+          // construction — this used to be read off the live pane because the member's own copy
+          // could be stale.
+          aid: m.aid || '',
+          pane: pane ? pane.pane_id : (away.pane_id || ''),
+          host: (pane && pane.host) || away.host || 'local',
           project: pane ? (pane.project_id || '') : (spawn.project_id || m.project || ''),
-          state: off.has(m.key) ? 'hidden' : (pane ? 'recording' : 'paused'),
+          state: off.has(m.aid) ? 'hidden' : (pane ? 'recording' : 'paused'),
           messages: String(m.messages || 0),
-          cwd: (pane && pane.cwd) || spawn.cwd || cwd,
-          // Every pane this member has sat in before this one. The whole reason the key is not the
-          // identity, kept where the identity is being read.
-          was: (m.was || []).join(' '),
+          cwd: (pane && pane.cwd) || spawn.cwd || away.cwd || '',
         };
       });
     }
@@ -23932,10 +23812,7 @@
         const v = r[f];
         if (!v) return '<td class="missing">—</td>';
         const mono = f === 'aid' || f === 'pane' || f === 'cwd';
-        // The panes a member has been in before, on the pane it is in now: it is the same fact,
-        // and a column of its own would be empty for every member that has never moved.
-        const title = f === 'pane' && r.was ? ` title="Previously ${escapeHtml(r.was)}"` : '';
-        return `<td class="${mono ? 'mono' : ''}"${title}>${escapeHtml(String(v))}` +
+        return `<td class="${mono ? 'mono' : ''}">${escapeHtml(String(v))}` +
           (f === 'pane' && !r.live ? ' <span class="missing">(gone)</span>' : '') + '</td>';
       };
       const body = rows.map(r => `<tr class="${r.live ? '' : 'gone'}">` +
@@ -24027,7 +23904,7 @@
       const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
       if (!rows.length) return own || null;
       const member = loadConvIndex().reduce(
-        (found, c) => found || (c.members || []).find(m => m && m.key === key), null);
+        (found, c) => found || (c.members || []).find(m => m && m.aid === key), null);
       const row = member && member.aid && rows.find(x => x.aid === member.aid);
       if (!row) return own || null;
       // The registry's fields under whatever the local record already knew, so a browser holding
@@ -24204,6 +24081,11 @@
     function convStartClaimed(a) {
       if (!a) return false;
       if (typeof pendingStart !== 'undefined' && pendingStart && a.pane_id === pendingStart) return true;
+      // A start this browser is still holding the intent for. Not every start writes a note in the
+      // index — only the ones made for a conversation do — so without this a pane whose landing is
+      // one tick away is filed into an auto conversation of its own first, and the landing then
+      // finds it already named.
+      if (a.ref && typeof startsInFlight !== 'undefined' && startsInFlight.has(a.ref)) return true;
       return !!(a.ref && typeof convPendingRefs === 'function' && convPendingRefs().has(a.ref));
     }
 
@@ -24222,7 +24104,7 @@
         if (back) {
           showSpawnStatus(`"${paneLabel(back)}" is already running — continuing "${conv.name}".`,
                           'busy');
-          convLandMember(back, conv.id, key, held.ref).then(() => {
+          convLandMember(back, conv.id, held.ref).then(() => {
             if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
           });
         } else {
@@ -24260,6 +24142,8 @@
       const same = String(rec.label || spawn.label || '').trim();
       if (same && same.length <= 32) msg.label = same;
       if (tab) msg.workspace_id = spawn.workspace_id;
+      // The ref is minted below and written back into the intent before the send, so whichever of
+      // the two landing paths finds this pane clears the same note.
       startIntent = { conv: conv.id, replace: key, ref: '' };
       startPrompt = roleStarter(starter, spawn.agent);
       // And the new pane records the same starter, so the session can be ended and started again
@@ -24277,13 +24161,13 @@
       // agent across a herdr restart nobody asked for — but a restart *is* asked for, and the one
       // moment it cannot infer is this one: the pane being replaced is quit and the new one
       // started, and the relay can see both in a single poll.
-      const member = (conv.members || []).find(m => m.key === key);
+      const member = (conv.members || []).find(m => m.aid === key);
       if (member && member.aid) msg.aid = member.aid;
       // And which opening prompt it is being started with, kept by the relay against that agent —
       // so the next browser to restart it asks for the same one whether or not it watched this.
       if (startStarter) msg.starter = startStarter;
       convNotePending(conv.id, msg.ref, key, '');
-      ws.send(JSON.stringify(msg));
+      sendStart(msg);
     }
 
     // Reset and Restart: the two ways to put a member back at the beginning.
@@ -24360,7 +24244,7 @@
       // asking the same question of everyone at once must give the same answer. The old `live`
       // filter meant a conversation whose sessions had all been paused, which is precisely the
       // conversation somebody presses this on, reported that there was nothing here to restart.
-      convRestartQueue = (conv.members || []).map(m => m.key)
+      convRestartQueue = (conv.members || []).map(m => m.aid)
         .filter(k => canRespawn(((convViewRecs || []).find(r => r.key === k) || {}).spawn));
       if (!convRestartQueue.length) { showToast('Nothing here can be restarted.', 'info'); return; }
       showSpawnStatus(`Restarting ${convRestartQueue.length} pane` +
@@ -24383,7 +24267,7 @@
       if (!conv) return;
       // No queue: a reset is two sends into one pane, and the relay already keeps a pane's
       // messages in the order they arrived.
-      const n = (conv.members || []).filter(m => convResetMember(m.key)).length;
+      const n = (conv.members || []).filter(m => convResetMember(m.aid)).length;
       showToast(n ? `Reset ${n} pane${n === 1 ? '' : 's'}.` : 'Nothing here is running.',
                 n ? 'ok' : 'info');
     }
@@ -24395,11 +24279,11 @@
     function convMarkdown(conv, recs, entries) {
       const live = new Set(agents.map(x => convMemberKey(x)));
       const who = (conv.members || []).map(m => {
-        const rec = recs.find(r => r.key === m.key) || {}, spawn = rec.spawn || {};
+        const rec = recs.find(r => r.key === m.aid) || {}, spawn = rec.spawn || {};
         const facts = [spawn.agent, spawn.role, spawn.project || spawn.cwd].filter(Boolean);
         return `- ${rec.label || m.label || 'Former pane'}` +
           (facts.length ? ` — ${facts.join(' · ')}` : '') +
-          ` (${live.has(m.key) ? 'recording' : 'no longer live'})`;
+          ` (${live.has(m.aid) ? 'recording' : 'no longer live'})`;
       }).join('\n');
       const body = entries.map(e => {
         const at = convAt(e);
@@ -24469,7 +24353,7 @@
       // the copy holds this pane, so it is a grouping the pane can be read under.
       const a = document.getElementById('convView').style.display === 'none' && activePane
         ? paneOf(activePane) : null;
-      if (a && (copy.members || []).some(m => m.key === convMemberKey(a))) {
+      if (a && (copy.members || []).some(m => m.aid === convMemberKey(a))) {
         convViewId = copy.id;
         convSetView(a, copy.id);
         renderConvBar();
@@ -24492,7 +24376,7 @@
       const conv = loadConvIndex().find(c => c.id === convViewId);
       if (!conv) return;
       convPickRecs = await convAll();
-      const taken = new Set((conv.members || []).map(m => m.key));
+      const taken = new Set((conv.members || []).map(m => m.aid));
       const live = new Set(agents.map(convMemberKey));
       // The live panes this conversation does not already name — including panes already recording
       // elsewhere, which bring their own transcript with them (D3). And the sessions that have
@@ -24553,6 +24437,13 @@
         for (const key of keys) {
           const pane = agents.find(x => convMemberKey(x) === key);
           if (pane) {
+            // Said out loud rather than quietly dropped. The relay has this pane but has not said
+            // which agent is in it, so a membership written now names a key that is about to
+            // change — and the reader who tapped a row would otherwise be told nothing at all.
+            if (pane.unresolved) {
+              showToast(`${paneLabel(pane) || pane.pane_id} is still starting. Try again in a moment.`);
+              continue;
+            }
             // The cap is on panes *recording* at once, which is why a record is never counted
             // against it: that session has stopped.
             if (recording >= CONV_MEMBER_MAX) {
@@ -24630,7 +24521,7 @@
     async function purgeConversation(id) {
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv || !conv.archived) return;
-      const keys = (conv.members || []).map(m => m.key);
+      const keys = (conv.members || []).map(m => m.aid);
       // The sessions first. A pane still running is the one part of "it never happened" that no
       // record can erase on its own.
       for (const key of keys) endConvMember(key);
@@ -24647,9 +24538,9 @@
 
     function convRemoveMember(key) {
       const conv = loadConvIndex().find(c => c.id === convViewId);
-      const m = conv && (conv.members || []).find(x => x.key === key);
+      const m = conv && (conv.members || []).find(x => x.aid === key);
       if (!m) return;
-      convEdit(c => { c.members = (c.members || []).filter(x => x.key !== key); });
+      convEdit(c => { c.members = (c.members || []).filter(x => x.aid !== key); });
       // The modal that used to ask said what leaving costs. The drain asks instead, and cannot
       // carry a sentence, so the sentence lands after — it is the part the user has to know, and
       // the tap it would have interrupted has already happened.
@@ -24676,7 +24567,7 @@
         ? shown : shown.concat(loadConvIndex().filter(c => c.id === here));
       const live = new Set(agents.map(x => convMemberKey(x)));
       const rows = list.map(c => {
-        const on = (c.members || []).map(m => agents.find(a => live.has(m.key) && convMemberKey(a) === m.key))
+        const on = (c.members || []).map(m => agents.find(a => live.has(m.aid) && convMemberKey(a) === m.aid))
           .filter(Boolean);
         const lead = on.find(a => a.status === 'blocked') || on.find(a => a.status === 'working')
           || on.find(a => attentionKind(a) === 'done') || on[0];
@@ -24734,7 +24625,7 @@
       const idle = document.getElementById('convViewIdle');
       if (idle) {
         const live = new Set(agents.concat(shells).map(x => convMemberKey(x)));
-        idle.hidden = (conv.members || []).some(m => live.has(m.key));
+        idle.hidden = (conv.members || []).some(m => live.has(m.aid));
       }
       const head = view.querySelector('.conv-view-head');
       if (head) head.classList.toggle('auto', !!conv.auto);
@@ -24743,7 +24634,7 @@
       const mark = document.getElementById('convViewMark');
       if (mark && !mark.firstChild) mark.innerHTML = convGlyph();
       const members = conv.members || [], hidden = convHidden(conv.id);
-      const shown = members.filter(m => !hidden.has(m.key));
+      const shown = members.filter(m => !hidden.has(m.aid));
       const open = document.getElementById('convViewOpen');
       open.hidden = !convVisibleLive(conv);
       const who = document.getElementById('convViewWho');
@@ -24751,7 +24642,7 @@
         ` pane${members.length === 1 ? '' : 's'} ▾`;
       who.setAttribute('aria-expanded', convRosterOpen ? 'true' : 'false');
       const token = ++convStandaloneToken;
-      const keys = members.map(m => m.key);
+      const keys = members.map(m => m.aid);
       // No drafts: a draft belongs to a pane being watched, and this view watches none.
       const composed = await convCompose(conv, keys);
       if (token !== convStandaloneToken || convViewId !== conv.id) return;
@@ -24768,7 +24659,7 @@
       // The right side is the pane the reader has open when that is one of the two — the same rule
       // the pane thread follows — and the second member otherwise, so the columns are stable for a
       // reader who has no pane open at all.
-      const shownKeys = shown.map(m => m.key);
+      const shownKeys = shown.map(m => m.aid);
       const openKey = activePane ? convMemberKey(paneOf(activePane)) : '';
       const twoCol = shownKeys.length === 2 && !!(conv.pair_id ||
         agents.some(x => shownKeys.includes(convMemberKey(x)) && pairFor(pairs, x)));
@@ -24793,9 +24684,9 @@
       const kinds = [];
       const seen = new Set();
       for (const m of members) {
-        const rec = composed.recs.find(r => r.key === m.key);
+        const rec = composed.recs.find(r => r.key === m.aid);
         const spawn = (rec && rec.spawn) || {};
-        const pane = live.get(m.key);
+        const pane = live.get(m.aid);
         const kind = spawn.agent || (pane && pane.agent) || '';
         const config = (pane && pane.config) || spawn.config || '';
         if (kind && !seen.has(config || kind)) {
@@ -24811,8 +24702,8 @@
       // is one whose header has to say so, because nothing else on this screen does.
       const projects = [];
       for (const m of members) {
-        const rec = composed.recs.find(r => r.key === m.key);
-        const pane = live.get(m.key);
+        const rec = composed.recs.find(r => r.key === m.aid);
+        const pane = live.get(m.aid);
         const project = ((rec && rec.spawn) || {}).project || (pane && pane.project) || m.project || '';
         if (project && !projects.includes(project)) projects.push(project);
       }
@@ -24860,7 +24751,7 @@
       const workingEl = document.getElementById('convViewWorking');
       if (workingEl) {
         const workingList = (members || []).map(m => {
-          const liveAgent = agents.find(x => convMemberKey(x) === m.key);
+          const liveAgent = agents.find(x => convMemberKey(x) === m.aid);
           return (liveAgent && (liveAgent.status === 'working' || liveAgent.agent_status === 'working')) ? liveAgent : null;
         }).filter(Boolean);
         workingEl.innerHTML = typeof convWorkingBadgesHtml === 'function'
@@ -24882,7 +24773,7 @@
       const key = convSoloKey(conv.id);
       bar.hidden = !key;
       if (!key) { bar.innerHTML = ''; return; }
-      const m = (members || []).find(x => x.key === key) || {};
+      const m = (members || []).find(x => x.aid === key) || {};
       const live = agents.find(a => convMemberKey(a) === key);
       const name = (live && paneLabel(live)) || m.label || 'one member';
       bar.innerHTML = `<span class="solo-name">Solo · ${escapeHtml(name)}</span>` +
@@ -25117,7 +25008,7 @@
       // A pair is not a pane, so it opens the first half of itself — the two are side by side in
       // the strip from there, which is the whole point of having paired them.
       const healthy = (typeof pairs === 'undefined' ? [] : pairs)
-        .filter(p => typeof pairHealth !== 'function' || pairHealth(p, agents).state === 'healthy');
+        .filter(p => typeof pairHealth !== 'function' || pairHealth(p, agents, retiredAgents).state === 'live');
       add('Pairs', 'pair pairs paired partner', healthy.map(p => {
         const live = (p.members || []).map(m => agents.find(a => memberMatches(m, a))).filter(Boolean);
         return {id: p.id || p.name, name: p.name || 'Pair', glyph: '⇄',
@@ -25354,8 +25245,8 @@
       const conv = loadConvIndex().find(c => c.id === convViewId);
       if (!conv) return [];
       const hidden = convHidden(conv.id);
-      const live = (conv.members || []).filter(m => !hidden.has(m.key))
-        .map(m => agents.find(a => convMemberKey(a) === m.key)).filter(Boolean);
+      const live = (conv.members || []).filter(m => !hidden.has(m.aid))
+        .map(m => agents.find(a => convMemberKey(a) === m.aid)).filter(Boolean);
       // Sorted here rather than in the row, so the row, the list behind ▾ and the fallback target
       // all read the membership in the same order — three places disagreeing about who is first is
       // three answers to "who am I talking to".
@@ -26279,7 +26170,11 @@
       startPrompt = newAgentFor === 'arbWho' ? '' : roleStarter(role, newAgentKind);
       startStarter = newAgentFor === 'arbWho' ? NO_STARTER : ((role || {}).at || NO_STARTER);
       showSpawnStatus(`Starting ${msg.label || newAgentKind}…`, 'busy');
-      ws.send(JSON.stringify(msg));
+      // The ref this start is waited on by. Already set above where the conversation wrote a note
+      // against it; sendStart mints one for the arbitration-slot case, which writes no note. Held
+      // before the send, because sendStart takes the intent and clears the global as it goes.
+      const held = startIntent;
+      held.ref = sendStart(msg);
       closeNewAgent();
     }
 
@@ -27373,10 +27268,10 @@
     // restarted from once it has not. A conversation whose panes have all been closed still has a
     // project; it is the one every restart in it would land in.
     function arbMemberProject(m) {
-      const live = agents.find(x => convMemberKey(x) === m.key);
+      const live = agents.find(x => convMemberKey(x) === m.aid);
       if (live) return live.project_id || '';
       if (typeof convViewRecs === 'undefined') return null;
-      const rec = (convViewRecs || []).find(r => r.key === m.key);
+      const rec = (convViewRecs || []).find(r => r.key === m.aid);
       return rec && rec.spawn ? (rec.spawn.project_id || '') : null;
     }
 
@@ -27457,11 +27352,11 @@
       const live = new Map(agents.map(x => [convMemberKey(x), x]));
       const taken = arbTakenPanes(except);
       return (conv.members || []).map(m => {
-        const pane = live.get(m.key) || null;
+        const pane = live.get(m.aid) || null;
         if (pane && taken.has(pane.pane_id)) return null;
-        if (!pane && !arbCanWake(m.key)) return null;
-        return {key: m.key, pane: pane, label: pane ? paneLabel(pane)
-          : `${convMemberName(m.key, m.label, 'Former pane')} — paused`};
+        if (!pane && !arbCanWake(m.aid)) return null;
+        return {key: m.aid, pane: pane, label: pane ? paneLabel(pane)
+          : `${convMemberName(m.aid, m.label, 'Former pane')} — paused`};
       }).filter(Boolean);
     }
 
@@ -28030,7 +27925,7 @@
       if (want.slot !== 'arbWho') {
         const items = loadConvIndex();
         const conv = items.find(c => c.id === want.conv);
-        if (conv && !(conv.members || []).some(m => m.key === convMemberKey(a))) {
+        if (conv && !(conv.members || []).some(m => m.aid === convMemberKey(a))) {
           conv.members = (conv.members || []).concat(convMemberOf(a));
           saveConvIndex(items);
         }
@@ -28512,12 +28407,12 @@
       const live = new Map(agents.map(x => [convMemberKey(x), x]));
       for (const w of arbHold.want) {
         if (w.pane_id || !w.key) continue;
-        // The member's key is the *old* pane's until the landing moves it, so the row is found by
-        // walking the roster rather than by looking the old key up in the live map.
-        const m = (conv.members || []).find(x => x.key === w.key)
-          || (conv.members || []).find(x => (x.was || []).includes(convKeyPaneId(w.key)));
-        const pane = m && live.get(m.key);
-        if (pane) { w.pane_id = pane.pane_id; w.key = m.key; }
+        // A member key is an agent id, so the row a start was made for is the row it always was —
+        // the pane under it changed and the key did not. This used to have to walk each member's
+        // `was` list to find the old pane the key still named.
+        const m = (conv.members || []).find(x => x.aid === w.key);
+        const pane = m && live.get(m.aid);
+        if (pane) { w.pane_id = pane.pane_id; w.key = m.aid; }
       }
       if (arbHold.want.some(w => !w.pane_id)) {
         if (arbSetupOpen()) arbDrawSetup(conv, arbReadSetup());
@@ -29184,7 +29079,7 @@
       if (btn) btn.classList.add('busy');
       try {
         if (convLiveOn()) convLiveInvalidate();   // ask the relay again, on the way through
-        const removed = await convTidyQuiet((conv.members || []).map(m => m.key));
+        const removed = await convTidyQuiet((conv.members || []).map(m => m.aid));
         convStandaloneHtml = '';        // the thread is being redrawn from the record, not diffed
         await renderConvStandalone(true);
         if (removed) showToast(`Removed ${removed} duplicate message${removed > 1 ? 's' : ''}`);
@@ -29444,7 +29339,7 @@
       const conv = loadConvIndex().find(c => c.id === convId);
       if (!conv) return false;
       const live = (conv.members || [])
-        .map(m => agents.concat(shells).find(x => convMemberKey(x) === m.key))
+        .map(m => agents.concat(shells).find(x => convMemberKey(x) === m.aid))
         .filter(Boolean);
       if (!live.length) { showToast('Nothing in this conversation is still running.'); return false; }
       live.forEach(p => endPane(p.pane_id));
