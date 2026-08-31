@@ -12880,9 +12880,18 @@
           // under a name the user never typed and reads as the wrong session.
           const asked = document.getElementById('startName').value.trim();
           const renamed = asked && msg.label && msg.label !== asked;
-          showSpawnStatus(renamed ? `Name taken — started as "${msg.label}" — opening…`
-            : `${msg.command === 'open_terminal' ? 'Terminal opened' : 'Session started'} — opening…`,
-            renamed ? 'warning' : 'busy');
+          // Unless the pane is already on screen. The relay publishes it the moment it exists and
+          // answers the start seconds later, so its landing routinely beats this message — and
+          // re-arming the spinner then leaves a session that is up and working saying "opening…"
+          // until SPAWN_BUSY_MS reports that no pane has appeared. Which is what the reader saw:
+          // a start that finished, under a status that said it had not.
+          const landed = msg.command === 'start_agent' && msg.ref &&
+            typeof startAwaiting === 'function' && !startAwaiting(msg.ref);
+          if (renamed || !landed) {
+            showSpawnStatus(renamed ? `Name taken — started as "${msg.label}" — opening…`
+              : `${msg.command === 'open_terminal' ? 'Terminal opened' : 'Session started'} — opening…`,
+              renamed ? 'warning' : 'busy');
+          }
           closeStart();
           // Open it once the poll has seen it. Not here: the session is not in `agents` yet, and
           // openTerminal reads the snapshot for the pane's title and its pair. Starting a session
@@ -13615,6 +13624,14 @@
       startStarter = '';
       ws.send(JSON.stringify(msg));
       return msg.ref;
+    }
+
+    // Is this start still waiting for its pane? The relay's answer to a start arrives *after* the
+    // pane it made is published — the pane carries its ref the moment it exists, so the poll often
+    // lands it first (measured 3s apart on 2026-08-31). Anything that reacts to that answer has to
+    // ask this before it says the session is still coming.
+    function startAwaiting(ref) {
+      return !!ref && startsInFlight.has(ref);
     }
 
     // Panes that have arrived carrying a ref this browser is waiting on, landed against their own
@@ -27227,7 +27244,7 @@
       if (at) { openTerminal(at); return; }
       const conv = loadConvIndex().find(c => c.id === convCurrentId());
       if (!conv) return;
-      const live = arbSlotRows(conv, undefined, ''), free = arbArbiterRows(conv, undefined, '');
+      const live = arbMemberRows(conv, ''), free = arbArbiterRows(conv, undefined, '');
       // Refused only when the dialog could do nothing about it. A missing member or a missing
       // arbitrator is a slot away now that each one can start its own — what is not answerable
       // from here is a relay that will not start agents at all, or a conversation whose own
@@ -27354,11 +27371,19 @@
         (x.project_id || '') === project), except);
     }
 
-    // The conversation's roster as pickable rows: the live pane where there is one, and the member
-    // itself where there is not. A conversation whose panes have all been closed is exactly the one
-    // somebody opens this dialog on, and until now it offered them nothing. A paused member with no
-    // record to restart from is still left out — the slot would name something nothing can bring
-    // back.
+    // What a member slot offers, and the whole of it: this conversation's roster, as the live pane
+    // where there is one and the member itself where there is not. A conversation whose panes have
+    // all been closed is exactly the one somebody opens this dialog on, and until now it offered
+    // them nothing. A paused member with no record to restart from is still left out — the slot
+    // would name something nothing can bring back.
+    //
+    // The two member slots and the arbitrator's are deliberately not the same list. A session
+    // decides between two agents that are already talking to each other, and that conversation is
+    // where the record of it lives — so an agent from elsewhere in the project is not a
+    // participant in it, whatever the wire would accept. Somebody who wants one in the room adds
+    // it to the conversation, or starts it here with + New, which does the same thing. The
+    // arbitrator is the opposite case: it is reading the room rather than in it, so any pane in
+    // the project may referee.
     function arbMemberRows(conv, except) {
       const live = new Map(agents.map(x => [convMemberKey(x), x]));
       const taken = arbTakenPanes(except);
@@ -27378,24 +27403,6 @@
         .map(x => ({key: convMemberKey(x), pane: x, label: paneLabel(x)}));
       const have = new Set(rows.map(r => r.key));
       return rows.concat(arbMemberRows(conv, except).filter(r => !r.pane && !have.has(r.key)));
-    }
-
-    // What a member slot offers: this conversation's roster first, then every other pane in the
-    // project. The roster is what somebody almost always means, so it stays at the top of the
-    // list — but it is not the whole answer, and treating it as one made the two member slots the
-    // only place in this dialog where a pane sitting right there could not be picked. A
-    // conversation is this browser's grouping of transcripts; a session is three terminals. The
-    // relay has never asked whether a member is in the conversation (`check_participants`), only
-    // that it is live, local, unheld and in one project, so the narrower list was refusing what
-    // the wire would have taken.
-    //
-    // The arbitrator's own row set is reused rather than re-derived: which pane may be written to
-    // and which may referee is the same question, and the one difference — an agent cannot be both
-    // — is already answered by `duplicate_participant` and said earlier by `arbCheckSetup`.
-    function arbSlotRows(conv, project, except) {
-      const rows = arbMemberRows(conv, except);
-      const have = new Set(rows.map(r => r.key));
-      return rows.concat(arbArbiterRows(conv, project, except).filter(r => !have.has(r.key)));
     }
 
     // Whether a paused member can be brought back at all — the same record-shaped question the
@@ -27968,7 +27975,7 @@
       const free = arbArbiterRows(conv, arbPickedProject(conv, at), mine);
       // Members too, and for the same reason: a member of another session is a pane that session
       // is deciding about, and enrolling it here would put two arbitrators over one terminal.
-      const rows = arbSlotRows(conv, arbPickedProject(conv, at), mine);
+      const rows = arbMemberRows(conv, mine);
       if (el) el.innerHTML = arbSetupHtml(rows, free, at, !!mine, holding || arbHoldNote());
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
@@ -28178,11 +28185,11 @@
     // three members, or with every other pane busy, silently had no arbitration at all and no way
     // to find out why. Both reasons are things a person can act on, so both are said out loud.
     function arbWhyNot(live, free, project) {
-      // "this project" and not "this conversation": a member slot offers every pane in the
-      // project now, so a room with one member in a project with two other agents is not short of
-      // anybody, and saying it was sent people looking for a member they did not need.
+      // "this conversation" for the members and "this project" for the arbitrator, because those
+      // are the two sets the slots are drawn from: a room with one member is short a member even
+      // when the project is full of panes, and a full room in a project of two is short a referee.
       const why = live.length < 2
-        ? 'Arbitration watches two agents talk. This project has ' +
+        ? 'Arbitration watches two agents talk. This conversation has ' +
           (live.length === 1 ? 'one agent in it.' : 'none in it.')
         : project === null
         ? 'Arbitration needs everyone in one project, and this conversation spans more than one.'
@@ -28265,7 +28272,7 @@
       // Members that can be woken, not panes that are running. A conversation whose sessions have
       // all been paused is exactly the one somebody opens this dialog on, and counting live panes
       // told them it had none in it — about a roster every row of which has a Restart.
-      const live = arbSlotRows(conv, undefined, except);
+      const live = arbMemberRows(conv, except);
       const scope = at.arbScope.trim();
       const picks = [at.arbFirst, at.arbSecond];
       const roles = ['arbRoleFirst', 'arbRoleSecond'].map(arbRoleValue);
