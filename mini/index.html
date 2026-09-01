@@ -588,14 +588,29 @@
       align-items: center;
     }
 
-    .agent-glyph {
+    /* One rule for both marks: an agent and a shell sitting in one list are the same drawing at
+       two colours, so they are the same size and sit on the same line. 1.1em of whatever the slot
+       is set in, which is what makes a 0.62rem tab strip and a 0.75rem picker row each get a glyph
+       in proportion to its own text rather than one fixed pixel size in both. The vertical-align
+       is for the inline case — the pane list drops the glyph into a run of text; every other slot
+       is a flex box that centres it outright. */
+    .agent-glyph,
+    .shell-glyph {
       width: 1.1em;
       height: 1.1em;
-      vertical-align: -0.15em;
+      vertical-align: -0.1em;
       display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .agent-glyph {
       stroke: var(--pink, #ff2d87);
       color: var(--pink, #ff2d87);
-      flex-shrink: 0;
+    }
+
+    .shell-glyph {
+      stroke: var(--shell, #7dcfff);
+      color: var(--shell, #7dcfff);
     }
 
     .agent-tab:hover .pill {
@@ -1499,10 +1514,10 @@
     }
 
     /* A tile stands in for a thing that will exist, so it carries the kind's colour the way an
-       agent card carries its agent's — the shell blue of a terminal, the blue of a session. Both
-       blue, and deliberately not the same blue: `--shell` is what the Terminals section and every
-       terminal card already wear, so a Terminal tile and the shell it opens are one colour, and
-       `--blue` keeps a session tile distinguishable beside it. */
+       agent card carries its agent's — the terminal green of a shell, the blue of a session. The
+       launcher is the one grid where the two kinds sit side by side, and green against blue is
+       what tells them apart at tile size; everywhere a terminal is *drawn* rather than offered it
+       wears `--shell` instead. */
     .launcher-tile .launcher-kind {
       display: flex;
       align-items: center;
@@ -1515,10 +1530,10 @@
 
     /* Both, and for the reason LAUNCHER_GLYPHS gives them one glyph: a terminal is a terminal
        whether or not a line is typed at it. `term` used to fall through to --muted, which made
-       the one tile that opens a bare prompt the only terminal in the app not drawn as one. */
+       the one tile that opens a bare prompt the only terminal in the launcher not marked as one. */
     .launcher-tile[data-action="run"] .launcher-kind,
     .launcher-tile[data-action="term"] .launcher-kind {
-      color: var(--shell);
+      color: var(--green);
     }
 
     .launcher-tile[data-action="spawn"] .launcher-kind {
@@ -2994,6 +3009,11 @@
     .pair-pick .kind {
       flex-shrink: 0;
       font-size: 0.75rem;
+      /* The slot is a box, not a baseline: the glyph centres against the dot and the two lines of
+         text beside it rather than hanging off whatever baseline an inline SVG lands on. */
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* The conversation mark. An SVG that takes currentColor, so the green is this rule's to give
@@ -7068,6 +7088,14 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.72rem;
       font-weight: 600;
+    }
+
+    /* Holds a glyph rather than a word, so it centres both ways like the pills beside it. Not on
+       .xfer-chip, whose <sub> is positioned by vertical-align and would be ignored in a flex box. */
+    .xfer-row .xfer-who-more {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* Lit, not filled. Send is the only filled thing on this row: three picked chips in the same
