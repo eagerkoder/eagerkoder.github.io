@@ -115,6 +115,11 @@
       --blue: #7aa2f7;
       --orange: #e0af68;
       --pink: #ff2d87;
+      /* A bot tile's wash. Purple because it is the one hue no *status* owns — green, red, orange
+         and blue all mean something about how a session is doing, and a bot is not a state. A
+         shade off --agent-agy deliberately: that one names a harness in a badge, this one names a
+         row in the grid, and at a 7% wash the two are never on screen as the same kind of mark. */
+      --bot: #9d7cd8;
       /* Agent kinds, in the badge only. --orange doubles as the pi yellow; claude needs its own
          because the two sit side by side in a list and #e0af68 twice reads as one colour. */
       --agent-claude: #ff9e64;
@@ -168,6 +173,7 @@
       --blue: #2461da;
       --orange: #965904;
       --pink: #ff2d87;
+      --bot: #6b46c1;
       --agent-claude: #b74208;
       --agent-agy: #6a3ec4;
       --agent-kiro: #b0126e;
@@ -1298,6 +1304,14 @@
 
     .launcher.compact .launcher-edit { display: none; }
 
+    /* Compact hides Edit, so the mark has no corner left to hang under. It is still the one thing
+       worth knowing about a row about to be pressed, so it keeps the corner rather than the
+       relationship — the top-right of the tile, where Edit was. */
+    .launcher.compact .launcher-live {
+      top: 6px;
+      right: 8px;
+    }
+
     /* The glyph stays, the word beside it goes: "SESSION" over every tile is the column heading of
        a table nobody asked for, and the icon says the same thing in the space of a letter. */
     .launcher.compact .launcher-kind span { display: none; }
@@ -1427,6 +1441,61 @@
     .launcher-edit:hover, .launcher-edit:focus-visible {
       color: var(--blue);
       border-color: var(--blue);
+    }
+
+    /* A bot is not another tile like the ones around it — it is the same room every time — so it
+       is the one row in the grid that reads as a place rather than a button. A wash and a warmer
+       border, not a different hue: the kind colour on the line above still has to say whether
+       this opens a conversation or a shell, and two colour systems on one tile is one too many. */
+    .launcher-tile[data-bot="true"] {
+      background: color-mix(in srgb, var(--bot) 7%, var(--bg));
+      border-color: color-mix(in srgb, var(--bot) 38%, var(--border));
+    }
+
+    .launcher-tile[data-bot="true"]:hover {
+      background: color-mix(in srgb, var(--bot) 12%, var(--bg));
+      border-color: color-mix(in srgb, var(--bot) 55%, var(--border));
+    }
+
+    /* The one badge strip whose labels are two lines. `pre-line` and not `pre`: the wrapping is
+       still the browser's, this only says a newline that was typed is a newline that is drawn. */
+    /* Doubled up: .badge-strip's own `align-items: center` is later in this file. */
+    .badge-strip.ql-press { align-items: stretch; }
+    .ql-press .badge {
+      white-space: pre-line;
+      text-align: center;
+      line-height: 1.3;
+      /* Both badges the height of the taller one. A one-line badge sitting short beside a two-line
+         one reads as two controls of different importance, which is the opposite of a pick-one. */
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Directly under Edit, in the corner both belong to. Not in .launcher-badges beside insecure
+       and skip approvals: those say what pressing this tile *will* do, and this says what is true
+       right now — a fact with a different lifetime is worth a different place to sit. */
+    .launcher-live {
+      position: absolute;
+      top: 40px;
+      right: 6px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.52rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--green);
+      /* The tile underneath is the button. A mark that swallowed a tap would make the one corner
+         of a live bot that looks most pressable the one place that does nothing. */
+      pointer-events: none;
+    }
+
+    .launcher-live-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--green);
     }
 
     /* A tile stands in for a thing that will exist, so it carries the kind's colour the way an
@@ -5436,7 +5505,8 @@
        drain would never be seen. Same declarations, enough specificity to be reached. */
     .arm-btn[data-armed="1"],
     .conv-roster .conv-menu-items button.arm-btn[data-armed="1"],
-    .term-menu .menu-item.arm-btn[data-armed="1"] {
+    .term-menu .menu-item.arm-btn[data-armed="1"],
+    .quick-actions .qa-nav button.qa-esc[data-armed="1"] {
       color: var(--bg);
       border-color: transparent;
       background: linear-gradient(to right, var(--orange) 50%, var(--border) 50%) right / 200% 100%;
@@ -5446,7 +5516,8 @@
     @media (prefers-reduced-motion: reduce) {
       .arm-btn[data-armed="1"],
       .conv-roster .conv-menu-items button.arm-btn[data-armed="1"],
-      .term-menu .menu-item.arm-btn[data-armed="1"] {
+      .term-menu .menu-item.arm-btn[data-armed="1"],
+      .quick-actions .qa-nav button.qa-esc[data-armed="1"] {
         background: var(--orange);
         animation: none;
       }
@@ -7141,9 +7212,9 @@
        this row is always on screen, and a permanent 52px band cost more than a mis-tap on a
        control whose worst outcome is opening the wrong session. */
     .quick-actions .qa-nav button.nav {
-      /* Shrinks with the middle track. No floor: on a 320px screen with Summary showing there is
-         about 160px to share, and an arrow that refused to go under 96 would be pushed out of its
-         own column rather than getting narrower. */
+      /* Shrinks with the middle track. No floor: on a 320px screen there is about 160px to share,
+         and an arrow that refused to go under 96 would be pushed out of its own column rather than
+         getting narrower. */
       flex: 0 1 140px;
       min-width: 0;
       padding: 2px 10px;
@@ -7188,9 +7259,10 @@
       transform: rotate(180deg);
     }
 
-    /* The right edge of the nav row. Last is always there; Summary joins it only when the pane
-       has a closing message to offer. One column holding both, so the width the pair needs is
-       measured rather than guessed and the middle track gives up exactly that much. */
+    /* The right edge of the nav row: Esc and Summary, both always there. They used to come and go
+       with the pane's state, which made this column change width under a resting thumb. One column
+       holding both, so the width the pair needs is measured rather than guessed and the middle
+       track gives up exactly that much. */
     .quick-actions .qa-nav .qa-right {
       /* Third column named rather than counted: the middle track has nothing in it since the walk
          moved to the status bar, and an empty div held only to fill a grid slot is a box that has
@@ -7199,10 +7271,9 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      /* Held open at a button's height even while it is empty, which is most panes now that Last
-         hangs over the text and only Summary is left to put here. A collapsed box in a row of
-         centred grid items sits 11px off the group beside it, and the fold on the left edge would
-         read as having slipped out of the row. */
+      /* A floor, not a prop. Both buttons are 22px, so this only matters if the group is ever
+         emptied again — and a collapsed box in a row of centred grid items sits 11px off the group
+         beside it, which reads as the fold having slipped out of the row. */
       min-height: 22px;
     }
 
@@ -7227,6 +7298,37 @@
     .quick-actions .qa-nav button.qa-summary {
       border-color: var(--orange);
       color: var(--orange);
+    }
+
+    /* Dead, and saying so, by giving back the orange — the colour of the band this draws, which a
+       button that cannot draw one has no business wearing. Muted against orange is the whole
+       signal, so there is no opacity on top of it: dimming a muted colour twice only makes the
+       word hard to read. Native `disabled` rather than aria-disabled: it suppresses the click and
+       leaves the focus order without a guard inside selectFinalMessage that a later caller could
+       forget. The title says why it is dead. */
+    .quick-actions .qa-nav button.qa-summary:disabled {
+      border-color: var(--border);
+      color: var(--muted);
+      cursor: default;
+    }
+
+    /* Escape's own pill, the same shape as Summary and in the colour of the thing it interrupts.
+       Sized to its word, so the right edge is two fixed widths rather than one that moves.
+       The armed fill is listed up with the other arm-btn rules rather than left to the bare
+       .arm-btn[data-armed="1"]: this selector names an element and three classes and outweighs it
+       on background, border and colour, so the drain would never be seen. Same trap the menu
+       items are listed there for. */
+    .quick-actions .qa-nav button.qa-esc {
+      flex: 0 0 auto;
+      min-width: 0;
+      height: 22px;
+      padding: 0 9px;
+      border-radius: 11px;
+      border: 1px solid var(--red);
+      background: var(--surface);
+      color: var(--red);
+      font-size: 0.7rem;
+      font-weight: 400;
     }
 
     /* Beside the fold, and shaped like it: both are switches for what is on screen rather than
@@ -8587,7 +8689,10 @@
           <button class="nav-key" onclick="fireKey('Enter')">⏎ Enter</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:4px">
-          <button class="nav-key" onclick="fireKey('Escape')">Esc</button>
+          <!-- Two taps, the same as the Esc in the nav row: one rule for one key wherever it
+               appears, rather than a control that is safe in one panel and immediate in another.
+               No arm key — this button is static markup and is never replaced under its own arm. -->
+          <button class="nav-key arm-btn" onclick="armButton(this, 'Esc?', () => fireKey('Escape'))">Esc</button>
           <button class="nav-key" style="grid-column:span 2" onclick="fireKey('Space')">Space</button>
           <button class="nav-key" onclick="fireKey('Enter')">⏎ Enter</button>
         </div>
@@ -10847,6 +10952,22 @@
               project_id: '', members: [{name: bot.kind}]};
     }
 
+    // Minted, and never folded from the label. A slug derived from the name has to choose between
+    // following a rename — and losing the thread on the other side of it — and staying as the old
+    // name, which is then the one string in the app that disagrees with what is on screen. The
+    // conversation id is built from this, so it is the one field of a bot that never moves.
+    function launcherBotSlug() {
+      return 'b_' + Math.random().toString(36).slice(2, 10);
+    }
+
+    // A bot this build ships, as against one the user made. The only thing it decides is Delete: a
+    // seeded row deleted comes straight back empty on the next load — launcherWithBots puts it
+    // there — so removing it is not a removal, and offering it is offering something that does not
+    // work.
+    function launcherBotSeeded(tile) {
+      return !!tile && LAUNCHER_BOTS.some(b => b.slug === tile.bot);
+    }
+
     // Every bot, present whether or not the document has heard of it. A bot the user has edited is
     // in the document and is left exactly as it is; one that is not is added at the end, where the
     // Bots band picks it up — the band is what puts it at the top of the section, not its index.
@@ -10875,8 +10996,11 @@
     // it is the whole message rejected. launcherStrict is what makes that a test failure here
     // instead of a spawn that mysteriously does nothing.
     const OPEN_TERMINAL_FIELDS = ['type', 'project_id', 'placement', 'label', 'slot'];
+    // `aid` is never built here — only a bot press has an agent to continue, and it sets it on the
+    // message it was handed. It is in the list because the list is the shape of the message, and
+    // launcherStrict throws on anything not named in it.
     const START_AGENT_FIELDS = ['type', 'name', 'role', 'project_id', 'placement', 'label', 'slot',
-                                'config', 'unattended', 'ref'];
+                                'config', 'unattended', 'ref', 'aid'];
 
     // Always. The other two placements name a live pane — `workspace_id` for a tab, `split_from`
     // for a split — and a tile saved last week cannot: the pane it would have named is gone, and
@@ -11048,10 +11172,13 @@
       // the same roster pressed into whichever tree wants it. The Project is then asked for at the
       // press, where it is mandatory — see launcherAskProject.
       if (LAUNCHER_ACTIONS.indexOf(tile.action) < 0) return 'Unknown action';
-      // A bot is one agent in one thread. Two would be two panes writing into one transcript, and
-      // a terminal has no conversation to be permanent in.
-      if (launcherIsBot(tile)) {
-        if (tile.action !== 'spawn') return 'A bot starts an agent';
+      // A bot is one place you go back to. An agent bot is one agent in one thread — two would be
+      // two panes writing into one transcript. A terminal bot is one shell in one tree, which has
+      // no transcript to be the second writer of, so the roster rule is not one it needs: what
+      // makes it the same terminal is where it is and what it is called. The launcherIsTerm block
+      // below then applies to it whole, with nothing about a terminal restated here.
+      if (launcherIsBot(tile) && !launcherIsTerm(tile)) {
+        if (tile.action !== 'spawn') return 'Unknown action';
         if ((Array.isArray(tile.members) ? tile.members.length : 0) !== 1) {
           return 'A bot has exactly one agent';
         }
@@ -11405,10 +11532,11 @@
     // one operation to the person doing it.
     function putLauncherTile(tile) {
       const items = loadLauncher();
-      // The bots do not count. They are here on every load, so counting them would mean the
-      // section's one moment of "the user just made a tile" never arrives — see
-      // ensureLauncherSection for why that moment is the switch.
-      const had = items.filter(t => !launcherIsBot(t)).length;
+      // The *seeded* bots do not count. They are here on every load, so counting them would mean
+      // the section's one moment of "the user just made a tile" never arrives — see
+      // ensureLauncherSection for why that moment is the switch. A bot the user made is a tile
+      // they made, and it counts like one.
+      const had = items.filter(t => !launcherBotSeeded(t)).length;
       const at = items.findIndex(t => t.id === tile.id);
       if (at < 0) items.push(tile); else items[at] = tile;
       const kept = saveLauncher(items);
@@ -11422,7 +11550,11 @@
     // harness is editable; the row is not.
     function removeLauncherTile(id) {
       const items = loadLauncher();
-      if (launcherIsBot(items.find(t => t.id === id))) return items;
+      // A seeded bot is not removable, and saying so here is what stops the editor offering a
+      // Delete that does not delete: the tile would go and launcherWithBots would put it back
+      // empty on the next load. A bot the user made has no seed behind it, so it goes. Its
+      // conversation stays — what was said in a room is not the tile that opened it.
+      if (launcherBotSeeded(items.find(t => t.id === id))) return items;
       return saveLauncher(items.filter(t => t.id !== id));
     }
 
@@ -15156,15 +15288,20 @@
     // What the tile calls the thing it will make.
     function launcherKindLine(tile) {
       const many = (tile.members || []).length > 1;
-      // A bot before anything else it might also be. What matters about this row is not that it
-      // starts one session — every one-agent tile does — it is that it starts *the same* one.
-      const kind = launcherIsBot(tile) ? 'Bot'
-        : launcherIsTerm(tile) ? 'Terminal'
+      // A bot says what you are going back to, not that it is a bot. The Bots band above it and
+      // the colour under it both already say that, and saying it a third time here cost the reader
+      // the one word that told them whether this opens a room or a shell. An agent bot is a
+      // Conversation whatever its roster size: it is a fixed thread with an id of its own, which
+      // is more than any one-off session ever is.
+      const room = launcherIsBot(tile) && !launcherIsTerm(tile);
+      const kind = launcherIsTerm(tile) ? 'Terminal'
+        : room ? 'Conversation'
         : launcherWantsArb(tile) ? 'Arbitrated' : many ? 'Conversation' : 'Session';
       // The bubbles rather than the robot as soon as there is more than one agent on the tile:
       // what this press makes is a room with them in it, and that is what the reader wants to
       // know before reading which kinds are in the payload line below.
-      return `${launcherIcon(many ? 'conv' : tile.action)}<span>${escapeHtml(kind)}</span>`;
+      return `${launcherIcon(many || room ? 'conv' : tile.action)}`
+        + `<span>${escapeHtml(kind)}</span>`;
     }
 
     // Which tree it runs in, beside the name and in the app's one nomenclature for it — `@project`,
@@ -15186,11 +15323,30 @@
     // The roster, as the badges every other list wears. `+` between them and not a comma: two of
     // the same kind are two panes, and the badges are what says which kinds without the reader
     // parsing a line of lowercase words. A command has no badges — it is quoted verbatim.
+    // Which pane this bot is on right now, or null. Guarded on the function and not assumed:
+    // launcher_exec.js loads after this file, so the binding is there by the time anything renders
+    // but not at the moment this one is parsed. See the script-order note in CLAUDE.md.
+    function launcherBotLive(tile) {
+      if (!launcherIsBot(tile) || typeof launcherBotWhere !== 'function') return null;
+      return launcherBotWhere(tile).live;
+    }
+
     function launcherPayloadHtml(tile) {
       if (!tile || launcherIsTerm(tile)) {
         return escapeHtml(launcherPreview(tile));
       }
-      const members = (tile.members || []).map(m => m || {});
+      // A bot's tile names a harness and its room holds an agent, and when those two disagree the
+      // room is the true one: a press opens what is up rather than starting what the field says.
+      // So while it is live the badge is read off the pane — the tile would otherwise quietly
+      // claim a harness that is not the one about to open. A bot that is away is described by what
+      // the next press *will* start, which is the field.
+      //
+      // The config is the tile's either way: the relay is the only participant that knows which
+      // alias a live pane was started under, and it does not report it back on the snapshot.
+      const running = launcherBotLive(tile);
+      const members = running
+        ? [{name: running.agent, config: ((tile.members || [])[0] || {}).config}]
+        : (tile.members || []).map(m => m || {});
       const badges = members.map(m => typeof configBadge === 'function'
         ? configBadge(m.name || '?', m.config)
         : ` <span class="badge">${escapeHtml(m.name || '?')}</span>`);
@@ -15227,14 +15383,26 @@
         ? '<span class="launcher-badge solo" title="Starts without approval prompts — it runs'
           + ' tools without asking">skip approvals</span>'
         : '';
+      // Under Edit, in the corner both belong to, because both are facts about this tile rather
+      // than about what it will make — and a reader deciding whether to press it is already
+      // looking there. A dot and a word: the dot is what carries across a grid at a glance, the
+      // word is what makes it mean something the first time it is seen.
+      const live = launcherBotLive(tile)
+        ? '<span class="launcher-live" title="It is running — pressing this opens it">'
+          + '<span class="launcher-live-dot"></span>live</span>'
+        : '';
       // aria-disabled and not the `disabled` attribute: a disabled button is skipped by the
       // keyboard and reports nothing to a screen reader, and the reason this tile cannot be
       // pressed is the one thing its reader most needs. It is still not pressable — nothing is
       // wired to it yet, and step 4's handler returns on a closed gate.
       // The tile and its Edit are siblings inside one grid cell — see .launcher-tile-wrap for why
       // Edit cannot be inside the button it edits.
+      // `data-bot` and not a class: the tile is already addressed by `data-action` for its kind
+      // colour, and a bot is the same question asked one level up — what this row *is*, answered
+      // in CSS rather than by a second class list to keep in step.
       return `<div class="launcher-tile-wrap">`
         + `<button class="launcher-tile" data-action="${escapeHtml(tile.action)}"`
+        + (launcherIsBot(tile) ? ' data-bot="true"' : '')
         + ` data-tile="${escapeHtml(tile.id)}" aria-disabled="${gate.ok ? 'false' : 'true'}"`
         // A gone Project is the one closed gate the presser can fix, so this tile is still worth
         // a pointer: the press opens it on that field rather than reporting a dead end.
@@ -15259,6 +15427,7 @@
         + ` onclick="launcherEditFromTile(this.dataset.tile)"`
         + ` title="Edit ${escapeHtml(tile.label)}"`
         + ` aria-label="Edit the tile ${escapeHtml(tile.label)}">Edit</button>`
+        + live
         + '</div>';
     }
 
@@ -15387,18 +15556,43 @@
       const warn = launcherInsecure(tile)
         ? ['Insecure: the providers behind this tile do not protect what is sent to them.', '']
         : [];
+      // Before the terminal branch and not after it: a terminal bot is both, and the ordinary
+      // terminal lines would offer to open "a terminal" — one of many — which is the one thing a
+      // bot is not.
+      //
+      // A bot says what it is instead of how many it starts: one, always, and the same one. And
+      // when that one is already up the press starts nothing, so the sheet does not say "Start" —
+      // a confirm is a quote of what is about to happen, and the harness named on the tile is not
+      // it. The agent shown is the one running, which is what tells the reader the tile and the
+      // room disagree before they press anything.
+      if (launcherIsBot(tile)) {
+        const running = launcherBotWhere(tile).live;
+        if (launcherIsTerm(tile)) {
+          // The command only where there is one — a `term` bot opens a prompt and types nothing —
+          // and the blank line kept either way. A filter over the whole list took the separator
+          // with the command and left the one confirm in the app with no gap under its question.
+          const command = String(tile.command || '').trim();
+          return warn.concat([`Open ${tile.label} on ${where}?`, ''],
+            running
+              ? ['It is open — this goes to the terminal it is on and opens nothing.']
+              : (command ? [command, ''] : []).concat(
+                  'It always opens in the same place, under the same name.'));
+        }
+        if (running) {
+          return warn.concat([`Open ${tile.label} on ${where}?`, '', running.agent || '',
+                              '', 'It is running — this opens the pane it is on and starts '
+                              + 'nothing.']);
+        }
+        return warn.concat([`Start ${tile.label} on ${where}?`, '',
+                            ((tile.members || [])[0] || {}).name || '',
+                            '', 'It keeps its conversation — the thread carries on where it left '
+                            + 'off.']);
+      }
       if (launcherIsTerm(tile)) {
         const command = String(tile.command || '').trim();
         return warn.concat(command
           ? [`Run this in a new terminal on ${where}?`, '', command]
           : [`Open a terminal on ${where}?`]);
-      }
-      // A bot says what it is instead of how many it starts: one, always, and the same one.
-      if (launcherIsBot(tile)) {
-        return warn.concat([`Start ${tile.label} on ${where}?`, '',
-                            ((tile.members || [])[0] || {}).name || '',
-                            '', 'It keeps its conversation — the thread carries on where it left '
-                            + 'off.']);
       }
       // The arbitrator counts. It is a third pane started on the same relay in the same Project,
       // and a confirm that said "2 sessions" before starting three would be the one number on
@@ -15443,9 +15637,17 @@
       // A batch already running owns pendingStart and the cursor. Refusing is the honest answer:
       // queueing the second one would start six panes from two taps that looked like one.
       if (launcherLive) { showToast('Still starting the last one — give it a moment.'); return false; }
-      // Every press goes through the sheet: it is where the Project a template does not name is
-      // chosen, where the launch is named, and where the confirm is read. A press that ends there
-      // has started nothing — launcherPressIn is what its Start button calls.
+      // A bot that is up goes straight there. The sheet exists to ask two questions and quote the
+      // answer to a third — which tree, what to call this launch, and what is about to be started
+      // — and a live bot has none of them: it is somewhere already, it keeps its own name, and
+      // nothing is started. All the sheet could do is make the reader confirm a navigation, which
+      // no other way of reaching a pane in this app asks for.
+      if (launcherIsBot(tile) && tile.project_id && launcherBotWhere(tile).live) {
+        return launcherGo(tile, env, '');
+      }
+      // Every other press goes through the sheet: it is where the Project a template does not name
+      // is chosen, where the launch is named, and where the confirm is read. A press that ends
+      // there has started nothing — launcherPressIn is what its Start button calls.
       if (typeof launcherLaunchSheet === 'function') return launcherLaunchSheet(tile);
       // A build without the tile editor still starts a tile that already names its Project. The
       // launch is then unnamed, which launcherNamed answers with the noun and the tag.
@@ -15466,43 +15668,93 @@
       return launcherIsTerm(named) ? launcherRunTile(named) : launcherSpawnTile(named);
     }
 
-    // A bot press is "open this again", never "start another one like it". Three cases, and only
-    // the last two send anything:
+    // A bot press is "open this again" — never "start another one like it", and never "start
+    // something else instead". Three cases, and only the last one sends anything:
     //
-    //   the pane is up on the harness the tile names  — open it, and nothing else happens
-    //   the pane is gone                              — start it into the thread it left
-    //   the tile names a different harness            — end that pane and do the same
+    //   the agent is up                    — open it, whatever harness it is on
+    //   the agent is away                  — start it into the thread it left, by name
+    //   nothing was ever started for this  — spawn, which is the only path allowed to create
     //
-    // The third is what "change the agent whenever you like" means in a terminal: a pane runs one
-    // CLI, so swapping the harness is Pause followed by Restart, which is exactly the succession
-    // a member swap already performs — same conversation, same name, the transcript carried across
-    // the seam by convContinueTranscript.
-    //
-    // ponytail: the harness alone decides whether the running pane is the one the tile asks for.
-    // An agent config swapped for another on the same harness is not restarted, and `config` falls
-    // off the snapshot on a relay restart — reading it here would end a live pane over a field
-    // that had merely gone quiet.
+    // The tile names a harness and the room names an agent, and when those two disagree the room
+    // wins: the room is what has months in it. A press used to end a live pane whose harness the
+    // tile no longer named, which is a session killed to satisfy a field the user edited somewhere
+    // else. Changing a bot's agent is a Restart from the pane manager — chosen by a person,
+    // against the pane they are looking at — and never a side effect of pressing a tile.
     function launcherBotGo(tile) {
       const member = (tile.members || [])[0] || {};
       launcherBotHome(tile);
-      const conv = loadConvIndex().find(c => c.id === launcherBotConvId(tile.bot));
-      const held = conv && (conv.members || [])[0];
-      // Nothing has ever been started for this bot. The ordinary spawn path makes the pane and the
-      // conversation, and launcherMakeConv gives that conversation the bot's own fixed id — which
-      // is what every press after this one finds.
+      // A terminal bot: go to the shell that is there, or open one where it belongs. No continue
+      // branch, because there is no thread to carry — a shell that has gone is gone, and the next
+      // one is the same bot for the reason it was ever the same bot: same place, same name.
+      if (launcherIsTerm(tile)) {
+        const open = launcherBotWhere(tile).live;
+        if (open) {
+          openTerminal(open.pane_id);
+          showSpawnStatus(`${tile.label} is already open.`, 'success');
+          return true;
+        }
+        return launcherRunTile(tile);
+      }
+      const at = launcherBotWhere(tile);
+      const conv = at.conv;
+      const held = at.held;
+      const live = at.live;
+      // Nothing has ever been started for this bot: no room at all, or a room whose member row is
+      // gone. The spawn path makes the pane, and launcherMakeConv gives the conversation the bot's
+      // own fixed id — adopting the empty room if there is one, rather than laying a second one
+      // carrying the same id over the top of it.
       if (!held) return launcherSpawnTile(tile);
-      const live = agents.find(x => convMemberKey(x) === held.key);
-      if (live && live.agent === member.name) {
+      if (live) {
         openConversation(conv.id);
         openTerminal(live.pane_id, live.aid);
-        showSpawnStatus(`${tile.label} is already running.`, 'success');
+        showSpawnStatus(live.agent === member.name
+          ? `${tile.label} is already running.`
+          : `${tile.label} is running on ${live.agent}. Restart it from the pane to change that.`,
+          'success');
         return true;
       }
-      if (live && !endPane(live.pane_id)) {
-        showToast(`${tile.label} could not be ended — nothing was started.`);
-        return false;
+      return launcherBotContinue(tile, conv, held);
+    }
+
+    // Where a bot's thread is at this moment: the room, found by the bot's fixed id; the member row
+    // that is its agent; and the pane that agent is on, if it is still up. Read by the press and by
+    // the confirm the press is quoted in, so the sheet cannot offer to start something it will only
+    // open. Matched by agent id where there is one — a pane id is a slot herdr recycles, so a
+    // member whose key names a dead pane can match a live stranger — and by key for a room written
+    // before the relay minted ids.
+    function launcherBotWhere(tile) {
+      // A terminal bot has no room to look in. What makes it the same terminal is where it is and
+      // what it is called, matched against the relay's own shell list — so every browser resolves
+      // it the same way with nothing stored on either side, and nothing to go stale. A pane id
+      // would not survive that: herdr recycles them, so a stored one names whatever is in that
+      // slot today. `held` and `live` are one value here because a shell has no retired half —
+      // there is no thread it left behind to be continued into a new pane.
+      if (launcherIsTerm(tile)) {
+        // A bot with no home matches nothing. Without this a bot that has never been pressed —
+        // project_id '' until launcherBotHome answers it — would adopt any shell of its name that
+        // the relay could not place in a Project either, which is a stranger's terminal reached by
+        // two empty strings being equal.
+        const open = !tile.project_id ? null
+          : (typeof shells !== 'undefined' && shells ? shells : [])
+              .find(s => s.project_id === tile.project_id && (s.label || '') === tile.label) || null;
+        return {conv: null, held: open, live: open};
       }
-      return launcherBotContinue(tile, conv, held.key);
+      const conv = loadConvIndex().find(c => c.id === launcherBotConvId(tile.bot)) || null;
+      const held = launcherBotMember(conv);
+      const list = typeof agents !== 'undefined' && agents ? agents : [];
+      const live = !held ? null
+        : (held.aid ? list.find(x => x.aid === held.aid)
+                    : list.find(x => convMemberKey(x) === held.key)) || null;
+      return {conv: conv, held: held, live: live};
+    }
+
+    // Which row a bot press continues. A bot is one agent, but its room keeps the ended members it
+    // had before — a session that happened is a record of one — so the answer is the newest row
+    // and never position 0, which is whichever row was written first.
+    function launcherBotMember(conv) {
+      const members = ((conv && conv.members) || []).filter(Boolean);
+      return members.slice().sort(
+        (a, b) => (b.seen || b.added || 0) - (a.seen || a.added || 0))[0] || null;
     }
 
     // Where a bot lives, written back onto the tile. The one place a press edits the tile it was
@@ -15521,13 +15773,19 @@
     // is a *replacement* for a member of a conversation that already exists, which is the intent
     // start_dialog's respawn branch is written for — it copies the transcript, moves the member's
     // key onto the new pane, and opens the thread.
-    function launcherBotContinue(tile, conv, key) {
+    function launcherBotContinue(tile, conv, held) {
       const member = (tile.members || [])[0] || {};
+      const key = held.key;
       // Named before the send and written down before that: the answer to a start is what a reload
       // loses, and the note is what a tab coming back finds the pane by. Same mechanism, same
       // two-minute window, as Restart in a conversation.
       const ref = typeof convRespawnRef === 'function' ? convRespawnRef() : '';
       const msg = launcherSpawnMsg(tile, member, ref);
+      // Which agent this start brings back, said rather than left to be inferred from a seat. A
+      // bot is the one tile where that matters most: without it every respawn mints a colleague,
+      // so a permanent room fills with strangers and the record can no longer say whose turns the
+      // months behind it were. The same field the conversation's own Restart sends.
+      if (held.aid) msg.aid = held.aid;
       startIntent = {conv: conv.id, replace: key, ref: ref};
       // Nothing is said to it. A bot is a room the user comes back to, and an opening prompt typed
       // at every press would be the one line in the thread nobody wrote.
@@ -15723,6 +15981,24 @@
     // thing, reached faster.
     function launcherMakeConv(batch) {
       const items = loadConvIndex();
+      // A bot's room is found by a fixed id, so a press that reaches here for a bot that already
+      // has one joins it rather than laying a second row over the top. Two conversations with one
+      // id is the whole thread going quiet behind an empty copy of itself, named "Jarvis 2"
+      // because the first name was taken — which is what a bot whose member row had gone missing
+      // did on every press.
+      const bot = batch.tile.bot ? launcherBotConvId(batch.tile.bot) : '';
+      const existing = bot && items.find(c => c.id === bot);
+      // The members, not the roster. An arbitrator is deliberately outside the conversation it
+      // decides about — it is not a participant in it, it is the one reading it — and a
+      // conversation carrying it would show its brief as a third voice in the thread.
+      const inside = batch.panes.slice(0, (batch.tile.members || []).length);
+      if (existing) {
+        existing.members = (existing.members || []).concat(inside.map(convMemberOf));
+        saveConvIndex(items);
+        inside.forEach(p => convSetView(p, existing.id));
+        return existing;
+      }
+      // Only the create path is capped. Joining a room that is already in the list adds no room.
       if (items.length >= CONV_CONV_MAX) {
         showToast(`Already at ${CONV_CONV_MAX} conversations — the panes started, ungrouped.`);
         return null;
@@ -15732,15 +16008,10 @@
       // the same thing, and two conversations called the same are two the user cannot tell apart.
       let name = batch.tile.label;
       for (let n = 2; taken.has(name) && n < 100; n++) name = `${batch.tile.label} ${n}`;
-      // The members, not the roster. An arbitrator is deliberately outside the conversation it
-      // decides about — it is not a participant in it, it is the one reading it — and a
-      // conversation carrying it would show its brief as a third voice in the thread.
-      const inside = batch.panes.slice(0, (batch.tile.members || []).length);
       const conv = {
         // A bot's conversation is found by its id rather than looked up by name, on every browser
         // and after every restart — so the id is the bot's own and not this press's.
-        id: batch.tile.bot ? launcherBotConvId(batch.tile.bot)
-          : 'c_' + Math.random().toString(36).slice(2, 10),
+        id: bot || 'c_' + Math.random().toString(36).slice(2, 10),
         name: name, created: Date.now(), members: inside.map(convMemberOf),
       };
       saveConvIndex([conv].concat(items));
@@ -15831,7 +16102,7 @@
         + ` aria-label="Move ${escapeHtml(tile.label)} up"${i === 0 ? ' disabled' : ''}>↑</button>`
         + `<button class="ql-move" onclick="launcherMove('${escapeHtml(tile.id)}', 1)"`
         + ` aria-label="Move ${escapeHtml(tile.label)} down"${last ? ' disabled' : ''}>↓</button>`
-        + (launcherIsBot(tile)
+        + (launcherBotSeeded(tile)
           ? ''
           : `<button class="ql-del" onclick="launcherDelete('${escapeHtml(tile.id)}')"`
             + ` aria-label="Delete ${escapeHtml(tile.label)}">✕</button>`)
@@ -15941,19 +16212,34 @@
                 .map(escapeHtml).join('<br>')}</p>`
             : '<p class="ql-none">This tile is a template — pick the Project to start it in.</p>')
           + launcherRosterHtml(tile)
-          + '<div class="start-field">Project<div class="badge-strip">'
+          // A bot that has a home is not asked again. An ordinary tile is a template — the same
+          // roster pressed into whichever tree wants it, which is why the strip is here at all —
+          // and a bot is a room, so the strip would be offering to move a thread that has months
+          // in it into a different checkout. A bot that has *never* been pressed still gets it:
+          // that is the one press where the answer is not yet anywhere, and launcherBotHome writes
+          // down whatever it says.
+          + (launcherIsBot(tile) && tile.project_id
+            ? `<p class="ql-none">It lives in <span class="badge proj">@`
+              + escapeHtml((projects.find(p => p.id === tile.project_id) || {}).label
+                           || tile.project_id)
+              + '</span> — edit the tile to move it.</p>'
+            : '<div class="start-field">Project<div class="badge-strip">'
           + (projectsForPicking().length
             ? projectsForPicking().map(p => badgeHtml(p.label || p.id, p.id === tile.project_id,
                 `launcherLaunchProject('${escapeHtml(p.id)}')`,
                 {proj: true, title: p.host && p.host !== 'local' ? 'on ' + p.host : ''})).join('')
             : '<span class="ql-none">This relay has no Projects configured.</span>')
-          + '</div></div>'
+          + '</div></div>')
           // A bot is not named per press. There is one of it, it keeps the name on the tile, and a
           // box asking what to call this launch would be asking about a launch that is not a new
           // thing — see launcherBotNamed.
           + (launcherIsBot(tile)
-            ? `<p class="ql-none">${escapeHtml(tile.label)} keeps its name and its conversation. `
-              + 'Pressing this opens the one that is there, or starts it again where it left off.'
+            ? `<p class="ql-none">${escapeHtml(tile.label)} keeps its name and `
+              + (launcherIsTerm(tile)
+                ? 'its place. Pressing this goes to the terminal that is there, or opens it again '
+                  + 'where it belongs.'
+                : 'its conversation. Pressing this opens the one that is there, or starts it '
+                  + 'again where it left off.')
               + '</p>'
             : `<label class="start-field">Name<input id="qlLaunchName" type="text"`
               + ` maxlength="${LAUNCHER_LABEL_MAX}" autocapitalize="none" autocomplete="off"`
@@ -16087,6 +16373,17 @@
       launcherDrawForm();
     }
 
+    // Minted here and not at the save, so the draft carries the same identity the tile will. A
+    // toggle off and on mints a second slug and that costs nothing: this control is only offered
+    // while the tile is being made, and the room a slug names does not exist until the first press.
+    function launcherPickBot(on) {
+      launcherReadForm();
+      const d = launcherDraft;
+      if (!on) d.bot = '';
+      else if (!d.bot) d.bot = launcherBotSlug();
+      launcherDrawForm();
+    }
+
     function launcherPickProject(id) {
       launcherReadForm();
       launcherDraft.project_id = id;
@@ -16166,10 +16463,19 @@
       return '<label class="start-field">Name<input id="qlName" type="text"'
         + ` maxlength="${LAUNCHER_LABEL_MAX}" autocapitalize="none" autocomplete="off"`
         + ` placeholder="what pressing this does" value="${escapeHtml(d.label || '')}" /></label>`
-        + (launcherIsBot(d)
-          ? '<p class="ql-conv">' + launcherIcon('spawn') + '<span>A bot is one agent in one '
-            + 'conversation that outlives it. Change which agent below — the thread carries on '
-            + 'into whatever you pick.</span></p>'
+        // The strip is withheld from a bot that *exists* and offered to one being made. What a bot
+        // opens is chosen once: switching a live one from an agent to a terminal orphans the room
+        // on the other side of it, which is the same reason launcherTileOf will not let a bot stop
+        // being one. While it is still being made there is nothing on the other side yet, so the
+        // ordinary three choices apply and a bot is simply a tile with one more thing true of it.
+        + (launcherIsBot(d) && launcherEditing
+          ? '<p class="ql-conv">' + launcherIcon(launcherIsTerm(d) ? 'term' : 'conv')
+            + '<span>' + (launcherIsTerm(d)
+              ? 'A bot is one terminal in one place. Change the Project or the name below — it '
+                + 'opens there, under that name, every time.'
+              : 'A bot is one agent in one conversation that outlives it. Change which agent '
+                + 'below — the thread carries on into whatever you pick.')
+            + ' What it opens was settled when it was made and does not move.</span></p>'
           : '<div class="start-field">What it does<div class="badge-strip">'
         + badgeHtml('Start agents', d.action === 'spawn', "launcherPickAction('spawn')",
                     {title: kinds.length ? 'Starts one or more sessions'
@@ -16181,6 +16487,23 @@
                     {title: terminal ? 'Opens a terminal and types this at it'
                                      : 'This relay has terminal mode switched off'})
         + '</div></div>')
+        // A separate strip and never a fourth badge in the one above: those three are exclusive
+        // and this is not one of them. A bot *is* an agent or a terminal — the question here is
+        // whether pressing it goes back to the same one, which is a different question about the
+        // same tile. Only while it is being made: after that the answer is what the row is.
+        + (launcherEditing ? ''
+          // ql-press is what lets the second badge below keep its newline — see the rule in
+          // index.html. Scoped rather than loosening `white-space` on every pick badge in the app.
+          : '<div class="start-field">Every press<div class="badge-strip ql-press">'
+            + badgeHtml('New instance', !d.bot, 'launcherPickBot(false)',
+                        {title: 'Starts another one like it each time'})
+            // Two lines in one badge: "New bot" is what the row becomes and "(same instance)" is
+            // what that means, and the second half is the half that answers the strip's question.
+            // Naming only one of the two left the reader to know already what a bot was.
+            + badgeHtml('New bot\n(same instance)', !!d.bot, 'launcherPickBot(true)',
+                        {title: 'A bot — one conversation, or one terminal, that you keep '
+                                + 'coming back to'})
+            + '</div></div>')
         + '<div class="start-field">Project<div class="badge-strip">'
         + badgeHtml('Ask each time', !d.project_id, "launcherPickProject('')",
                     {title: 'A template — the Project is picked when the tile is pressed'})
@@ -16198,7 +16521,8 @@
             + '<textarea id="qlCommand" rows="2"'
             + ' autocapitalize="none" autocomplete="off" spellcheck="false"'
             + ` placeholder="pytest -q">${escapeHtml(d.command || '')}</textarea></label>`
-          : launcherMembersHtml(members, kinds, configs))
+          : launcherMembersHtml(members, kinds, configs,
+                                 launcherIsBot(d) && members.length >= 1))
         + (canArb
           ? '<div class="start-field">Arbitrator<div class="badge-strip">'
             + badgeHtml('None', !arbName, "launcherPickArb('')",
@@ -16215,12 +16539,14 @@
         + launcherInsecureHtml(d)
         + '<p id="qlError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>'
         + '<div class="ql-actions">'
-        // A bot has no Delete anywhere — not here and not in the list. removeLauncherTile refuses
-        // it either way; a button that is refused after the confirm is worse than no button.
-        + (launcherEditing && !launcherIsBot(d)
+        // A *seeded* bot has no Delete anywhere — not here and not in the list. removeLauncherTile
+        // refuses it either way; a button that is refused after the confirm is worse than no
+        // button. A bot the user made is deleted like anything else they made.
+        + (launcherEditing && !launcherBotSeeded(d)
           ? `<button class="ql-secondary" onclick="launcherDelete('${escapeHtml(launcherEditing)}')">Delete</button>`
           : '<button class="ql-secondary" onclick="launcherDrawList()">Cancel</button>')
-        + '<button id="qlSave" class="ql-primary" onclick="launcherSaveTile()">Save tile</button>'
+        + '<button id="qlSave" class="ql-primary" onclick="launcherSaveTile()">'
+        + (launcherIsBot(d) ? 'Save bot' : 'Save tile') + '</button>'
         + '</div>';
     }
 
@@ -16246,15 +16572,23 @@
           {agent: c.kind, title: c.command || c.provider_label || ''})).join('') : '');
     }
 
-    function launcherMembersHtml(members, kinds, configs) {
-      return '<div class="start-field">Agents<div class="badge-strip">'
-        + (kinds.length
-          ? kinds.map(k => badgeHtml('+ ' + k, false, `launcherAddMember('${escapeHtml(k)}')`,
-                                     {agent: k, title: 'Add one of these to the roster'})).join('')
-          : '<span class="ql-none">This relay starts nothing.</span>')
-        + launcherCustomBadges(configs, launcherMembersCustom, 'members', c =>
-          `launcherAddMember('${escapeHtml(c.kind)}', '${escapeHtml(c.id)}')`)
-        + '</div>'
+    // `solo` is a bot that already has its one agent. The strip is withheld rather than left to
+    // be refused at Save: launcherValid says 'A bot has exactly one agent', and a form that offers
+    // a second and then rejects the row for having it is asking the reader to discover a rule the
+    // dialog knew all along.
+    function launcherMembersHtml(members, kinds, configs, solo) {
+      return '<div class="start-field">' + (solo ? 'Agent' : 'Agents')
+        + (solo
+          ? '<p class="ql-none">A bot is one agent in one conversation. Drop this one to pick '
+            + 'another — the thread carries on into whatever you pick.</p>'
+          : '<div class="badge-strip">'
+            + (kinds.length
+              ? kinds.map(k => badgeHtml('+ ' + k, false, `launcherAddMember('${escapeHtml(k)}')`,
+                                         {agent: k, title: 'Add one of these to the roster'})).join('')
+              : '<span class="ql-none">This relay starts nothing.</span>')
+            + launcherCustomBadges(configs, launcherMembersCustom, 'members', c =>
+              `launcherAddMember('${escapeHtml(c.kind)}', '${escapeHtml(c.id)}')`)
+            + '</div>')
         // Three answers per member: what to call it, what it is for, and what to say to it first.
         // The name is a template rather than the pane's name — launcherNamed puts the launch's tag
         // after it, because a tile pressed twice is two panes and two called "Reviewer" are two
@@ -16415,7 +16749,11 @@
 
     function launcherDrawForm() {
       const title = document.getElementById('launcherEditTitle');
-      if (title) title.textContent = launcherEditing ? 'Edit tile' : 'New tile';
+      // A bot says so in the heading, because the selector that made it one is halfway down a
+      // form that scrolls — and by the time the roster is being built the answer to "what am I
+      // making" has gone off the top of the sheet.
+      const noun = launcherIsBot(launcherDraft) ? 'bot' : 'tile';
+      if (title) title.textContent = `${launcherEditing ? 'Edit' : 'New'} ${noun}`;
       const el = document.getElementById('launcherEditBody');
       if (el) el.innerHTML = launcherFormHtml();
     }
@@ -26896,17 +27234,34 @@
       // thing this app exists to do.
       if (!blocked && !showNav) { setQuickActions(qa, ''); return; }
       const open = bottomDockOpen();
-      // Offered only when there is one to select. A button that does nothing on most panes would
-      // teach people to stop pressing it on the panes where it works.
       // In the thread the same button picks the newest agent bubble; on the pane it draws the
       // band across its lines. One control, because it is one claim about one message.
+      //
+      // Always in the row, dead when there is nothing to pick. It used to be absent on a pane with
+      // no closing message, which meant the right edge changed width every time an agent finished
+      // a turn — and a control that moves under a resting thumb is one nobody builds a reflex for.
+      // The gate stays; it decides whether the button works, not whether it is there.
       const threadOn = convThreadOn();
       const hasFinal = threadOn ? convLastAgent >= 0 : !!finalAt;
-      const summary = hasFinal
-        ? `<button class="qa-summary" onclick="${threadOn ? 'selectFinalConvMessage()' : 'selectFinalMessage(true)'}" ` +
-        `title="Select the agent's closing message" ` +
-        `aria-label="Select the agent's closing message">Summary</button>`
-        : '';
+      const summaryTitle = hasFinal
+        ? "Select the agent's closing message"
+        : 'No closing message on this pane yet';
+      const summary = `<button class="qa-summary" ${hasFinal ? '' : 'disabled '}` +
+        `onclick="${threadOn ? 'selectFinalConvMessage()' : 'selectFinalMessage(true)'}" ` +
+        `title="${summaryTitle}" aria-label="${summaryTitle}">Summary</button>`;
+      // Escape, two taps. It reaches a stuck agent without opening the keys dock over the pane you
+      // are trying to read, and it is armed because sending it to a working agent throws away the
+      // turn. Keyed rather than bare: this row is rebuilt on the poll, and an arm that did not
+      // survive that redraw could never be reached a second time.
+      //
+      // Not `menuItemHtml` — that lives in shortcuts.js, which the nav row's own test slice does
+      // not load, and half of what it builds (the data-key, the escaping) has nothing here to do.
+      const escArmed = typeof armButtonArmed === 'function' && armButtonArmed('qa-esc');
+      const esc = `<button class="qa-esc arm-btn" data-arm-key="qa-esc"` +
+        (escArmed ? ' data-armed="1" data-arm-label="Esc"' : '') +
+        ` onclick="armButton(this, 'Esc?', () => fireKey('Escape'), this.dataset.armKey)"` +
+        ` title="Send Escape to this pane (tap twice)"` +
+        ` aria-label="Send Escape to this pane, tap twice">${escArmed ? 'Esc?' : 'Esc'}</button>`;
       // Source order is the column order now that the edges are grid tracks rather than absolute:
       // left switches, arrows, right group.
       // Offered only on a pane that is in a conversation, for the reason Summary is conditional:
@@ -26951,7 +27306,7 @@
         // No Last here any more: the same jump hangs over the text itself, in the corner the end
         // is in, and appears only while there is somewhere to jump to — see hangSync.
         goConv +
-        `<div class="qa-right">${summary}</div></div>`;
+        `<div class="qa-right">${esc}${summary}</div></div>`;
       let middle = '';
       if (blocked) {
         // No fallback list any more. The relay sends claude's three where it saw them, the pane's
