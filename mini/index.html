@@ -1510,7 +1510,11 @@
       color: var(--muted);
     }
 
-    .launcher-tile[data-action="run"] .launcher-kind {
+    /* Both, and for the reason LAUNCHER_GLYPHS gives them one glyph: a terminal is a terminal
+       whether or not a line is typed at it. `term` used to fall through to --muted, which made
+       the one tile that opens a bare prompt the only terminal in the app not drawn as one. */
+    .launcher-tile[data-action="run"] .launcher-kind,
+    .launcher-tile[data-action="term"] .launcher-kind {
       color: var(--green);
     }
 
@@ -2523,15 +2527,14 @@
     .term-glyph {
       width: 10px;
       flex-shrink: 0;
-      color: var(--shell);
-      /* An icon now rather than a `$`, so what is centred is a box and not a baseline. The width
-         stays 10px — the box it has to line up with is .agent .dot's, and that did not move —
-         and the glyph is drawn wider than its slot on purpose, the way the dot's ring is. */
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
+      /* The card keeps its `$` — an icon here would be a third size of the same drawing in one
+         column, and the prompt character is what a terminal calls itself. Green, because that is
+         what a terminal is everywhere else in the app. */
+      color: var(--green);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 700;
       line-height: 1;
+      text-align: center;
     }
 
     /* The Project a pane belongs to. Same shape and size as the agent badge so a row of them
@@ -10419,10 +10422,14 @@
     // 1em span agentGlyph uses — so a shell and an agent sitting in one list are two icons of one
     // family rather than an icon beside an emoji. It replaced ⬛, which was a filled square the
     // reader had to be told meant a terminal, drawn in whatever colour their font shipped.
+    //
+    // Green and not --shell, which is the blue a *pane* is tinted with. A terminal is green
+    // wherever the app names one — that is what the launcher tile's kind line has always been —
+    // and one thing in two colours is two things as far as the reader is concerned.
     function shellGlyph() {
       return '<svg class="shell-glyph" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
-        'stroke="var(--shell, #7dcfff)" stroke-width="2" stroke-linecap="round" ' +
-        'stroke-linejoin="round" aria-hidden="true" style="color:var(--shell, #7dcfff);">' +
+        'stroke="var(--green, #9ece6a)" stroke-width="2" stroke-linecap="round" ' +
+        'stroke-linejoin="round" aria-hidden="true" style="color:var(--green, #9ece6a);">' +
         '<rect x="2" y="4" width="20" height="16" rx="2"/>' +
         '<polyline points="6 9 9 12 6 15"/><line x1="12" y1="15" x2="18" y2="15"/></svg>';
     }
@@ -23500,7 +23507,7 @@
       // No status dot and no Pair button, and both absences are the point: a shell has no status,
       // and a pair is agent-to-agent.
       return `<div class="agent" role="button" tabindex="0" aria-label="Terminal ${escapeHtml(paneLabel(s))}" onclick="openTerminal('${s.pane_id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTerminal('${s.pane_id}')}">
-    <span class="term-glyph" aria-hidden="true">${shellGlyph()}</span>
+    <span class="term-glyph" aria-hidden="true">$</span>
     <div class="info"><div class="project">${paneChrome(s)}${host}</div><div class="meta">${cwd}</div></div>
     ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + s.pane_id, pane: s.pane_id, stop: true,
                   rest: 'Close', ask: 'Close?', going: 'Closing…',
