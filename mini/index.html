@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-08-31">
+  <meta name="app-built" content="2026-09-01">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -579,7 +579,7 @@
       text-overflow: ellipsis;
     }
 
-    /* The same agent glyph / ⬛ the cards use. Small, and it never shrinks — the label is what truncates. */
+    /* The same agent and shell glyphs the cards use. Small, and it never shrinks — the label is what truncates. */
     .agent-tab .kind {
       flex-shrink: 0;
       font-size: 0.62rem;
@@ -1499,7 +1499,10 @@
     }
 
     /* A tile stands in for a thing that will exist, so it carries the kind's colour the way an
-       agent card carries its agent's — the terminal green of a shell, the blue of a session. */
+       agent card carries its agent's — the shell blue of a terminal, the blue of a session. Both
+       blue, and deliberately not the same blue: `--shell` is what the Terminals section and every
+       terminal card already wear, so a Terminal tile and the shell it opens are one colour, and
+       `--blue` keeps a session tile distinguishable beside it. */
     .launcher-tile .launcher-kind {
       display: flex;
       align-items: center;
@@ -1515,7 +1518,7 @@
        the one tile that opens a bare prompt the only terminal in the app not drawn as one. */
     .launcher-tile[data-action="run"] .launcher-kind,
     .launcher-tile[data-action="term"] .launcher-kind {
-      color: var(--green);
+      color: var(--shell);
     }
 
     .launcher-tile[data-action="spawn"] .launcher-kind {
@@ -2528,9 +2531,8 @@
       width: 10px;
       flex-shrink: 0;
       /* The card keeps its `$` — an icon here would be a third size of the same drawing in one
-         column, and the prompt character is what a terminal calls itself. Green, because that is
-         what a terminal is everywhere else in the app. */
-      color: var(--green);
+         column, and the prompt character is what a terminal calls itself. */
+      color: var(--shell);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-weight: 700;
       line-height: 1;
@@ -3469,7 +3471,7 @@
     }
 
     /* Terminal panes. A shell has no status dot to colour, so the demarcation has to be
-       structural: the accent rule and the ⬛ in the title say what the missing dot cannot. */
+       structural: the accent rule and the shell glyph in the title say what the missing dot cannot. */
     .terminal-view.is-terminal .term-header {
       border-bottom: 2px solid var(--shell);
     }
@@ -4863,6 +4865,34 @@
       /* The left of two columns. What it may spend and the buttons that spend it are one
          decision, and the two stacks are the same height — two 32px rows each. */
       flex: 0 1 auto;
+    }
+
+    /* What the person did while the session was stopped, in their own words. Its own row and the
+       full width of the sheet: it is prose, and a two-line box wedged beside the steppers would
+       say "a word or two" about the one field here that wants a sentence. */
+    .arb-plan-note {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1 0 100%;
+    }
+
+    .arb-plan-note > span {
+      font-size: 0.66rem;
+      color: var(--muted);
+    }
+
+    .arb-plan-note textarea {
+      font: inherit;
+      font-size: 0.8rem;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      resize: vertical;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     /* The field itself is not a box — it is a label in one column and a stepper in the other. */
@@ -10423,13 +10453,12 @@
     // family rather than an icon beside an emoji. It replaced ⬛, which was a filled square the
     // reader had to be told meant a terminal, drawn in whatever colour their font shipped.
     //
-    // Green and not --shell, which is the blue a *pane* is tinted with. A terminal is green
-    // wherever the app names one — that is what the launcher tile's kind line has always been —
-    // and one thing in two colours is two things as far as the reader is concerned.
+    // --shell, which is what the Terminals section, its cards and the launcher's Terminal tile
+    // all wear. One thing in two colours is two things as far as the reader is concerned.
     function shellGlyph() {
       return '<svg class="shell-glyph" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
-        'stroke="var(--green, #9ece6a)" stroke-width="2" stroke-linecap="round" ' +
-        'stroke-linejoin="round" aria-hidden="true" style="color:var(--green, #9ece6a);">' +
+        'stroke="var(--shell, #7dcfff)" stroke-width="2" stroke-linecap="round" ' +
+        'stroke-linejoin="round" aria-hidden="true" style="color:var(--shell, #7dcfff);">' +
         '<rect x="2" y="4" width="20" height="16" rx="2"/>' +
         '<polyline points="6 9 9 12 6 15"/><line x1="12" y1="15" x2="18" y2="15"/></svg>';
     }
@@ -27925,9 +27954,10 @@
     // seen, which is the whole reason the path is recorded.
     const ARB_EVENT_LEDE = {
       started: 'session started', briefed: 'briefed', trigger: 'trigger', asked: 'asked',
-      human: 'you typed',
+      human: 'you typed', note: 'your note',
       waiting: 'waiting', record: 'record written', decided: '', rejected: 'record refused',
-      reprompt: 're-asked', sent: 'sent', paused: 'paused', resumed: 'resumed',
+      reprompt: 're-asked', sent: 'sent', unconfirmed: 'ringing again',
+      paused: 'paused', resumed: 'resumed',
       warmed: 'woke',
       edited: 'session edited', ended: 'session ended', error: 'error',
     };
@@ -29100,6 +29130,9 @@
     // what was the last thing that happened before it stopped.
 
     const ARB_RESUME_ROWS = 15;
+    // MAX_RESUME_NOTE in relay/arbitration.py. The field stops at the cap rather than letting the
+    // relay refuse a resume over a paragraph somebody wrote and cannot see the end of.
+    const ARB_NOTE_MAX = 2000;
 
     function arbResumeRows(events) {
       if (!Array.isArray(events)) return [];
@@ -29126,6 +29159,15 @@
         arbBudField('arbResumeSteps', 'Steps', b.steps_left, 1) +
         arbBudField('arbResumeMins', 'Minutes', b.max_minutes, 15) +
         '</div>';
+      // The other half of `call_human`. The arbitrator asked for a person and is about to be told
+      // the session is running again; without this it is told nothing about what the person did,
+      // so its commonest next move is to ask for one again over the thing already dealt with.
+      // Optional, and empty is the ordinary case — a resume that needs no explanation gets none.
+      const note = !paused ? '' :
+        '<label class="arb-plan-note"><span>What you did, for the arbitrator</span>' +
+        `<textarea id="arbResumeNote" rows="2" maxlength="${ARB_NOTE_MAX}"` +
+        ' placeholder="Optional — e.g. rebased onto main and fixed the failing test myself."' +
+        '></textarea></label>';
       // Running, and the one thing worth doing to a running session from here is stopping it.
       // The sheet is opened by tapping the tray, which is a thing people do while a session is
       // going — and until now it answered a question nobody had asked yet.
@@ -29184,7 +29226,7 @@
               `${i === mark ? '<span class="arb-step-stop"> ◀ stopped here</span>' : ''}</td></tr>`;
           }).reverse().join('')
         : '<tr><td colspan="5" class="arb-dec-empty">Nothing has happened yet.</td></tr>';
-      return `<div class="arb-plan${plan && plan.stale ? ' warn' : ''}">${head}${budget}${acts}</div>` +
+      return `<div class="arb-plan${plan && plan.stale ? ' warn' : ''}">${head}${budget}${note}${acts}</div>` +
         '<table class="arb-rows"><thead><tr><th>Time</th><th>Step</th><th>What</th>' +
         '<th></th><th>Detail</th></tr></thead><tbody>' + body + '</tbody></table>';
     }
@@ -29248,7 +29290,12 @@
                  budget: {max_steps: want, max_consecutive: b.max_consecutive || 8,
                           max_wall_clock_ms: mins * 60000}});
       }
-      arbCommand('arb_resume', kick ? {kick: true} : undefined);
+      const el = document.getElementById('arbResumeNote');
+      const note = ((el || {}).value || '').trim();
+      const extra = {};
+      if (kick) extra.kick = true;
+      if (note) extra.note = note;
+      arbCommand('arb_resume', Object.keys(extra).length ? extra : undefined);
     }
 
     function arbRenderResume() {
@@ -29258,7 +29305,13 @@
       // The copy that came with the path when there is one, and the session message's own
       // otherwise — which is what an older relay leaves, and what this shows in the moment before
       // its own answer arrives.
+      // What is half-typed in the note survives a re-render. The sheet is redrawn whenever the
+      // session or its path moves, and a person writing two sentences about what they fixed should
+      // not lose them to an event arriving.
+      const typing = (document.getElementById('arbResumeNote') || {}).value || '';
       el.innerHTML = arbResumeHtml(here, arbEvents, arbPlan || (here || {}).plan || null);
+      const note = document.getElementById('arbResumeNote');
+      if (note && typing) note.value = typing;
       // The sheet is opened from the tray whatever the session is doing, and "Resume from here"
       // over a running one is a heading that describes a button that is not there.
       const title = document.getElementById('arbResumeTitle');
