@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-08">
+  <meta name="app-built" content="2026-09-09">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -3980,14 +3980,209 @@
     }
 
     #webAgentView .conv-view-head {
-      grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
-      grid-template-areas: 'back mark title tier model sync clear';
+      grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto auto;
+      grid-template-areas: 'back mark title pills model sync new more gear';
     }
 
-    #webAgentStatus { grid-area: tier; }
-    #webAgentModel { grid-area: model; max-width: 110px; min-height: 24px; font-size: 0.65rem; }
+    /* The two things that can be wrong, side by side, at the top of the chat they are about. The
+       adapter and the provider's browser fail independently — so they are two pills rather than
+       one dot with three meanings — and both are processes, so both open the one drawer that
+       repairs a process. They share a wrap for that reason: a drawer belongs inside the thing a
+       press outside of closes it. */
+    #webAgentHeads {
+      grid-area: pills;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    /* Two pills, a model select and four buttons share a phone's header, and an `auto` grid column
+       will not shrink below its content — so without this the pair grew past its column and sat on
+       top of Sync. They shrink instead, ellipsis first, and there is a floor below which the pair
+       stops being readable and is dropped in favour of what is beside it. */
+    /* `.term-menu-wrap` is flex-shrink: 0 everywhere else, where it holds one glyph button. Here
+       it holds the two pills, and refusing to shrink is what put them on top of Sync. */
+    #webAgentHeads .term-menu-wrap { min-width: 0; flex-shrink: 1; }
+
+    #webAgentHeads .head-pill {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 76px;
+    }
+
+    /* Nine things share this header — back, mark, title, two pills, the model, Sync, + and two
+       drawers — and on a phone that is one row too many: the title was squeezed to nothing and the
+       pills sat on top of Sync. So on a narrow screen it is two rows. What the chat *is* stays on
+       top; what you can *do* to it moves under, in one line right of the model, which keeps its
+       own left edge. The header grows by a row of buttons and the thread loses that much, which is
+       the trade a title worth reading is worth. */
+    /* Wide: each control keeps the grid area it has always had. */
+    #webAgentActs { display: contents; }
+
+    @media (max-width: 560px) {
+      #webAgentView .conv-view-head {
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        grid-template-areas:
+          'back mark title pills'
+          'back acts acts  acts';
+        row-gap: 4px;
+      }
+
+      #webAgentActs {
+        display: flex;
+        grid-area: acts;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      /* The model select is the one thing here that can be long, so it is the one thing that
+         gives way — the four buttons beside it are a word or a glyph each. */
+      #webAgentModel { flex: 0 1 auto; min-width: 0; }
+
+      /* The pills share the top row with the name, the id and the date, and those three are what
+         the row is for — so the pills keep the half that carries the state and drop the word. A
+         truncated "SE…" names nothing that a coloured dot in the adapter's own position does not,
+         and the provider's mark says which provider without spelling it. Both keep their title and
+         their aria-label, which is where the word went. */
+      #webAgentHeads .head-pill { max-width: none; padding: 1px 6px; }
+      #webAgentHeads .head-pill .head-pill-name { display: none; }
+    }
+
+    .head-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 96px;
+      min-height: 22px;
+      padding: 1px 7px 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .head-pill .head-pill-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .head-pill .dot {
+      flex: 0 0 auto;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      opacity: 0.4;
+    }
+
+    /* Colour is the whole message, so it is on the dot *and* on the border: a coloured dot on a
+       grey pill is a dot somebody has to look for. Green is working, amber is a state nothing here
+       can repair, red is one this menu can. */
+    .head-pill.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, var(--border)); }
+    .head-pill.ok .dot { background: var(--green); opacity: 1; }
+    .head-pill.warn { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 45%, var(--border)); }
+    .head-pill.warn .dot { background: var(--orange); opacity: 1; }
+    .head-pill.bad { color: var(--red); border-color: color-mix(in srgb, var(--red) 55%, var(--border)); }
+    .head-pill.bad .dot { background: var(--red); opacity: 1; }
+
+    /* Nothing has been asked yet, which is not a problem — it is the state a chat opens in for as
+       long as the first probe takes. */
+    .head-pill.unknown { opacity: 0.6; }
+
+    /* Ready, and not connected. A browser that is up with no page open for this chat is not the
+       same fact as a tab that answered, and filling the dot for both said "you are talking to
+       claude" while nothing was open. A ring is the shape for it: nothing wrong, nothing live. */
+    .head-pill.idle .dot,
+    .head-pill.unknown .dot {
+      background: transparent;
+      border: 1.5px solid currentColor;
+      opacity: 0.75;
+    }
+
+    /* A turn with nothing streamed yet. A still line and a wedged one are the same pixels, which
+       is exactly the failure this app keeps hitting, so the line moves while it is waiting. */
+    .webchat-wait {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 1px;
+      color: var(--muted);
+    }
+
+    .webchat-ell {
+      display: inline-flex;
+      gap: 2px;
+      margin-left: 3px;
+      align-self: center;
+    }
+
+    .webchat-ell i {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.25;
+      animation: webchat-ell 1.2s infinite ease-in-out;
+    }
+
+    .webchat-ell i:nth-child(2) { animation-delay: 0.2s; }
+    .webchat-ell i:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes webchat-ell {
+      0%, 60%, 100% { opacity: 0.25; }
+      30% { opacity: 1; }
+    }
+
+    /* The reason the wait may not end, on the line that is doing the waiting. Without it a wedged
+       tab is thirty seconds of a slow provider. */
+    .webchat-wait-bad {
+      color: var(--red);
+    }
+
+    /* One still frame for anyone who asked their system not to animate. The dots stay, at the
+       opacity they hold at rest, because they are also punctuation. */
+    @media (prefers-reduced-motion: reduce) {
+      .webchat-ell i { animation: none; opacity: 0.5; }
+    }
+    /* The one select that is not in a menu, so it is shaped here rather than by `.term-menu`:
+       the platform's own select chrome is a different control on every OS and none of them is the
+       one this header is made of. The caret is a data: URI because a select cannot carry a
+       pseudo-element, and a fixed grey because a background image has no access to the cascade —
+       it reads in all eleven themes, which an accent would not. Capped, because the longest model
+       name on some providers is most of a phone's width. */
+    #webAgentModel {
+      grid-area: model;
+      appearance: none;
+      -webkit-appearance: none;
+      max-width: 104px;
+      min-height: 26px;
+      padding: 2px 18px 2px 7px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: transparent
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        no-repeat right 5px center;
+      color: var(--text);
+      font: inherit;
+      font-size: 0.62rem;
+      cursor: pointer;
+    }
     #webAgentSync { grid-area: sync; }
-    #webAgentView .conv-view-head > .arm-btn { grid-area: clear; }
+
+    /* Lit when a turn ended leaving an answer that may be on the provider and not here — a stop,
+       a failure, a reply whose events never arrived. The button is there either way; this is the
+       difference between "you can read the page back" and "you probably want to". */
+    #webAgentSync.live {
+      color: var(--orange);
+      border-color: var(--orange);
+    }
 
     #webAgentThread {
       padding-top: 12px;
@@ -6998,6 +7193,15 @@
       border-color: var(--green);
     }
 
+    /* The Markdown toggle lights the same green as the live button, and for the same reason: both
+       say "what you are looking at is being kept up to date by something", and a second colour for
+       a second such switch would imply a difference that is not there. Only one of the two is ever
+       on screen at a time. */
+    #webAgentMarkdown.live {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
     /* Lit in the branch colour rather than the record's green: two buttons side by side in the
        same green would read as one state with two switches. */
     .hang-commits.live {
@@ -8353,12 +8557,502 @@
         padding: 8px 18px;
       }
     }
-      /* The recovery ladder under the Web Agent head. Its own row rather than three more buttons
-         in the head, which already carries a title, a status, a model picker and two actions. */
-      /* `:not([hidden])`, not a bare selector: an author `display` beats the UA stylesheet's rule
-         for the hidden attribute, so a bare `display: flex` here would draw the row whatever the
-         attribute said -- and the whole point of the row is that it is withheld. */
-      .webchat-recovery:not([hidden]) { display: flex; gap: 8px; padding: 0 12px 8px; flex-wrap: wrap; }
+      /* Both menus are the pane's own menu — `.term-menu` carries the panel, the rows and the
+         widths — so what is left here is only what differs: they hang from a header that is a grid
+         rather than from a flex row, and the whole point of the actions one is that it is read
+         while something is wrong, so it may not be wider than the screen it is read on. */
+      .webchat-wrap { display: flex; align-items: center; }
+
+      .webchat-menu {
+        min-width: 200px;
+        max-width: min(78vw, 280px);
+      }
+
+      .webchat-menu .menu-item { margin-top: 4px; }
+      .webchat-menu .menu-item:first-of-type { margin-top: 0; }
+
+      /* Sized like a menu row rather than like the page: a select that took the width of the
+         screen was the only control in the app that did. */
+      .webchat-menu select { margin-top: 4px; }
+
+      .webchat-menu .hint { margin-top: 8px; font-size: 0.62rem; line-height: 1.35; }
+
+      /* What the probe found. One line, and the colour is the whole message: green is a page that
+         answered, red is one that did not, and neither is the cold case -- no page is cached, the
+         next turn opens one, and there is nothing to repair. */
+      .webchat-link {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.7rem;
+        color: var(--muted);
+      }
+
+      /* When a thread was started, beside what it is called. Small, muted and never wrapping: it
+         is how two chats with the same provider-given title are told apart, which is a thing you
+         read only when you are already looking for it. */
+      .webchat-since {
+        flex: 0 0 auto;
+        font-size: 0.62rem;
+        font-weight: 400;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      /* The adapter's key for the thread — what the CLI and the adapter's own TUI call it. A badge
+         rather than another word on the line: it is an identifier, so it is read a character at a
+         time, and monospace is what says that. */
+      .webchat-id {
+        flex: 0 0 auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.6rem;
+        font-weight: 400;
+        color: var(--muted);
+        background: var(--bg-alt, rgba(127, 127, 127, 0.12));
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 4px;
+        white-space: nowrap;
+      }
+
+      #webAgentTitle .webchat-id { margin-left: 6px; }
+
+      #webAgentTitle .webchat-since { margin-left: 6px; }
+
+      .webchat-link .dot { flex: 0 0 auto; }
+      .webchat-link.hot { color: var(--green); }
+      .webchat-link.stale { color: var(--red); }
+
+      /* The two head pills open a drawer, so they need the positioned box the ⋯ has, and they
+         share one: a press outside the wrap closes what is open, and a pill that opened the drawer
+         from outside it would close the drawer on the way in. It hangs from the left because that
+         is the edge the pills sit on — the two at the other end of the head hang from the right
+         for the same reason. No left margin: the wrap's own is for two controls that would
+         otherwise be mis-tapped, and these two are the pills themselves. */
+      .webchat-server-wrap { margin-left: 0; gap: 4px; align-items: center; min-width: 0; }
+      .webchat-server-wrap .term-menu { left: 0; right: auto; }
+
+      /* --- Web Agents: the provider strip, the cards, and rendered Markdown --- */
+
+      /* A line that scrolls rather than a block that wraps. Eight providers wrap to three rows on a
+         phone, and three rows of filter above a list is a page whose top half is chrome. */
+      .webchat-pills {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: 0 0 8px;
+      }
+
+      .webchat-pills::-webkit-scrollbar { display: none; }
+
+      /* The line between the two rows, and the control that opens the lower one standing on it.
+         A rule running out to the left is what says the button is about what is below rather than
+         one more provider on the row above — which is how it read when it hung off the end of the
+         accounts strip. */
+      .webchat-sep {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 0 8px;
+      }
+
+      .webchat-sep-rule {
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+
+      /* The second line: the same site reached with no account. Held back from the first line,
+         which is the one anybody looks at, and folded away until asked for — there are as many of
+         these as there are of the others, and one strip of sixteen scrolls twice. */
+      .webchat-pills-anon {
+        padding-top: 0;
+        margin-top: -4px;
+      }
+
+      .webchat-anon-toggle {
+        flex: 0 0 auto;
+        border-style: dashed;
+        background: transparent;
+      }
+
+      .webchat-anon-caret {
+        font-size: 0.6rem;
+        opacity: 0.7;
+      }
+
+      .webchat-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex: 0 0 auto;
+        padding: 4px 10px 4px 7px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.7rem;
+        line-height: 1.6;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      /* The mark keeps its own colour whether or not the pill is lit -- it is what identifies the
+         provider, and a strip whose glyphs all went grey would be eight identical pills. */
+      .webchat-pill.on {
+        color: var(--text);
+        border-color: var(--muted);
+        background: color-mix(in srgb, var(--muted) 14%, var(--surface));
+      }
+
+      /* Only `foreign`. A browser that is down is not a problem -- the next turn brings it back
+         up -- and a colour spent on it would be a colour the eye stops reading. */
+      .webchat-pill.warn {
+        border-color: color-mix(in srgb, var(--dot-blocked) 60%, var(--border));
+      }
+
+      .webchat-pill .dot { width: 6px; height: 6px; }
+
+      .webchat-pill-n {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        opacity: 0.8;
+      }
+
+      .webchat-mark { flex: 0 0 auto; }
+
+      /* Two columns that stay two columns. A phone is narrow enough that these would collapse into
+         one long list under `auto-fit`, and one list is exactly what this sheet exists not to be:
+         the split *is* the information — signed in on the left, no login on the right. */
+      .webchat-picker {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 10px;
+        align-items: start;
+      }
+
+      .webchat-picker h4 {
+        margin: 0 0 2px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .webchat-picker-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+      .webchat-pick-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 7px 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.72rem;
+        line-height: 1.4;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .webchat-pick-row:hover { border-color: var(--muted); }
+
+      .webchat-pick-row .webchat-pill-n { margin-left: auto; }
+
+      .webchat-picker .pair-empty { grid-column: 1 / -1; }
+
+
+      /* One line, clipped. Two lines of every answer would make the list scroll as far as the
+         conversations themselves, which is the thing a list exists to save you. */
+      .webchat-snippet {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 0.7rem;
+        line-height: 1.45;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* Rendered Markdown inside a message bubble. Everything here is a reset toward the thread's
+         own type: a browser's default h1 and ul are sized for a document, and an answer is not one.
+         The only thing given room is a code block, which is the one construct that is unreadable
+         without it. */
+      /* `white-space: normal`, against the bubble's own `pre-wrap`: once the blocks are elements
+         the newlines between them are markup rather than layout, and pre-wrap would draw a blank
+         line for each one. The monospace face stays -- the whole thread is monospace, and a
+         formatted answer that switched to a proportional one would read as a different kind of
+         thing rather than as the same message drawn properly. */
+      .conv-msg .md { white-space: normal; }
+      .conv-msg .md > :first-child { margin-top: 0; }
+      .conv-msg .md > :last-child { margin-bottom: 0; }
+      .conv-msg .md p { margin: 0 0 6px; }
+      .conv-msg .md h1,
+      .conv-msg .md h2,
+      .conv-msg .md h3,
+      .conv-msg .md h4,
+      .conv-msg .md h5,
+      .conv-msg .md h6 {
+        margin: 10px 0 4px;
+        font-size: 1em;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .conv-msg .md h1 { font-size: 1.15em; }
+      .conv-msg .md h2 { font-size: 1.07em; }
+      .conv-msg .md ul,
+      .conv-msg .md ol { margin: 0 0 6px; padding-left: 1.3em; }
+      .conv-msg .md li { margin: 1px 0; }
+      .conv-msg .md blockquote {
+        margin: 0 0 6px;
+        padding-left: 8px;
+        border-left: 2px solid var(--border);
+        color: var(--muted);
+      }
+      .conv-msg .md hr {
+        margin: 8px 0;
+        border: 0;
+        border-top: 1px solid var(--border);
+      }
+      .conv-msg .md code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.88em;
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--muted) 16%, transparent);
+      }
+      /* Scrolls inside itself. A line of code wider than the phone must not widen the thread --
+         a bubble that overflows takes the whole column with it and every other message with that. */
+      .conv-msg .md pre {
+        margin: 0 0 6px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--muted) 14%, transparent);
+        overflow-x: auto;
+      }
+      .conv-msg .md pre code {
+        padding: 0;
+        background: none;
+        white-space: pre;
+      }
+      /* A link is marked rather than merely coloured. In a thread that is monospace throughout,
+         a colour is the weakest signal there is -- and half these answers are read in a theme
+         where the accent is close to the body text. The arrow is a pseudo-element, so what gets
+         copied out of the bubble is still the words the provider wrote. */
+      .conv-msg .md a {
+        color: var(--md-link, var(--blue));
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .conv-msg .md a::before {
+        content: '\2192\00a0';
+        opacity: 0.75;
+        text-decoration: none;
+      }
+
+      /* Scrolls inside itself, like a code block and for the same reason: a table wider than the
+         phone must not widen the thread and take every other message with it. */
+      .conv-msg .md-table {
+        margin: 0 0 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .conv-msg .md table {
+        border-collapse: collapse;
+        font-size: 0.92em;
+        /* `auto` rather than a width: a two-column table stretched across the bubble is mostly
+           gaps, and one with six columns needs to be as wide as it needs to be. */
+        width: auto;
+        max-width: 100%;
+      }
+
+      .conv-msg .md th,
+      .conv-msg .md td {
+        /* Not --border. That line is drawn to separate a card from the page behind it, and inside
+           a bubble it is one wash away from invisible -- which is exactly what a table cannot be,
+           since the grid is the only thing telling one cell from the next. */
+        border: 1px solid var(--md-grid, color-mix(in srgb, var(--muted) 55%, transparent));
+        padding: 4px 8px;
+        vertical-align: top;
+        white-space: pre-wrap;
+      }
+
+      .conv-msg .md th {
+        background: color-mix(in srgb, var(--muted) 14%, transparent);
+        color: var(--md-head, var(--text));
+        font-weight: 600;
+        text-align: left;
+      }
+
+      /* A code block, and the button that gets it out cleanly. Most of what anyone wants from a
+         formatted answer is the code in it, and selecting a <pre> with a finger on a phone is the
+         one gesture this app cannot make pleasant. The button sits over the block's top-right and
+         fades in on hover; on a touch screen there is no hover, so it stays at half opacity rather
+         than hiding — a control you cannot discover is not a control. */
+      .conv-msg .md-code {
+        position: relative;
+        margin: 0 0 6px;
+      }
+
+      .conv-msg .md-code pre { margin: 0; }
+
+      .conv-msg .md-copy {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        padding: 2px 7px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.72em;
+        font-family: inherit;
+        line-height: 1.5;
+        cursor: pointer;
+        opacity: 0.55;
+      }
+
+      .conv-msg .md-copy:hover,
+      .conv-msg .md-copy:focus-visible { opacity: 1; color: var(--text); }
+
+      /* A drawn block: an `svg` fence that parsed and survived the allowlist. Sized by the bubble
+         rather than by the file — a chart authored at 900px would otherwise make every message in
+         the thread scroll sideways. */
+      .conv-msg .md-figure {
+        margin: 0 0 6px;
+        padding: 6px;
+        border: 1px solid var(--md-grid, var(--border));
+        border-radius: 8px;
+        background: var(--surface);
+        text-align: center;
+      }
+
+      .conv-msg .md-svg,
+      .conv-msg .md-img {
+        display: inline-block;
+        max-width: 100%;
+        height: auto;
+      }
+
+      .conv-msg .md-img { border-radius: 6px; margin: 2px 0; }
+
+      /* The copy that takes the whole message, in the header where the speaker is named. The block
+         button copies one fence; this one copies the answer as the provider wrote it — Markdown
+         source, not the rendering, which is the form it is worth pasting anywhere else. */
+      .conv-copy {
+        margin-left: auto;
+        padding: 0 4px;
+        border: 0;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        font-size: 0.85em;
+        cursor: pointer;
+        opacity: 0.6;
+      }
+
+      .conv-copy:hover, .conv-copy:focus-visible { opacity: 1; color: var(--text); }
+
+      /* The bubble a provider's answer sits in. Grey rather than the thread's blue wash: a colour
+         on the bubble is a claim about who is speaking, which is worth making in a pair, where two
+         agents share a thread and the side is the whole point. Here there is one provider and the
+         answer is often a page of prose, a table and a code block -- so the ground under it should
+         be quiet and let the theme's colours be the only ones in the frame.
+
+         Not `.provisional`, which is unfilled and dashed on purpose. This rule comes later in the
+         file than that one and would otherwise fill a bubble whose emptiness is the message. */
+      #webAgentThread .conv-msg:not(.provisional) {
+        background: var(--md-bubble, color-mix(in srgb, var(--muted) 20%, var(--surface)));
+        border-color: color-mix(in srgb, var(--muted) 35%, var(--border));
+      }
+
+      /* The one thing the user's own bubble keeps: they wrote it, and in a thread of long answers
+         the question that started one has to be findable. Its own green stays in the border and in
+         the text; the fill is the same quiet ground as everything else. */
+      #webAgentThread .conv-msg.user {
+        border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+      }
+
+      /* --- Markdown themes ---
+         Four, and every one of them is only tokens: the rules above read --md-head, --md-mark,
+         --md-rule and --md-link, and a theme sets them. A theme that added rules of its own would
+         be four stylesheets to keep in step, and the fourth would be the one nobody checked. */
+      .conv-msg .md h1,
+      .conv-msg .md h2,
+      .conv-msg .md h3,
+      .conv-msg .md h4,
+      .conv-msg .md h5,
+      .conv-msg .md h6 { color: var(--md-head, var(--text)); }
+
+      .conv-msg .md li::marker { color: var(--md-mark, inherit); }
+
+      .conv-msg .md blockquote {
+        border-left-color: var(--md-rule, var(--border));
+        color: var(--md-quote, var(--muted));
+      }
+
+      .conv-msg .md hr { border-top-color: var(--md-rule, var(--border)); }
+
+      .conv-msg .md code { background: var(--md-code, color-mix(in srgb, var(--muted) 16%, transparent)); }
+      .conv-msg .md pre { background: var(--md-code, color-mix(in srgb, var(--muted) 14%, transparent)); }
+      .conv-msg .md strong { color: var(--md-strong, inherit); }
+
+      /* Accent: the app's own three, in the order a document uses them -- the heading in blue, the
+         bullets in the same blue at the marker, emphasis in green. Nothing invented; these are the
+         colours the rest of this page already means something by. */
+      #webAgentThread.md-accent {
+        --md-bubble: color-mix(in srgb, var(--blue) 8%, color-mix(in srgb, var(--muted) 16%, var(--surface)));
+        --md-grid: color-mix(in srgb, var(--blue) 40%, var(--muted));
+        --md-head: var(--blue);
+        --md-mark: var(--blue);
+        --md-rule: color-mix(in srgb, var(--blue) 45%, var(--border));
+        --md-strong: var(--green);
+        --md-link: var(--blue);
+      }
+
+      /* Warm: for reading rather than for scanning. The heading takes the orange the page uses for
+         a host badge, the code tint warms with it, and the quote goes quieter than --muted. */
+      #webAgentThread.md-warm {
+        /* The same ground as High contrast, which is the plainest one there is. Warm is a warmth
+           in the type, not in the paper: a tinted ground under an orange heading turned the whole
+           bubble into one colour and the theme stopped being sober, which is the point of it. */
+        --md-bubble: var(--surface);
+        --md-grid: color-mix(in srgb, var(--orange) 40%, var(--muted));
+        --md-head: var(--orange);
+        --md-mark: var(--orange);
+        --md-rule: color-mix(in srgb, var(--orange) 40%, var(--border));
+        --md-strong: var(--orange);
+        --md-quote: color-mix(in srgb, var(--muted) 80%, transparent);
+        --md-code: color-mix(in srgb, var(--orange) 12%, transparent);
+        --md-link: var(--orange);
+      }
+
+      /* Contrast: no hue at all, and the separation carried by weight and rule instead. For a
+         thread read in bright light, and for anyone the other three are the wrong idea for. */
+      #webAgentThread.md-contrast {
+        --md-bubble: var(--surface);
+        --md-grid: color-mix(in srgb, var(--text) 45%, transparent);
+        --md-head: var(--text);
+        --md-mark: var(--text);
+        --md-rule: var(--text);
+        --md-strong: var(--text);
+        --md-code: color-mix(in srgb, var(--muted) 24%, transparent);
+      }
+
+      #webAgentThread.md-contrast .md h1,
+      #webAgentThread.md-contrast .md h2,
+      #webAgentThread.md-contrast .md h3 {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 2px;
+      }
   </style>
 </head>
 
@@ -8682,9 +9376,14 @@
       <div class="conv-bubble">
         <div class="conv-composer">
           <div class="conv-field">
+            <div class="conv-ghost" id="nlmGhost" aria-hidden="true"></div>
             <textarea id="nlmInput" rows="1" maxlength="16000"
               placeholder="Ask the sources…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="off"
-              oninput="autoGrow(this); nlmSaveDraft()" onkeydown="nlmInputKey(event)"></textarea>
+              oninput="autoGrow(this); keepBlockCaret(this); nlmSaveDraft()"
+              onkeydown="nlmInputKey(event)"
+              onkeyup="syncBlockCursor(this)" onclick="syncBlockCursor(this)"
+              onselect="syncBlockCursor(this)" onfocus="syncBlockCursor(this)"
+              onblur="syncBlockCursor(this)" onscroll="syncBlockCursor(this)"></textarea>
           </div>
           <button class="send" id="nlmSend" onclick="nlmSend()" aria-label="Send"><svg
               width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
@@ -8721,38 +9420,174 @@
       <button class="back" onclick="showLanding()" aria-label="Back to list"><svg width="20" height="20"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
-      <span class="conv-kind"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle
-        cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></span>
+      <!-- The provider's own mark, written by the render. The card that was tapped carries it and
+           the window it opens has to say the same thing about what is being read. -->
+      <span class="conv-kind" id="webAgentMark"></span>
       <span class="title" id="webAgentTitle">Web Agent</span>
-      <span class="conversation-tier" id="webAgentStatus"></span>
-      <select id="webAgentModel" onchange="webchatSetModel(this.value)" onfocus="webchatAskModels()"
-        aria-label="Provider model" hidden></select>
-      <button class="open-pane" id="webAgentSync" onclick="webchatSync()" hidden>Sync</button>
-      <button class="open-pane arm-btn" onclick="armButton(this, 'Clear local history?', webchatClear)"
-        aria-label="Clear local Web Agent history">Clear</button>
+      <!-- Written by webchatDrawPills. Both open the same drawer: the two processes this page
+           did not start — the adapter and this provider's browser — with a status line each and
+           the repair that ends it. A provider's *tab* is a different kind of repair and stays in
+           the ⋯ menu, which asks the probe on the way in. -->
+      <span id="webAgentHeads">
+        <span class="term-menu-wrap webchat-wrap webchat-server-wrap">
+          <button class="head-pill unknown" id="webAgentServerPill" onclick="webchatMenu('server')"
+            aria-haspopup="true" aria-expanded="false" aria-controls="webAgentServerMenu"
+            aria-label="Adapter status"><span class="dot" aria-hidden="true"></span><span
+              class="head-pill-name">server</span></button>
+          <button class="head-pill unknown" id="webAgentProviderPill" onclick="webchatMenu('server')"
+            aria-haspopup="true" aria-expanded="false" aria-controls="webAgentServerMenu"
+            aria-label="Provider status"><span class="dot" aria-hidden="true"></span><span
+              class="head-pill-name">provider</span></button>
+          <!-- Written by webchatDrawServer, out of the same function the landing page draws its
+               own server drawer from: the processes behind this chat, their status, and the repair
+               that ends each — wherever you are standing when you notice. -->
+          <div class="term-menu webchat-menu" id="webAgentServerMenu" role="menu" hidden></div>
+        </span>
+      </span>
+      <!-- The five controls, in a wrapper that is `display: contents` on a wide screen — so each
+           keeps the grid area it has always had — and one flex row on a phone, where the header is
+           two rows and this is the second of them. -->
+      <span id="webAgentActs">
+      <select id="webAgentModel" onchange="webchatSetModel(this.value)"
+        onfocus="webchatAskModels()" aria-label="Provider model" hidden></select>
+      <!-- Reading the conversation back off the provider's page is the thing people reach for
+           most, and it was a row in a drawer unless the app had a reason to suspect a missing
+           reply. It stands in the head now, and lights up when there is such a reason. -->
+      <button class="open-pane" id="webAgentSync" onclick="webchatSync()"
+        aria-label="Read this conversation back off the provider's page" hidden>Sync</button>
+      <!-- A second conversation with the provider you are already talking to. The only other way
+           to one is the landing page's + New, which means leaving the thread and finding the
+           provider again in a list. -->
+      <button class="open-pane" id="webAgentNewChat" style="grid-area: new"
+        onclick="webchatNewHere()" title="New chat with this provider"
+        aria-label="New chat with this provider">+</button>
+      <!-- The session's own actions, in one drawer rather than as a row of buttons over every
+           thread: this is the ladder the adapter's TUI binds to keys, and on a phone a header has
+           room for the name and about two more things. -->
+      <div class="term-menu-wrap webchat-wrap" style="grid-area: more">
+        <button class="open-pane" id="webAgentMore" onclick="webchatMenu('actions')"
+          aria-haspopup="true" aria-expanded="false" aria-controls="webAgentActions"
+          aria-label="This chat's options">⋯</button>
+        <!-- What the adapter's TUI offers, in the order it offers it, as the pane's own menu:
+             the same panel, the same rows, the same widths. A bar across the header was three
+             sizes of button in a grid that reshaped itself every time a control appeared. -->
+        <div class="term-menu webchat-menu" id="webAgentActions" role="menu" hidden>
+          <!-- What `ready` cannot say. A browser can be up while the page this adapter cached for
+               the tab is gone, which inside a turn is thirty seconds of nothing and from here
+               looks exactly like a slow provider. Asked when the menu opens. -->
+          <div class="webchat-link" id="webAgentLink" role="status">Checking the connection…</div>
+          <!-- First, because it is the one thing here anybody does to a chat on purpose rather
+               than to repair one. Sync used to sit in this list and is in the head now, where it
+               is reachable without opening anything. -->
+          <button class="menu-item" id="webAgentRename"
+            onclick="webchatMenu(); webchatRename(webchatCurrent)"
+            aria-label="Rename this chat" hidden>Rename chat</button>
+          <button class="menu-item" id="webAgentProbe" onclick="webchatProbe()"
+            aria-label="Check this chat's connection">Check connection</button>
+          <!-- The TUI's `/retry`. It fills the composer rather than sending: after a hang the
+               provider may well have taken the message already, and this app's own Resend works
+               the same way for the same reason. -->
+          <button class="menu-item" onclick="webchatMenu(); webchatRetry()"
+            aria-label="Put your last message back in the composer">Retry last message</button>
+          <button class="menu-item arm-btn" onclick="armButton(this, 'Clear local history?',
+            () => { webchatMenu(); webchatClear(); })"
+            aria-label="Clear local Web Agent history">Clear history</button>
+          <!-- Withheld on a provider's own default chat, which is not a thing anybody made and not
+               a thing anybody can take away. Rename is at the top of this list rather than beside
+               it: one names a thread and the other ends it. -->
+          <button class="menu-item danger arm-btn" id="webAgentDelete"
+            onclick="armButton(this, 'Delete this chat?', () => webchatDelete(webchatCurrent))"
+            aria-label="Delete this chat" hidden>Delete chat</button>
+          <div id="webAgentRecovery" hidden>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Recovery</div>
+            <button class="menu-item" id="webAgentReconnect" onclick="webchatRecover('reconnect')"
+              aria-label="Reopen this provider's tab" hidden>Reconnect tab</button>
+            <button class="menu-item danger arm-btn" id="webAgentRestart"
+              onclick="armButton(this, 'Restart browser? Every tab on this profile closes.', () => webchatRecover('restart'))"
+              aria-label="Restart this provider's browser" hidden>Restart browser</button>
+            <button class="menu-item danger arm-btn" id="webAgentBrowserStop"
+              onclick="armButton(this, 'Stop browser? Every tab on this profile closes.', () => webchatRecover('browser_stop'))"
+              aria-label="Stop this provider's browser" hidden>Stop browser</button>
+          </div>
+          <!-- The controls are gated on what the relay says it will act on, which is what the
+               adapter says it can do. So an adapter running an older build of itself shows a menu
+               with two rows in it and no reason — and the commonest cause is a server process that
+               has been up longer than the file it was started from. Say that rather than look
+               broken. -->
+          <div class="hint" id="webAgentStale" hidden>This adapter does not offer the connection
+            check or the recovery controls. Restart the web-agent server to pick them up.</div>
+        </div>
+      </div>
+      <!-- How the thread is drawn, which is a standing preference rather than an action: its own
+           button, and the pane's gear rather than a glyph, since this app draws one gear. Here
+           rather than on the composer: this is about the answers above, and the composer's own
+           gear is about the box it sits on. -->
+      <div class="term-menu-wrap webchat-wrap" style="grid-area: gear">
+        <button class="open-pane" id="webAgentGear" onclick="webchatMenu('settings')"
+          aria-haspopup="true" aria-expanded="false" aria-controls="webAgentSettings"
+          aria-label="How this thread is drawn"><svg width="14" height="14" aria-hidden="true"
+            ><use href="#icoGear"/></svg></button>
+        <div class="term-menu webchat-menu" id="webAgentSettings" role="menu" hidden>
+          <div class="menu-label">Markdown theme</div>
+          <select id="webAgentTheme" onchange="webchatSetTheme(this.value)"
+            aria-label="Markdown theme"></select>
+          <div class="hint">How a rendered answer is coloured — headings, bullets, quotes and
+            highlights. Plain is the thread's own type with nothing added.</div>
+        </div>
+      </div>
+      </span>
     </div>
-    <!-- The recovery ladder, in increasing violence. Reconnect closes a tab and is a plain press;
-         the two that end a browser process are armed, like everything else destructive here. Every
-         one of them is hidden until the relay reports its capability. -->
-    <div class="webchat-recovery" id="webAgentRecovery" hidden>
-      <button class="archive-btn" id="webAgentReconnect" onclick="webchatRecover('reconnect')"
-        aria-label="Reopen this provider's tab" hidden>Reconnect</button>
-      <button class="archive-btn arm-btn" id="webAgentRestart"
-        onclick="armButton(this, 'Restart browser? Every tab on this profile closes.', () => webchatRecover('restart'))"
-        aria-label="Restart this provider's browser" hidden>Restart</button>
-      <button class="end-btn arm-btn" id="webAgentBrowserStop"
-        onclick="armButton(this, 'Stop browser? Every tab on this profile closes.', () => webchatRecover('browser_stop'))"
-        aria-label="Stop this provider's browser" hidden>Stop browser</button>
+    <!-- The one floating control this view has, in the corner the conversation window puts its
+         own in: what a provider returns is Markdown, and this is whether it is drawn as Markdown
+         or shown as the text it arrived as. -->
+    <!-- Inside the wrap rather than under the head: .hang-float is absolute, and .conv-wrap is
+         the positioned box the conversation window hangs its own corner controls off. -->
+    <div class="conv-wrap">
+      <div class="hang-float">
+        <button class="hang-btn on" id="webAgentMarkdown" onclick="webchatToggleMarkdown()"
+          aria-pressed="true" aria-label="Show the reply as formatted Markdown">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+            <path d="M6 15.5v-7l3 3.5 3-3.5v7M16 8.5v7M16 15.5l-2-2.5M16 15.5l2-2.5" />
+          </svg></button>
+      </div>
+      <div class="conv-thread conv-solo" id="webAgentThread" aria-live="polite"></div>
     </div>
-    <div class="conv-thread conv-solo" id="webAgentThread" aria-live="polite"></div>
     <div class="conv-dock">
-      <div class="conv-bubble">
+      <!-- How this *box* behaves, above the bubble the way the conversation dock puts its own
+           list. Only what is about the composer: how the thread is drawn is a property of the
+           thread, and its gear is in the header with the rest of what names the thread. -->
+      <div class="chip-menu" id="webAgentComposerMenu" role="menu" hidden></div>
+      <!-- The whole bubble is the field, the same as the conversation composer: a tap anywhere in
+           it puts the caret in the text, which is what a phone's own message box does. -->
+      <div class="conv-bubble" onclick="focusWebchatInput(event)">
+        <!-- The same instruction chips the conversation composer carries, writing into the box at
+             the caret. A provider takes prose, so they are written rather than attached: there is
+             nothing here for an instruction to be attached to. -->
+        <div class="xfer-row">
+          <div class="xfer-act">
+            <div class="xfer-chip-row" id="webAgentChips"></div>
+            <button class="xfer-chip opts gear-btn" id="webAgentComposerGear"
+              onclick="webchatMenu('composer')" aria-haspopup="true" aria-expanded="false"
+              aria-controls="webAgentComposerMenu" title="How this box behaves"
+              aria-label="How this box behaves"><svg class="gear-ico"
+                aria-hidden="true" focusable="false"><use href="#icoGear" /></svg></button>
+          </div>
+        </div>
         <div class="conv-composer">
           <div class="conv-field">
+            <!-- The ghost that carries the block cursor — see syncBlockCursor. Without it this
+                 field inherits `caret-color: transparent` and has no cursor at all. -->
+            <div class="conv-ghost" id="webAgentGhost" aria-hidden="true"></div>
             <textarea id="webAgentInput" rows="1" maxlength="16000"
               placeholder="Message…  ⌘/Ctrl+Enter sends" autocomplete="off" autocorrect="off"
-              oninput="autoGrow(this); webchatSaveDraft()" onkeydown="webchatInputKey(event)"></textarea>
+              oninput="autoGrow(this); keepBlockCaret(this); webchatSaveDraft()"
+              onkeydown="webchatInputKey(event)"
+              onkeyup="syncBlockCursor(this)" onclick="syncBlockCursor(this)"
+              onselect="syncBlockCursor(this)" onfocus="syncBlockCursor(this)"
+              onblur="syncBlockCursor(this)" onscroll="syncBlockCursor(this)"></textarea>
           </div>
           <button class="send" id="webAgentSend" onclick="webchatSend()" aria-label="Send"><svg
               width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
@@ -9390,6 +10225,62 @@
         <button id="newProjectSubmit" onclick="submitNewProject()"
           style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:var(--bg);font-weight:600;font-size:0.85rem;cursor:pointer">Create
           project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Which provider a new chat is on. Two columns, because the choice has two halves that are
+       not the same kind of choice: an account you are signed in to, and one that needs no login and
+       is limited for it. The order inside each is the adapter's own driver order, which is what
+       `chat.js providers` prints and what its session menu offers — the same eight names in the
+       same places on whichever surface you reach them from. -->
+  <div id="webchatNewSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeWebchatNew()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">New Web Agent chat</span>
+        <button onclick="closeWebchatNew()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <label class="start-field">Name (optional)<input id="webchatNewName" type="text"
+            maxlength="64" autocapitalize="none" autocomplete="off"
+            placeholder="leave empty for this provider's own chat" /></label>
+        <div class="webchat-picker" id="webchatNewCols"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- What this browser calls a conversation. Local by design: a session's name is the adapter's
+       key for it, so there is nothing on that side to rename, and the provider's own title for a
+       thread is the provider's. Empty is the way back to that title rather than a rejected name,
+       which is why this is a sheet and not a prompt() -- there is a second control to draw. -->
+  <div id="webchatRenameSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeWebchatRename()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Name this chat</span>
+        <button onclick="closeWebchatRename()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <div class="conversation-meta names" id="webchatRenameOf"></div>
+        <label class="start-field">Name<input id="webchatRenameName" type="text" maxlength="64"
+            autocapitalize="sentences" autocomplete="off"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();webchatRenameSave()}"
+            placeholder="the provider's own title" /></label>
+        <!-- The launcher's dialog buttons, which is what every other sheet in this app closes
+             with. Fill writes the provider's own name into the field and stops there: it is a
+             starting point to edit, not a second Save, and nothing about this sheet acts until
+             Save is pressed. -->
+        <div class="ql-actions">
+          <button class="ql-secondary" onclick="webchatRenameFill()"
+            aria-label="Put the provider's own name in the field">Use provider's name</button>
+          <button class="ql-primary" onclick="webchatRenameSave()">Save</button>
+        </div>
+        <p class="hint">Kept in this browser. Other browsers keep their own names for the same
+          chat, and the provider is never told. Save an empty field to go back to the provider's
+          own title.</p>
       </div>
     </div>
   </div>
@@ -12631,7 +13522,12 @@
       // desktop page has up to five and none of them has one, so it is asked to apply it itself —
       // and each guard is for the page that does not load the other's modules.
       if (typeof syncComposerMode === 'function') syncComposerMode();
-      applyAutocorrect(document.getElementById('convInput'), on);
+      // Every `.conv-composer` on the page — the conversation's, the web-agent chat's and the
+      // notebook's — rather than the conversation's alone, which is what this used to reach. A
+      // pane's own composer is `#termInput` and is set by `syncComposerMode` above, because a
+      // shell never takes it whatever this says.
+      document.querySelectorAll('.conv-composer textarea')
+        .forEach(el => applyAutocorrect(el, on));
       if (typeof deskApplyAutocorrect === 'function') deskApplyAutocorrect();
     }
 
@@ -22070,6 +22966,345 @@
     }
 
   </script>
+  <!-- Before web_agent.js, which is the only caller: markdownHtml is what draws a provider's
+       reply, and a page that loaded them the other way round throws at the first message. -->
+  <script>
+// A small Markdown renderer, for text this app did not write.
+//
+// Web-agent providers answer in Markdown and the adapter keeps it verbatim, so a thread that
+// escapes it shows the asterisks and the backticks rather than the answer. Nothing else in this
+// app needs one: an agent pane is a terminal and is drawn as one, and the durable record holds
+// what a pane printed rather than what a model composed.
+//
+// Deliberately partial. Headings, lists, quotes, rules, fences, pipe tables, and the five inline
+// forms — no footnotes, no reference links, no HTML passthrough. What is not recognised is left as
+// the text it was, which is the same thing the reader saw before this file existed.
+//
+// **The whole input is escaped before a single rule runs.** Every rule below therefore matches
+// against text in which `<`, `>`, `&`, `"` and `'` are already entities, and nothing any provider
+// can put in an answer can become markup. A renderer that escaped afterwards, or per fragment,
+// would be one missed branch away from letting a provider's reply script this page.
+
+const MD_SCHEME = /^(https?:\/\/|mailto:)/i;
+
+// An image is drawn only when the message already contains it. A remote `src` is a request this
+// page makes to a third party the moment an answer arrives — it tells that host somebody is reading
+// this thread, and the app ships as one self-contained file precisely so that it makes no such
+// requests. A `data:` URI is the picture itself and reaches nobody. `image/svg+xml` is left out on
+// purpose: an SVG is a document rather than a bitmap, and the one path that shows one is the fenced
+// block below, where it is walked first.
+const MD_DATA_IMAGE = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
+
+// Refused to its own alt text, the way a link that goes nowhere safe is refused to its own words:
+// the reader still sees what the provider meant to show.
+function mdImage(alt, src) {
+  return MD_DATA_IMAGE.test(src)
+    ? `<img class="md-img" src="${src}" alt="${alt}" loading="lazy">` : (alt || src);
+}
+
+// After escaping, a URL's `&` is `&amp;` and its quotes are entities, so the only thing left to
+// check is where it points. Anything that is not plainly http, https or mailto is dropped back to
+// its own text — `javascript:` is the reason, and a relative link has nowhere to go from here.
+function mdLink(text, href) {
+  return MD_SCHEME.test(href)
+    ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
+    : `${text}`;
+}
+
+// A pipe table's delimiter row, which is the only thing that makes the row above it a header
+// rather than a line with pipes in it. The alignment colons are read from here and from nowhere
+// else, which is why a table is recognised by looking one line ahead rather than at the first row.
+const MD_DELIM = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+
+// `a | b | c` → ['a', 'b', 'c']. The outer pipes are optional in GFM and are dropped when there,
+// so `| a | b |` and `a | b` are the same two cells rather than four with two empty ones.
+function mdCells(line) {
+  let text = line.trim();
+  if (text.startsWith('|')) text = text.slice(1);
+  if (text.endsWith('|') && !text.endsWith('\\|')) text = text.slice(0, -1);
+  return text.split('|').map(cell => cell.trim());
+}
+
+function mdAlign(spec) {
+  const left = spec.startsWith(':');
+  const right = spec.endsWith(':');
+  if (left && right) return ' style="text-align:center"';
+  if (right) return ' style="text-align:right"';
+  return left ? ' style="text-align:left"' : '';
+}
+
+// One table, from the header row, the delimiter row, and every row after them that still has a
+// pipe in it. Ragged rows are padded and over-long ones are cut to the header's width: a provider
+// that miscounts a cell must not produce a table the browser lays out as a staircase.
+function mdTable(header, delimiter, rows) {
+  const heads = mdCells(header);
+  const aligns = mdCells(delimiter).map(mdAlign);
+  const cell = (text, index, tag) =>
+    `<${tag}${aligns[index] || ''}>${mdInline(text)}</${tag}>`;
+  const body = rows.map(row => {
+    const cells = mdCells(row).slice(0, heads.length);
+    while (cells.length < heads.length) cells.push('');
+    return `<tr>${cells.map((text, index) => cell(text, index, 'td')).join('')}</tr>`;
+  }).join('');
+  return `<div class="md-table"><table><thead><tr>`
+    + heads.map((text, index) => cell(text, index, 'th')).join('')
+    + `</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+// The five entities `escapeHtml` produces, undone. Only a fenced block ever needs this, and only
+// because the thing inside it has to be *parsed* rather than shown: everything else in this file
+// works on escaped text from the first line to the last, which is the property that makes it safe.
+// `&amp;` last, or `&amp;lt;` — a provider writing the literal text `&lt;` — becomes `<`.
+function mdUnescape(text) {
+  return text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+}
+
+// What an `svg` fence may contain. An allowlist and never a blocklist: the elements and attributes
+// that draw a picture are a short, closed list, and everything that has ever been an XSS vector in
+// an SVG — script, foreignObject, animate, href, style, on* — is simply not on it. Anything not
+// named here is removed rather than escaped, so a file that arrives with something extra in it is
+// still drawn, minus that.
+const MD_SVG_TAGS = new Set(['svg', 'g', 'defs', 'title', 'desc', 'path', 'circle', 'ellipse',
+  'rect', 'line', 'polyline', 'polygon', 'text', 'tspan', 'linearGradient', 'radialGradient',
+  'stop', 'clipPath', 'mask', 'pattern', 'symbol']);
+
+const MD_SVG_ATTRS = new Set(['d', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
+  'dx', 'dy', 'width', 'height', 'points', 'transform', 'viewBox', 'preserveAspectRatio',
+  'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-linecap',
+  'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-opacity', 'opacity',
+  'font-size', 'font-family', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline',
+  'letter-spacing', 'offset', 'stop-color', 'stop-opacity', 'gradientUnits', 'gradientTransform',
+  'clip-path', 'mask', 'patternUnits', 'id']);
+
+// A paint value may name another element in the same document — `url(#gradient)` — and must never
+// name anything outside it. That is the one attribute value in the list above that can carry a URL.
+const MD_SVG_URL = /url\(/i;
+
+// Big enough for a chart, small enough that a runaway answer cannot lock the page up parsing it.
+const MD_SVG_MAX = 200000;
+
+function mdSvgClean(node) {
+  if (!MD_SVG_TAGS.has(node.tagName)) return false;
+  for (const attribute of [...node.attributes]) {
+    const name = attribute.name;
+    const bad = !MD_SVG_ATTRS.has(name)
+      || (MD_SVG_URL.test(attribute.value) && !/^url\(\s*['"]?#/i.test(attribute.value.trim()));
+    if (bad) node.removeAttribute(name);
+  }
+  for (const child of [...node.children]) {
+    if (!mdSvgClean(child)) child.remove();
+  }
+  return true;
+}
+
+// Returns the sanitized markup, or '' for anything that is not plainly an SVG — in which case the
+// caller draws the fence as the code it also is. Browser-only by construction: with no DOMParser
+// there is no way to walk the thing, and showing it unwalked is not the fallback.
+function mdSvg(source) {
+  if (typeof DOMParser === 'undefined' || typeof XMLSerializer === 'undefined') return '';
+  if (!source.trim() || source.length > MD_SVG_MAX) return '';
+  let root;
+  try {
+    const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+    if (doc.getElementsByTagName('parsererror').length) return '';
+    root = doc.documentElement;
+  } catch (_error) {
+    return '';
+  }
+  if (!root || root.tagName !== 'svg' || !mdSvgClean(root)) return '';
+  // Sized by the bubble rather than by whatever the file asked for: a chart authored at 900px wide
+  // would otherwise make every message in the thread scroll sideways.
+  root.setAttribute('class', 'md-svg');
+  root.removeAttribute('width');
+  root.removeAttribute('height');
+  return new XMLSerializer().serializeToString(root);
+}
+
+// One fenced block. `svg` is drawn when it parses and shown as its own source when it does not —
+// a picture that will not render must still be readable, since the text is what the reader can act
+// on. Everything else is a code block with a copy button, which is most of what anybody wants out
+// of an answer that contains code.
+function mdBlock(language, body) {
+  if (language === 'svg') {
+    const drawn = mdSvg(mdUnescape(body));
+    if (drawn) return `<div class="md-figure">${drawn}</div>`;
+  }
+  return '<div class="md-code"><button type="button" class="md-copy" onclick="mdCopy(this)"'
+    + ` aria-label="Copy this block">Copy</button><pre${language ? ` data-lang="${language}"` : ''}>`
+    + `<code>${body}</code></pre></div>`;
+}
+
+// The clipboard write, and the only DOM this file touches. Kept here rather than in the app so the
+// button and what it does are one thing: the markup above is the only thing that ever calls it.
+function mdCopy(button) {
+  const code = button.parentElement?.querySelector('code');
+  if (!code || !navigator.clipboard) return;
+  navigator.clipboard.writeText(code.textContent.replace(/\n$/, '')).then(() => {
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+  }, () => { button.textContent = 'Copy failed'; });
+}
+
+// Code spans first and once: what is inside one is text, not markup, so the emphasis and link
+// rules must never see it. Split on the backticks, transform only the odd-indexed pieces, and put
+// the even ones back untouched.
+function mdInline(line) {
+  return line.split(/`([^`]+)`/).map((piece, index) => {
+    if (index % 2) return `<code>${piece}</code>`;
+    return piece
+      // Before the link rule, or that one matches `[alt](src)` and leaves a stray `!` behind.
+      .replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_all, alt, src) => mdImage(alt, src))
+      .replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_all, text, href) => mdLink(text, href))
+      // Bold before italic, or `**a**` is read as an empty italic wrapping a bold.
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+      .replace(/(^|\W)_([^_\n]+)_(?=\W|$)/g, '$1<em>$2</em>');
+  }).join('');
+}
+
+// Blocks, in one pass over the lines. `list` holds the tag of the list currently open, so a run of
+// bullets is one `<ul>` rather than one per line, and anything that is not a bullet closes it.
+function renderMarkdown(source) {
+  const lines = String(source == null ? '' : source).replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let list = '';
+  let fence = '';
+  let fenceLanguage = '';
+  // Buffered rather than emitted line by line: an `svg` fence can only be judged once it is whole,
+  // and a copy button has to wrap the block it copies.
+  let fenceBody = [];
+  let paragraph = [];
+
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = ''; } };
+  const closeParagraph = () => {
+    if (paragraph.length) out.push(`<p>${paragraph.map(mdInline).join('<br>')}</p>`);
+    paragraph = [];
+  };
+  const openList = (tag) => {
+    closeParagraph();
+    if (list !== tag) { closeList(); out.push(`<${tag}>`); list = tag; }
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index];
+    const line = raw.replace(/\s+$/, '');
+    // A fence swallows everything until the next one, including what looks like a heading or a
+    // bullet. Its own content is never given to mdInline — it is code, and it is already escaped.
+    const fenced = line.match(/^\s*(```|~~~)(.*)$/);
+    if (fence) {
+      if (fenced && fenced[1] === fence) {
+        out.push(mdBlock(fenceLanguage, fenceBody.join('')));
+        fence = '';
+        fenceBody = [];
+      } else fenceBody.push(line + '\n');
+      continue;
+    }
+    if (fenced) {
+      closeParagraph();
+      closeList();
+      fence = fenced[1];
+      // The info string is a language name, not markup, and it is the one thing here that is
+      // shown as an attribute rather than as text.
+      fenceLanguage = fenced[2].trim().split(/\s+/)[0].replace(/[^A-Za-z0-9+#_-]/g, '');
+      fenceBody = [];
+      continue;
+    }
+    if (!line.trim()) { closeParagraph(); closeList(); continue; }
+
+    // An SVG a provider wrote without fencing it. Most of them fence their code, but "here is the
+    // chart:" followed by bare markup is common enough, and this file escapes the whole input --
+    // so what the reader got was a wall of `&lt;path d=...`, which is the one form of an answer
+    // that is worth nothing to anybody. Everything from the opening tag to the closing one is
+    // taken as the block it is and walked by the same allowlist a fence goes through, so nothing
+    // is trusted here that is not trusted there.
+    if (/^\s*&lt;svg[\s&]/.test(line)) {
+      closeParagraph();
+      closeList();
+      const block = [];
+      let at = index;
+      while (at < lines.length) {
+        block.push(lines[at]);
+        if (lines[at].includes('&lt;/svg&gt;')) break;
+        at += 1;
+      }
+      // An unclosed one is not an SVG yet -- an answer still streaming, or a fragment quoted in
+      // prose. Left to the ordinary rules, which show it as the text it is.
+      if (at < lines.length) {
+        out.push(mdBlock('svg', block.join('\n') + '\n'));
+        index = at;
+        continue;
+      }
+    }
+
+    // A table is recognised by the line *after* the header, which is the only thing separating
+    // `| a | b |` from a sentence with pipes in it. Everything from here to the first line with no
+    // pipe belongs to it, so the rows are consumed rather than fed back through the block rules.
+    if (line.includes('|') && MD_DELIM.test(lines[index + 1] || '')) {
+      closeParagraph();
+      closeList();
+      const rows = [];
+      let at = index + 2;
+      while (at < lines.length && lines[at].includes('|') && lines[at].trim()) {
+        rows.push(lines[at]);
+        at += 1;
+      }
+      out.push(mdTable(line, lines[index + 1], rows));
+      index = at - 1;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      closeParagraph();
+      closeList();
+      const level = heading[1].length;
+      out.push(`<h${level}>${mdInline(heading[2])}</h${level}>`);
+      continue;
+    }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      closeParagraph();
+      closeList();
+      out.push('<hr>');
+      continue;
+    }
+    const quote = line.match(/^\s*&gt;\s?(.*)$/);
+    if (quote) {
+      closeParagraph();
+      closeList();
+      out.push(`<blockquote>${mdInline(quote[1])}</blockquote>`);
+      continue;
+    }
+    const bullet = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (bullet) {
+      openList('ul');
+      out.push(`<li>${mdInline(bullet[1])}</li>`);
+      continue;
+    }
+    const numbered = line.match(/^\s*\d{1,3}[.)]\s+(.*)$/);
+    if (numbered) {
+      openList('ol');
+      out.push(`<li>${mdInline(numbered[1])}</li>`);
+      continue;
+    }
+    closeList();
+    paragraph.push(line);
+  }
+  // A fence nobody closed is an answer that was cut off mid-block, which happens every time a
+  // turn is stopped part-way. Close it rather than dropping the tail on the floor.
+  if (fence) out.push(mdBlock(fenceLanguage, fenceBody.join('')));
+  closeParagraph();
+  closeList();
+  return out.join('');
+}
+
+// The one entry point callers should use: escape, then render. Kept together so no caller can do
+// the second without the first.
+function markdownHtml(source) {
+  return renderMarkdown(escapeHtml(source == null ? '' : source));
+}
+
+  </script>
   <script>
 // Browser-provider chats. They share conversation presentation, never the local-agent model.
 let webchatOffered = false;
@@ -22089,6 +23324,19 @@ const webchatNeedsSync = new Set();
 const WEBCHAT_SEEN_KEY = 'herdr_webchat_seen';
 const WEBCHAT_CONSENT_KEY = 'herdr_webchat_consent';
 const WEBCHAT_DRAFT_PREFIX = 'herdr_webchat_draft:';
+const WEBCHAT_COMPACT_KEY = 'herdr_webchat_compact';
+const WEBCHAT_FILTER_KEY = 'herdr_webchat_filter';
+const WEBCHAT_MD_KEY = 'herdr_webchat_md';
+const WEBCHAT_THEME_KEY = 'herdr_webchat_theme';
+const WEBCHAT_NAMES_KEY = 'herdr_webchat_names';
+
+// Which provider the list is narrowed to, or '' for all of them. Kept here rather than in the
+// shared documents: a filter is a statement about what this reader is looking at now, the same as
+// the landing page's kind filter, and pushing it to every browser would be a surprise in the other
+// ones. Remembered across a reload, because a list that silently widens is a list that lost your
+// place.
+let webchatFilter = '';
+try { webchatFilter = localStorage.getItem(WEBCHAT_FILTER_KEY) || ''; } catch (_error) { /* private mode */ }
 
 function webchatReset() {
   const view = document.getElementById('webAgentView');
@@ -22126,7 +23374,20 @@ function webchatReceiveState(msg) {
     localStorage.setItem(WEBCHAT_SEEN_KEY, '1');
     saveSections();
   }
+  webchatCheckTurn();
   renderWebAgents(msg.error || '');
+  if (webchatAwaitingServer) {
+    const what = webchatAwaitingServer;
+    webchatAwaitingServer = '';
+    if (!webchatAvailable) showToast('The adapter did not come back. Restart it on its own host.');
+    else {
+      // The pages every session was holding went with the process, so what this phone shows for
+      // the open chat is a transcript nobody can confirm — the same position a reconnect leaves
+      // it in.
+      if (webchatCurrent) webchatAsk({type: 'webchat_open', session: webchatCurrent});
+      webchatSettle(true, what);
+    }
+  }
   if (webchatCurrent && !webchatSessions.some(session => session.name === webchatCurrent)) {
     showLanding();
     webchatCurrent = '';
@@ -22147,6 +23408,48 @@ function webchatSession(name) {
   return webchatSessions.find(session => session.name === name) || null;
 }
 
+// A mark per provider family, drawn rather than fetched. The page ships as one self-contained
+// file with no runtime dependencies and no network beyond its own relay, so a remote image URL is
+// not a shortcut here — it is a request that will not be made. These are our own glyphs and not
+// anybody's logo: they exist to tell eight rows apart at a glance, which a wordmark on a phone at
+// 16px does not do anyway. The colour is the identifying half; the shape is what survives a
+// grayscale screen.
+const WEBCHAT_MARKS = {
+  claude: {colour: '#d97757', fill: true,
+    body: '<path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/>'},
+  chatgpt: {colour: '#10a37f', fill: true,
+    body: '<path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>'},
+  gemini: {colour: '#8e7cf0', fill: true,
+    body: '<path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>'},
+  grok: {colour: '#cbd5e1', fill: true,
+    body: '<g transform="scale(0.046875)"><path d="M210.484 312.759L343.465 210.383C349.984 205.364 359.302 207.322 362.408 215.117C378.758 256.231 371.454 305.64 338.925 339.563C306.397 373.487 261.137 380.927 219.768 363.983L174.577 385.803C239.394 432.008 318.104 420.581 367.289 369.251C406.303 328.564 418.386 273.104 407.088 223.091L407.19 223.198C390.807 149.726 411.218 120.359 453.03 60.3072C454.02 58.8833 455.01 57.4595 456 56L400.978 113.382V113.204L210.45 312.794"/><path d="M183.042 337.641C136.519 291.294 144.54 219.567 184.236 178.203C213.59 147.59 261.683 135.096 303.666 153.464L348.755 131.75C340.632 125.627 330.221 119.042 318.275 114.414C264.277 91.2407 199.63 102.774 155.735 148.516C113.513 192.549 100.236 260.254 123.036 318.027C140.069 361.206 112.148 391.748 84.0229 422.575C74.0561 433.503 64.0553 444.431 56 456L183.007 337.677"/></g>'},
+  deepseek: {colour: '#4d6bfe', fill: true,
+    body: '<path d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/>'},
+  qwen: {colour: '#615ced', fill: true,
+    body: '<path d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/>'},
+  perplexity: {colour: '#1fb8cd', fill: true,
+    body: '<path d="M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z"/>'},
+  nano: {colour: '#94a3b8',
+    body: '<rect x="4.5" y="4.5" width="15" height="15" rx="4.5"/><circle cx="12" cy="12" r="2"/>'},
+  // Anything this app has never heard of: the section's own globe, which is what the header wears.
+  '': {colour: 'var(--muted)',
+    body: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>'},
+};
+
+// `-anon` first, then `-coder`: `qwen-coder-anon` is a Qwen, and stripping in the other order
+// would leave `qwen-coder-anon` with nothing matched.
+function webchatFamily(id) {
+  return String(id || '').replace(/-anon$/, '').replace(/-coder$/, '');
+}
+
+function webchatMark(id, size = 16) {
+  const mark = WEBCHAT_MARKS[webchatFamily(id)] || WEBCHAT_MARKS[''];
+  return `<svg class="webchat-mark" width="${size}" height="${size}" viewBox="0 0 24 24"`
+    + ` fill="${mark.fill ? 'currentColor' : 'none'}"`
+    + ` stroke="${mark.fill ? 'none' : 'currentColor'}" stroke-width="${mark.fill ? 0 : 1.7}" stroke-linecap="round" stroke-linejoin="round"`
+    + ` style="color:${mark.colour}" aria-hidden="true">${mark.body}</svg>`;
+}
+
 // A provider's browser is up, down, or held by a Chrome this adapter does not drive. The last is
 // the one state where restarting is the wrong advice and quitting that other browser is the right
 // one, so it says so in words rather than only in a colour.
@@ -22159,21 +23462,173 @@ const WEBCHAT_READY = {
   foreign: {colour: 'var(--dot-blocked)', text: 'profile held by another Chrome'},
 };
 
-function webchatCard(session, provider) {
-  const busy = provider.busy;
-  const ready = WEBCHAT_READY[provider.ready] || {colour: 'var(--dot-cold)', text: ''};
-  const context = provider.resumable ? 'resumable' : 'live tab only';
-  const count = Number(session?.messages || 0);
-  const name = session?.name || `herdr:${provider.id}`;
-  const label = session?.default === false ? session.label : provider.label;
-  const actions = session && !session.default
-    ? `<button class="archive-btn" onclick="event.stopPropagation(); webchatRename(this.closest('.webchat-card').dataset.session)"`
-      + ` aria-label="Rename ${escapeHtml(label)}">Rename</button>`
-      + `<button class="end-btn arm-btn" onclick="event.stopPropagation(); armButton(this, 'Delete local chat?',`
-      + ` () => webchatDelete(this.closest('.webchat-card').dataset.session))" aria-label="Delete ${escapeHtml(label)}">Delete</button>`
+// The pills: one per provider, in a line that scrolls. They are the drill-down the section header
+// opens onto — the same shape the landing page's kind filter has, with a mark instead of a badge
+// because a provider is a place and not a harness. Tapping the lit one takes the filter off, which
+// is what every other filter in this app does.
+// An `-anon` driver is the same site reached without a login. It is the same split the + New
+// picker draws as two columns, and for the same reason: choosing between accounts you have is a
+// different act from reaching for the one that needs none. Kept out of the first line, which is
+// the one anybody looks at, and folded away until asked for — there are as many of them as there
+// are of the others, and one strip of sixteen scrolls past the edge of a phone twice.
+const WEBCHAT_ANON_KEY = 'herdr_webchat_anon';
+
+function webchatAnonOpen() {
+  try { return localStorage.getItem(WEBCHAT_ANON_KEY) === 'on'; } catch (_error) { return false; }
+}
+
+function webchatToggleAnon() {
+  try { localStorage.setItem(WEBCHAT_ANON_KEY, webchatAnonOpen() ? 'off' : 'on'); }
+  catch (_error) { /* private mode: this render only */ }
+  renderWebAgents();
+  if (window.cue) cue('tick');
+}
+
+// Which providers live under the fold rather than on the first line. The `-anon` drivers, and a
+// `-coder` variant of a provider whose ordinary driver is already up there: it is the same account
+// reached in a second mode, so it belongs with the other second-line row rather than taking a slot
+// on the line anybody actually looks at.
+function webchatFolded(id) {
+  return /-anon$/.test(id) || /-coder$/.test(id);
+}
+
+function webchatPillsHtml() {
+  if (webchatProviders.length < 2) return '';
+  const folded = webchatProviders.filter(provider => webchatFolded(provider.id));
+  const named = webchatProviders.filter(provider => !webchatFolded(provider.id));
+  const open = webchatAnonOpen();
+  // On the line that divides the two rows rather than floating over the first one. It is a control
+  // about what is *below* it, and a rule to its left is what says so — where hanging it off the
+  // end of the accounts row made it look like one more provider.
+  const fold = folded.length
+    ? '<div class="webchat-sep"><span class="webchat-sep-rule" aria-hidden="true"></span>'
+      + `<button type="button" class="webchat-pill webchat-anon-toggle" id="webchatAnonToggle"`
+      + ` onclick="webchatToggleAnon()" aria-expanded="${open}" aria-controls="webchatAnonPills"`
+      + ` title="Providers that need no account, and the coder modes">Anonymous`
+      + `<span class="webchat-pill-n">${folded.length}</span>`
+      + `<span class="webchat-anon-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>`
+      + '</div>'
     : '';
+  return webchatPillRowHtml(named, 'Filter chats by provider')
+    + fold
+    + (folded.length && open
+      ? webchatPillRowHtml(folded, 'Filter chats by a provider that needs no login',
+        'webchatAnonPills')
+      : '');
+}
+
+function webchatPillRowHtml(providers, label, id) {
+  if (!providers.length) return '';
+  return `<div class="webchat-pills${id ? ' webchat-pills-anon' : ''}"`
+    + `${id ? ` id="${id}"` : ''} role="group" aria-label="${label}">`
+    + providers.map(provider => {
+      const count = webchatSessions.filter(session => session.provider === provider.id).length;
+      const on = webchatFilter === provider.id;
+      const ready = WEBCHAT_READY[provider.ready] || WEBCHAT_READY.up;
+      // `warn` is for `foreign` alone: a browser that is down comes back up on the next turn, and
+      // one held by another Chrome needs a person at that machine. The pill is where it belongs
+      // now that a card stands for a conversation rather than for a provider.
+      return `<button type="button" class="webchat-pill${on ? ' on' : ''}`
+        + `${provider.ready === 'foreign' ? ' warn' : ''}"`
+        + ` data-provider="${escapeHtml(provider.id)}" aria-pressed="${on}"`
+        + ` onclick="webchatPick(this.dataset.provider)"`
+        + ` title="${escapeHtml(provider.label + (ready.text ? ` — ${ready.text}` : ''))}">`
+        + webchatMark(provider.id)
+        + `<span class="webchat-pill-name">${escapeHtml(provider.label)}</span>`
+        + (count ? `<span class="webchat-pill-n">${count}</span>` : '')
+        + (provider.busy ? '<span class="dot pulse" style="background:var(--dot-live)"></span>' : '')
+        + '</button>';
+    }).join('') + '</div>';
+}
+
+function webchatPick(id) {
+  webchatFilter = webchatFilter === id ? '' : id;
+  try { localStorage.setItem(WEBCHAT_FILTER_KEY, webchatFilter); } catch (_error) { /* private mode */ }
+  renderWebAgents();
+  if (window.cue) cue('tick');
+}
+
+// What this reader has called a conversation, kept in this browser and nowhere else.
+//
+// Renaming used to be a message to the adapter, which does not have a name to change: a session's
+// name *is* its key — `herdr:claude-2` — so a rename moved the thread to a new key and left the
+// old one behind, and the thing on screen went on being whatever the provider called it. A name
+// somebody typed to find a thread again is worth keeping and is not worth a migration, so it is
+// stored here, keyed by the session it is about.
+function webchatNames() {
+  try { return JSON.parse(localStorage.getItem(WEBCHAT_NAMES_KEY) || '{}') || {}; }
+  catch (_error) { return {}; }
+}
+
+// An empty name deletes the entry rather than storing one, so "clear it" and "never named it" are
+// the same state and the provider's own title comes back.
+function webchatSetName(session, label) {
+  const names = webchatNames();
+  if (label) names[session] = label; else delete names[session];
+  try { localStorage.setItem(WEBCHAT_NAMES_KEY, JSON.stringify(names)); }
+  catch (_error) { /* private mode: this render only */ }
+}
+
+// What a conversation is called. What the reader named it first — they typed it to find this
+// thread again — then the provider's own title for it, which names the chat after what was said in
+// it and is more use in a list than "Claude" eight times, then the key's own suffix.
+//
+// A suffix that is only a number is drawn under the provider's name rather than alone: the second
+// Claude chat is "Claude 2" and never "2", which is what a list of them looked like.
+function webchatName(session, provider) {
+  const named = webchatNames()[session.name];
+  if (named) return named;
+  const label = session.default === false ? session.label : '';
+  const provided = provider?.label || session.provider;
+  if (session.title) return session.title;
+  if (!label) return provided;
+  return /^\d+$/.test(label) ? `${provided} ${label}` : label;
+}
+
+// The adapter's own key for a conversation, which is the nearest thing it has to an id:
+// `<namespace>:<provider>[:<label>]`, minted when the chat is made and never moving afterwards —
+// a rename is this browser's and a provider's title is the provider's, so this is the one name for
+// a thread that everything agrees on. The label an app-made chat gets is the lowest number that
+// provider has free, so it reads as a serial per provider; it is not one globally, and a number
+// comes free again when the chat holding it is deleted.
+function webchatId(session) {
+  return session.name || '';
+}
+
+// When this conversation was started, for the line that names it. A thread's title comes from the
+// provider and says what it is about; two of them about the same thing, a month apart, are told
+// apart by this and by nothing else on the row. The year is drawn only when it is not this one.
+function webchatSince(session) {
+  const at = session.createdAt ? new Date(session.createdAt) : null;
+  if (!at || Number.isNaN(at.getTime())) return '';
+  const sameYear = at.getFullYear() === new Date().getFullYear();
+  return at.toLocaleDateString([], sameYear ? {month: 'short', day: 'numeric'}
+    : {year: 'numeric', month: 'short', day: 'numeric'});
+}
+
+function webchatCard(session, provider, compact) {
+  const busy = provider?.busy;
+  const ready = WEBCHAT_READY[provider?.ready] || {colour: 'var(--dot-cold)', text: ''};
+  const count = Number(session.messages || 0);
+  const label = webchatName(session, provider);
+  // Rename is on every card now that it is this browser's own name for the thread rather than a
+  // key the adapter holds: a provider's default chat can be named too, and could not be before.
+  // Delete stays where it was — that one ends something, and a provider's own chat is not a thing
+  // anybody made and not a thing anybody can take away.
+  const actions = `<button class="archive-btn" onclick="event.stopPropagation(); webchatRename(this.closest('.webchat-card').dataset.session)"`
+    + ` aria-label="Rename ${escapeHtml(label)}">Rename</button>`
+    + (session.default === false
+      ? `<button class="end-btn arm-btn" onclick="event.stopPropagation(); armButton(this, 'Delete local chat?',`
+        + ` () => webchatDelete(this.closest('.webchat-card').dataset.session))" aria-label="Delete ${escapeHtml(label)}">Delete</button>`
+      : '');
+  // The last thing said, on its own line under the name. Withheld when the row is compact and when
+  // there is nothing to say — an empty line under every card is a list with a hole in it.
+  const snippet = !compact && session.snippet
+    ? `<div class="webchat-snippet">${escapeHtml(session.snippet)}</div>` : '';
+  const when = session.updatedAt ? fmtAgo(new Date(session.updatedAt)) : '';
+  const since = webchatSince(session);
   return `<div class="conversation-card webchat-card" role="button" tabindex="0"`
-    + ` data-provider="${escapeHtml(provider.id)}" data-session="${escapeHtml(session?.name || '')}"`
+    + ` data-provider="${escapeHtml(session.provider)}" data-session="${escapeHtml(session.name)}"`
     + ` onclick="webchatOpenCard(this)"`
     + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();webchatOpenCard(this)}">`
     // The page's own dot vocabulary: a provider with a turn running is live and breathing, and one
@@ -22181,12 +23636,30 @@ function webchatCard(session, provider) {
     // colours have nothing to say here.
     + `<div class="conversation-title"><span class="dot${busy ? ' pulse' : ''}"`
     + ` style="background:${busy ? 'var(--dot-live)' : ready.colour}" aria-hidden="true"></span>`
-    + `<span class="conv-kind">${sectionIcon('webAgent')}</span><span class="name">${escapeHtml(label)}</span>`
-    + `<span class="conversation-tier${provider.resumable ? '' : ' idle'}">${context}</span>${actions}</div>`
-    + `<div class="conversation-count">${count} ${count === 1 ? 'message' : 'messages'}</div>`
-    + `<div class="conversation-meta names">${escapeHtml(provider.label)}`
-    + `${provider.models ? ' · models' : ''}${busy ? ` · busy in ${escapeHtml(busy)}` : ''}`
+    + `<span class="conv-kind">${webchatMark(session.provider, 18)}</span>`
+    + `<span class="name">${escapeHtml(label)}</span>`
+    // Where the thread came from, beside what it is called: a title is the provider's and moves
+    // with the conversation, and the date it was started is the one part of the name that is
+    // about this thread rather than about its subject.
+    + (since ? `<span class="webchat-since">${escapeHtml(since)}</span>` : '')
+    + `${actions}</div>`
+    + snippet
+    + `<div class="conversation-meta names">`
+    // The key, first on the line under the name: it is what the CLI, the adapter's own TUI and
+    // this app all call the same thread, and the only one of the three names on this card that is
+    // stable.
+    + `<span class="webchat-id">${escapeHtml(webchatId(session))}</span> · `
+    + `${escapeHtml(provider?.label || session.provider)}`
+    + ` · ${count} ${count === 1 ? 'message' : 'messages'}${when ? ` · ${escapeHtml(when)}` : ''}`
+    + `${busy ? ` · busy in ${escapeHtml(busy)}` : ''}`
     + `${ready.text ? ` · ${escapeHtml(ready.text)}` : ''}</div></div>`;
+}
+
+// Newest first, across every provider — the same rule the agent cards and the terminals follow. It
+// is what makes the pills worth having: without a filter the list is what you were last doing, and
+// with one it is one provider's threads.
+function webchatByRecent(list) {
+  return [...list].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
 }
 
 function renderWebAgents(error = '') {
@@ -22197,7 +23670,14 @@ function renderWebAgents(error = '') {
     applySections();
     return;
   }
-  const header = '<div class="section-header"><span class="section-name">Web Agent</span>'
+  // The server pill first, beside the name: it is a fact about the section rather than an action
+  // on it, and it is drawn whether or not the adapter is answering — the page you land on when
+  // every chat has gone quiet is this one, and until now it said so and offered nothing.
+  // Then compact, + New, refresh. + New sits where the Launcher and Conversations put theirs:
+  // last of the ones that rearrange, first of nothing, because it is the one that makes something.
+  const header = '<div class="section-header"><span class="section-name">Web Agents</span>'
+    + webchatServerPillHtml()
+    + compactButton(WEBCHAT_COMPACT_KEY, 'renderWebAgents', 'Compact Web Agent chats')
     + '<button class="section-action" onclick="webchatNew()" aria-label="New Web Agent chat">+ New</button>'
     + '<button class="section-action" onclick="webchatRefresh()" aria-label="Refresh Web Agents">↻</button></div>';
   if (!webchatAvailable) {
@@ -22205,15 +23685,66 @@ function renderWebAgents(error = '') {
     applySections();
     return;
   }
-  const cards = [];
-  for (const provider of webchatProviders) {
-    const owned = webchatSessions.filter(session => session.provider === provider.id);
-    const base = owned.find(session => session.default) || null;
-    cards.push(webchatCard(base, provider));
-    for (const session of owned.filter(item => !item.default)) cards.push(webchatCard(session, provider));
-  }
-  el.innerHTML = header + (cards.join('') || '<p class="pair-empty">No providers are enabled.</p>');
+  // A filter naming a provider this relay no longer offers would hide every row with no way back
+  // to them, since the pill that would clear it is not drawn either.
+  if (webchatFilter && !webchatProvider(webchatFilter)) webchatFilter = '';
+  const compact = compactOn(WEBCHAT_COMPACT_KEY);
+  const shown = webchatFilter
+    ? webchatSessions.filter(session => session.provider === webchatFilter) : webchatSessions;
+  const cards = webchatByRecent(shown).map(
+    session => webchatCard(session, webchatProvider(session.provider), compact));
+  el.innerHTML = header + webchatPillsHtml()
+    + `<div class="webchat-list${compact ? ' compact' : ''}">${cards.join('')}</div>`
+    + (cards.length ? '' : webchatEmptyHtml());
   applySections();
+}
+
+// The one place a chat is started on a provider that has none yet. It used to be a card per
+// provider standing in for the conversation that did not exist; under a newest-first list such a
+// card has no date to sort by and would have to be pinned somewhere arbitrary. The pill already
+// names the provider, so the empty state is where the offer belongs.
+function webchatEmptyHtml() {
+  if (!webchatProviders.length) return '<p class="pair-empty">No providers are enabled.</p>';
+  if (!webchatFilter) {
+    return '<p class="pair-empty">No chats yet. Pick a provider above, or press + New.</p>';
+  }
+  const provider = webchatProvider(webchatFilter);
+  return `<p class="pair-empty">Nothing on ${escapeHtml(provider.label)} yet. `
+    + `<button class="archive-btn" onclick="webchatStart('${escapeHtml(webchatFilter)}')">`
+    + `Start a chat</button></p>`;
+
+}
+
+// A chat on a named provider. With no name, this is the provider's own chat — the thread its tab
+// is already on — so an existing one is opened rather than a second unnamed row created beside it,
+// which would be two cards nobody could tell apart.
+// The next free number for a provider that already has its own chat. A session with no label is
+// the provider's default one and there can only be one of them, so a second chat needs a name
+// whether or not the person typed one — and pressing + New and being handed the conversation you
+// were already in is not a new chat by any reading. A number rather than a date: the thread's own
+// title arrives from the provider a message later and is what the card ends up showing, so this is
+// a handle, not a description.
+function webchatNextLabel(provider) {
+  const taken = new Set(webchatSessions
+    .filter(session => session.provider === provider).map(session => session.label));
+  for (let n = 2; ; n += 1) if (!taken.has(String(n))) return String(n);
+}
+
+function webchatStart(provider, label = '') {
+  const base = webchatSessions.find(
+    session => session.provider === provider && session.default);
+  const name = label || (base ? webchatNextLabel(provider) : '');
+  if (webchatAsk({type: 'webchat_create', provider, label: name || undefined})) {
+    webchatPendingProvider = provider;
+  }
+}
+
+// The same thing from inside a chat, where the provider is not a choice to make: it is the one on
+// screen. Every other route to a second conversation goes back to the landing page first, which
+// on a phone is the list you were reading and have now lost your place in.
+function webchatNewHere() {
+  const session = webchatSession(webchatCurrent);
+  if (session) webchatStart(session.provider);
 }
 
 // Every message this section sends goes through here. A phone whose socket has dropped still has
@@ -22235,10 +23766,7 @@ function webchatRefresh() {
 }
 
 function webchatOpenCard(card) {
-  const session = card.dataset.session;
-  if (session) return webchatOpen(session);
-  const provider = card.dataset.provider;
-  if (webchatAsk({type: 'webchat_create', provider})) webchatPendingProvider = provider;
+  webchatOpen(card.dataset.session);
 }
 
 function webchatOpen(name) {
@@ -22246,12 +23774,20 @@ function webchatOpen(name) {
   webchatMessages = [];
   webchatTruncated = false;
   webchatTurn = null;
+  // Both drawers shut: a connection status read for the last chat is not one for this one.
+  webchatMenu('');
   openPanel('webAgentView');
   const input = document.getElementById('webAgentInput');
   input.value = localStorage.getItem(WEBCHAT_DRAFT_PREFIX + name) || '';
   autoGrow(input);
+  syncBlockCursor(input);
+  webchatDrawChips();
   renderWebchatView();
   webchatAsk({type: 'webchat_open', session: name});
+  // Asked on entry, not only when the menu is opened: the dot is on the header the whole time a
+  // chat is on screen, and a dot that says nothing until you open the drawer behind it is a light
+  // nobody reads. It opens nothing and drives no browser, which is what makes this affordable.
+  if (webchatCan('probe')) webchatProbe();
 }
 
 // Asking for a provider's models is not a read: the utility opens that provider's tab and its model
@@ -22292,12 +23828,62 @@ function webchatReceiveResult(msg) {
   // A reconnect drops the pages of every session on that provider, so whatever this phone was
   // holding for the open one is now a transcript nobody can be sure of. Ask for it again.
   if (msg.action === 'reconnect' || msg.action === 'restart' || msg.action === 'browser_stop') {
-    showToast(`${escapeHtml(msg.provider || 'Provider')}: ${msg.action.replace('_', ' ')} done`, 'info');
+    const name = msg.provider || 'Provider';
+    // The adapter waits for the turns it cancelled to finish writing themselves down, then goes
+    // ahead anyway — which is right, since a turn that will not end is why anyone is recovering.
+    // But the tab was then closed under a turn still reading it, so what it streamed may never
+    // have been stored. Say so: the reader is the one who can go and look.
+    if (msg.abandoned) {
+      showToast(`${name}: closed under ${msg.abandoned} turn${msg.abandoned === 1 ? '' : 's'}`
+        + ' that had not finished. Their replies may be missing — Sync to check.');
+      webchatNeedsSync.add(webchatCurrent);
+    }
     if (webchatCurrent) webchatAsk({type: 'webchat_open', session: webchatCurrent});
+    // A stop is meant to leave the browser down, so it is the one rung that is not followed by an
+    // attempt to open anything. What went right is said once the tab answers rather than here:
+    // this message means the relay accepted the press, which is not what anybody is asking.
+    const did = {reconnect: 'reopened', restart: 'restarted the browser for',
+      browser_stop: 'stopped the browser for'}[msg.action];
+    // Silent when there is a warning on screen: "may be missing — Sync to check" is the thing to
+    // read, and a confirmation landing on top of it would bury the only line that needed acting on.
+    webchatSettle(msg.action !== 'browser_stop',
+      msg.abandoned ? '' : `${did} ${name}`.replace(/^./, c => c.toUpperCase()));
+  }
+  if (msg.action === 'probe') webchatDrawLink(msg.result || msg);
+  if (msg.action === 'open_tab') {
+    // The adapter answers `link: 'hot'` because it has just handed over the page. Drawn from that
+    // rather than probed again: a second round trip to ask what the first one just said.
+    // No toast: this is the tail of something the person already pressed, and a second line
+    // saying "connected" would step on the first one — which, after a reconnect that closed a tab
+    // under a live turn, is the warning that the reply may be missing. The dot is the report.
+    webchatDrawLink(msg);
+  }
+  if (msg.action === 'server_restart') {
+    // Nothing is asked of the adapter here. The old process is on its way out and the replacement
+    // is not listening yet, so a history read or a tab open sent now fails — and what the person
+    // sees for a restart that worked is an error. The relay broadcasts the state once the new
+    // process answers; that broadcast is what this waits for.
+    webchatAwaitingServer = 'Adapter restarted';
   }
   if (msg.action === 'sync' || msg.action === 'clear') {
     webchatNeedsSync.delete(msg.synced || msg.cleared || webchatCurrent);
     renderWebchatView();
+  }
+  if (msg.action === 'sync') {
+    // A sync that returned messages is proof the provider answered — which is the question the dot
+    // is about, and which nothing was saying. It reads the page and then closes it, so the honest
+    // state afterwards is `cold`; reopening the tab is what makes the answer green rather than a
+    // grey that reads as failure one second after something worked.
+    // What a sync *added*, which is not the size of the record: the adapter merges the page into
+    // what it holds rather than writing over it, so the ordinary result of a repair is nothing
+    // new — the record was already ahead of the screenful the provider renders.
+    const added = typeof msg.added === 'number' ? msg.added : null;
+    const total = typeof msg.messages === 'number' ? msg.messages : null;
+    webchatSettle(true, added === null
+      ? `Synced${total === null ? '' : ` ${total} message${total === 1 ? '' : 's'}`}`
+      : added
+        ? `Synced ${added} new message${added === 1 ? '' : 's'}`
+        : 'Already up to date');
   }
   if (msg.action === 'create' && msg.name) {
     const open = webchatPendingProvider === msg.provider || !!msg.label;
@@ -22307,6 +23893,8 @@ function webchatReceiveResult(msg) {
 }
 
 function webchatReceiveError(msg) {
+  // Whatever was waiting to say how the repair went, this is how it went.
+  webchatSettleFor = '';
   if (msg.action === 'models') {
     if (msg.provider) webchatModelRequests.delete(msg.provider);
     else webchatModelRequests.clear();
@@ -22321,6 +23909,28 @@ function webchatReceiveError(msg) {
   showToast(msg.message || 'Web Agent request failed.');
 }
 
+// A turn ends when the adapter says so, and the only route for that is the socket the send went
+// out on. A page that missed those events — a socket that dropped and came back, a relay restarted
+// mid-turn, a stream that closed without its last record — kept the turn `running` for ever, and a
+// running turn is what stops the next send. What that looks like from the outside is a composer
+// that has quietly stopped working.
+//
+// The session list is the second witness. Once a turn has started, the adapter holds its
+// provider's lane for this session and says so as `busy`, so a provider that is busy with
+// something else or with nothing at all is not still running our turn. Only after `start`: before
+// it, this turn is queued behind somebody else's and `busy` is rightly another session's name.
+function webchatCheckTurn() {
+  if (!webchatTurn?.running || !webchatTurn.started) return;
+  const session = webchatSession(webchatCurrent);
+  const provider = session ? webchatProvider(session.provider) : null;
+  if (!provider || provider.busy === webchatCurrent) return;
+  webchatTurn.running = false;
+  // Whatever streamed before the events stopped arriving is kept, the way an aborted turn's is.
+  // The reply itself is on the provider's page and a sync is what brings it back.
+  if (!webchatTurn.reply) webchatTurn.error = 'The reply did not arrive here. Sync to read it.';
+  webchatNeedsSync.add(webchatCurrent);
+}
+
 function webchatReceiveTurn(msg) {
   if (msg.session !== webchatCurrent) return;
   if (!webchatTurn || webchatTurn.requestId !== msg.requestId) return;
@@ -22328,6 +23938,9 @@ function webchatReceiveTurn(msg) {
     webchatTurn.status = msg.behind ? `Queued behind ${msg.behind}` : 'Queued';
   } else if (msg.event === 'start') {
     webchatTurn.status = `Waiting for ${msg.provider}`;
+    // From here on the adapter is holding its provider's lane for this session, so the session
+    // list is evidence about this turn: see webchatCheckTurn.
+    webchatTurn.started = true;
   } else if (msg.event === 'delta') {
     webchatTurn.reply += msg.delta || '';
     webchatTurn.status = 'Replying…';
@@ -22344,22 +23957,448 @@ function webchatReceiveTurn(msg) {
   renderWebchatView();
 }
 
-function webchatMessageHtml(message) {
+// On by default, which is a decision rather than a default: what a provider returns *is* Markdown,
+// and the thread that escaped it was showing the source of the answer instead of the answer. The
+// toggle exists because the source is occasionally what you want — a table this renderer does not
+// know, a snippet to copy with its fences intact — and because a renderer with a bug in it must
+// never be the only way to read what was said.
+function webchatMarkdownOn() {
+  try { return localStorage.getItem(WEBCHAT_MD_KEY) !== 'off'; } catch (_error) { return true; }
+}
+
+function webchatToggleMarkdown() {
+  try { localStorage.setItem(WEBCHAT_MD_KEY, webchatMarkdownOn() ? 'off' : 'on'); }
+  catch (_error) { /* private mode: this render only */ }
+  renderWebchatView();
+}
+
+// How a rendered answer is coloured, and nothing else — every theme is a set of custom properties
+// the one stylesheet reads, so there is one set of Markdown rules rather than four to keep in step.
+// `plain` is what the thread looked like before this existed and stays the default: a theme that
+// changed on upgrade would be a change nobody asked for.
+const WEBCHAT_THEMES = [
+  {id: 'plain', label: 'Plain'},
+  {id: 'accent', label: 'Accent'},
+  {id: 'warm', label: 'Warm'},
+  {id: 'contrast', label: 'High contrast'},
+];
+
+function webchatTheme() {
+  let id = 'plain';
+  try { id = localStorage.getItem(WEBCHAT_THEME_KEY) || 'plain'; } catch (_error) { /* private */ }
+  return WEBCHAT_THEMES.some(theme => theme.id === id) ? id : 'plain';
+}
+
+function webchatSetTheme(id) {
+  try { localStorage.setItem(WEBCHAT_THEME_KEY, id); } catch (_error) { /* this render only */ }
+  renderWebchatView();
+}
+
+// What is standing about this *box*, in the conversation dock's own list. Only that: how the
+// thread is drawn belongs to the thread and is in the header's gear with the rest of what names
+// it. Drawn on open rather than written into the markup, because a tick is a statement about a
+// setting's value and a menu that opened showing the last one is a lie.
+function webchatDrawComposerMenu() {
+  const box = document.getElementById('webAgentComposerMenu');
+  if (!box) return;
+  const on = typeof autocorrectOn === 'function' && autocorrectOn();
+  box.innerHTML =
+    `<button class="menu-item" role="menuitemcheckbox" aria-checked="${!!on}" ` +
+    `onclick="webchatToggleAutocorrect()" title="Let the keyboard correct what you type. ` +
+    `The same setting both other composers use">` +
+    `<span class="tick">${on ? '✓' : ''}</span>Autocorrect</button>` +
+    `<button class="menu-item" role="menuitem" onclick="webchatMenu('')">Done</button>`;
+}
+
+// One setting, not a second copy of it: this is the app-wide switch, reached from the composer it
+// is about, exactly as the conversation dock reaches it.
+function webchatToggleAutocorrect() {
+  if (typeof setAutocorrect !== 'function') return;
+  setAutocorrect(!autocorrectOn());
+  webchatDrawComposerMenu();
+  if (window.cue) cue('tick');
+}
+
+// The instruction chips, written into the box at the caret. The conversation composer can either
+// write them or attach them at the send; a provider takes prose and nothing else, so here there is
+// only the writing. Ordered the way that row orders them, off the same most-recently-used list.
+function webchatDrawChips() {
+  const row = document.getElementById('webAgentChips');
+  if (!row || typeof promptChips !== 'function') return;
+  row.innerHTML = byDockMru('chip', promptChips(), x => x.s.at).map(({s, i}) =>
+    `<button class="xfer-chip" onclick="webchatChip(${i})" title="${escapeHtml(s.label)}" ` +
+    `aria-label="Write the instruction ${escapeHtml(s.label)}">@${escapeHtml(s.at)}</button>`)
+    .join('');
+}
+
+function webchatChip(i) {
+  noteDockUse('chip', SHORTCUTS[i].at);
+  // No agentSlash: that rewrites a leading `/` for codex, and a provider's chat box is not a
+  // harness with slash commands in it.
+  insertShortcutInto(document.getElementById('webAgentInput'), SHORTCUTS[i].text);
+  webchatSaveDraft();
+  webchatDrawChips();
+  if (window.cue) cue('tick');
+}
+
+// The three drawers, one open at a time: the head's two — what this session can be made to do,
+// and how its thread is drawn — and the composer's own. Opening the actions drawer probes, because
+// the answer it shows is about right now and a status read on open is the only one nobody has to
+// remember to ask for.
+function webchatMenu(which) {
+  const docks = {actions: 'webAgentActions', settings: 'webAgentSettings',
+    server: 'webAgentServerMenu', composer: 'webAgentComposerMenu'};
+  // Two buttons open the server drawer — the pill for each of the processes it repairs — so both
+  // of them say whether it is open.
+  const buttons = {actions: 'webAgentMore', settings: 'webAgentGear',
+    server: ['webAgentServerPill', 'webAgentProviderPill'], composer: 'webAgentComposerGear'};
+  // The landing page's copy is not a static dock — it lives in HTML a render writes — so it is
+  // closed here rather than in the loop. One drawer open at a time is the rule for all of them.
+  if (webchatServerOpen) {
+    webchatServerOpen = false;
+    renderWebAgents();
+  }
+  let opened = '';
+  for (const [name, id] of Object.entries(docks)) {
+    const dock = document.getElementById(id);
+    if (!dock) continue;
+    const open = name === which && dock.hidden;
+    if (open && name === 'composer') webchatDrawComposerMenu();
+    if (open && name === 'server') webchatDrawServer();
+    dock.hidden = !open;
+    for (const button of [buttons[name]].flat()) {
+      document.getElementById(button)?.setAttribute('aria-expanded', String(open));
+    }
+    if (open) opened = name;
+  }
+  if (opened === 'actions') webchatProbe();
+  // A menu that stays open until you press its own button again is the one control on this page
+  // that behaves like a drawer. Closed by the next press anywhere outside it, the way the pane's
+  // menu is; `capture` so it runs before a button inside the page swallows the event, and `once`
+  // so nothing accumulates.
+  if (opened) {
+    setTimeout(() => document.addEventListener('click', webchatMenuAway, {capture: true, once: true}), 0);
+  }
+}
+
+function webchatMenuAway(event) {
+  // The head's two hang inside a `.webchat-wrap`; the composer's hangs in the dock, so it is
+  // named along with the button that opens it.
+  if (event.target.closest?.('.webchat-wrap, #webAgentComposerMenu, #webAgentComposerGear')) {
+    document.addEventListener('click', webchatMenuAway, {capture: true, once: true});
+    return;
+  }
+  webchatMenu('');
+}
+
+// Whether the landing page's copy of the server drawer is open. Its markup is written by a
+// render rather than sitting in the page, so `hidden` on the element would be undone by the next
+// state broadcast — the flag is what survives one, and the render reads it.
+let webchatServerOpen = false;
+
+// The adapter's status and its one repair, drawn under the pill that stands for it: in a chat's
+// head, and on the landing page, from this one function. It used to be the bottom rung of a chat's
+// Recovery block, which put a control over the process behind every provider inside a menu gated
+// on one of them — and out of reach entirely from the page you land on, which is where you are
+// standing when every chat has stopped answering at once.
+// It carries the provider's browser too, when a chat is open. A browser is a process this page did
+// not start and cannot see, exactly like the adapter, and the thing that is wrong when either of
+// them is wrong is never one conversation — so the two repairs that end a process belong together,
+// under a status line that says what state each is in. The rungs that are about a page rather than
+// a process — Reconnect tab, Check connection — stay in the chat's own ⋯ menu.
+//
+// `prefix` names the buttons. The drawer is drawn in two places at once — a chat's head and the
+// landing page — and one markup written twice under one id is the failure that does not announce
+// itself, which is the rule the desktop's five composers are addressed by.
+function webchatServerHtml(prefix) {
+  const health = webchatHealth();
+  const server = health.server;
+  const ok = server.state === 'ok';
+  // Withheld rather than drawn and refused when the relay says it will not act on it, and withheld
+  // when the adapter is down — the restart is a request *to* the adapter, so a process that is not
+  // answering cannot be asked to replace itself. That case wants a person on the host, and says so.
+  const can = ok && webchatCan('server');
+  return `<div class="webchat-link ${ok ? 'hot' : 'stale'}" role="status">`
+    + `<span class="dot" style="background:${ok ? 'var(--green)' : 'var(--red)'}"></span>`
+    + `${escapeHtml(server.why)}</div>`
+    + (can
+      ? `<button class="menu-item danger arm-btn" id="${prefix}Restart"`
+        + " onclick=\"armButton(this, 'Restart the adapter? Any turn it is running is lost.',"
+        + ' () => webchatServerRestart())"'
+        + ' aria-label="Restart the web-agent adapter">Restart adapter</button>'
+      : '')
+    + (ok ? '' : '<div class="hint">Nothing on this page can reach a process that is not'
+      + ' answering. It has to be started again on the host it runs on.</div>')
+    + webchatBrowserHtml(prefix, health.provider);
+}
+
+// The provider's own browser, under the same drawer. Withheld with no chat open: which browser is
+// meant is answered by the conversation you are standing in, and the landing page is standing in
+// none of them. Each rung is withheld on its own when the relay says it will not act on it, which
+// is what an adapter too old for the route and a relay with write extensions off both look like.
+function webchatBrowserHtml(prefix, provider) {
+  const name = webchatSession(webchatCurrent)?.provider || '';
+  const rungs = [
+    ['restart', 'BrowserRestart', 'Restart browser', 'restart',
+      `Restart ${name}'s browser? Every tab on this profile closes.`],
+    ['browser', 'BrowserStop', 'Stop browser', 'browser_stop',
+      `Stop ${name}'s browser? Every tab on this profile closes.`],
+  ].filter(([can]) => name && webchatCan(can));
+  if (!rungs.length) return '';
+  const dot = provider.state === 'bad' ? 'var(--red)'
+    : provider.state === 'ok' ? 'var(--green)' : 'var(--muted)';
+  return '<div class="menu-sep"></div>'
+    + `<div class="webchat-link ${provider.state === 'bad' ? 'stale' : 'hot'}" role="status">`
+    + `<span class="dot" style="background:${dot}"></span>`
+    + `${escapeHtml(provider.why)}</div>`
+    + rungs.map(([, suffix, label, action, arm]) =>
+      `<button class="menu-item danger arm-btn" id="${prefix}${suffix}" `
+      + `onclick="armButton(this, ${escapeHtml(JSON.stringify(arm))}, `
+      + `() => webchatRecover('${action}'))" `
+      + `aria-label="${escapeHtml(label)} for ${escapeHtml(name)}">${escapeHtml(label)}</button>`)
+      .join('');
+}
+
+// The chat head's copy is static markup, so its contents are written when it opens — the answer is
+// about right now, the same reason the actions drawer probes on the way in.
+function webchatDrawServer() {
+  const dock = document.getElementById('webAgentServerMenu');
+  if (dock) dock.innerHTML = webchatServerHtml('webAgentServer');
+}
+
+// The landing page's server pill and its drawer. A pill rather than a ⋯ button: the status is the
+// control here, and a menu whose only rows are one line of status and one repair does not need a
+// second thing to open it.
+function webchatServerPillHtml() {
+  const server = webchatHealth().server;
+  const why = escapeHtml(server.why);
+  return '<span class="term-menu-wrap webchat-wrap webchat-server-wrap">'
+    + `<button type="button" class="head-pill ${server.state}" id="webchatLandingServerPill"`
+    + ` onclick="webchatServerMenu()" aria-haspopup="true"`
+    + ` aria-expanded="${webchatServerOpen}" aria-controls="webchatLandingServerMenu"`
+    + ` title="${why}" aria-label="Adapter status: ${why}">`
+    + '<span class="dot" aria-hidden="true"></span>'
+    + '<span class="head-pill-name">server</span></button>'
+    + '<div class="term-menu webchat-menu" id="webchatLandingServerMenu" role="menu"'
+    + `${webchatServerOpen ? '' : ' hidden'}>`
+    + `${webchatServerHtml('webchatLandingServer')}</div></span>`;
+}
+
+function webchatServerMenu() {
+  // The head's three close when this opens, the same way this closes when one of them does.
+  if (!webchatServerOpen) webchatMenu('');
+  webchatServerOpen = !webchatServerOpen;
+  renderWebAgents();
+  if (webchatServerOpen) {
+    setTimeout(() => document.addEventListener('click', webchatMenuAway,
+      {capture: true, once: true}), 0);
+  }
+}
+
+// Is the wire hot? `ready` on a provider row says a browser process is up, which is a different
+// question: the failure people actually hit is a browser that is running while the adapter holds a
+// page for a tab that is gone, and from in here that is thirty seconds of nothing followed by a
+// timeout. Asked on demand rather than polled — it drives no browser, but it is still a question
+// about somebody's Chrome and nobody asked it until they opened this menu.
+function webchatProbe() {
+  const link = document.getElementById('webAgentLink');
+  if (!link) return;
+  if (!webchatCurrent || !webchatCan('probe')) {
+    webchatDrawLink({link: '', error: webchatCurrent ? 'This relay cannot check the connection.' : ''});
+    return;
+  }
+  link.className = 'webchat-link';
+  link.textContent = 'Checking the connection…';
+  webchatAsk({type: 'webchat_probe', session: webchatCurrent});
+}
+
+const WEBCHAT_LINK = {
+  hot: {colour: 'var(--green)', text: 'Connected — the tab is live and taking input'},
+  stale: {colour: 'var(--red)', text: 'The tab is not answering. Reconnect reopens it'},
+  cold: {colour: 'var(--muted)', text: 'No tab open — the next message opens one'},
+};
+
+// Set while the adapter is being replaced: the relay answers the press immediately and the new
+// process is not listening for another second or two, so nothing may be sent until a state
+// broadcast says it is up. Holds what to say when that happens.
+let webchatAwaitingServer = '';
+
+// The last probe answer, per session. The pills are redrawn by every render and a probe answer is
+// the freshest thing anybody knows about the wire, so it has to outlive the menu that asked for it.
+const webchatLinks = new Map();
+
+// The two facts the header pills stand for, each as one of four words. `ok` is green, `warn` amber,
+// `bad` red, `unknown` grey — nothing has been asked yet, which is not the same as a problem.
+//
+// Two pills rather than one because they fail independently and the repair differs: the adapter
+// being down is fixed on this machine, and a provider's tab is fixed from this menu.
+function webchatHealth() {
+  const session = webchatSession(webchatCurrent);
+  const provider = session ? webchatProvider(session.provider) : null;
+  const link = webchatLinks.get(webchatCurrent);
+  const server = webchatAvailable
+    ? {state: 'ok', why: 'The web-agent adapter is answering'}
+    : {state: 'bad', why: 'The web-agent adapter is not answering'};
+  if (!provider) return {server, provider: {state: 'unknown', why: '', label: ''}};
+  const label = provider.id || '';
+  // A browser somebody else's Chrome is holding is the one state where restarting is the wrong
+  // advice, so it is amber rather than red: nothing here is broken, and nothing here can fix it.
+  if (provider.ready === 'foreign') {
+    return {server, provider: {state: 'warn', label,
+      why: 'This profile is held by another Chrome. Close it there, not here'}};
+  }
+  if (provider.ready === 'down') {
+    return {server, provider: {state: 'bad', label,
+      why: 'The browser is down. The next message brings it up, or Restart browser does'}};
+  }
+  // The adapter's own answer outranks anything remembered. `open` is read from the map the routes
+  // themselves consult, so a session it is holding no page for is ready-and-not-connected however
+  // wedged the page used to be — and a probe answer kept past the repair that closed the page it
+  // described is what left this pill red over a tab that had visibly come back.
+  if (session && session.open === false) {
+    return {server, provider: {state: 'idle', label,
+      why: 'The browser is up. No tab open for this chat — the next message opens one'}};
+  }
+  if (link?.link === 'stale') {
+    return {server, provider: {state: 'bad', label,
+      why: 'The tab is not answering. Reconnect reopens it'}};
+  }
+  // Filled only for a tab that answered. A browser that is up with no page cached for this chat is
+  // ready and not connected, and those are different facts: filling the dot for both made the pill
+  // say "you are talking to claude" while nothing at all was open. A ring is the honest shape —
+  // nothing is wrong, and nothing is live either.
+  if (link?.link === 'hot') {
+    return {server, provider: {state: 'ok', label, why: 'The tab is live and taking input'}};
+  }
+  // Before any probe, the adapter's own answer: `open` says whether it is holding a page for this
+  // conversation, which it knows without touching a browser. It does not say the page still
+  // answers — that is what a probe is for — so a held page nobody has probed is filled and a
+  // probe that came back `cold` is a ring, and both are right.
+  if (!link && session?.open) {
+    return {server, provider: {state: 'ok', label,
+      why: 'A tab is open for this chat. Check connection asks whether it still answers'}};
+  }
+  return {server, provider: {state: 'idle', label,
+    why: 'The browser is up. No tab open for this chat — the next message opens one'}};
+}
+
+// The one line a running turn needs and did not have: what is wrong *while* you are waiting. A
+// wedged tab and a slow provider look identical from here, and the difference is the whole reason
+// the probe exists — so when it is known, it is said next to the thing it explains.
+function webchatTrouble() {
+  const health = webchatHealth();
+  if (health.server.state === 'bad') return 'the adapter is not answering';
+  if (health.provider.state === 'bad') return health.provider.why.split('.')[0].toLowerCase();
+  return '';
+}
+
+// The provider pill wears the mark the cards and the landing pills wear, because at this size the
+// word is four letters of a name that is often eight — and the mark is the half that is legible.
+// The server pill has no mark to wear: there is one adapter and it stands for itself.
+function webchatDrawPills() {
+  const health = webchatHealth();
+  // Redrawn while it is open, because the minute it is open is the minute the adapter is going
+  // down and coming back, and a drawer describing the state before the press is the one thing it
+  // must not say.
+  const dock = document.getElementById('webAgentServerMenu');
+  if (dock && !dock.hidden) webchatDrawServer();
+  for (const [id, part, name, mark] of [['webAgentServerPill', health.server, 'server', ''],
+    ['webAgentProviderPill', health.provider, health.provider.label || 'provider',
+      health.provider.label ? webchatMark(health.provider.label, 12) : '']]) {
+    const pill = document.getElementById(id);
+    if (!pill) continue;
+    pill.className = `head-pill ${part.state}`;
+    pill.title = part.why;
+    pill.setAttribute('aria-label', `${name}: ${part.why || 'not checked yet'}`);
+    pill.innerHTML = `<span class="dot" aria-hidden="true"></span>` + mark
+      + `<span class="head-pill-name">${escapeHtml(name)}</span>`;
+  }
+}
+
+function webchatDrawLink(answer) {
+  if (answer && answer.link) webchatLinks.set(answer.session || webchatCurrent, answer);
+  webchatDrawPills();
+  webchatSettled(answer && answer.link);
+  const link = document.getElementById('webAgentLink');
+  if (!link) return;
+  const state = WEBCHAT_LINK[answer.link];
+  link.className = `webchat-link${state ? ` ${answer.link}` : ''}`;
+  if (!state) {
+    link.textContent = answer.error || 'The connection could not be checked.';
+    return;
+  }
+  // The busy line matters as much as the colour: a hot tab in the middle of somebody else's turn
+  // is why this chat is not answering, and it is not a fault to repair.
+  const busy = answer.busy ? ` · busy with ${answer.busy}` : '';
+  const ms = typeof answer.ms === 'number' ? ` · ${answer.ms} ms` : '';
+  link.innerHTML = `<span class="dot" style="background:${state.colour}"></span>`
+    + escapeHtml(state.text + busy + ms);
+}
+
+// What a turn looks like before its answer arrives. Nothing streamed yet is a line of moving dots
+// — a still `Waiting for claude` and a wedged one are the same pixels, which is the complaint this
+// answers — and once something has, it is the text itself with no ornament.
+function webchatWaitHtml() {
+  const turn = webchatTurn;
+  if (!turn) return '';
+  const streamed = turn.reply || turn.error;
+  if (streamed) return escapeHtml(streamed);
+  const trouble = webchatTrouble();
+  return `<span class="webchat-wait">${escapeHtml(turn.status)}`
+    + '<span class="webchat-ell" aria-hidden="true"><i></i><i></i><i></i></span>'
+    + (trouble ? `<span class="webchat-wait-bad"> · ${escapeHtml(trouble)}</span>` : '')
+    + '</span>';
+}
+
+// A user's own message is never rendered: they typed it, they know what they typed, and a `*` in a
+// question would silently become emphasis in the record of what was asked.
+function webchatBodyHtml(message, user) {
+  const text = user ? (message.content || '') : (message.markdown || message.content || '');
+  if (user || !webchatMarkdownOn()) return escapeHtml(text);
+  return `<div class="md">${markdownHtml(text)}</div>`;
+}
+
+function webchatMessageHtml(message, index) {
   const user = message.role === 'user';
   return `<div class="conv-msg${user ? ' user' : ''}" style="--conv-agent:${user ? 'var(--green)' : 'var(--blue)'}">`
     + `<div class="conv-who">${user ? 'You' : escapeHtml(webchatSession(webchatCurrent)?.provider || 'Web Agent')}`
-    + `${message.createdAt ? `<span class="conv-time">${escapeHtml(fmtAgo(new Date(message.createdAt)))}</span>` : ''}</div>`
-    + escapeHtml(message.markdown || message.content || '') + '</div>';
+    + `${message.createdAt ? `<span class="conv-time">${escapeHtml(fmtAgo(new Date(message.createdAt)))}</span>` : ''}`
+    // Copies what the provider wrote rather than what is on screen: the source is the form worth
+    // pasting anywhere else, and it is the only form that survives the Markdown toggle either way.
+    + `${typeof index === 'number' ? `<button type="button" class="conv-copy" data-at="${index}"`
+      + ` onclick="webchatCopyMessage(this)" aria-label="Copy this message">⧉</button>` : ''}</div>`
+    + webchatBodyHtml(message, user) + '</div>';
+}
+
+function webchatCopyMessage(button) {
+  const message = webchatMessages[Number(button.dataset.at)];
+  const text = message && (message.markdown || message.content || '');
+  if (!text || !navigator.clipboard) return;
+  navigator.clipboard.writeText(text).then(() => showToast('Copied', 'info'),
+    () => showToast('Could not copy.'));
+}
+
+// Tap anywhere in the bubble to put the caret in the text, the way the conversation composer does
+// and the way a phone's own message box does. Buttons inside it keep their own taps.
+function focusWebchatInput(event) {
+  if (event.target.closest && event.target.closest('button')) return;
+  document.getElementById('webAgentInput')?.focus();
 }
 
 function renderWebchatView() {
   const session = webchatSession(webchatCurrent);
   const provider = session ? webchatProvider(session.provider) : null;
-  document.getElementById('webAgentTitle').textContent =
-    (session?.default === false ? session.label : provider?.label) || 'Web Agent';
-  const status = document.getElementById('webAgentStatus');
-  status.textContent = webchatTurn?.status || (provider?.resumable ? 'resumable' : 'live tab only');
-  status.classList.toggle('idle', !provider?.resumable);
+  // The name, and under it the date the thread was started — the same pair the card carries, for
+  // the same reason: a provider's title says what a chat is about and never which one it is.
+  const title = document.getElementById('webAgentTitle');
+  const since = session ? webchatSince(session) : '';
+  title.innerHTML = escapeHtml((session ? webchatName(session, provider) : '') || 'Web Agent')
+    + (session ? `<span class="webchat-id">${escapeHtml(webchatId(session))}</span>` : '')
+    + (since ? `<span class="webchat-since">${escapeHtml(since)}</span>` : '');
+  // The same mark the landing list draws, so a chat opened from a card is visibly the same chat.
+  document.getElementById('webAgentMark').innerHTML =
+    session ? webchatMark(session.provider, 18) : '';
+  webchatDrawPills();
   const model = document.getElementById('webAgentModel');
   const modelState = webchatModels.get(webchatCurrent);
   model.hidden = !provider?.models;
@@ -22372,19 +24411,60 @@ function renderWebchatView() {
   const provisional = webchatTurn
     ? webchatMessageHtml({role: 'user', content: webchatTurn.message})
       + `<div class="conv-msg provisional" style="--conv-agent:var(--blue)"><div class="conv-who">Web Agent</div>`
-      + `${escapeHtml(webchatTurn.reply || webchatTurn.error || webchatTurn.status)}</div>`
+      // Plain while it streams. A half-arrived answer has half a fence and half a list in it, and
+      // re-rendering the lot on every delta makes the block under the reader's eye jump as each
+      // construct completes. It is repainted formatted from the record the moment the turn ends,
+      // which is the same thing the adapter's own TUI does.
+      + `${webchatTurn.running || !webchatTurn.reply
+        ? webchatWaitHtml()
+        : webchatBodyHtml({markdown: webchatTurn.reply}, false)}</div>`
     : '';
   const thread = document.getElementById('webAgentThread');
+  // The theme sits on the thread rather than on each rendered answer: it colours the ground under
+  // a bubble as well as the type inside one, and a token declared inside the bubble cannot reach
+  // the bubble. Everything below still reads it by inheritance, so there is one place it is set.
+  const theme = webchatTheme();
+  thread.className = `conv-thread conv-solo${theme === 'plain' ? '' : ` md-${theme}`}`;
   const earlier = webchatTruncated
     ? `<p class="pair-empty">Showing the most recent ${webchatMessages.length} messages.`
       + ' Earlier ones stay on this host.</p>' : '';
-  thread.innerHTML = earlier + webchatMessages.map(webchatMessageHtml).join('') + provisional;
+  thread.innerHTML = earlier
+    + webchatMessages.map((message, at) => webchatMessageHtml(message, at)).join('') + provisional;
   requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
   document.getElementById('webAgentSend').hidden = !!webchatTurn?.running;
   document.getElementById('webAgentStop').hidden = !webchatTurn?.running;
-  // Offered after a stop and after a failure alike: both leave a turn whose reply may exist on the
-  // provider and not here, which is the one question Sync answers.
-  document.getElementById('webAgentSync').hidden = !webchatNeedsSync.has(webchatCurrent);
+  // Standing, rather than appearing when the app suspects a missing reply: reading the thread back
+  // off the provider's page is the commonest thing anybody does here, and it was two presses into
+  // a drawer. Lit when there *is* such a reason — a stop and a failure both leave a turn whose
+  // reply may exist on the provider and not here, which is the one question Sync answers.
+  const sync = document.getElementById('webAgentSync');
+  sync.hidden = !webchatCan('sync');
+  sync.classList.toggle('live', webchatNeedsSync.has(webchatCurrent));
+  // Lit is a state, so it is marked on the button rather than said in a toast nobody keeps. `on`
+  // is what makes a .hang-btn visible at all; `live` is what says it is pressed.
+  const md = document.getElementById('webAgentMarkdown');
+  if (md) {
+    const on = webchatMarkdownOn();
+    md.classList.add('on');
+    md.classList.toggle('live', on);
+    md.setAttribute('aria-pressed', String(on));
+    md.title = on ? 'Showing formatted Markdown — tap for the text the provider sent'
+      : 'Showing the text the provider sent — tap to format it';
+  }
+  // The header's theme picker is static markup, so its options are written by the render.
+  const themeSelect = document.getElementById('webAgentTheme');
+  if (themeSelect) {
+    themeSelect.innerHTML = WEBCHAT_THEMES.map(row => `<option value="${row.id}"`
+      + `${row.id === theme ? ' selected' : ''}>${escapeHtml(row.label)}</option>`).join('');
+  }
+  const probe = document.getElementById('webAgentProbe');
+  if (probe) probe.hidden = !webchatCan('probe');
+  // Rename is this browser's own name for the thread, so it is offered for any chat that is open,
+  // a provider's default one included. Delete ends something and stays where it was.
+  const rename = document.getElementById('webAgentRename');
+  if (rename) rename.hidden = !session;
+  const remove = document.getElementById('webAgentDelete');
+  if (remove) remove.hidden = !session || session.default !== false;
   webchatDrawRecovery(session?.provider || '');
 }
 
@@ -22399,11 +24479,69 @@ function renderWebchatView() {
 function webchatDrawRecovery(provider) {
   const row = document.getElementById('webAgentRecovery');
   if (!row) return;
-  row.hidden = !provider || !webchatCan('reconnect');
+  // Any one of the three is enough to draw the row: they are gated one by one below. The adapter
+  // restart used to be a fourth and is not a rung of this ladder — it replaces the process behind
+  // every provider, so it hangs off the server pill instead, in a chat's head and on the landing
+  // page alike.
+  row.hidden = !provider || !['reconnect', 'restart', 'browser'].some(webchatCan);
   for (const [id, name] of [['webAgentReconnect', 'reconnect'],
     ['webAgentRestart', 'restart'], ['webAgentBrowserStop', 'browser']]) {
     document.getElementById(id).hidden = !provider || !webchatCan(name);
   }
+  const stale = document.getElementById('webAgentStale');
+  if (stale) stale.hidden = !provider || webchatCan('reconnect') || webchatCan('probe');
+}
+
+// Not provider-scoped, unlike everything beside it: what is being replaced is the process that
+// drives all of them. The relay waits for the replacement to answer before it tells anyone what
+// the state is, so there is nothing to poll for here.
+function webchatServerRestart() {
+  // No `force`. The adapter refuses while a turn is running and says which one, and being told
+  // that is worth one press: the arm above says "I mean to restart it", not "whatever it costs".
+  if (webchatAsk({type: 'webchat_server_restart'})) {
+    showToast('Restarting the web-agent adapter…', 'info');
+  }
+}
+
+// Open the tab and keep it. Every repair below ends with this session holding no page — `sync`
+// reads the conversation and closes what it opened, `reconnect` closes the cached page on purpose
+// — so without it a successful repair leaves the chat reading `cold`, which is the truth and not
+// what the person pressing Reconnect was trying to reach. Skipped on a relay that does not offer
+// it, in which case the probe below still says what the state is.
+function webchatOpenTab() {
+  if (!webchatCurrent || !webchatCan('open')) return false;
+  return webchatAsk({type: 'webchat_open_tab', session: webchatCurrent});
+}
+
+// Where a repair, a sync or a restart ends: reopen the tab if this relay can, and say what the
+// wire is either way. One place, because "did that work" is one question however it was reached.
+//
+// `what` is what the person pressed, held until the answer comes back. A repair used to report
+// itself the moment the relay acknowledged it, which is before the tab exists — so the toast said
+// "done" and the pill went on saying otherwise for another second, and a repair that had actually
+// failed said "done" too.
+function webchatSettle(reopen, what = '') {
+  // Every one of these closed the page the last probe was about. Keeping that answer would draw a
+  // red dot over a tab that has just been reopened.
+  webchatLinks.clear();
+  webchatSettleFor = what;
+  if (reopen && webchatOpenTab()) return;
+  if (webchatCan('probe')) { webchatProbe(); return; }
+  webchatSettled('');
+}
+
+// What the person pressed, until the wire says how it went. Empty at rest, so an ordinary probe
+// from the menu says nothing extra.
+let webchatSettleFor = '';
+
+function webchatSettled(link) {
+  if (!webchatSettleFor) return;
+  const what = webchatSettleFor;
+  webchatSettleFor = '';
+  if (link === 'hot') showToast(`${what} — the tab is open and answering.`, 'info');
+  else if (link === 'stale') showToast(`${what}, but the tab is still not answering.`
+    + " Restart browser is the rung above Reconnect.");
+  else showToast(`${what}. No tab is open — the next message opens one.`, 'info');
 }
 
 function webchatRecover(action) {
@@ -22431,7 +24569,13 @@ function webchatSaveDraft() {
 }
 
 function webchatSend() {
-  if (!webchatCurrent || webchatTurn?.running) return;
+  if (!webchatCurrent) return;
+  // Refusing in silence is what a composer that has stopped working looks like from the outside:
+  // the text stays in the box, nothing is sent, and nothing says why.
+  if (webchatTurn?.running) {
+    showToast('Still waiting for the last reply. Stop it, or wait for it to finish.');
+    return;
+  }
   const input = document.getElementById('webAgentInput');
   const message = input.value.trim();
   if (!message) return;
@@ -22449,6 +24593,7 @@ function webchatSend() {
   input.value = '';
   localStorage.removeItem(WEBCHAT_DRAFT_PREFIX + webchatCurrent);
   autoGrow(input);
+  syncBlockCursor(input);
   renderWebchatView();
 }
 
@@ -22464,6 +24609,26 @@ function webchatStop() {
   renderWebchatView();
 }
 
+// The TUI's `/retry`, in this app's idiom: it loads the last thing you sent back into the box
+// rather than sending it. After a hang that is the difference between one message and two — the
+// provider may well have taken the first one, and the composer's own send is the gate everywhere
+// else in this app that a message is re-offered.
+function webchatRetry() {
+  const last = [...webchatMessages].reverse().find(message => message.role === 'user');
+  const text = last && (last.content || last.markdown || '');
+  if (!text) {
+    showToast('Nothing to retry — you have not sent anything in this chat.');
+    return;
+  }
+  const input = document.getElementById('webAgentInput');
+  input.value = text;
+  autoGrow(input);
+  syncBlockCursor(input);
+  webchatSaveDraft();
+  input.focus();
+  showToast('Your last message is back in the box. Send when ready.', 'info');
+}
+
 function webchatSync() {
   if (webchatCurrent) webchatAsk({type: 'webchat_sync', session: webchatCurrent});
 }
@@ -22472,21 +24637,94 @@ function webchatClear() {
   if (webchatCurrent) webchatAsk({type: 'webchat_clear', session: webchatCurrent});
 }
 
+// The provider picker, in two columns. An `-anon` driver is the same site reached without a login:
+// it needs no account and is limited for it, which is a different kind of choice from picking
+// between accounts you have — so they are a column of their own rather than eight more rows in one
+// list. The order within each column is the order the adapter hands them over in, which is its own
+// driver order and what `chat.js providers` prints. Never sorted here: a picker whose rows move
+// between two surfaces is one you have to read every time instead of reaching for.
 function webchatNew() {
   if (!webchatAvailable || !webchatProviders.length) return;
-  const provider = prompt(`Provider (${webchatProviders.map(item => item.id).join(', ')})`, webchatProviders[0].id);
-  if (!provider || !webchatProvider(provider.trim())) return showToast('Choose an enabled provider.');
-  const label = prompt('Conversation name');
-  if (!label?.trim()) return;
-  if (webchatAsk({type: 'webchat_create', provider: provider.trim(), label: label.trim()})) {
-    webchatPendingProvider = provider.trim();
-  }
+  const column = (title, list) => `<div class="webchat-picker-col"><h4>${title}</h4>`
+    + list.map(provider => {
+      const count = webchatSessions.filter(session => session.provider === provider.id).length;
+      const ready = WEBCHAT_READY[provider.ready] || WEBCHAT_READY.up;
+      return `<button type="button" class="webchat-pick-row"`
+        + ` data-provider="${escapeHtml(provider.id)}"`
+        + ` onclick="webchatNewPick(this.dataset.provider)"`
+        + ` title="${escapeHtml(provider.label + (ready.text ? ` — ${ready.text}` : ''))}">`
+        + webchatMark(provider.id)
+        + `<span class="webchat-pill-name">${escapeHtml(provider.label)}</span>`
+        + (count ? `<span class="webchat-pill-n">${count}</span>` : '') + '</button>';
+    }).join('') + '</div>';
+  const anon = provider => /-anon$/.test(provider.id);
+  const signedIn = webchatProviders.filter(provider => !anon(provider));
+  const guests = webchatProviders.filter(anon);
+  document.getElementById('webchatNewCols').innerHTML =
+    (signedIn.length ? column('Signed in', signedIn) : '')
+    + (guests.length ? column('No login', guests) : '')
+    + (signedIn.length || guests.length ? '' : '<p class="pair-empty">No providers are enabled.</p>');
+  const name = document.getElementById('webchatNewName');
+  name.value = '';
+  document.getElementById('webchatNewSheet').style.display = 'block';
+  name.focus();
 }
+
+function closeWebchatNew() {
+  document.getElementById('webchatNewSheet').style.display = 'none';
+}
+
+function webchatNewPick(provider) {
+  const label = document.getElementById('webchatNewName').value.trim();
+  closeWebchatNew();
+  webchatStart(provider, label);
+}
+
+// Renaming, in this browser and nowhere else. A sheet rather than `prompt()`: every other name in
+// this app is typed into one, a `prompt` is the one dialog a phone draws at the top of the screen
+// under the address bar, and it cannot carry the second control this one needs — the way back to
+// the provider's own title for a thread.
+let webchatRenaming = '';
 
 function webchatRename(name) {
   const session = webchatSession(name);
-  const label = prompt('Conversation name', session?.label || '');
-  if (label?.trim()) webchatAsk({type: 'webchat_rename', session: name, label: label.trim()});
+  if (!session) return;
+  webchatRenaming = name;
+  const provider = webchatProvider(session.provider);
+  const input = document.getElementById('webchatRenameName');
+  input.value = webchatNames()[name] || '';
+  input.placeholder = webchatName({...session, name: ''}, provider);
+  document.getElementById('webchatRenameOf').textContent =
+    `${provider?.label || session.provider}${webchatSince(session) ? ` · started ${webchatSince(session)}` : ''}`;
+  document.getElementById('webchatRenameSheet').style.display = 'block';
+  input.focus();
+  input.select();
+}
+
+function closeWebchatRename() {
+  document.getElementById('webchatRenameSheet').style.display = 'none';
+  webchatRenaming = '';
+}
+
+// Empty is not a rejected name: it is the way back to whatever the provider calls the thread.
+function webchatRenameSave() {
+  if (!webchatRenaming) return;
+  webchatSetName(webchatRenaming, document.getElementById('webchatRenameName').value.trim());
+  closeWebchatRename();
+  renderWebAgents();
+  renderWebchatView();
+}
+
+// The provider's own name for the thread, written into the field for editing. It saves nothing:
+// a starting point is what people want when the title is nearly right, and a button that both
+// filled the field and committed it would be a second Save wearing another word.
+function webchatRenameFill() {
+  const session = webchatSession(webchatRenaming);
+  if (!session) return;
+  const input = document.getElementById('webchatRenameName');
+  input.value = webchatName({...session, name: ''}, webchatProvider(session.provider));
+  input.focus();
+  input.select();
 }
 
 function webchatDelete(name) {
@@ -28092,8 +30330,16 @@ function nlmSourceDelete(source) {
     // writing — they are what the instruction is about — so a box holding only tokens is an empty
     // box with a quote in it, and an instruction about a quote is read before it, not after.
     function insertDockShortcut(i) {
-      const input = document.getElementById('convInput');
-      const text = agentSlash(SHORTCUTS[i].text, agentOf(dockAddressed()));
+      insertShortcutInto(document.getElementById('convInput'),
+        agentSlash(SHORTCUTS[i].text, agentOf(dockAddressed())));
+      if (window.cue) cue('tick');
+    }
+
+    // The writing half of the above, on any composer: the web-agent chat's chips do the same thing
+    // to a different box, and a copy of this that drifted would put the caret in a different place
+    // for the same gesture.
+    function insertShortcutInto(input, text) {
+      if (!input) return;
       const written = input.value.replace(DOCK_TOKEN, '').trim();
       const at = !written ? 0
         : input.selectionStart == null ? input.value.length : input.selectionStart;
@@ -28106,9 +30352,8 @@ function nlmSourceDelete(source) {
       // them, because that is where the message carries on rather than between the two.
       input.selectionStart = input.selectionEnd = written ? (before + block).length : input.value.length;
       autoGrow(input);
-      syncConvCursor();
+      syncBlockCursor(input);
       input.focus();
-      if (window.cue) cue('tick');
     }
 
     // Additive. Two chips are two instructions, in the order they were tapped, and tapping one
@@ -28435,9 +30680,13 @@ function nlmSourceDelete(source) {
     // is a box that types into terminals — so the caret is painted instead, on a ghost copy of the
     // text sitting exactly under the field. The character at the caret goes inside the block, and a
     // caret at the end of the text gets a space to sit on, so the block has a width either way.
-    function syncConvCursor() {
-      const input = document.getElementById('convInput');
-      const ghost = document.getElementById('convGhost');
+    //
+    // Any composer with a `.conv-ghost` under its field gets it. All three of them share the rule
+    // that turns the platform's caret off, so a field without a ghost had no cursor at all. The
+    // ghost is found under the field rather than named, so a composer opts in with markup alone.
+    function syncBlockCursor(input) {
+      const ghost = input && input.parentElement
+        && input.parentElement.querySelector('.conv-ghost');
       if (!input || !ghost) return;
       const at = input.selectionStart ?? input.value.length;
       const head = input.value.slice(0, at), tail = input.value.slice(at);
@@ -28462,10 +30711,10 @@ function nlmSourceDelete(source) {
     // there is nothing else in a textarea that says which pixel row the caret is on. Only from the
     // events that move the caret, never from the field's own scroll: scrolling up to reread what
     // you wrote must not be undone by the thing that follows the caret.
-    function keepConvCaret() {
-      const input = document.getElementById('convInput');
-      const ghost = document.getElementById('convGhost');
-      syncConvCursor();
+    function keepBlockCaret(input) {
+      const ghost = input && input.parentElement
+        && input.parentElement.querySelector('.conv-ghost');
+      syncBlockCursor(input);
       if (!input || !ghost) return;
       const cur = ghost.querySelector('.cur');
       if (!cur) return;
@@ -28482,16 +30731,26 @@ function nlmSourceDelete(source) {
     //
     // Bound to the document as well as the field: browsers disagree about which of the two fires
     // for a textarea, and a caret that lags a held arrow key is exactly the case this is for.
-    function watchConvCursor() {
-      const input = document.getElementById('convInput');
+    function watchBlockCursor(input) {
       if (!input) return;
-      const sync = () => { if (document.activeElement === input) keepConvCaret(); };
+      const sync = () => { if (document.activeElement === input) keepBlockCaret(input); };
       document.addEventListener('selectionchange', sync);
       input.addEventListener('selectionchange', sync);
       // The fallback, for a browser that fires neither: a key that moves the caret is read after
       // the browser has moved it, not while it is still where it was.
-      input.addEventListener('keydown', () => requestAnimationFrame(keepConvCaret));
+      input.addEventListener('keydown', () => requestAnimationFrame(() => keepBlockCaret(input)));
     }
+
+    // The three composers on this page, named where they are wired rather than by each of them.
+    function watchConvCursor() {
+      for (const id of ['convInput', 'webAgentInput', 'nlmInput']) {
+        watchBlockCursor(document.getElementById(id));
+      }
+    }
+
+    function syncConvCursor() { syncBlockCursor(document.getElementById('convInput')); }
+
+    function keepConvCaret() { keepBlockCaret(document.getElementById('convInput')); }
 
     function dockRowHtml(list) {
       const target = dockAddressed();

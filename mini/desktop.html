@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-08">
+  <meta name="app-built" content="2026-09-09">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -14892,7 +14892,12 @@
       // desktop page has up to five and none of them has one, so it is asked to apply it itself —
       // and each guard is for the page that does not load the other's modules.
       if (typeof syncComposerMode === 'function') syncComposerMode();
-      applyAutocorrect(document.getElementById('convInput'), on);
+      // Every `.conv-composer` on the page — the conversation's, the web-agent chat's and the
+      // notebook's — rather than the conversation's alone, which is what this used to reach. A
+      // pane's own composer is `#termInput` and is set by `syncComposerMode` above, because a
+      // shell never takes it whatever this says.
+      document.querySelectorAll('.conv-composer textarea')
+        .forEach(el => applyAutocorrect(el, on));
       if (typeof deskApplyAutocorrect === 'function') deskApplyAutocorrect();
     }
 
