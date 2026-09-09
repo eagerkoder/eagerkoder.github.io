@@ -8353,6 +8353,12 @@
         padding: 8px 18px;
       }
     }
+      /* The recovery ladder under the Web Agent head. Its own row rather than three more buttons
+         in the head, which already carries a title, a status, a model picker and two actions. */
+      /* `:not([hidden])`, not a bare selector: an author `display` beats the UA stylesheet's rule
+         for the hidden attribute, so a bare `display: flex` here would draw the row whatever the
+         attribute said -- and the whole point of the row is that it is withheld. */
+      .webchat-recovery:not([hidden]) { display: flex; gap: 8px; padding: 0 12px 8px; flex-wrap: wrap; }
   </style>
 </head>
 
@@ -8667,6 +8673,7 @@
         <button class="open-pane arm-btn" onclick="armButton(this, 'Delete on Google?',
           () => { nlmMenu(); nlmClear(); })"
           aria-label="Delete this conversation on Google">Clear chat</button>
+        <button class="open-pane" id="nlmSourceBtn" onclick="nlmShowSource(nlmSource === 'live' ? 'record' : 'live')"></button>
         <button class="open-pane" id="nlmAttachBtn" onclick="nlmAttachMenu()"></button>
       </div>
     </div>
@@ -8724,6 +8731,19 @@
       <button class="open-pane" id="webAgentSync" onclick="webchatSync()" hidden>Sync</button>
       <button class="open-pane arm-btn" onclick="armButton(this, 'Clear local history?', webchatClear)"
         aria-label="Clear local Web Agent history">Clear</button>
+    </div>
+    <!-- The recovery ladder, in increasing violence. Reconnect closes a tab and is a plain press;
+         the two that end a browser process are armed, like everything else destructive here. Every
+         one of them is hidden until the relay reports its capability. -->
+    <div class="webchat-recovery" id="webAgentRecovery" hidden>
+      <button class="archive-btn" id="webAgentReconnect" onclick="webchatRecover('reconnect')"
+        aria-label="Reopen this provider's tab" hidden>Reconnect</button>
+      <button class="archive-btn arm-btn" id="webAgentRestart"
+        onclick="armButton(this, 'Restart browser? Every tab on this profile closes.', () => webchatRecover('restart'))"
+        aria-label="Restart this provider's browser" hidden>Restart</button>
+      <button class="end-btn arm-btn" id="webAgentBrowserStop"
+        onclick="armButton(this, 'Stop browser? Every tab on this profile closes.', () => webchatRecover('browser_stop'))"
+        aria-label="Stop this provider's browser" hidden>Stop browser</button>
     </div>
     <div class="conv-thread conv-solo" id="webAgentThread" aria-live="polite"></div>
     <div class="conv-dock">
@@ -13440,6 +13460,9 @@
       }
       else if (msg.type === 'notebooklm_history') {
         if (typeof nlmReceiveHistory === 'function') nlmReceiveHistory(msg);
+      }
+      else if (msg.type === 'notebooklm_record') {
+        if (typeof nlmReceiveRecord === 'function') nlmReceiveRecord(msg);
       }
       else if (msg.type === 'notebooklm_studio') {
         if (typeof nlmReceiveStudio === 'function') nlmReceiveStudio(msg);
@@ -22053,9 +22076,11 @@ let webchatOffered = false;
 let webchatAvailable = false;
 let webchatProviders = [];
 let webchatSessions = [];
+let webchatCapabilities = [];
 let webchatCurrent = '';
 let webchatMessages = [];
 let webchatTurn = null;
+let webchatTruncated = false;
 let webchatPendingProvider = '';
 const webchatModels = new Map();
 const webchatModelRequests = new Map();
@@ -22072,8 +22097,10 @@ function webchatReset() {
   webchatAvailable = false;
   webchatProviders = [];
   webchatSessions = [];
+  webchatCapabilities = [];
   webchatCurrent = '';
   webchatMessages = [];
+  webchatTruncated = false;
   webchatTurn = null;
   webchatModels.clear();
   webchatModelRequests.clear();
@@ -22086,6 +22113,10 @@ function webchatReceiveState(msg) {
   webchatAvailable = !!msg.available;
   webchatProviders = Array.isArray(msg.providers) ? msg.providers : [];
   webchatSessions = Array.isArray(msg.sessions) ? msg.sessions : [];
+  // What this relay will act on, which is the adapter's list minus anything the relay declines.
+  // Gated on the list and never on the API version: adding a route is not a breaking change, so
+  // an adapter with the recovery controls answers the same version as one without them.
+  webchatCapabilities = Array.isArray(msg.capabilities) ? msg.capabilities : [];
   for (const name of webchatNeedsSync) {
     if (!webchatSessions.some(session => session.name === name)) webchatNeedsSync.delete(name);
   }
@@ -22104,6 +22135,10 @@ function webchatReceiveState(msg) {
   }
 }
 
+function webchatCan(name) {
+  return webchatCapabilities.includes(name);
+}
+
 function webchatProvider(id) {
   return webchatProviders.find(provider => provider.id === id) || null;
 }
@@ -22112,8 +22147,21 @@ function webchatSession(name) {
   return webchatSessions.find(session => session.name === name) || null;
 }
 
+// A provider's browser is up, down, or held by a Chrome this adapter does not drive. The last is
+// the one state where restarting is the wrong advice and quitting that other browser is the right
+// one, so it says so in words rather than only in a colour.
+// Only `foreign` takes a colour of its own. A browser that is down is not a problem — the next
+// turn brings it back up — so it says so in words and stays cold, and a colour is spent only on
+// the state that needs a person to do something on the machine itself.
+const WEBCHAT_READY = {
+  up: {colour: 'var(--dot-cold)', text: ''},
+  down: {colour: 'var(--dot-cold)', text: 'browser down'},
+  foreign: {colour: 'var(--dot-blocked)', text: 'profile held by another Chrome'},
+};
+
 function webchatCard(session, provider) {
   const busy = provider.busy;
+  const ready = WEBCHAT_READY[provider.ready] || {colour: 'var(--dot-cold)', text: ''};
   const context = provider.resumable ? 'resumable' : 'live tab only';
   const count = Number(session?.messages || 0);
   const name = session?.name || `herdr:${provider.id}`;
@@ -22132,12 +22180,13 @@ function webchatCard(session, provider) {
     // with nothing running is cold. A chat is never blocked and never finishes unread, so those two
     // colours have nothing to say here.
     + `<div class="conversation-title"><span class="dot${busy ? ' pulse' : ''}"`
-    + ` style="background:${busy ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true"></span>`
+    + ` style="background:${busy ? 'var(--dot-live)' : ready.colour}" aria-hidden="true"></span>`
     + `<span class="conv-kind">${sectionIcon('webAgent')}</span><span class="name">${escapeHtml(label)}</span>`
     + `<span class="conversation-tier${provider.resumable ? '' : ' idle'}">${context}</span>${actions}</div>`
     + `<div class="conversation-count">${count} ${count === 1 ? 'message' : 'messages'}</div>`
     + `<div class="conversation-meta names">${escapeHtml(provider.label)}`
-    + `${provider.models ? ' · models' : ''}${busy ? ` · busy in ${escapeHtml(busy)}` : ''}</div></div>`;
+    + `${provider.models ? ' · models' : ''}${busy ? ` · busy in ${escapeHtml(busy)}` : ''}`
+    + `${ready.text ? ` · ${escapeHtml(ready.text)}` : ''}</div></div>`;
 }
 
 function renderWebAgents(error = '') {
@@ -22195,6 +22244,7 @@ function webchatOpenCard(card) {
 function webchatOpen(name) {
   webchatCurrent = name;
   webchatMessages = [];
+  webchatTruncated = false;
   webchatTurn = null;
   openPanel('webAgentView');
   const input = document.getElementById('webAgentInput');
@@ -22230,11 +22280,21 @@ function webchatReceiveModels(msg) {
 function webchatReceiveHistory(msg) {
   if (msg.name !== webchatCurrent) return;
   webchatMessages = Array.isArray(msg.messages) ? msg.messages : [];
+  // The relay asks for the newest few hundred rather than the whole chat. An answer that stopped
+  // early and stayed quiet about it reads as a whole one, which is the same contract the durable
+  // record keeps: truncation is reported, not merely applied.
+  webchatTruncated = !!msg.truncated;
   webchatTurn = null;
   renderWebchatView();
 }
 
 function webchatReceiveResult(msg) {
+  // A reconnect drops the pages of every session on that provider, so whatever this phone was
+  // holding for the open one is now a transcript nobody can be sure of. Ask for it again.
+  if (msg.action === 'reconnect' || msg.action === 'restart' || msg.action === 'browser_stop') {
+    showToast(`${escapeHtml(msg.provider || 'Provider')}: ${msg.action.replace('_', ' ')} done`, 'info');
+    if (webchatCurrent) webchatAsk({type: 'webchat_open', session: webchatCurrent});
+  }
   if (msg.action === 'sync' || msg.action === 'clear') {
     webchatNeedsSync.delete(msg.synced || msg.cleared || webchatCurrent);
     renderWebchatView();
@@ -22315,13 +22375,45 @@ function renderWebchatView() {
       + `${escapeHtml(webchatTurn.reply || webchatTurn.error || webchatTurn.status)}</div>`
     : '';
   const thread = document.getElementById('webAgentThread');
-  thread.innerHTML = webchatMessages.map(webchatMessageHtml).join('') + provisional;
+  const earlier = webchatTruncated
+    ? `<p class="pair-empty">Showing the most recent ${webchatMessages.length} messages.`
+      + ' Earlier ones stay on this host.</p>' : '';
+  thread.innerHTML = earlier + webchatMessages.map(webchatMessageHtml).join('') + provisional;
   requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
   document.getElementById('webAgentSend').hidden = !!webchatTurn?.running;
   document.getElementById('webAgentStop').hidden = !webchatTurn?.running;
   // Offered after a stop and after a failure alike: both leave a turn whose reply may exist on the
   // provider and not here, which is the one question Sync answers.
   document.getElementById('webAgentSync').hidden = !webchatNeedsSync.has(webchatCurrent);
+  webchatDrawRecovery(session?.provider || '');
+}
+
+// The recovery ladder, drawn where the wedge is felt rather than on the landing list. A page that
+// stopped answering is discovered inside a chat, and the provider it belongs to is the one this
+// chat is on — so the controls are provider-scoped but live in the chat's own head.
+//
+// Each is hidden when the relay did not report its capability, which covers both an adapter too
+// old to have the route and a relay with write extensions off. A control that is drawn and then
+// refuses is worse than one that was never drawn, because it is pressed during the failure it was
+// supposed to repair.
+function webchatDrawRecovery(provider) {
+  const row = document.getElementById('webAgentRecovery');
+  if (!row) return;
+  row.hidden = !provider || !webchatCan('reconnect');
+  for (const [id, name] of [['webAgentReconnect', 'reconnect'],
+    ['webAgentRestart', 'restart'], ['webAgentBrowserStop', 'browser']]) {
+    document.getElementById(id).hidden = !provider || !webchatCan(name);
+  }
+}
+
+function webchatRecover(action) {
+  const provider = webchatSession(webchatCurrent)?.provider;
+  if (!provider) return;
+  if (webchatAsk({type: `webchat_${action}`, provider})) {
+    showToast(action === 'reconnect' ? `Reopening ${provider}'s tab…`
+      : action === 'restart' ? `Restarting ${provider}'s browser…`
+        : `Stopping ${provider}'s browser…`, 'info');
+  }
 }
 
 function webchatInputKey(event) {
@@ -22414,6 +22506,13 @@ let nlmCurrent = '';
 let nlmTab = 'chat';
 let nlmSources = [];
 let nlmTurns = [];
+// Which of the two views the chat tab is drawing. `live` is Google's history, fetched on open.
+// `record` is what crossed this relay — the only view that survives a Clear or a deleted notebook,
+// and the only one that shows a mutation at all. Never merged: reloaded history carries nothing to
+// join on, so a merged thread would be matching by text or by position.
+let nlmSource = 'live';
+let nlmEvents = [];
+let nlmEventsTruncated = false;
 let nlmConversation = '';
 let nlmTurn = null;
 let nlmSendText = '';
@@ -22596,6 +22695,11 @@ function nlmOpen(id) {
   nlmConversation = '';
   nlmTurn = null;
   nlmTab = 'chat';
+  // Back to live on every open. The record is a view a reader asks for about the notebook in front
+  // of them, not a preference that follows them into the next one.
+  nlmSource = 'live';
+  nlmEvents = [];
+  nlmEventsTruncated = false;
   openPanel('nlmView');
   const input = document.getElementById('nlmInput');
   input.value = localStorage.getItem(NLM_DRAFT_PREFIX + id) || '';
@@ -22610,6 +22714,47 @@ function nlmOpen(id) {
 function nlmMenu() {
   const menu = document.getElementById('nlmMenu');
   menu.hidden = !menu.hidden;
+}
+
+// The view switch. Asked for every time rather than cached: the record is written by this relay
+// while the page is open, so a second look is a second question.
+function nlmShowSource(which) {
+  document.getElementById('nlmMenu').hidden = true;
+  nlmSource = which;
+  nlmTab = 'chat';
+  if (which === 'record') {
+    nlmEvents = [];
+    nlmEventsTruncated = false;
+    nlmAsk({type: 'notebooklm_record', notebook: nlmCurrent});
+  }
+  renderNlmView();
+}
+
+function nlmReceiveRecord(msg) {
+  if (msg.notebook !== nlmCurrent) return;
+  nlmEvents = Array.isArray(msg.events) ? msg.events : [];
+  nlmEventsTruncated = !!msg.truncated;
+  renderNlmView();
+}
+
+// One event, drawn as what happened rather than as something said. Only an ask and an answer have
+// prose; everything else is a title and an id, and `detail` is where it is.
+function nlmEventHtml(event) {
+  const said = event.kind === 'ask' || event.kind === 'answer';
+  const when = event.at ? new Date(event.at).toLocaleString() : '';
+  let detail = '';
+  try {
+    const parsed = event.detail ? JSON.parse(event.detail) : null;
+    detail = parsed ? Object.entries(parsed).filter(([, value]) => value !== '' && value !== false)
+      .map(([key, value]) => `${key}: ${value}`).join(' \u00b7 ') : '';
+  } catch (_error) {
+    detail = String(event.detail || '');
+  }
+  const where = event.project ? ` \u00b7 ${event.project}` : '';
+  return `<div class="conv-msg nlm-event" style="--conv-agent:var(${said ? '--blue' : '--muted'})">`
+    + `<div class="conv-who">${escapeHtml(String(event.kind || '').replace(/_/g, ' '))}`
+    + `<span class="conv-time">${escapeHtml(when)}</span></div>`
+    + `${escapeHtml((event.text || detail || '') + where)}</div>`;
 }
 
 function nlmShowTab(tab) {
@@ -22636,6 +22781,8 @@ function nlmReceiveAnswer(msg) {
   // answer are the notebook's now — the ones this view was holding are what it had at open.
   if (Array.isArray(msg.sources)) nlmSources = msg.sources;
   nlmTurns = nlmTurns.concat([{question: nlmTurn.question, answer: msg.answer || '',
+    // Google's own addressing for this answer, kept so a save of it names the same file twice.
+    conversation_id: msg.conversation_id || '', turn: msg.turn || 0,
     references: Array.isArray(msg.references) ? msg.references : []}]);
   nlmTurn = null;
   renderNlmView();
@@ -22811,6 +22958,17 @@ function renderNlmView() {
   } else if (nlmTab === 'studio') {
     thread.innerHTML = nlmArtifacts.map(nlmArtifactHtml).join('')
       || '<p class="pair-empty">Nothing generated yet.</p>';
+  } else if (nlmSource === 'record') {
+    // No composer question here and no Save buttons: this is a record of what happened, and the
+    // things it names may no longer exist on Google to act on.
+    // The relay stops at a byte ceiling. Said rather than silently done: an answer that stopped
+    // early and does not say so reads as the whole record.
+    const more = nlmEventsTruncated
+      ? '<p class="pair-empty">The oldest events are not shown \u2014 this is as much of the'
+        + ' record as one answer carries.</p>' : '';
+    thread.innerHTML = more + nlmEvents.map(nlmEventHtml).join('')
+      || '<p class="pair-empty">Nothing recorded for this notebook. The relay keeps this record'
+        + ' only when HERDR_CONV_LOG is on.</p>';
   } else {
     const provisional = nlmTurn
       ? `<div class="conv-msg user" style="--conv-agent:var(--green)"><div class="conv-who">You</div>`
@@ -22821,7 +22979,11 @@ function renderNlmView() {
     thread.innerHTML = nlmTurns.map((turn, index) => nlmTurnHtml(turn, index)).join('') + provisional;
     requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
   }
-  document.getElementById('nlmDock').hidden = nlmTab !== 'chat';
+  // In the menu rather than as a fifth tab: the head is already four tabs and three controls wide
+  // on a 390-pixel phone, and this is a statement about the notebook the head names.
+  document.getElementById('nlmSourceBtn').textContent =
+    nlmSource === 'live' ? 'Show the record' : 'Show live chat';
+  document.getElementById('nlmDock').hidden = nlmTab !== 'chat' || nlmSource !== 'live';
   document.getElementById('nlmAddSource').hidden = nlmTab !== 'sources';
   document.getElementById('nlmAddNote').hidden = nlmTab !== 'notes';
   document.getElementById('nlmStudioDock').hidden = nlmTab !== 'studio';
@@ -23091,7 +23253,9 @@ function nlmSaveAnswer(index) {
   if (!turn?.answer) return;
   // The conversation and the turn number are Google's own addressing for this answer, so two
   // saves of the same one land on the same file rather than accumulating.
-  const id = `${turn.conversation_id || nlmConversation || 'answer'}-${turn.turn || index}`;
+  // One-based, because that is how Google numbers a turn on the answer it sends — so a turn read
+  // back from history, which carries no numbering of its own, names the same file it did fresh.
+  const id = `${turn.conversation_id || nlmConversation || 'answer'}-${turn.turn || index + 1}`;
   nlmSave('answer', id, {title: (turn.question || 'Answer').slice(0, 60),
     question: turn.question || '', text: nlmSplitAnswer(turn.answer).prose});
 }

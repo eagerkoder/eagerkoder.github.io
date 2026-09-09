@@ -14171,6 +14171,9 @@
       else if (msg.type === 'notebooklm_history') {
         if (typeof nlmReceiveHistory === 'function') nlmReceiveHistory(msg);
       }
+      else if (msg.type === 'notebooklm_record') {
+        if (typeof nlmReceiveRecord === 'function') nlmReceiveRecord(msg);
+      }
       else if (msg.type === 'notebooklm_studio') {
         if (typeof nlmReceiveStudio === 'function') nlmReceiveStudio(msg);
       }
