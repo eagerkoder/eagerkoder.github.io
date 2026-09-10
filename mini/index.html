@@ -32306,24 +32306,42 @@ function nlmSourceDelete(source) {
       // not.
       const row = document.getElementById('xferRow');
       if (row) {
+        // A panel's pills have no `ondblclick` of their own: the row they sit in is rebuilt between
+        // the two clicks, so the browser has no element both of them hit and fires `dblclick` at
+        // this container instead -- where an inline handler on the inner row would never see it.
+        // Which provider it was about is answered by the first tap rather than by the target.
+        row.addEventListener('dblclick', e => {
+          if (typeof convPanelOf !== 'function' || !convPanelOf(convViewId)) return;
+          convPanelSoloPick(e);
+        });
         let whoTap = 0, whoPane = '';
         row.addEventListener('touchend', e => {
           const who = e.target.closest && e.target.closest('.xfer-who');
           if (!who) return;
+          // A panel's pills stand where the member chips do and carry a provider instead of a
+          // pane. Same gesture, same reason it has to be read here, and a different thing to be
+          // alone with -- so the identity the two taps are matched on is whichever the pill has.
+          const provider = who.dataset.provider || '';
+          const id = who.dataset.pane || provider;
           const now = Date.now();
-          if (now - whoTap < 350 && whoPane === who.dataset.pane) {
+          if (now - whoTap < 350 && whoPane === id) {
             // Before the browser's own click, which would address the chip a second time and, in
             // solo, address whichever chip the redraw put under the finger.
             e.preventDefault();
-            // Named from the gesture rather than from the tap-to-address that normally records it:
-            // a fast double tap can land before the first tap's click has been dispatched at all.
-            dockLastPick = {pane: whoPane, at: now};
-            soloDockTarget(e);
+            if (provider) {
+              convPanelSoloPick(e);
+            } else {
+              // Named from the gesture rather than from the tap-to-address that normally records
+              // it: a fast double tap can land before the first tap's click has been dispatched
+              // at all.
+              dockLastPick = {pane: id, at: now};
+              soloDockTarget(e);
+            }
             whoTap = 0;
             whoPane = '';
           } else {
             whoTap = now;
-            whoPane = who.dataset.pane || '';
+            whoPane = id;
           }
         });
       }
@@ -32408,6 +32426,13 @@ function convPanelSoloOf(convId) {
   return convPanelSolo.get(convId) || '';
 }
 
+// Which pill the gesture is about, recorded at the first tap. The row is rebuilt between the two
+// -- a tap changes what is lit, which changes the row's signature -- so by the time the second one
+// lands the element the first one hit is gone, and with it any chance of reading the provider off
+// the event. The member chips keep `dockLastPick` for exactly this.
+let convPanelLastPick = {provider: '', at: 0};
+const CONV_PANEL_DOUBLE_MS = 500;
+
 // A single tap switches: this one, and not the others. That is what a tap on a member's chip
 // already means, and a panel is the same question asked of providers. Holding several at once is
 // what the Select switch beside All is for.
@@ -32415,6 +32440,10 @@ function convPanelToggle(provider) {
   const conv = convPanelOf(convViewId);
   if (!conv) return;
   const picked = convPanelPicked(conv);
+  const now = Date.now();
+  if (now - convPanelLastPick.at > CONV_PANEL_DOUBLE_MS) {
+    convPanelLastPick = {provider: provider, at: now};
+  } else convPanelLastPick.at = now;
   if (convPanelMulti.has(conv.id)) {
     if (picked.has(provider)) picked.delete(provider);
     else picked.add(provider);
@@ -32445,8 +32474,12 @@ function convPanelSoloPick(event) {
   const conv = convPanelOf(convViewId);
   const pill = event && event.target && event.target.closest
     ? event.target.closest('[data-provider]') : null;
-  if (!conv || !pill) return;
-  const provider = pill.dataset.provider;
+  // The event's own pill when there is one, and otherwise the one the first tap named. There
+  // usually is not: with the row rebuilt between the taps the browser has no shared element to
+  // fire `dblclick` at, so it fires it at the row instead.
+  const provider = (pill && pill.dataset.provider)
+    || (Date.now() - convPanelLastPick.at < CONV_PANEL_DOUBLE_MS ? convPanelLastPick.provider : '');
+  if (!conv || !provider) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
   const on = convPanelSoloOf(conv.id) === provider;
@@ -32499,7 +32532,7 @@ function convPanelRowHtml(conv) {
   }).join('');
   const all = picked.size === ids.length;
   return `<div class="xfer-act">`
-    + `<div class="xfer-who-row" ondblclick="convPanelSoloPick(event)">${pills}</div>`
+    + `<div class="xfer-who-row">${pills}</div>`
     + `<button class="xfer-who-more list" onclick="convPanelAll()" aria-pressed="${all}" `
     + `title="${all ? 'Send to none of them' : 'Send to all of them'}" `
     + `aria-label="${all ? 'Send to none of them' : 'Send to all of them'}">`
