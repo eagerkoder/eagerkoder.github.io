@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-09">
+  <meta name="app-built" content="2026-09-10">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -10191,7 +10191,9 @@
     // read may only ever *extend* it, never replace it, and its stamp may only ever get better.
     // Streaming pane content is what folds into new entries; it does not own the ones already
     // written, and the thread renders the record rather than the frame.
-    const CONV_AT_RANK = { backfill: 0, read: 1, state: 2, sent: 3 };
+    // `webchat` is a provider's own stamp on its own message, which is a reading and not an
+    // inference — the same standing as a send this app watched go out.
+    const CONV_AT_RANK = { backfill: 0, read: 1, state: 2, sent: 3, webchat: 3 };
 
     function convAtRank(e) {
       const r = CONV_AT_RANK[e && e.at_src];
@@ -10963,6 +10965,24 @@
       // `typed` is the default the recorder applies on its own, so there is nothing to leave.
       if (note.via === 'typed') return;
       saveOutbox(outboxAdd(loadOutbox(), convHash(text), note, now));
+    }
+
+    // What a conversation's card says about the web providers it reaches, or null for one that
+    // reaches none. Here rather than in the row builder because it is the one decision on that
+    // card that is not about panes: `providers` is the grant — what may be spent — and the two
+    // modes differ in who spends it, an agent or the person at the composer.
+    //
+    // `*` is the agent choosing for itself and has no marks to draw: naming every provider on the
+    // card would be the app answering a question the agent has not been asked yet.
+    function convWebBadge(conv) {
+      const granted = conv && conv.webchat && conv.webchat.providers;
+      if (!Array.isArray(granted) || !granted.length) return null;
+      const any = granted.includes('*');
+      return {
+        kind: conv.webchat.mode === 'panel' ? 'Panel' : 'Agent',
+        any: any,
+        providers: any ? [] : Array.from(new Set(granted)),
+      };
     }
 
   </script>
@@ -12686,21 +12706,24 @@
         // selection tick, because a decision is not a message anyone can quote back at an agent.
         // What it says is why, and under it, in the same shape the commit strip uses for the other
         // "this happened between two messages" fact, the gate and the agent that was called.
+        // A step of a session's path — asked, record written, sent, paused, error — and a
+        // provider whose half of the thread could not be read. Drawn in the commit strip's shape
+        // and for its reason: a small thing that happened at this point in the thread, under
+        // nothing, said in one line and read past unless it is the line being looked for.
+        // `sign` because the arbitrator is no longer the only thing with steps to report, and a
+        // provider's own mark in front of a provider's own line is what says which it is.
+        if (e.event) {
+          const when = convClock(e);
+          last = at;
+          return `<div class="conv-arb-to">` +
+            `<span class="conv-commits-lede">${e.sign || arbSign(13)} ${escapeHtml(e.lede || '')}</span>` +
+            (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
+                      `${escapeHtml(e.text)}</span>` : '') +
+            (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
+            '</div>';
+        }
         if (e.who === 'arbiter') {
           const when = convClock(e);
-          // A step of the session's path — asked, record written, sent, paused, error. Drawn in
-          // the commit strip's shape and for its reason: a small thing that happened at this point
-          // in the thread, under nothing, said in one line and read past unless it is the line
-          // being looked for.
-          if (e.event) {
-            last = at;
-            return `<div class="conv-arb-to">` +
-              `<span class="conv-commits-lede">${arbSign(13)} ${escapeHtml(e.lede || '')}</span>` +
-              (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
-                        `${escapeHtml(e.text)}</span>` : '') +
-              (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
-              '</div>';
-          }
           const badge = e.toAgent ? agentBadge(e.toAgent) : '';
           const gate = escapeHtml(e.gate || 'decided');
           // The member's own label and never `member-2`. That id is this session's bookkeeping and
@@ -12752,20 +12775,28 @@
         // Every agent bubble carries its label as well as its colour: two washes of one family are
         // not enough on a phone in sunlight, and past two members colour alone stops working.
         const key = e.key || me.key || '';
-        const live = agents.find(x => convMemberKey(x) === key);
+        // A bubble from something that is not a pane in this conversation and never will be — a
+        // web provider the agent asked a question of. It has no live pane, no spawn record and no
+        // harness, so every fallback to "the pane this thread is read through" is wrong for it:
+        // an unmarked one wore the reading pane's own badge and alias.
+        const foreign = !!e.foreign;
+        const live = foreign ? null : agents.find(x => convMemberKey(x) === key);
         // The harness the entry was recorded under, not the one running in that pane today: a
         // conversation outlives its panes, and a member that has exited still gets its own badge.
-        const agent = e.agent || (live && live.agent) || me.agent || '';
+        const agent = e.agent || (foreign ? '' : (live && live.agent) || me.agent) || '';
         // The alias it was started under, where there is one. An entry never carries it — it is a
         // fact about the session, not about a message — so it is read off the live pane first and
         // off the spawn record after, which is the only source left once the pane has ended.
-        const spawn = (typeof convViewRecs !== 'undefined'
+        const spawn = (typeof convViewRecs !== 'undefined' && !foreign
           ? (convViewRecs.find(r => r.key === key) || {}).spawn : null) || {};
-        const config = (live && live.config) || spawn.config || me.config || '';
-        const color = agentColor(agent) || 'var(--muted)';
+        const config = foreign ? '' : (live && live.config) || spawn.config || me.config || '';
+        // `color` is carried by an entry that is not a pane at all — a web provider, whose
+        // identifying colour is its own mark's and not any harness's.
+        const color = e.color || agentColor(agent) || 'var(--muted)';
         // The name it goes by now, not the one stamped when the words were recorded — see
         // convMemberName. An ended member has no live pane and keeps its stamp.
-        const name = escapeHtml(convMemberName(key, e.label, me.label));
+        const name = escapeHtml(foreign ? (e.label || '')
+          : convMemberName(key, e.label, me.label));
         // The same badge the pane list and the pair sheet use, beside the name: colour says which
         // member, and the badge says what it is — a thread of claude and codex reads as two
         // colleagues rather than as two colours.
@@ -12777,9 +12808,19 @@
         // This is a status dot, so it carries only the member's state now. The bubble wash, name
         // and badge already identify the speaker; a second colour ring made a working dot look
         // like it had changed to an unrelated warning state.
-        const dot = live ? statusColor(live) : 'var(--dot-cold)';
-        const who = `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
-          `style="background:${dot}"></span>${name}${badge}`;
+        const dot = live ? statusColor(live)
+          : (foreign && e.live ? 'var(--dot-live)' : 'var(--dot-cold)');
+        // A web provider's mark, beside its name and in its own colour. It used to be a light
+        // grey label and nothing else, which in a thread of five providers is five rows that read
+        // the same. The mark is what the card, the pill and the picker already identify it by.
+        const sign = foreign && e.sign
+          ? `<span class="conv-foreign" style="--conv-agent:${color}">${e.sign}` +
+            `<span class="conv-foreign-name">${name}</span></span>`
+          : '';
+        const who = sign
+          ? `<span class="dot${e.live ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
+          : `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
+            `style="background:${dot}"></span>${name}${badge}`;
         const bar = user ? [who, from].filter(Boolean).join(' · ') : who;
         // On every bubble, including a user's own in a single-pane thread, where it is the whole
         // header: a time you have to switch views to check is not one you can check an entry with.
@@ -12807,6 +12848,13 @@
           `<button class="conv-pick" onclick="${pick === true || !pick ? 'toggleConvPick' : pick}(${i})" ` +
           `aria-pressed="false" aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
+        // What a provider returns *is* Markdown. Drawn as such when the reader has it on -- the
+        // same switch the Web Agents chat view carries, because it is one preference about one
+        // kind of answer. `data-text` stays the raw text: a quote lifted out of a bubble is the
+        // words, not the markup that drew them.
+        const body = foreign && e.text && typeof markdownHtml === 'function'
+          && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
+          ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
@@ -12820,7 +12868,7 @@
         return rule + git.before +
           `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
-          ` style="--conv-agent:${color}">${tick}${head}${text}</div>` + git.after;
+          ` style="--conv-agent:${color}">${tick}${head}${body}</div>` + git.after;
       }).join('');
     }
 
@@ -14366,6 +14414,10 @@
         // by the id the start named itself with. After openPendingStart, so a start this tab does
         // still hold the answer for lands the ordinary way, with its opening words.
         if (typeof convLandPending === 'function') convLandPending();
+        // And any agent conversation whose binding does not yet say what the conversation does.
+        // After convLandPending, which is what puts the started pane in the conversation this
+        // reads the member out of.
+        if (typeof webchatReconcileBindings === 'function') webchatReconcileBindings();
         // `convFollowAids` was called here, every poll, to fold a live pane's agent id onto a
         // member row and to move a member whose pane had gone onto the pane its agent was in. A
         // member is its agent now, so there is nothing to fold and nowhere to follow.

@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-09">
+  <meta name="app-built" content="2026-09-10">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -2153,8 +2153,14 @@
       gap: 8px;
     }
 
-    .ql-primary, .ql-secondary {
+    /* Two of them side by side share the row; one on its own is the width of what it sits in.
+       `flex: 1` on the button itself would stretch it down a column-flex parent instead. */
+    .ql-actions > .ql-primary,
+    .ql-actions > .ql-secondary {
       flex: 1;
+    }
+
+    .ql-primary, .ql-secondary {
       padding: 11px;
       border-radius: 8px;
       font-weight: 600;
@@ -2461,6 +2467,15 @@
       border-radius: 4px;
       color: var(--muted);
       font-weight: 500;
+    }
+
+    /* Which web providers a conversation talks to, beside its name. The marks first and the kind
+       after them: the marks are what is recognised, and the word is what it is called. */
+    .conv-web {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
     }
 
     /* Nothing in it is running. The same badge as `auto` and a different colour, because it is a
@@ -2953,7 +2968,9 @@
       flex: 0 0 auto;
     }
 
-    #startSubmit:disabled {
+    #startSubmit:disabled,
+    .ql-primary:disabled,
+    .ql-secondary:disabled {
       opacity: 0.5;
       cursor: default;
     }
@@ -3979,10 +3996,28 @@
       width: 100%;
     }
 
+    /* Two rows at every width. What the chat *is* on top — the back arrow, the provider's mark
+       and the title — and what you can *do* to it on the right of that row; the processes behind
+       it and the model it is on underneath, which is the line that used to be squeezed between
+       the title and the first button. */
     #webAgentView .conv-view-head {
-      grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto auto;
-      grid-template-areas: 'back mark title pills model sync new more gear';
+      grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto;
+      grid-template-areas:
+        'back mark title sync retry new more gear'
+        'back meta meta  meta meta  meta meta meta';
+      row-gap: 4px;
     }
+
+    #webAgentMeta {
+      grid-area: meta;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    /* The one thing on that line that can be long, so the one thing that gives way. */
+    #webAgentMeta #webAgentModel { flex: 0 1 auto; min-width: 0; }
 
     /* The two things that can be wrong, side by side, at the top of the chat they are about. The
        adapter and the provider's browser fail independently — so they are two pills rather than
@@ -3990,7 +4025,6 @@
        repairs a process. They share a wrap for that reason: a drawer belongs inside the thing a
        press outside of closes it. */
     #webAgentHeads {
-      grid-area: pills;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -4011,22 +4045,18 @@
       max-width: 76px;
     }
 
-    /* Nine things share this header — back, mark, title, two pills, the model, Sync, + and two
-       drawers — and on a phone that is one row too many: the title was squeezed to nothing and the
-       pills sat on top of Sync. So on a narrow screen it is two rows. What the chat *is* stays on
-       top; what you can *do* to it moves under, in one line right of the model, which keeps its
-       own left edge. The header grows by a row of buttons and the thread loses that much, which is
-       the trade a title worth reading is worth. */
     /* Wide: each control keeps the grid area it has always had. */
     #webAgentActs { display: contents; }
 
+    /* On a phone the title and five buttons do not share a row either, so the buttons take a row
+       of their own and the header is three: what it is, what it is running on, what you can do. */
     @media (max-width: 560px) {
       #webAgentView .conv-view-head {
-        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        grid-template-columns: auto auto minmax(0, 1fr);
         grid-template-areas:
-          'back mark title pills'
-          'back acts acts  acts';
-        row-gap: 4px;
+          'back mark title'
+          'back meta meta'
+          'back acts acts';
       }
 
       #webAgentActs {
@@ -4037,17 +4067,10 @@
         min-width: 0;
       }
 
-      /* The model select is the one thing here that can be long, so it is the one thing that
-         gives way — the four buttons beside it are a word or a glyph each. */
-      #webAgentModel { flex: 0 1 auto; min-width: 0; }
-
-      /* The pills share the top row with the name, the id and the date, and those three are what
-         the row is for — so the pills keep the half that carries the state and drop the word. A
-         truncated "SE…" names nothing that a coloured dot in the adapter's own position does not,
-         and the provider's mark says which provider without spelling it. Both keep their title and
-         their aria-label, which is where the word went. */
-      #webAgentHeads .head-pill { max-width: none; padding: 1px 6px; }
-      #webAgentHeads .head-pill .head-pill-name { display: none; }
+      /* The pills have a line to themselves now rather than the end of the title's, so the words
+         are back: "server" and "provider" is what makes two coloured dots two different questions.
+         The cap goes with them -- nothing on that line is competing for the space. */
+      #webAgentHeads .head-pill { max-width: none; }
     }
 
     .head-pill {
@@ -7183,6 +7206,7 @@
        same button read as tiny on a phone and fine on a desktop. Same reasoning as convGlyph. */
     .hang-live svg,
     .hang-commits svg,
+    .hang-md svg,
     .hang-tidy svg,
     .conv-analytics-refresh svg {
       display: block;
@@ -7200,6 +7224,14 @@
     #webAgentMarkdown.live {
       color: var(--green);
       border-color: var(--green);
+    }
+
+    /* The conversation window's copy of that switch, which governs the same bubbles from the other
+       side. Its own colour: the green beside it belongs to the record toggle and the blue to the
+       commits one, and a third button repeating either would read as one state with two switches. */
+    .hang-md.live {
+      color: var(--orange);
+      border-color: var(--orange);
     }
 
     /* Lit in the branch colour rather than the record's green: two buttons side by side in the
@@ -7636,6 +7668,55 @@
       border-color: var(--who-accent, var(--text));
       color: var(--text);
       opacity: 1;
+    }
+
+    /* A web provider names itself in a bubble header the way it does everywhere else: its own
+       mark, in its own colour, with the name beside it at the header's own weight. It was the
+       label alone in the header's muted grey, which past two providers is one voice. */
+    .conv-who .conv-foreign {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 7px 1px 4px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--conv-agent) 45%, transparent);
+      background: color-mix(in srgb, var(--conv-agent) 12%, transparent);
+      color: var(--text);
+      font-weight: 600;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .conv-who .conv-foreign svg,
+    .conv-who .conv-foreign img { flex: 0 0 auto; }
+
+    .conv-who .conv-foreign-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* A rendered answer inside a bubble. The bubble owns the margins, so the first and last block
+       inside it must not add their own — a paragraph with a top margin lifts the text off the
+       header it belongs under. */
+    .conv-msg .conv-md > :first-child { margin-top: 0; }
+    .conv-msg .conv-md > :last-child { margin-bottom: 0; }
+
+    /* The pill a double tap has left reading alone. Marked on the row it was chosen from rather
+       than only in the thread: the thread is showing one provider and this says which control
+       did it. */
+    .xfer-row .xfer-who.solo {
+      border-style: dashed;
+      border-color: var(--blue);
+      color: var(--blue);
+      opacity: 1;
+    }
+
+    /* Whether a tap on a pill adds or switches. Lit when it adds, because that is the state worth
+       knowing: switching is what a row of pills does everywhere else in this app. */
+    .xfer-row .xfer-who-more.pick.on {
+      border-color: var(--blue);
+      color: var(--blue);
     }
 
     /* Measured in the pill's own ems, so the pill scales as one piece — the same rule the thread's
@@ -8615,6 +8696,16 @@
         white-space: nowrap;
       }
 
+      /* One card standing for a conversation's whole panel of threads. Marked by the row of
+         provider marks where a single chat wears one, so the two are told apart at a glance
+         without a word for it. */
+      .webchat-room .conv-kind {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        flex: 0 0 auto;
+      }
+
       #webAgentTitle .webchat-id { margin-left: 6px; }
 
       #webAgentTitle .webchat-since { margin-left: 6px; }
@@ -8662,6 +8753,15 @@
         flex: 1;
         height: 1px;
         background: var(--border);
+      }
+
+      /* Offered under the pills once one of them is chosen, standing on that same rule: it is a
+         control about the list below it rather than one more provider in the row above. Dashed,
+         because every solid pill on this page is a filter and this one starts something. */
+      .webchat-new-here {
+        gap: 6px;
+        border-style: dashed;
+        color: var(--text);
       }
 
       /* The second line: the same site reached with no account. Held back from the first line,
@@ -8762,7 +8862,80 @@
 
       .webchat-pick-row:hover { border-color: var(--muted); }
 
+      /* Picked, in agent mode. The row is a toggle there rather than a button that closes the
+         sheet, so it has to say which of the two it is in without a second glance -- a tick alone
+         reads as decoration at this size. */
+      .webchat-pick-row[aria-pressed="true"] {
+        border-color: var(--blue);
+        background: color-mix(in srgb, var(--blue) 16%, var(--surface));
+      }
+
+      .webchat-pick-row[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+
       .webchat-pick-row .webchat-pill-n { margin-left: auto; }
+
+      /* Stuck to the foot of the sheet it is in, because the picker above it grows with the number
+         of providers on the machine and .sheet scrolls -- and a control that commits has to be
+         where the thumb is, not wherever the scroll happens to be. */
+      .webchat-go {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        position: sticky;
+        bottom: 0;
+        margin: 0 -16px -12px;
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+      }
+
+
+      /* display:flex outranks the user agent's [hidden] rule, so hiding it needs saying twice --
+         the same guard .block-nav[hidden] carries for the same reason. */
+      .webchat-go[hidden],
+      .webchat-any[hidden],
+      .seg[hidden] { display: none; }
+
+      /* All / None for a whole column, in the heading that names it. */
+      .webchat-pick-all {
+        margin-left: auto;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        letter-spacing: inherit;
+        padding: 1px 8px;
+        cursor: pointer;
+      }
+
+      .webchat-pick-all[aria-pressed="true"] { border-color: var(--blue); color: var(--blue); }
+      .webchat-pick-all:disabled { opacity: 0.45; cursor: default; }
+
+      .webchat-picker h4 { display: flex; align-items: center; gap: 8px; }
+
+      .webchat-any {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+
+      /* The two things the New sheet can make. Its own rule rather than a shared segmented control:
+         this app has none, and one control is not a component. */
+      .seg { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+      .seg button {
+        flex: 1;
+        padding: 6px 10px;
+        border: none;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.72rem;
+        cursor: pointer;
+      }
+      .seg button[aria-selected="true"] { background: var(--blue); color: var(--bg); font-weight: 600; }
 
       .webchat-picker .pair-empty { grid-column: 1 / -1; }
 
@@ -9428,6 +9601,10 @@
            did not start — the adapter and this provider's browser — with a status line each and
            the repair that ends it. A provider's *tab* is a different kind of repair and stays in
            the ⋯ menu, which asks the probe on the way in. -->
+      <!-- What this chat *is*, on a line of its own under the title: the two processes behind it
+           and which model it is on. They used to share the title's row, where a title worth
+           reading and four buttons left them a hundred pixels between them. -->
+      <span id="webAgentMeta">
       <span id="webAgentHeads">
         <span class="term-menu-wrap webchat-wrap webchat-server-wrap">
           <button class="head-pill unknown" id="webAgentServerPill" onclick="webchatMenu('server')"
@@ -9444,12 +9621,13 @@
           <div class="term-menu webchat-menu" id="webAgentServerMenu" role="menu" hidden></div>
         </span>
       </span>
-      <!-- The five controls, in a wrapper that is `display: contents` on a wide screen — so each
-           keeps the grid area it has always had — and one flex row on a phone, where the header is
-           two rows and this is the second of them. -->
-      <span id="webAgentActs">
       <select id="webAgentModel" onchange="webchatSetModel(this.value)"
         onfocus="webchatAskModels()" aria-label="Provider model" hidden></select>
+      </span>
+      <!-- The controls, in a wrapper that is `display: contents` on a wide screen — so each keeps
+           the grid area it has always had — and one flex row on a phone, where the header is three
+           rows and this is the last of them. -->
+      <span id="webAgentActs">
       <!-- Reading the conversation back off the provider's page is the thing people reach for
            most, and it was a row in a drawer unless the app had a reason to suspect a missing
            reply. It stands in the head now, and lights up when there is such a reason. -->
@@ -9458,6 +9636,12 @@
       <!-- A second conversation with the provider you are already talking to. The only other way
            to one is the landing page's + New, which means leaving the thread and finding the
            provider again in a list. -->
+      <!-- The TUI's `/retry`, and the other half of Sync: after a hang, either the provider took
+           the message and the answer has to be read back, or it did not and the message has to go
+           again. It fills the composer rather than sending — the provider may well have taken it. -->
+      <button class="open-pane" id="webAgentRetry" style="grid-area: retry"
+        onclick="webchatRetry()" title="Put your last message back in the composer"
+        aria-label="Put your last message back in the composer">Retry</button>
       <button class="open-pane" id="webAgentNewChat" style="grid-area: new"
         onclick="webchatNewHere()" title="New chat with this provider"
         aria-label="New chat with this provider">+</button>
@@ -9484,11 +9668,6 @@
             aria-label="Rename this chat" hidden>Rename chat</button>
           <button class="menu-item" id="webAgentProbe" onclick="webchatProbe()"
             aria-label="Check this chat's connection">Check connection</button>
-          <!-- The TUI's `/retry`. It fills the composer rather than sending: after a hang the
-               provider may well have taken the message already, and this app's own Resend works
-               the same way for the same reason. -->
-          <button class="menu-item" onclick="webchatMenu(); webchatRetry()"
-            aria-label="Put your last message back in the composer">Retry last message</button>
           <button class="menu-item arm-btn" onclick="armButton(this, 'Clear local history?',
             () => { webchatMenu(); webchatClear(); })"
             aria-label="Clear local Web Agent history">Clear history</button>
@@ -9706,6 +9885,16 @@
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3.5" /><path d="M12 2v6.5M12 15.5V22" />
+        </svg></button>
+      <!-- How a provider's answer is drawn, for a conversation that has provider threads in it.
+           The same switch the Web Agents chat view carries and the same stored preference: it is
+           one decision about one kind of answer, wherever that answer is being read. -->
+      <button class="hang-btn hang-md" id="convMarkdown" onclick="webchatToggleMarkdown()"
+        aria-pressed="true" aria-label="Show provider replies as formatted Markdown">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+          <path d="M6 15.5v-7l3 3.5 3-3.5v7M16 8.5v7M16 15.5l-2-2.5M16 15.5l2-2.5" />
         </svg></button>
       <button class="hang-btn hang-live" id="convLive" onclick="toggleConvLive()"
         aria-pressed="false" aria-label="Read the relay’s record">
@@ -10243,10 +10432,38 @@
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
-        <label class="start-field">Name (optional)<input id="webchatNewName" type="text"
-            maxlength="64" autocapitalize="none" autocomplete="off"
+        <!-- Three things this sheet can make, different in kind rather than in degree.
+             A chat is one thread you read and type into. An agent conversation is one herdr
+             session holding several provider threads at once, asking each its own question and
+             collating the answers -- so it spawns a pane and the providers are a set. A panel is
+             that same set of threads with nobody driving it but you: no pane, no binding, and the
+             composer asks which of them each message goes to. -->
+        <div class="seg" role="tablist" id="webchatNewModes" aria-label="What to make">
+          <button type="button" role="tab" id="webchatNewModeChat" aria-selected="true"
+            onclick="webchatNewMode('chat')">Chat</button>
+          <button type="button" role="tab" id="webchatNewModeAgent" aria-selected="false"
+            onclick="webchatNewMode('agent')">Agent</button>
+          <button type="button" role="tab" id="webchatNewModePanel" aria-selected="false"
+            onclick="webchatNewMode('panel')">Panel</button>
+        </div>
+        <label class="start-field" id="webchatNewNameRow">Name (optional)<input id="webchatNewName"
+            type="text" maxlength="64" autocapitalize="none" autocomplete="off"
             placeholder="leave empty for this provider's own chat" /></label>
+        <p class="pair-empty" id="webchatNewAgentNote" hidden>One agent, several providers. Pick
+          who it may ask; it opens a thread with each and follows each up on its own.</p>
+        <p class="pair-empty" id="webchatNewPanelNote" hidden>Several providers and no agent. Pick
+          who is on the panel; the composer asks which of them each message goes to, and every
+          answer lands in one thread.</p>
         <div class="webchat-picker" id="webchatNewCols"></div>
+        <!-- The one control that commits, so it is never scrolled away from: the picker above it
+             is as tall as the machine has providers, and .sheet scrolls. A row you can fill in and
+             not submit is the whole of what went wrong here. The onclick is set by
+             webchatNewRender, which is the only thing that knows which of the three it commits. -->
+        <div id="webchatNewAgentGo" class="webchat-go" hidden>
+          <label class="webchat-any" id="webchatNewAnyRow"><input type="checkbox" id="webchatNewAny"
+            onchange="webchatNewRender()" /> Let the agent choose</label>
+          <button type="button" class="ql-primary" id="webchatNewStart">Start agent</button>
+        </div>
       </div>
     </div>
   </div>
@@ -14552,6 +14769,10 @@
         // by the id the start named itself with. After openPendingStart, so a start this tab does
         // still hold the answer for lands the ordinary way, with its opening words.
         if (typeof convLandPending === 'function') convLandPending();
+        // And any agent conversation whose binding does not yet say what the conversation does.
+        // After convLandPending, which is what puts the started pane in the conversation this
+        // reads the member out of.
+        if (typeof webchatReconcileBindings === 'function') webchatReconcileBindings();
         // `convFollowAids` was called here, every poll, to fold a live pane's agent id onto a
         // member row and to move a member whose pane had gone onto the pane its agent was in. A
         // member is its agent now, so there is nothing to fold and nowhere to follow.
@@ -19608,7 +19829,9 @@
     // read may only ever *extend* it, never replace it, and its stamp may only ever get better.
     // Streaming pane content is what folds into new entries; it does not own the ones already
     // written, and the thread renders the record rather than the frame.
-    const CONV_AT_RANK = { backfill: 0, read: 1, state: 2, sent: 3 };
+    // `webchat` is a provider's own stamp on its own message, which is a reading and not an
+    // inference — the same standing as a send this app watched go out.
+    const CONV_AT_RANK = { backfill: 0, read: 1, state: 2, sent: 3, webchat: 3 };
 
     function convAtRank(e) {
       const r = CONV_AT_RANK[e && e.at_src];
@@ -20380,6 +20603,24 @@
       // `typed` is the default the recorder applies on its own, so there is nothing to leave.
       if (note.via === 'typed') return;
       saveOutbox(outboxAdd(loadOutbox(), convHash(text), note, now));
+    }
+
+    // What a conversation's card says about the web providers it reaches, or null for one that
+    // reaches none. Here rather than in the row builder because it is the one decision on that
+    // card that is not about panes: `providers` is the grant — what may be spent — and the two
+    // modes differ in who spends it, an agent or the person at the composer.
+    //
+    // `*` is the agent choosing for itself and has no marks to draw: naming every provider on the
+    // card would be the app answering a question the agent has not been asked yet.
+    function convWebBadge(conv) {
+      const granted = conv && conv.webchat && conv.webchat.providers;
+      if (!Array.isArray(granted) || !granted.length) return null;
+      const any = granted.includes('*');
+      return {
+        kind: conv.webchat.mode === 'panel' ? 'Panel' : 'Agent',
+        any: any,
+        providers: any ? [] : Array.from(new Set(granted)),
+      };
     }
 
   </script>
@@ -22103,21 +22344,24 @@
         // selection tick, because a decision is not a message anyone can quote back at an agent.
         // What it says is why, and under it, in the same shape the commit strip uses for the other
         // "this happened between two messages" fact, the gate and the agent that was called.
+        // A step of a session's path — asked, record written, sent, paused, error — and a
+        // provider whose half of the thread could not be read. Drawn in the commit strip's shape
+        // and for its reason: a small thing that happened at this point in the thread, under
+        // nothing, said in one line and read past unless it is the line being looked for.
+        // `sign` because the arbitrator is no longer the only thing with steps to report, and a
+        // provider's own mark in front of a provider's own line is what says which it is.
+        if (e.event) {
+          const when = convClock(e);
+          last = at;
+          return `<div class="conv-arb-to">` +
+            `<span class="conv-commits-lede">${e.sign || arbSign(13)} ${escapeHtml(e.lede || '')}</span>` +
+            (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
+                      `${escapeHtml(e.text)}</span>` : '') +
+            (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
+            '</div>';
+        }
         if (e.who === 'arbiter') {
           const when = convClock(e);
-          // A step of the session's path — asked, record written, sent, paused, error. Drawn in
-          // the commit strip's shape and for its reason: a small thing that happened at this point
-          // in the thread, under nothing, said in one line and read past unless it is the line
-          // being looked for.
-          if (e.event) {
-            last = at;
-            return `<div class="conv-arb-to">` +
-              `<span class="conv-commits-lede">${arbSign(13)} ${escapeHtml(e.lede || '')}</span>` +
-              (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
-                        `${escapeHtml(e.text)}</span>` : '') +
-              (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
-              '</div>';
-          }
           const badge = e.toAgent ? agentBadge(e.toAgent) : '';
           const gate = escapeHtml(e.gate || 'decided');
           // The member's own label and never `member-2`. That id is this session's bookkeeping and
@@ -22169,20 +22413,28 @@
         // Every agent bubble carries its label as well as its colour: two washes of one family are
         // not enough on a phone in sunlight, and past two members colour alone stops working.
         const key = e.key || me.key || '';
-        const live = agents.find(x => convMemberKey(x) === key);
+        // A bubble from something that is not a pane in this conversation and never will be — a
+        // web provider the agent asked a question of. It has no live pane, no spawn record and no
+        // harness, so every fallback to "the pane this thread is read through" is wrong for it:
+        // an unmarked one wore the reading pane's own badge and alias.
+        const foreign = !!e.foreign;
+        const live = foreign ? null : agents.find(x => convMemberKey(x) === key);
         // The harness the entry was recorded under, not the one running in that pane today: a
         // conversation outlives its panes, and a member that has exited still gets its own badge.
-        const agent = e.agent || (live && live.agent) || me.agent || '';
+        const agent = e.agent || (foreign ? '' : (live && live.agent) || me.agent) || '';
         // The alias it was started under, where there is one. An entry never carries it — it is a
         // fact about the session, not about a message — so it is read off the live pane first and
         // off the spawn record after, which is the only source left once the pane has ended.
-        const spawn = (typeof convViewRecs !== 'undefined'
+        const spawn = (typeof convViewRecs !== 'undefined' && !foreign
           ? (convViewRecs.find(r => r.key === key) || {}).spawn : null) || {};
-        const config = (live && live.config) || spawn.config || me.config || '';
-        const color = agentColor(agent) || 'var(--muted)';
+        const config = foreign ? '' : (live && live.config) || spawn.config || me.config || '';
+        // `color` is carried by an entry that is not a pane at all — a web provider, whose
+        // identifying colour is its own mark's and not any harness's.
+        const color = e.color || agentColor(agent) || 'var(--muted)';
         // The name it goes by now, not the one stamped when the words were recorded — see
         // convMemberName. An ended member has no live pane and keeps its stamp.
-        const name = escapeHtml(convMemberName(key, e.label, me.label));
+        const name = escapeHtml(foreign ? (e.label || '')
+          : convMemberName(key, e.label, me.label));
         // The same badge the pane list and the pair sheet use, beside the name: colour says which
         // member, and the badge says what it is — a thread of claude and codex reads as two
         // colleagues rather than as two colours.
@@ -22194,9 +22446,19 @@
         // This is a status dot, so it carries only the member's state now. The bubble wash, name
         // and badge already identify the speaker; a second colour ring made a working dot look
         // like it had changed to an unrelated warning state.
-        const dot = live ? statusColor(live) : 'var(--dot-cold)';
-        const who = `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
-          `style="background:${dot}"></span>${name}${badge}`;
+        const dot = live ? statusColor(live)
+          : (foreign && e.live ? 'var(--dot-live)' : 'var(--dot-cold)');
+        // A web provider's mark, beside its name and in its own colour. It used to be a light
+        // grey label and nothing else, which in a thread of five providers is five rows that read
+        // the same. The mark is what the card, the pill and the picker already identify it by.
+        const sign = foreign && e.sign
+          ? `<span class="conv-foreign" style="--conv-agent:${color}">${e.sign}` +
+            `<span class="conv-foreign-name">${name}</span></span>`
+          : '';
+        const who = sign
+          ? `<span class="dot${e.live ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
+          : `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
+            `style="background:${dot}"></span>${name}${badge}`;
         const bar = user ? [who, from].filter(Boolean).join(' · ') : who;
         // On every bubble, including a user's own in a single-pane thread, where it is the whole
         // header: a time you have to switch views to check is not one you can check an entry with.
@@ -22224,6 +22486,13 @@
           `<button class="conv-pick" onclick="${pick === true || !pick ? 'toggleConvPick' : pick}(${i})" ` +
           `aria-pressed="false" aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
+        // What a provider returns *is* Markdown. Drawn as such when the reader has it on -- the
+        // same switch the Web Agents chat view carries, because it is one preference about one
+        // kind of answer. `data-text` stays the raw text: a quote lifted out of a bubble is the
+        // words, not the markup that drew them.
+        const body = foreign && e.text && typeof markdownHtml === 'function'
+          && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
+          ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
@@ -22237,7 +22506,7 @@
         return rule + git.before +
           `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
-          ` style="--conv-agent:${color}">${tick}${head}${text}</div>` + git.after;
+          ` style="--conv-agent:${color}">${tick}${head}${body}</div>` + git.after;
       }).join('');
     }
 
@@ -22699,10 +22968,20 @@
       const arbEntries = typeof arbThreadEntries === 'function'
         ? arbThreadEntries(conv && conv.id) : [];
       const withArb = arbEntries.length ? convInsertByTime(all, arbEntries) : all;
+      // And what this conversation's agent asked its web providers, on the same terms: fetched per
+      // view rather than stored, because the relay proxies those exchanges and does not keep them.
+      // The fetch is here and not in the render for the reason the records are — every caller of
+      // this composer draws the same thread and none of them should have to remember.
+      let withWeb = withArb;
+      if (typeof webchatThreadEntries === 'function') {
+        webchatThreadFetch(conv && conv.id);
+        const webEntries = webchatThreadEntries(conv && conv.id);
+        if (webEntries.length) withWeb = convInsertByTime(withArb, webEntries);
+      }
       // `all` and `entries` both, because "nothing recorded" and "everything recorded is
       // provisional" are different empty states and the view says so differently.
-      return { recs: recs, joint: joint, all: withArb,
-        entries: convFinalOnly() ? withArb.filter(e => !convProvisional(e)) : withArb };
+      return { recs: recs, joint: joint, all: withWeb,
+        entries: convFinalOnly() ? withWeb.filter(e => !convProvisional(e)) : withWeb };
     }
 
     // Both halves of the switch: the button that offers it and the view it selects.
@@ -23312,6 +23591,9 @@ let webchatAvailable = false;
 let webchatProviders = [];
 let webchatSessions = [];
 let webchatCapabilities = [];
+// Which agent drives which namespace, as the relay has already written it. The relay's own fact —
+// it is the side holding the master bearer — and it never carries the token.
+let webchatBindings = {};
 let webchatCurrent = '';
 let webchatMessages = [];
 let webchatTurn = null;
@@ -23329,6 +23611,22 @@ const WEBCHAT_FILTER_KEY = 'herdr_webchat_filter';
 const WEBCHAT_MD_KEY = 'herdr_webchat_md';
 const WEBCHAT_THEME_KEY = 'herdr_webchat_theme';
 const WEBCHAT_NAMES_KEY = 'herdr_webchat_names';
+// The one turn this browser has in flight, written down rather than only held. Everything about a
+// sent prompt used to live in `webchatTurn` and nowhere else — the composer is cleared at the send
+// — so a page discarded on a tab switch, or a socket drop that reset this module, lost the only
+// copy of what had just been said. The reply is not kept here: it is on the provider's page and in
+// the adapter's record, and this is about the question, not the answer.
+const WEBCHAT_TURN_KEY = 'herdr_webchat_turn';
+// Long enough to cover any turn a provider will actually finish, short enough that a turn from
+// last week does not come back as a chat waiting for a reply.
+const WEBCHAT_TURN_TTL = 6 * 60 * 60 * 1000;
+// How much of a part-written reply is carried across a page that goes away and comes back. The tail
+// rather than the head: what a reader who has just returned is looking for is where it has got to.
+const WEBCHAT_TURN_REPLY_MAX = 40000;
+// A delta is not written down as it arrives -- a provider streams word by word, and a localStorage
+// write per word is a write per word. The last one is caught by the write on `done`.
+const WEBCHAT_TURN_KEEP_MS = 1500;
+let webchatTurnKept = 0;
 
 // Which provider the list is narrowed to, or '' for all of them. Kept here rather than in the
 // shared documents: a filter is a statement about what this reader is looking at now, the same as
@@ -23338,22 +23636,90 @@ const WEBCHAT_NAMES_KEY = 'herdr_webchat_names';
 let webchatFilter = '';
 try { webchatFilter = localStorage.getItem(WEBCHAT_FILTER_KEY) || ''; } catch (_error) { /* private mode */ }
 
+// What the *socket* was telling us, and only that. Which providers exist, what this relay will act
+// on and what it knows about them all belong to the connection and may be different on the next
+// one. Which chat the reader is in, and what they have just sent, do not — clearing those bounced
+// a reader out of the thread they were reading and threw away the prompt that was in flight, every
+// time the connection blinked. `webchatStale` is what says the rest has to be asked for again.
+//
+// The cost of keeping the reader in place: reconnecting to a relay with no adapter at all leaves
+// the last thread on screen — visibly disconnected, and cleared the moment any state does arrive
+// — rather than a landing page. That is the rarer case by a long way, and bouncing every reader
+// out of every thread on every blink to cover it is the bug this is fixing.
 function webchatReset() {
-  const view = document.getElementById('webAgentView');
-  if (view && view.style.display !== 'none') showLanding();
   webchatOffered = false;
   webchatAvailable = false;
   webchatProviders = [];
   webchatSessions = [];
   webchatCapabilities = [];
-  webchatCurrent = '';
-  webchatMessages = [];
   webchatTruncated = false;
-  webchatTurn = null;
   webchatModels.clear();
   webchatModelRequests.clear();
-  webchatNeedsSync.clear();
+  // A turn kept across the reset is now older than the connection that will report on it, which
+  // is the same standing a turn read back out of storage has — see webchatCheckTurn.
+  if (webchatTurn?.running) webchatTurn.predates = true;
+  webchatStale = true;
   renderWebAgents();
+}
+
+// The transcript on screen was read over a socket that has gone, so it has to be read again before
+// it can be trusted. Set by the reset above and spent by the next state that arrives.
+let webchatStale = false;
+
+// The in-flight turn, as the next page will find it. `null` clears it: a turn that has ended is
+// not something to resume, and leaving it would greet the next visit with a chat that appears to
+// be waiting for a reply that arrived hours ago.
+function webchatKeepTurn(turn) {
+  webchatTurnKept = Date.now();
+  try {
+    if (!turn) localStorage.removeItem(WEBCHAT_TURN_KEY);
+    else {
+      localStorage.setItem(WEBCHAT_TURN_KEY, JSON.stringify({
+        session: turn.session, requestId: turn.requestId, message: turn.message,
+        started: !!turn.started, at: turn.at || Date.now(),
+        // What has streamed so far. It was left out because the answer is on the provider's page
+        // and in the adapter's record -- true once the turn has ended, and no help at all to a
+        // page that comes back while it is still being written, which is exactly when the reader
+        // most wants to see it. Capped, because this is one localStorage key and a long answer
+        // from a provider that likes to think out loud is not a small string.
+        reply: String(turn.reply || '').slice(-WEBCHAT_TURN_REPLY_MAX),
+      }));
+    }
+  } catch (_error) { /* private mode: this page only, which is the case it cannot help anyway */ }
+}
+
+// A page about to go away writes down whatever has streamed since the last flush. The throttle
+// above is what keeps a provider's word-by-word stream from being a localStorage write per word,
+// and this is what stops that throttle costing the reader the last second and a half of a reply
+// when the tab is discarded -- which is the moment the whole mechanism exists for.
+if (typeof document !== 'undefined' && document.addEventListener) {
+  const flush = () => { if (webchatTurn?.running) webchatKeepTurn(webchatTurn); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+  window.addEventListener('pagehide', flush);
+}
+
+function webchatStoredTurn() {
+  let raw = null;
+  try { raw = localStorage.getItem(WEBCHAT_TURN_KEY); } catch (_error) { return null; }
+  if (!raw) return null;
+  let held = null;
+  try { held = JSON.parse(raw); } catch (_error) { held = null; }
+  if (!held || !held.session || !held.message) { webchatKeepTurn(null); return null; }
+  if (typeof held.reply !== 'string') held.reply = '';
+  if (Date.now() - (held.at || 0) > WEBCHAT_TURN_TTL) { webchatKeepTurn(null); return null; }
+  return held;
+}
+
+// A stored turn, put back as the one this page is watching. `predates` is what tells the check
+// below that it may believe the adapter about whether this is still running: a turn sent a moment
+// ago is not yet in anybody's books, and one that is older than the connection reading it is.
+function webchatResumeTurn(held) {
+  webchatTurn = {
+    requestId: held.requestId, message: held.message, reply: held.reply || '',
+    status: held.reply ? 'Replying…' : 'Waiting for the reply',
+    running: true, started: !!held.started,
+    session: held.session, at: held.at, predates: true,
+  };
 }
 
 function webchatReceiveState(msg) {
@@ -23365,6 +23731,7 @@ function webchatReceiveState(msg) {
   // Gated on the list and never on the API version: adding a route is not a breaking change, so
   // an adapter with the recovery controls answers the same version as one without them.
   webchatCapabilities = Array.isArray(msg.capabilities) ? msg.capabilities : [];
+  webchatBindings = (msg.attached && typeof msg.attached === 'object') ? msg.attached : {};
   for (const name of webchatNeedsSync) {
     if (!webchatSessions.some(session => session.name === name)) webchatNeedsSync.delete(name);
   }
@@ -23373,6 +23740,22 @@ function webchatReceiveState(msg) {
     if (!sectionOrder.includes('webAgent')) sectionOrder.push('webAgent');
     localStorage.setItem(WEBCHAT_SEEN_KEY, '1');
     saveSections();
+  }
+  // A turn this page never saw start, because it was not this page that started it: a reload, a
+  // tab that was discarded, a socket that dropped. Put back before the check below, which is what
+  // decides whether it is still running.
+  const held = webchatTurn ? null : webchatStoredTurn();
+  if (held) {
+    if (webchatSessions.some(session => session.name === held.session)) {
+      // Never over a chat the reader has since opened for themselves. Restoring the turn under
+      // whatever is on screen would be controls acting on somebody else's thread.
+      if (!webchatCurrent) webchatCurrent = held.session;
+      if (webchatCurrent === held.session) webchatResumeTurn(held);
+    } else {
+      // The conversation it was sent to is gone — deleted, renamed, or an adapter that came back
+      // holding nothing. There is nothing left to resume it into.
+      webchatKeepTurn(null);
+    }
   }
   webchatCheckTurn();
   renderWebAgents(msg.error || '');
@@ -23391,13 +23774,25 @@ function webchatReceiveState(msg) {
   if (webchatCurrent && !webchatSessions.some(session => session.name === webchatCurrent)) {
     showLanding();
     webchatCurrent = '';
+    webchatMessages = [];
+    webchatTurn = null;
+    webchatKeepTurn(null);
   } else if (webchatCurrent) {
+    // The thread on screen was read over a socket that has gone. Ask again rather than leave a
+    // transcript nobody can confirm — and it is the same ask that brings back a reply which
+    // landed while this page was not listening.
+    if (webchatStale) webchatAsk({type: 'webchat_open', session: webchatCurrent});
     renderWebchatView();
   }
+  if (webchatOffered) webchatStale = false;
 }
 
 function webchatCan(name) {
   return webchatCapabilities.includes(name);
+}
+
+function webchatAttached() {
+  return webchatBindings;
 }
 
 function webchatProvider(id) {
@@ -23492,10 +23887,33 @@ function webchatFolded(id) {
   return /-anon$/.test(id) || /-coder$/.test(id);
 }
 
+// When a provider was last said anything to, as milliseconds. The rows below the pills are already
+// ordered by this, so ordering the pills by it too means the one you were last in is the one under
+// your thumb — the same rule the agent switcher and the recents list follow. A provider nobody has
+// used yet has no date and keeps the adapter's own driver order behind the ones that do.
+function webchatUsedAt(id) {
+  let newest = 0;
+  for (const session of webchatSessions) {
+    if (session.provider !== id) continue;
+    const at = Date.parse(session.updatedAt || session.createdAt || '');
+    if (at > newest) newest = at;
+  }
+  return newest;
+}
+
+function webchatByRecency(providers) {
+  // Stable by construction: the sort is on the index for anything the two sides tie on, which for
+  // providers with no session at all is all of them.
+  return providers
+    .map((provider, index) => ({provider, index, at: webchatUsedAt(provider.id)}))
+    .sort((a, b) => (b.at - a.at) || (a.index - b.index))
+    .map(row => row.provider);
+}
+
 function webchatPillsHtml() {
   if (webchatProviders.length < 2) return '';
-  const folded = webchatProviders.filter(provider => webchatFolded(provider.id));
-  const named = webchatProviders.filter(provider => !webchatFolded(provider.id));
+  const folded = webchatByRecency(webchatProviders.filter(provider => webchatFolded(provider.id)));
+  const named = webchatByRecency(webchatProviders.filter(provider => !webchatFolded(provider.id)));
   const open = webchatAnonOpen();
   // On the line that divides the two rows rather than floating over the first one. It is a control
   // about what is *below* it, and a rule to its left is what says so — where hanging it off the
@@ -23509,7 +23927,19 @@ function webchatPillsHtml() {
       + `<span class="webchat-anon-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>`
       + '</div>'
     : '';
+  // With a provider chosen, the list is that provider's chats -- and the commonest next move is
+  // one more of them. It used to mean clearing the filter, pressing + New and finding the same
+  // provider again in a picker.
+  const start = webchatFilter && webchatProvider(webchatFilter)
+    ? `<div class="webchat-sep webchat-start"><span class="webchat-sep-rule" aria-hidden="true">`
+      + `</span><button type="button" class="webchat-pill webchat-new-here"`
+      + ` onclick="webchatStart('${escapeHtml(webchatFilter)}')"`
+      + ` title="New chat with ${escapeHtml(webchatProvider(webchatFilter).label)}"`
+      + ` aria-label="New chat with ${escapeHtml(webchatProvider(webchatFilter).label)}">`
+      + `+ New ${webchatMark(webchatFilter, 14)}</button></div>`
+    : '';
   return webchatPillRowHtml(named, 'Filter chats by provider')
+    + start
     + fold
     + (folded.length && open
       ? webchatPillRowHtml(folded, 'Filter chats by a provider that needs no login',
@@ -23606,8 +24036,72 @@ function webchatSince(session) {
     : {year: 'numeric', month: 'short', day: 'numeric'});
 }
 
+// Which herdr conversation a thread belongs to. The adapter names a session
+// `<namespace>:<provider>[:<label>]`, and for a thread opened under a conversation the namespace
+// *is* that conversation's id — so the index answers this with no second field to keep in step.
+// The app's own chats are under the adapter's default namespace, which is not a conversation id
+// and so matches nothing here. Built once per render: a lookup per session would read the index
+// once per row.
+function webchatRooms() {
+  if (typeof loadConvIndex !== 'function') return new Map();
+  return new Map(loadConvIndex().map(conv => [conv.id, conv]));
+}
+
+// The threads in one conversation, newest first. Namespace-wide and never narrowed by the provider
+// list a conversation grants: a thread opened last week is still this conversation's after somebody
+// switches that provider off, and a card that hid it would be hiding history.
+function webchatRoomSessions(convId) {
+  return webchatByRecent(webchatSessions.filter(session => session.namespace === convId));
+}
+
+// One card standing for a conversation's whole panel of threads, in place of the several loose
+// cards they would otherwise be. Which is the difference the list has to show: five rows called
+// `c_ab12ef:chatgpt` are five providers being asked one question, and drawn flat they read as five
+// unrelated chats somebody left open.
+function webchatRoomCard(conv, sessions, compact) {
+  const busy = sessions.some(session => webchatProvider(session.provider)?.busy === session.name);
+  const running = sessions.some(session => session.running);
+  const live = busy || running;
+  const count = sessions.reduce((n, session) => n + Number(session.messages || 0), 0);
+  const newest = sessions[0] || {};
+  const when = newest.updatedAt ? fmtAgo(new Date(newest.updatedAt)) : '';
+  // Every provider in the thread, in the order it was last spoken to, which is the order the rows
+  // are in. Not the granted list: what the card is about is what has been said, and a provider
+  // that has been granted and never used has nothing on this card to stand for.
+  // Before the first question there is nothing spoken to, and a card with no mark on it names
+  // nothing -- so an empty room wears its grant instead, which is what it is going to ask.
+  const spoken = Array.from(new Set(sessions.map(session => session.provider)));
+  const granted = (conv.webchat?.providers || []).filter(id => id !== '*');
+  const marks = (spoken.length ? spoken : granted).map(provider => webchatMark(provider, 18)).join('');
+  const snippet = !compact && newest.snippet
+    ? `<div class="webchat-snippet">${escapeHtml(newest.snippet)}</div>` : '';
+  const kind = conv.webchat?.mode === 'panel' ? 'Panel' : 'Agent';
+  const said = sessions.length
+    ? `${sessions.length} ${sessions.length === 1 ? 'thread' : 'threads'}`
+      + ` · ${count} ${count === 1 ? 'message' : 'messages'}${when ? ` · ${escapeHtml(when)}` : ''}`
+    : (conv.webchat?.providers || []).includes('*') ? 'nothing asked yet · any provider'
+      : `nothing asked yet · ${granted.length} ${granted.length === 1 ? 'provider' : 'providers'}`;
+  return `<div class="conversation-card webchat-card webchat-room" role="button" tabindex="0"`
+    + ` data-conv-id="${escapeHtml(conv.id)}"`
+    + ` onclick="openConversation(this.dataset.convId)"`
+    + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();`
+    + `openConversation(this.dataset.convId)}">`
+    + `<div class="conversation-title"><span class="dot${live ? ' pulse' : ''}"`
+    + ` style="background:${live ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true"></span>`
+    + `<span class="conv-kind">${marks}</span>`
+    + `<span class="name">${escapeHtml(conv.name || conv.id)}</span>`
+    + `<span class="webchat-since">${kind}</span></div>`
+    + snippet
+    + `<div class="conversation-meta names">`
+    + `<span class="webchat-id">${escapeHtml(conv.id)}</span> · ${said}`
+    + `</div></div>`;
+}
+
 function webchatCard(session, provider, compact) {
-  const busy = provider?.busy;
+  // This thread, and not the provider. `busy` names the session holding the provider's lane, so
+  // reading it as a boolean set every card on that provider breathing whenever any one of them
+  // was answering -- a list of eight chats all claiming to be the live one.
+  const busy = !!session.running || provider?.busy === session.name;
   const ready = WEBCHAT_READY[provider?.ready] || {colour: 'var(--dot-cold)', text: ''};
   const count = Number(session.messages || 0);
   const label = webchatName(session, provider);
@@ -23673,12 +24167,13 @@ function renderWebAgents(error = '') {
   // The server pill first, beside the name: it is a fact about the section rather than an action
   // on it, and it is drawn whether or not the adapter is answering — the page you land on when
   // every chat has gone quiet is this one, and until now it said so and offered nothing.
-  // Then compact, + New, refresh. + New sits where the Launcher and Conversations put theirs:
-  // last of the ones that rearrange, first of nothing, because it is the one that makes something.
+  // Then + New, compact, refresh. The one that makes something stands ahead of the ones that
+  // rearrange what is already there: it is what the header is reached for, and putting it between
+  // two view controls read as a third view control.
   const header = '<div class="section-header"><span class="section-name">Web Agents</span>'
     + webchatServerPillHtml()
-    + compactButton(WEBCHAT_COMPACT_KEY, 'renderWebAgents', 'Compact Web Agent chats')
     + '<button class="section-action" onclick="webchatNew()" aria-label="New Web Agent chat">+ New</button>'
+    + compactButton(WEBCHAT_COMPACT_KEY, 'renderWebAgents', 'Compact Web Agent chats')
     + '<button class="section-action" onclick="webchatRefresh()" aria-label="Refresh Web Agents">↻</button></div>';
   if (!webchatAvailable) {
     el.innerHTML = header + `<p class="pair-empty">${escapeHtml(error || 'Web Agent is unavailable.')}</p>`;
@@ -23691,8 +24186,44 @@ function renderWebAgents(error = '') {
   const compact = compactOn(WEBCHAT_COMPACT_KEY);
   const shown = webchatFilter
     ? webchatSessions.filter(session => session.provider === webchatFilter) : webchatSessions;
-  const cards = webchatByRecent(shown).map(
-    session => webchatCard(session, webchatProvider(session.provider), compact));
+  // A thread under a conversation's namespace is drawn as part of that conversation and never as
+  // a card of its own. Both kinds are then sorted together by recency, because "what was I last
+  // doing" is one question and a section that answered it in two lists would be two lists.
+  const rooms = webchatRooms();
+  const grouped = new Map();
+  const loose = [];
+  for (const session of shown) {
+    const conv = rooms.get(session.namespace);
+    if (!conv) { loose.push(session); continue; }
+    if (!grouped.has(conv.id)) grouped.set(conv.id, []);
+    grouped.get(conv.id).push(session);
+  }
+  // A panel or an agent conversation nobody has asked anything yet has no thread, so grouping the
+  // threads finds nothing to make a card out of -- and the conversation somebody has just made is
+  // missing from the one list that is meant to show it. It is drawn from the conversation itself,
+  // sorted by when it was made, which is the only time it has.
+  const empty = [];
+  for (const conv of rooms.values()) {
+    const grant = conv.webchat?.providers;
+    if (!Array.isArray(grant) || !grant.length || grouped.has(conv.id)) continue;
+    if (webchatSessions.some(session => session.namespace === conv.id)) continue;
+    // Under a provider filter, a conversation that may spend that provider still belongs to it --
+    // an empty one has said nothing to anybody, so its grant is all there is to go on.
+    if (webchatFilter && !grant.includes('*') && !grant.includes(webchatFilter)) continue;
+    empty.push(conv);
+  }
+  const rows = loose.map(session => ({
+    at: session.updatedAt || '',
+    html: webchatCard(session, webchatProvider(session.provider), compact),
+  })).concat(Array.from(grouped, ([id, list]) => {
+    const sorted = webchatByRecent(list);
+    return {at: sorted[0]?.updatedAt || '', html: webchatRoomCard(rooms.get(id), sorted, compact)};
+  })).concat(empty.map(conv => ({
+    at: conv.created ? new Date(conv.created).toISOString() : '',
+    html: webchatRoomCard(conv, [], compact),
+  })));
+  const cards = rows
+    .sort((a, b) => String(b.at).localeCompare(String(a.at))).map(row => row.html);
   el.innerHTML = header + webchatPillsHtml()
     + `<div class="webchat-list${compact ? ' compact' : ''}">${cards.join('')}</div>`
     + (cards.length ? '' : webchatEmptyHtml());
@@ -23773,7 +24304,17 @@ function webchatOpen(name) {
   webchatCurrent = name;
   webchatMessages = [];
   webchatTruncated = false;
-  webchatTurn = null;
+  // A turn of this chat's that is still in flight, put back rather than dropped. Opening the chat
+  // a question was asked in is exactly when the reader wants to see that it is still being
+  // answered — and the alternative is a thread showing neither the question nor the wait.
+  // The live one wins: this page has every delta that has arrived, and the written-down copy is
+  // at best as new as the last time it was flushed.
+  if (webchatTurn?.running && webchatTurn.session === name) { /* keep it */ }
+  else {
+    const held = webchatStoredTurn();
+    if (held && held.session === name) webchatResumeTurn(held);
+    else webchatTurn = null;
+  }
   // Both drawers shut: a connection status read for the last chat is not one for this one.
   webchatMenu('');
   openPanel('webAgentView');
@@ -23814,13 +24355,22 @@ function webchatReceiveModels(msg) {
 }
 
 function webchatReceiveHistory(msg) {
+  // Before the check below: a conversation thread asks for the history of every session in its
+  // namespace, and all but one of those answers are for a session this view does not have open.
+  if (typeof webchatThreadStore === 'function') webchatThreadStore(msg);
   if (msg.name !== webchatCurrent) return;
   webchatMessages = Array.isArray(msg.messages) ? msg.messages : [];
   // The relay asks for the newest few hundred rather than the whole chat. An answer that stopped
   // early and stayed quiet about it reads as a whole one, which is the same contract the durable
   // record keeps: truncation is reported, not merely applied.
   webchatTruncated = !!msg.truncated;
-  webchatTurn = null;
+  // A history read is what ends a turn on screen -- the answer as stored replaces the one that was
+  // streamed. But `webchat_open` is also asked on entry to a chat, and a turn that is still running
+  // has no stored answer yet: clearing it there dropped the reader's own question, the wait, and
+  // every delta after it, since a turn this page no longer holds is one whose events it discards.
+  // What that looked like was a chat that went blank on being revisited and stayed blank until the
+  // provider had finished.
+  if (!webchatTurn?.running) webchatTurn = null;
   renderWebchatView();
 }
 
@@ -23893,6 +24443,10 @@ function webchatReceiveResult(msg) {
 }
 
 function webchatReceiveError(msg) {
+  // A history a conversation thread asked for in the background. The thread draws the refusal in
+  // its own place, and a toast about a session nobody has open is noise.
+  if (msg.action === 'open' && typeof webchatThreadFailed === 'function'
+      && webchatThreadFailed(msg) && msg.session !== webchatCurrent) return;
   // Whatever was waiting to say how the repair went, this is how it went.
   webchatSettleFor = '';
   if (msg.action === 'models') {
@@ -23920,11 +24474,25 @@ function webchatReceiveError(msg) {
 // something else or with nothing at all is not still running our turn. Only after `start`: before
 // it, this turn is queued behind somebody else's and `busy` is rightly another session's name.
 function webchatCheckTurn() {
-  if (!webchatTurn?.running || !webchatTurn.started) return;
+  if (!webchatTurn?.running) return;
+  // A turn sent a moment ago is not yet in anybody's books, so neither witness may be believed
+  // about it. `started` says the adapter has it; `predates` says the turn is older than the
+  // connection now reporting on it, which says the same thing about a different moment.
+  if (!webchatTurn.started && !webchatTurn.predates) return;
   const session = webchatSession(webchatCurrent);
-  const provider = session ? webchatProvider(session.provider) : null;
-  if (!provider || provider.busy === webchatCurrent) return;
+  if (!session) return;
+  if (session.running !== undefined) {
+    // The adapter answers for this conversation directly. Nothing to infer.
+    if (session.running) return;
+  } else {
+    // An adapter too old to say. The provider's lane is the only witness there is, and it is the
+    // wrong scope by one level — a provider busy with somebody else's session says nothing about
+    // this one — so it can only ever be read as "certainly not ours".
+    const provider = webchatProvider(session.provider);
+    if (!provider || provider.busy === webchatCurrent) return;
+  }
   webchatTurn.running = false;
+  webchatKeepTurn(null);
   // Whatever streamed before the events stopped arriving is kept, the way an aborted turn's is.
   // The reply itself is on the provider's page and a sync is what brings it back.
   if (!webchatTurn.reply) webchatTurn.error = 'The reply did not arrive here. Sync to read it.';
@@ -23932,6 +24500,10 @@ function webchatCheckTurn() {
 }
 
 function webchatReceiveTurn(msg) {
+  // A panel's turns are for a thread nobody has open in this view — the reader is in the
+  // conversation, and the composer that sent it is that conversation's. Handed over before the
+  // early return below, which is about the chat view and would drop them.
+  if (typeof convPanelTurn === 'function' && convPanelTurn(msg)) return;
   if (msg.session !== webchatCurrent) return;
   if (!webchatTurn || webchatTurn.requestId !== msg.requestId) return;
   if (msg.event === 'queued') {
@@ -23941,17 +24513,23 @@ function webchatReceiveTurn(msg) {
     // From here on the adapter is holding its provider's lane for this session, so the session
     // list is evidence about this turn: see webchatCheckTurn.
     webchatTurn.started = true;
+    webchatKeepTurn(webchatTurn);
   } else if (msg.event === 'delta') {
     webchatTurn.reply += msg.delta || '';
     webchatTurn.status = 'Replying…';
+    if (Date.now() - webchatTurnKept > WEBCHAT_TURN_KEEP_MS) webchatKeepTurn(webchatTurn);
   } else if (msg.event === 'done') {
     webchatTurn.running = false;
     webchatTurn.aborted = !!msg.aborted;
+    // Ended, so there is nothing for the next page to resume — and a turn left written down would
+    // greet it as a chat still waiting for a reply that arrived hours ago.
+    webchatKeepTurn(null);
     if (msg.aborted) webchatNeedsSync.add(webchatCurrent);
     webchatAsk({type: 'webchat_open', session: webchatCurrent});
   } else if (msg.event === 'error') {
     webchatTurn.running = false;
     webchatTurn.error = msg.error || 'Provider failed';
+    webchatKeepTurn(null);
     webchatNeedsSync.add(webchatCurrent);
   }
   renderWebchatView();
@@ -23970,6 +24548,10 @@ function webchatToggleMarkdown() {
   try { localStorage.setItem(WEBCHAT_MD_KEY, webchatMarkdownOn() ? 'off' : 'on'); }
   catch (_error) { /* private mode: this render only */ }
   renderWebchatView();
+  // The same preference governs a provider's bubbles in a conversation thread, which is where a
+  // panel's and an agent's answers are read. One switch, both places.
+  if (typeof renderConvView === 'function') renderConvView();
+  if (typeof hangSync === 'function') hangSync();
 }
 
 // How a rendered answer is coloured, and nothing else — every theme is a set of custom properties
@@ -24358,11 +24940,35 @@ function webchatBodyHtml(message, user) {
   return `<div class="md">${markdownHtml(text)}</div>`;
 }
 
+// When a message was said, and whether that is a reading or an inference.
+//
+// `createdAt` is when the *row* was written, which is the same thing only for a turn the adapter
+// watched happen: a sync reads a conversation from last week and writes it today, so dating a
+// thread by it dates the reading. The adapter answers the real question in `at`, with `atSrc`
+// saying how it knows — `turn` and `provider` are readings, `sync` and `written` are upper bounds.
+// A bound is marked with the tilde the conversation thread has always used for the same meaning,
+// rather than quietly presented as a time somebody said something.
+const WEBCHAT_AT_READ = new Set(['turn', 'provider']);
+
+function webchatWhen(message) {
+  const at = Number(message.at);
+  if (Number.isFinite(at) && at > 0) {
+    return {at: new Date(at), sure: WEBCHAT_AT_READ.has(message.atSrc), src: message.atSrc || ''};
+  }
+  if (!message.createdAt) return null;
+  const parsed = new Date(message.createdAt);
+  return Number.isNaN(parsed.getTime())
+    ? null : {at: parsed, sure: false, src: 'written'};
+}
+
 function webchatMessageHtml(message, index) {
   const user = message.role === 'user';
+  const when = webchatWhen(message);
   return `<div class="conv-msg${user ? ' user' : ''}" style="--conv-agent:${user ? 'var(--green)' : 'var(--blue)'}">`
     + `<div class="conv-who">${user ? 'You' : escapeHtml(webchatSession(webchatCurrent)?.provider || 'Web Agent')}`
-    + `${message.createdAt ? `<span class="conv-time">${escapeHtml(fmtAgo(new Date(message.createdAt)))}</span>` : ''}`
+    + `${when ? `<span class="conv-time" title="${escapeHtml(when.at.toLocaleString())} · `
+      + `${escapeHtml(when.src || 'unknown')}">${when.sure ? '' : '~'}`
+      + `${escapeHtml(fmtAgo(when.at))}</span>` : ''}`
     // Copies what the provider wrote rather than what is on screen: the source is the form worth
     // pasting anywhere else, and it is the only form that survives the Markdown toggle either way.
     + `${typeof index === 'number' ? `<button type="button" class="conv-copy" data-at="${index}"`
@@ -24440,6 +25046,13 @@ function renderWebchatView() {
   const sync = document.getElementById('webAgentSync');
   sync.hidden = !webchatCan('sync');
   sync.classList.toggle('live', webchatNeedsSync.has(webchatCurrent));
+  // Beside it, and dead until there is a message to put back: after a hang either the provider
+  // took the message and Sync reads the answer, or it did not and this sends it again.
+  const retry = document.getElementById('webAgentRetry');
+  if (retry) {
+    retry.disabled = !webchatMessages.some(message => message.role === 'user');
+    retry.classList.toggle('live', webchatNeedsSync.has(webchatCurrent) && !retry.disabled);
+  }
   // Lit is a state, so it is marked on the button rather than said in a toast nobody keeps. `on`
   // is what makes a .hang-btn visible at all; `live` is what says it is pressed.
   const md = document.getElementById('webAgentMarkdown');
@@ -24589,7 +25202,11 @@ function webchatSend() {
   const requestId = `wa_${bytes[0].toString(36)}${bytes[1].toString(36)}`;
   if (!webchatAsk({type: 'webchat_send', request_id: requestId, session: webchatCurrent, message,
     model: webchatModels.get(webchatCurrent)?.selected || undefined})) return;
-  webchatTurn = {requestId, message, reply: '', status: 'Sending…', running: true};
+  webchatTurn = {requestId, message, reply: '', status: 'Sending…', running: true,
+    session: webchatCurrent, at: Date.now()};
+  // Written down before the box is emptied. This is the only moment at which the prompt exists in
+  // exactly one place, and a page discarded here is what used to lose it.
+  webchatKeepTurn(webchatTurn);
   input.value = '';
   localStorage.removeItem(WEBCHAT_DRAFT_PREFIX + webchatCurrent);
   autoGrow(input);
@@ -24604,7 +25221,11 @@ function webchatSetModel(value) {
 
 function webchatStop() {
   if (!webchatTurn?.running) return;
-  webchatAsk({type: 'webchat_stop', request_id: webchatTurn.requestId});
+  webchatAsk({type: 'webchat_stop', request_id: webchatTurn.requestId,
+              session: webchatTurn.session || webchatCurrent});
+  // Asked for by a person, which is the one thing that ends a turn early. Nothing is left written
+  // down for the next page to put back as a chat still waiting.
+  webchatKeepTurn(null);
   webchatTurn.status = 'Stopping local read…';
   renderWebchatView();
 }
@@ -24643,15 +25264,96 @@ function webchatClear() {
 // list. The order within each column is the order the adapter hands them over in, which is its own
 // driver order and what `chat.js providers` prints. Never sorted here: a picker whose rows move
 // between two surfaces is one you have to read every time instead of reaching for.
-function webchatNew() {
+// Which of the two things the sheet is making, and which providers an agent conversation would be
+// given. Reset every time the sheet opens: a set half-picked and abandoned is not a preference.
+let webchatNewIs = 'chat';
+const webchatNewPicked = new Set();
+// The conversation whose grant is being rewritten, or '' when the sheet is making something new.
+// The picker is the same one either way: what may be picked, and how, is a fact about the mode
+// rather than about whether the thing already exists.
+let webchatEditing = '';
+
+function webchatNew(mode = 'chat') {
   if (!webchatAvailable || !webchatProviders.length) return;
-  const column = (title, list) => `<div class="webchat-picker-col"><h4>${title}</h4>`
+  webchatEditing = '';
+  webchatNewIs = WEBCHAT_NEW_MODES.has(mode) ? mode : 'chat';
+  webchatNewPicked.clear();
+  const any = document.getElementById('webchatNewAny');
+  if (any) any.checked = false;
+  const name = document.getElementById('webchatNewName');
+  name.value = '';
+  webchatNewRender();
+  document.getElementById('webchatNewSheet').style.display = 'block';
+  name.focus();
+}
+
+const WEBCHAT_NEW_MODES = new Set(['chat', 'agent', 'panel']);
+
+function webchatNewMode(mode) {
+  const was = webchatNewIs;
+  webchatNewIs = WEBCHAT_NEW_MODES.has(mode) ? mode : 'chat';
+  // A chat holds one provider and the other two hold a set, so a set carried into chat mode would
+  // silently lose all but one of itself. Coming the other way it is kept: the one already picked
+  // is the obvious first member of the set.
+  if (webchatNewIs === 'chat' && was !== 'chat' && webchatNewPicked.size > 1) {
+    webchatNewPicked.clear();
+  }
+  webchatNewRender();
+}
+
+// A column, in one press. All of it on unless it already is, in which case the obvious next move
+// is off -- and the label says which of the two the press will do.
+function webchatNewToggleAll(ids) {
+  const list = String(ids || '').split(' ').filter(Boolean);
+  if (!list.length) return;
+  const on = list.every(provider => webchatNewPicked.has(provider));
+  for (const provider of list) {
+    if (on) webchatNewPicked.delete(provider);
+    else webchatNewPicked.add(provider);
+  }
+  webchatNewRender();
+}
+
+function webchatNewToggle(provider) {
+  if (webchatNewPicked.has(provider)) webchatNewPicked.delete(provider);
+  else webchatNewPicked.add(provider);
+  webchatNewRender();
+}
+
+// Every mode draws the same rows and commits the same way: pick, then press the button at the
+// foot of the sheet. A chat mode where the row itself was the commit read as a sheet with nothing
+// to press -- and it also meant a misplaced thumb started a chat with no way back.
+function webchatNewRender() {
+  const agent = webchatNewIs === 'agent';
+  const panel = webchatNewIs === 'panel';
+  // Both of the multi-pick modes toggle rows; only the agent one can hand the choice over, since
+  // a panel has nobody to hand it to.
+  const many = agent || panel;
+  const any = agent && document.getElementById('webchatNewAny')?.checked;
+  // Taking a whole column is the common way to make a panel: "ask everyone I am signed in to" is
+  // one intention, not six. Offered only where a set is being picked, and only where there is more
+  // than one row to take -- a column of one already has a control for itself.
+  const allOf = (list) => {
+    const on = list.length > 1 && list.every(provider => webchatNewPicked.has(provider.id));
+    return many && list.length > 1
+      ? `<button type="button" class="webchat-pick-all" aria-pressed="${on}"`
+        + ` data-col="${escapeHtml(list.map(provider => provider.id).join(' '))}"`
+        + (any ? ' disabled aria-disabled="true"' : '')
+        + ` onclick="webchatNewToggleAll(this.dataset.col)">${on ? 'None' : 'All'}</button>`
+      : '';
+  };
+  const column = (title, list) => `<div class="webchat-picker-col">`
+    + `<h4>${title}${allOf(list)}</h4>`
     + list.map(provider => {
       const count = webchatSessions.filter(session => session.provider === provider.id).length;
       const ready = WEBCHAT_READY[provider.ready] || WEBCHAT_READY.up;
-      return `<button type="button" class="webchat-pick-row"`
+      const on = webchatNewPicked.has(provider.id);
+      return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}"`
         + ` data-provider="${escapeHtml(provider.id)}"`
-        + ` onclick="webchatNewPick(this.dataset.provider)"`
+        + ` aria-pressed="${on}"`
+        + (any ? ' aria-disabled="true"' : '')
+        + ` onclick="${many ? 'webchatNewToggle' : 'webchatNewPick'}(this.dataset.provider)"`
+        + (any ? ' disabled' : '')
         + ` title="${escapeHtml(provider.label + (ready.text ? ` — ${ready.text}` : ''))}">`
         + webchatMark(provider.id)
         + `<span class="webchat-pill-name">${escapeHtml(provider.label)}</span>`
@@ -24664,17 +25366,143 @@ function webchatNew() {
     (signedIn.length ? column('Signed in', signedIn) : '')
     + (guests.length ? column('No login', guests) : '')
     + (signedIn.length || guests.length ? '' : '<p class="pair-empty">No providers are enabled.</p>');
-  const name = document.getElementById('webchatNewName');
-  name.value = '';
-  document.getElementById('webchatNewSheet').style.display = 'block';
-  name.focus();
+  document.getElementById('webchatNewModeChat')
+    .setAttribute('aria-selected', String(webchatNewIs === 'chat'));
+  document.getElementById('webchatNewModeAgent').setAttribute('aria-selected', String(agent));
+  document.getElementById('webchatNewModePanel').setAttribute('aria-selected', String(panel));
+  // A panel's name is the conversation's, and a chat's is the thread's. Only the agent mode has
+  // nothing to name here: what it makes is named by the Start sheet that follows.
+  document.getElementById('webchatNewNameRow').hidden = agent;
+  document.getElementById('webchatNewAgentNote').hidden = !agent;
+  document.getElementById('webchatNewPanelNote').hidden = !panel;
+  // Always there, in all three modes: the sheet has one thing that commits it, and it says so
+  // whether or not anything has been picked yet.
+  document.getElementById('webchatNewAgentGo').hidden = false;
+  // Letting the agent choose is the agent's; a panel is a person choosing, which is the whole
+  // difference between the two modes.
+  document.getElementById('webchatNewAnyRow').hidden = !agent;
+  const go = document.getElementById('webchatNewStart');
+  if (go) {
+    go.textContent = webchatEditing ? 'Save'
+      : (panel ? 'Open panel' : (agent ? 'Start agent' : 'Start chat'));
+    go.onclick = webchatEditing ? webchatSaveProviders
+      : (panel ? webchatNewPanel : (agent ? webchatNewAgent : webchatNewChat));
+    // Nothing picked, nothing to start. The one exception is an agent told to choose for itself,
+    // which is a choice about who picks rather than an empty one.
+    go.disabled = !any && !webchatNewPicked.size;
+  }
+  // Editing a conversation that exists is one field of it. The tabs would offer to change which
+  // kind of thing it is, which is not an edit — it is a different conversation.
+  const tabs = document.getElementById('webchatNewModes');
+  if (tabs) tabs.hidden = !!webchatEditing;
 }
 
+// One herdr session holding several provider threads. The conversation is minted first and is the
+// namespace — every thread the agent opens is called `<conversation id>:<provider>[:<label>]` — so
+// what is started here is an ordinary session joined to it, and the binding is written by
+// webchat_bind.js once the relay can say which agent that pane is.
+function webchatNewAgent() {
+  const any = document.getElementById('webchatNewAny')?.checked;
+  const providers = any ? ['*'] : Array.from(webchatNewPicked);
+  if (!providers.length) return;
+  if (typeof convNewId !== 'function' || typeof saveConvIndex !== 'function') return;
+  const items = loadConvIndex();
+  const id = convNewId(items);
+  saveConvIndex([{
+    id, name: 'Web agents', created: Date.now(), members: [],
+    // What makes this conversation an agent one, and the only thing that does. Read on every
+    // snapshot by webchat_bind.js, which is what turns it into a binding.
+    webchat: {providers},
+  }].concat(items));
+  closeWebchatNew();
+  // The ordinary Start sheet, opening on this conversation. One agent: the providers are what
+  // there are several of, and a second pane would be a second reader of one namespace.
+  if (typeof openStartDialog === 'function') {
+    openStartDialog('', null, 'agent');
+    startIntent = {conv: id};
+  }
+}
+
+// The other multi-provider conversation: several providers and no agent at all. The person is at
+// the composer, picks which of them a message goes to, and reads every answer in one thread. Same
+// namespace mechanism as an agent conversation — the threads are `<conversation id>:<provider>` —
+// and no binding, because there is nothing to bind: a binding hands an agent a bearer, and here
+// the sends come from the app over the socket it already has.
+function webchatNewPanel() {
+  const providers = Array.from(webchatNewPicked);
+  if (!providers.length) return;
+  if (typeof convNewId !== 'function' || typeof saveConvIndex !== 'function') return;
+  const items = loadConvIndex();
+  const id = convNewId(items);
+  const name = document.getElementById('webchatNewName').value.trim();
+  saveConvIndex([{
+    id, name: name || 'Panel', created: Date.now(), members: [],
+    webchat: {providers, mode: 'panel'},
+  }].concat(items));
+  closeWebchatNew();
+  // Straight into the conversation, because there is nothing to start: the threads are opened by
+  // the first message sent to each provider.
+  if (typeof openConversation === 'function') openConversation(id);
+}
+
+// The grant of a conversation that already exists. Everything below the tabs is the sheet's own;
+// what changes is that there is nothing to name and nothing to start — the conversation is there,
+// and this is one field of it.
+//
+// Widening or narrowing an agent's grant needs nothing restarted: webchat_bind.js reconciles the
+// binding against every snapshot and compares the grant as well as the namespace, so the next one
+// rewrites the file. Threads already open on a provider that has just been dropped stay readable,
+// because reading is namespace-wide and the grant is about new turns.
+function webchatEditProviders(convId) {
+  const conv = typeof loadConvIndex === 'function'
+    ? loadConvIndex().find(c => c.id === convId) : null;
+  const badge = typeof convWebBadge === 'function' ? convWebBadge(conv) : null;
+  if (!badge || !webchatAvailable) return;
+  webchatEditing = convId;
+  webchatNewIs = conv.webchat.mode === 'panel' ? 'panel' : 'agent';
+  webchatNewPicked.clear();
+  for (const provider of badge.providers) webchatNewPicked.add(provider);
+  const any = document.getElementById('webchatNewAny');
+  if (any) any.checked = badge.any;
+  webchatNewRender();
+  document.getElementById('webchatNewSheet').style.display = 'block';
+}
+
+// Save, for the sheet opened on a conversation that already exists.
+function webchatSaveProviders() {
+  const conv = loadConvIndex().find(c => c.id === webchatEditing);
+  if (!conv) { closeWebchatNew(); return; }
+  const any = webchatNewIs === 'agent' && document.getElementById('webchatNewAny')?.checked;
+  const providers = any ? ['*'] : Array.from(webchatNewPicked);
+  if (!providers.length) return;
+  saveConvIndex(loadConvIndex().map(c => (c.id === conv.id
+    ? {...c, webchat: {...c.webchat, providers}} : c)));
+  closeWebchatNew();
+  renderWebAgents();
+  if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+  if (typeof renderConvDock === 'function') renderConvDock();
+}
+
+// The way out of the sheet: the backdrop, the close button, and every path that finishes with it.
+// It went missing when `webchatNew` was split from `webchatNewRender`, which took the tail of the
+// old function with it -- so nothing closed the sheet at all and each of those paths threw.
 function closeWebchatNew() {
   document.getElementById('webchatNewSheet').style.display = 'none';
+  webchatEditing = '';
 }
 
+// Chat mode's row: one provider, so picking a second replaces the first rather than adding to it.
 function webchatNewPick(provider) {
+  const had = webchatNewPicked.has(provider);
+  webchatNewPicked.clear();
+  if (!had) webchatNewPicked.add(provider);
+  webchatNewRender();
+}
+
+// And the button that commits it.
+function webchatNewChat() {
+  const provider = Array.from(webchatNewPicked)[0];
+  if (!provider) return;
   const label = document.getElementById('webchatNewName').value.trim();
   closeWebchatNew();
   webchatStart(provider, label);
@@ -24729,6 +25557,250 @@ function webchatRenameFill() {
 
 function webchatDelete(name) {
   webchatAsk({type: 'webchat_delete', session: name});
+}
+
+  </script>
+  <!-- After web_agent.js and conversation_store.js: it reads a global from each, and it is the
+       one place an agent conversation becomes a binding the relay writes. -->
+  <script>
+// Turning an agent conversation into a binding, and keeping it that way.
+//
+// An agent-mode Web Agents conversation is an ordinary herdr conversation carrying one extra field:
+// `webchat: {providers}`. Its id is the namespace — every provider thread the agent opens is called
+// `<conversation id>:<provider>[:<label>]` — and the member sitting in it is the agent that drives
+// them.
+//
+// The binding is the relay's to write, so all this does is ask, and it asks by *reconciling* rather
+// than by handing off. A one-shot at start time would be wrong three ways: a pane comes up
+// `unresolved` for a poll or two and has no agent id to bind yet, a reload throws away whatever the
+// press was holding, and editing the provider set later is the same request again. A pass over the
+// snapshot answers all three and is a few lines shorter than any of them.
+//
+// It asks once per state it wants and not once per poll: `webchat_state` carries `attached`, which
+// is what the relay has already written, so a binding that agrees with the conversation is left
+// alone. Loaded after web_agent.js and conversation_store.js, whose globals it reads.
+
+// What has been asked for and not yet answered, so a slow relay is not asked five more times while
+// it writes the file. Keyed by agent id and cleared when the state comes back agreeing.
+const webchatBindSent = new Map();
+const WEBCHAT_BIND_RETRY_MS = 20000;
+
+// The providers an agent-mode conversation grants, as the relay stores them: sorted, comma-joined,
+// which is the form `attached` answers with. `['*']` is the agent choosing for itself.
+function webchatGrantOf(conv) {
+  // A panel is the same grant driven by the person at the composer, so there is nobody to hand a
+  // bearer to. Checked by mode rather than by whether a member happens to be in it: adding an
+  // agent to a panel must not quietly turn it into an agent conversation behind the reader.
+  if (conv?.webchat?.mode === 'panel') return '';
+  const providers = conv?.webchat?.providers;
+  if (!Array.isArray(providers) || !providers.length) return '';
+  return providers.includes('*') ? '*' : Array.from(new Set(providers)).sort().join(',');
+}
+
+// The agent driving one, or null while there is not one yet. A conversation with no member has not
+// had its session started; a member whose pane the relay has published but not identified has no
+// id to bind, and binding the pane id instead is the mistake `unresolved` exists to prevent.
+function webchatDriverOf(conv) {
+  for (const member of conv.members || []) {
+    const aid = member.aid || member.key || '';
+    if (!aid) continue;
+    const live = agents.find(a => a.aid === aid);
+    if (live && !live.unresolved) return aid;
+  }
+  return null;
+}
+
+// One pass over the snapshot. Called from net.js beside the other reconcilers.
+function webchatReconcileBindings() {
+  if (!webchatOffered || !webchatAvailable) return;
+  if (typeof loadConvIndex !== 'function' || typeof agents === 'undefined') return;
+  const held = webchatAttached();
+  const now = Date.now();
+  const wanted = new Set();
+  for (const conv of loadConvIndex()) {
+    const grant = webchatGrantOf(conv);
+    if (!grant) continue;
+    const aid = webchatDriverOf(conv);
+    if (!aid) continue;
+    wanted.add(aid);
+    const have = held[aid];
+    // Already what it should be. Compared on both halves: a conversation whose provider set was
+    // edited has the same namespace and a different grant, and that is exactly the case a check on
+    // "is it bound" would sail past.
+    if (have && have.ns === conv.id && (have.providers || '') === grant) {
+      webchatBindSent.delete(aid);
+      continue;
+    }
+    const asked = webchatBindSent.get(aid);
+    if (asked && now - asked.at < WEBCHAT_BIND_RETRY_MS && asked.grant === grant) continue;
+    if (webchatAsk({type: 'webchat_attach', aid, ns: conv.id,
+                    providers: grant === '*' ? ['*'] : grant.split(',')})) {
+      webchatBindSent.set(aid, {at: now, grant});
+    }
+  }
+  // A binding whose conversation is gone, or whose agent has left it. Taken away rather than left:
+  // it holds a bearer, and a bearer for work nobody is doing is one nothing is watching.
+  for (const aid of Object.keys(held)) {
+    if (wanted.has(aid)) continue;
+    const asked = webchatBindSent.get(`-${aid}`);
+    if (asked && now - asked.at < WEBCHAT_BIND_RETRY_MS) continue;
+    if (webchatAsk({type: 'webchat_detach', aid})) {
+      webchatBindSent.set(`-${aid}`, {at: now, grant: ''});
+    }
+  }
+}
+
+  </script>
+  <!-- After web_agent.js, whose marks and session list it reads, and beside conv_thread.js,
+       whose bubbles it produces. Loaded late because nothing reads it at load time: the
+       conversation composer calls it if it is there. -->
+  <script>
+// The provider half of an agent conversation's thread.
+//
+// A web agent asks five providers five different questions and follows each up separately. Those
+// exchanges happen in the adapter's own record, in sessions named `<conversation id>:<provider>`,
+// and the relay never stores a word of them — it proxies them, which is a different thing. So the
+// thread is drawn from three sources rather than two: the transcript store, the relay's record,
+// and this, which is fetched per view and kept only for as long as the page is up.
+//
+// Folded in the way the arbitrator's decisions are folded in, and for the same reason: display
+// only. Nothing here enrols a provider as a member, writes to the conversation's record, or
+// touches its roster. Turning an agent conversation back into an ordinary one leaves it byte for
+// byte what it was.
+
+// Per session: what was said, the `updatedAt` it was read at, and whether it could be read at all.
+const webchatThreadCache = new Map();
+// Asked and not yet answered, so a render every three seconds does not ask five times a second.
+const webchatThreadWait = new Set();
+
+// The sessions of one conversation. The namespace is the conversation's own id, which is what the
+// binding put in the agent's environment — so this needs nothing stored on the conversation and
+// works for a room whose binding a person has since edited.
+function webchatThreadSessions(convId) {
+  if (!convId || !webchatAvailable) return [];
+  const prefix = `${convId}:`;
+  return webchatSessions.filter(session => String(session.name || '').startsWith(prefix));
+}
+
+// Ask for anything not held, or held from before the provider last said something. `updatedAt` is
+// the adapter's own stamp on the session, so a thread that has not moved costs nothing.
+function webchatThreadFetch(convId) {
+  for (const session of webchatThreadSessions(convId)) {
+    const name = session.name;
+    const stamp = session.updatedAt || session.createdAt || '';
+    const held = webchatThreadCache.get(name);
+    if (held && held.stamp === stamp) continue;
+    if (webchatThreadWait.has(name)) continue;
+    if (webchatAsk({type: 'webchat_open', session: name})) webchatThreadWait.add(name);
+  }
+}
+
+// A history answer. Called for every session, including the one the Web Agents view has open —
+// which is why it is stored before that view decides whether the answer was for it.
+// Forget what is held for one thread, so the next pass fetches it again. A panel's turn ends with
+// the answer already stored by the adapter and the session's stamp about to move; dropping the
+// cached copy here means the answer is read back rather than assembled out of the deltas this page
+// happened to see.
+function webchatThreadInvalidate(name) {
+  webchatThreadCache.delete(name);
+  webchatThreadWait.delete(name);
+}
+
+function webchatThreadStore(msg) {
+  const name = msg.name || '';
+  if (!name || !webchatThreadWait.delete(name)) return;
+  const session = webchatSession(name);
+  webchatThreadCache.set(name, {
+    messages: Array.isArray(msg.messages) ? msg.messages : [],
+    stamp: (session && (session.updatedAt || session.createdAt)) || '',
+    error: '',
+  });
+  webchatThreadRepaint();
+}
+
+// A history that could not be read. Kept rather than retried on the next render: an adapter that
+// is down stays down, and the thread says the provider half is missing instead of drawing one
+// where the agent talked to itself.
+function webchatThreadFailed(msg) {
+  const name = msg.session || '';
+  if (!name || !webchatThreadWait.delete(name)) return false;
+  const session = webchatSession(name);
+  webchatThreadCache.set(name, {
+    messages: [],
+    stamp: (session && (session.updatedAt || session.createdAt)) || '',
+    error: msg.message || 'could not be read',
+  });
+  webchatThreadRepaint();
+  return true;
+}
+
+function webchatThreadRepaint() {
+  if (typeof renderConvView === 'function') renderConvView();
+  if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+}
+
+// A key that is not a member key and cannot become one: every real one is an agent id, which the
+// relay mints as `a_` and twelve base36 characters. The thread filters, hides and colours by key,
+// and a provider must answer to none of it.
+function webchatThreadKey(provider) { return `web:${provider}`; }
+
+// The provider's exchanges as thread entries, oldest first.
+//
+// A prompt goes on the user's side because that is the side prompts go on, and it names the
+// provider it was sent to — the same rule an ordinary user bubble follows, where the name is the
+// pane the text was typed at rather than whoever typed it. Which of the two wrote it, the person
+// or the agent, is not something the adapter records.
+function webchatThreadEntries(convId) {
+  const out = [];
+  for (const session of webchatThreadSessions(convId)) {
+    const held = webchatThreadCache.get(session.name);
+    if (!held) continue;
+    const provider = webchatProvider(session.provider);
+    const label = webchatName(session, provider);
+    const mark = WEBCHAT_MARKS[webchatFamily(session.provider)] || WEBCHAT_MARKS[''];
+    if (held.error) {
+      out.push({
+        event: true, warn: true, at: Date.now(), foreign: true,
+        key: webchatThreadKey(session.provider),
+        sign: webchatMark(session.provider, 13),
+        lede: `${label} not read`, text: held.error,
+      });
+      continue;
+    }
+    for (const message of held.messages) {
+      // `at` and never `createdAt`: the second is when the row was written, which for anything a
+      // sync brought back is today rather than when it was said. The thread sorts by this, so
+      // reading the wrong field interleaves five providers' conversations by the order they
+      // happened to be synced in. `webchatWhen` is the one place that decision is made.
+      const when = typeof webchatWhen === 'function' ? webchatWhen(message) : null;
+      const at = when ? when.at.getTime() : 0;
+      out.push({
+        who: message.role === 'user' ? 'user' : 'provider',
+        text: message.markdown || message.content || '',
+        // A reading gets the same standing a watched send has; an upper bound gets the tilde the
+        // thread already draws for a stamp that is an ordering rather than a time.
+        at: at, seen: at, at_src: when && when.sure ? 'webchat' : 'backfill',
+        key: webchatThreadKey(session.provider), foreign: true,
+        // The mark the card, the pill and the picker all name this provider by. Every entry and
+        // not only the error one: a thread of five providers drawn with five grey labels reads as
+        // one voice.
+        sign: webchatMark(session.provider, 14),
+        label: label, agent: session.provider, color: mark.colour,
+      });
+    }
+  }
+  // A turn in flight is in no record yet: the adapter writes it down when it ends, and until then
+  // the only copy is the deltas this page is being handed. Without these a panel asking five
+  // providers at once showed nothing at all until the last of them had finished.
+  if (typeof convPanelLiveEntries === 'function') {
+    for (const entry of convPanelLiveEntries(convId)) out.push(entry);
+  }
+  // Reading one provider alone. The conversation's own solo is built on members and a panel has
+  // none, so this is the same idea over the thing it does have; a conversation with no solo set
+  // filters nothing.
+  const solo = typeof convPanelSoloOf === 'function' ? convPanelSoloOf(convId) : '';
+  const kept = solo ? out.filter(entry => entry.agent === solo) : out;
+  return kept.sort((a, b) => (a.at || 0) - (b.at || 0));
 }
 
   </script>
@@ -28624,8 +29696,14 @@ function nlmSourceDelete(source) {
         // state the reader would have gone looking for.
         const lead = live.find(a => a.status === 'blocked') || live.find(a => a.status === 'working')
           || live.find(a => attentionKind(a) === 'done') || live[0];
+        // The web providers this conversation reaches, if any. The decision is
+        // conversation_pure's; what is left here is drawing it.
+        const web = convWebBadge(c);
         return {
           c, count, seen, names, liveNames, last: newest.last || '',
+          web,
+          webMarks: !web || typeof webchatMark !== 'function' ? ''
+            : web.providers.map(provider => webchatMark(provider, 14)).join(''),
           dot: lead ? statusColor(lead) : 'var(--dot-cold)',
           pulse: lead && lead.status === 'working' ? ' pulse' : '',
           // A conversation with live panes keeps the filled dot its lead pane's status paints —
@@ -28677,6 +29755,15 @@ function nlmSourceDelete(source) {
         `<div class="conversation-title"><span class="dot${r.pulse}${r.ended}" style="background:${r.dot}"` +
         ` aria-hidden="true"></span><span class="conv-kind">${convGlyph()}</span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
+        // Which providers this conversation talks to, beside its name. Without it an agent
+        // conversation and an ordinary one are the same card, and the only place the difference
+        // was written down was a field one module reads.
+        (r.web
+          ? `<span class="conv-web" title="${r.web.any ? 'Whichever web providers the agent decides '
+              + 'it needs' : 'Talks to these web providers'}">` +
+            `${r.webMarks}<span class="conversation-tier">${r.web.kind}` +
+            `${r.web.any ? ' · any' : ''}</span></span>`
+          : '') +
         // Nothing running, said in words beside the hollow dot. The dot is the glance; this is
         // for the reader who has not learned yet that a hollow one means the panes are gone.
         `${r.liveNames.length ? '' : '<span class="conversation-tier idle" title="Nothing in '
@@ -29033,6 +30120,15 @@ function nlmSourceDelete(source) {
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
         `Duplicate</button>` +
         `<button onclick="renameConversation()">Rename</button>` +
+        // Which web providers this conversation may spend. Beside Rename because it is the same
+        // kind of edit — what the conversation is, rather than what is running in it — and drawn
+        // only where there is a grant to edit. An agent conversation's is rewritten under the
+        // agent: the binding is reconciled against every snapshot, so widening or narrowing it
+        // takes without restarting anything.
+        (typeof convWebBadge === 'function' && convWebBadge(conv)
+          ? `<button onclick="webchatEditProviders(convViewId)"` +
+            ` aria-label="Change which web providers this conversation talks to">Providers</button>`
+          : '') +
         `<button onclick="convToggleAdd()">Add pane</button>` +
         // Starting one is offered next to adding one, not only inside the picker: from a pane's
         // roster the picker is two taps away, and "there is nobody to add yet" is exactly the
@@ -29246,6 +30342,10 @@ function nlmSourceDelete(source) {
       renderTermMenuState();
       renderConvBar();
       renderConvStandalone(false);
+      // A panel or an agent conversation has a card in the Web Agents list too, drawn from this
+      // same row -- so a rename that redrew everything except that list left the old name in the
+      // one place people go looking for these conversations.
+      if (typeof renderWebAgents === 'function') renderWebAgents();
     }
 
     // Naming is the whole of promotion (D4): what the user named is permanent, what the app named
@@ -29569,8 +30669,14 @@ function nlmSourceDelete(source) {
       const open = document.getElementById('convViewOpen');
       open.hidden = !convVisibleLive(conv);
       const who = document.getElementById('convViewWho');
-      who.textContent = (hidden.size ? `${shown.length}/${members.length}` : `${members.length}`) +
-        ` pane${members.length === 1 ? '' : 's'} ▾`;
+      // A panel has no panes, so counting them would say "0 panes" about a conversation with five
+      // providers in it. What it has instead is who is on the panel.
+      const asPanel = typeof convPanelOf === 'function' ? convPanelOf(conv.id) : null;
+      const onPanel = asPanel ? convPanelProviders(asPanel).length : 0;
+      who.textContent = asPanel
+        ? `${onPanel} provider${onPanel === 1 ? '' : 's'} ▾`
+        : (hidden.size ? `${shown.length}/${members.length}` : `${members.length}`) +
+          ` pane${members.length === 1 ? '' : 's'} ▾`;
       who.setAttribute('aria-expanded', convRosterOpen ? 'true' : 'false');
       const token = ++convStandaloneToken;
       const keys = members.map(m => m.aid);
@@ -30623,17 +31729,23 @@ function nlmSourceDelete(source) {
         load.hidden = !html;
       }
       const all = dockMembers();
+      // A panel has no members, so what stands where the roster does is its providers. Its own
+      // module: the row is multi-select and its send fans out, neither of which a member row is or
+      // does, and folding both into one builder would be two rows wearing one name.
+      const panel = typeof convPanelOf === 'function' ? convPanelOf(convViewId) : null;
       // Always the whole membership. A pick decides what is being sent, never who is in the
       // conversation or who may have it.
-      const html = all.length ? dockRowHtml(all) : '';
+      const html = panel ? convPanelRowHtml(panel) : (all.length ? dockRowHtml(all) : '');
       row.hidden = !html;
       if (!html) { closeDockMenu(); row.dataset.sig = ''; }
       // Rebuilt only when what it says changed. This runs on every snapshot, and replacing the row
       // wholesale three times a minute would take a chip out from under a finger already on it.
       else if (row.dataset.sig !== html) { row.innerHTML = html; row.dataset.sig = html; }
       // Nobody live to send to is the ordinary end state of a record, not a failure: the thread is
-      // still readable, and a composer that could only fail is worse than none.
-      dock.hidden = !all.length;
+      // still readable, and a composer that could only fail is worse than none. A panel has no
+      // members at all and never will -- nothing is spawned for one -- so its composer is gated on
+      // its providers instead, which is what the row above is made of.
+      dock.hidden = panel ? !convPanelProviders(panel).length : !all.length;
       paintDockAccent();
       syncDockHeight();
     }
@@ -30999,6 +32111,11 @@ function nlmSourceDelete(source) {
     // Typed text, to whoever the row has lit. No checkpoint and no prefill: there is no pane on
     // screen to prefill *into*, and what is being sent is what the composer already shows.
     function convSend() {
+      // A panel is written to before anything else is asked, because it has no members and every
+      // question below is about which member. Its own send: one message to as many providers as
+      // are lit, which is the thing a panel is for.
+      const panel = typeof convPanelOf === 'function' ? convPanelOf(convViewId) : null;
+      if (panel) return convPanelSend(panel);
       // With bubbles picked there is one message being written, and the row's Send is a labelled
       // second view of this button rather than a different one. Sending only the typed half here
       // would quietly drop the quote the pick put on the message.
@@ -31214,6 +32331,307 @@ function nlmSourceDelete(source) {
       new ResizeObserver(syncDockHeight).observe(dock);
       syncDockHeight();
     }
+
+  </script>
+  <!-- After conv_dock.js, whose composer row and pick tokens it replaces for a panel, and after
+       web_agent.js, whose provider list and socket it reads. -->
+  <script>
+// The panel composer: several web providers, no agent, and a person deciding who hears what.
+//
+// A panel conversation is an ordinary herdr conversation carrying `webchat: {providers, mode:
+// 'panel'}`. Its id is the namespace, exactly as an agent conversation's is, so its threads are
+// `<conversation id>:<provider>` and the merged thread already knows how to draw them. What it
+// does not have is a member: nothing is spawned, nothing is bound, and the sends go out over the
+// socket this page already has.
+//
+// So this replaces one row of the composer and nothing else. Where a conversation dock offers the
+// members and lights one, a panel offers the providers and lights any number — the question a
+// panel exists to ask is "what do all five of you make of this", and a radio cannot express it.
+
+// Who is lit, per conversation. Not stored: a selection is a statement about the message being
+// written, and a browser that remembered it across a reload would answer for a message nobody has
+// typed yet. Seeded to everyone the first time a panel is opened, because a panel with nobody
+// selected is a composer that cannot send.
+const convPanelPicks = new Map();
+
+// Threads with a turn in flight, by session name. The chat view tracks one turn because it draws
+// one thread; a panel has as many in flight as it has providers lit, and each finishes on its own.
+const convPanelRunning = new Map();
+
+// This conversation, if it is a panel. `mode` and not the presence of providers: an agent
+// conversation carries the same grant and is driven by a pane, so telling them apart by the field
+// they share would put this composer in front of the agent's conversation as well.
+function convPanelOf(convId) {
+  if (!convId || typeof loadConvIndex !== 'function') return null;
+  const conv = loadConvIndex().find(c => c.id === convId);
+  return conv && conv.webchat && conv.webchat.mode === 'panel' ? conv : null;
+}
+
+// The providers a panel may spend, narrowed to the ones this relay is actually offering. A grant
+// naming a provider that has since been switched off is drawn as nothing rather than as a pill
+// that answers 404 when pressed — and the threads it already holds are still read, because reading
+// is namespace-wide and never narrowed by the grant.
+function convPanelProviders(conv) {
+  const granted = (conv && conv.webchat && conv.webchat.providers) || [];
+  if (typeof webchatProvider !== 'function') return [];
+  return granted.filter(id => id !== '*' && webchatProvider(id));
+}
+
+function convPanelPicked(conv) {
+  const ids = convPanelProviders(conv);
+  let picked = convPanelPicks.get(conv.id);
+  if (!picked) {
+    picked = new Set(ids);
+    convPanelPicks.set(conv.id, picked);
+  }
+  // A provider that has gone away is not lit, and a grant that has grown does not silently light
+  // its new members: what is lit is what the reader last agreed to.
+  for (const id of Array.from(picked)) if (!ids.includes(id)) picked.delete(id);
+  return picked;
+}
+
+function convPanelSession(convId, provider) {
+  return `${convId}:${provider}`;
+}
+
+// Which conversations are picking several providers at once rather than switching between them.
+// Off by default: the ordinary thing is to ask one and read the answer, and a row where every tap
+// adds is a row that quietly grows a five-way send out of four mistaps.
+const convPanelMulti = new Set();
+
+// Which provider a panel is reading alone, or '' for all of them. The conversation's own solo is
+// built on members and a panel has none, so this is the same idea over the thing a panel does
+// have. Not stored: it is a way of looking at what is on screen, the same as the member solo.
+const convPanelSolo = new Map();
+
+function convPanelSoloOf(convId) {
+  return convPanelSolo.get(convId) || '';
+}
+
+// A single tap switches: this one, and not the others. That is what a tap on a member's chip
+// already means, and a panel is the same question asked of providers. Holding several at once is
+// what the Select switch beside All is for.
+function convPanelToggle(provider) {
+  const conv = convPanelOf(convViewId);
+  if (!conv) return;
+  const picked = convPanelPicked(conv);
+  if (convPanelMulti.has(conv.id)) {
+    if (picked.has(provider)) picked.delete(provider);
+    else picked.add(provider);
+  } else {
+    // Tapping the one already alone in the row leaves it there rather than emptying it: a
+    // composer addressed to nobody is one that can only fail.
+    picked.clear();
+    picked.add(provider);
+  }
+  renderConvDock();
+  if (window.cue) cue('tick');
+}
+
+function convPanelSelect() {
+  const conv = convPanelOf(convViewId);
+  if (!conv) return;
+  if (convPanelMulti.has(conv.id)) convPanelMulti.delete(conv.id);
+  else convPanelMulti.add(conv.id);
+  renderConvDock();
+  if (window.cue) cue('tick');
+}
+
+// Double rather than single, and on the row rather than on each pill, for the reasons the member
+// row's does: a single tap already means "talk to this one", and the row is redrawn between the
+// two clicks so the element the browser hands the second one is not the pill it began on.
+function convPanelSoloPick(event) {
+  if (event && event.preventDefault) event.preventDefault();
+  const conv = convPanelOf(convViewId);
+  const pill = event && event.target && event.target.closest
+    ? event.target.closest('[data-provider]') : null;
+  if (!conv || !pill) return;
+  const provider = pill.dataset.provider;
+  const sel = window.getSelection && window.getSelection();
+  if (sel && sel.removeAllRanges) sel.removeAllRanges();
+  const on = convPanelSoloOf(conv.id) === provider;
+  if (on) convPanelSolo.delete(conv.id);
+  else convPanelSolo.set(conv.id, provider);
+  const label = webchatProvider(provider)?.label || provider;
+  showToast(on ? 'Showing every provider' : `Reading only ${label}`);
+  renderConvDock();
+  if (typeof renderConvView === 'function') renderConvView();
+  if (window.cue) cue('tick');
+}
+
+// All, or none. One button rather than two: with anybody unlit it selects everyone, and with
+// everyone lit it clears — so the same press is always the one that changes what is in front of
+// you, and there is never a button that does nothing.
+function convPanelAll() {
+  const conv = convPanelOf(convViewId);
+  if (!conv) return;
+  const ids = convPanelProviders(conv);
+  const picked = convPanelPicked(conv);
+  if (picked.size === ids.length) picked.clear();
+  else for (const id of ids) picked.add(id);
+  renderConvDock();
+  if (window.cue) cue('tick');
+}
+
+function convPanelRowHtml(conv) {
+  const ids = convPanelProviders(conv);
+  const picked = convPanelPicked(conv);
+  if (!ids.length) {
+    return `<div class="xfer-act"><span class="pair-empty">`
+      + `None of this panel's providers are switched on.</span></div>`;
+  }
+  const solo = convPanelSoloOf(conv.id);
+  const multi = convPanelMulti.has(conv.id);
+  const pills = ids.map(id => {
+    const provider = webchatProvider(id) || {};
+    const name = escapeHtml(provider.label || id);
+    const on = picked.has(id);
+    const busy = convPanelRunning.has(convPanelSession(conv.id, id));
+    // What the tap will do, which is not what it does in the other mode.
+    const say = multi ? (on ? 'Stop sending to' : 'Also send to') : 'Send to';
+    return `<button class="xfer-who${on ? ' on' : ''}${solo === id ? ' solo' : ''}"`
+      + ` data-provider="${escapeHtml(id)}" `
+      + `onclick="convPanelToggle(this.dataset.provider)" aria-pressed="${on}" `
+      + `title="${say} ${name}" aria-label="${say} ${name}">`
+      + `<span class="dot${busy ? ' pulse' : ''}" `
+      + `style="background:${busy ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true">`
+      + `</span>${webchatMark(id, 14)}${name}</button>`;
+  }).join('');
+  const all = picked.size === ids.length;
+  return `<div class="xfer-act">`
+    + `<div class="xfer-who-row" ondblclick="convPanelSoloPick(event)">${pills}</div>`
+    + `<button class="xfer-who-more list" onclick="convPanelAll()" aria-pressed="${all}" `
+    + `title="${all ? 'Send to none of them' : 'Send to all of them'}" `
+    + `aria-label="${all ? 'Send to none of them' : 'Send to all of them'}">`
+    + `${all ? 'None' : 'All'}</button>`
+    // Whether a tap adds or switches. A switch is the ordinary thing and the default; this is how
+    // a message is put to several of them at once without four taps that each undid the last.
+    + `<button class="xfer-who-more pick${multi ? ' on' : ''}" onclick="convPanelSelect()" `
+    + `aria-pressed="${multi}" `
+    + `title="${multi ? 'One at a time' : 'Pick several'}" `
+    + `aria-label="${multi ? 'Go back to one provider at a time' : 'Pick several providers'}">`
+    + `${multi ? '☑' : '☐'}</button></div>`;
+}
+
+// The composer's send, for a panel. One message, one request each, and the answers land in the
+// thread when they land: nothing is written into the transcript here, because the adapter is
+// keeping this conversation and the relay is deliberately not.
+function convPanelSend(conv) {
+  const input = document.getElementById('convInput');
+  const body = input.value.trim();
+  if (!body) return;
+  const picked = Array.from(convPanelPicked(conv));
+  if (!picked.length) { showToast('Pick who this goes to.'); return; }
+  // A quote picked out of the thread stands up into the message the same way it does for a member,
+  // minus the "feedback from" header: a provider's bubble already wears the provider's name, and
+  // the panel is one person quoting one thread back into it.
+  const text = body.replace(DOCK_TOKEN, (mark, seq) => {
+    const quoted = dockTokens.get(Number(seq));
+    return quoted ? quoted.text : mark;
+  });
+  let sent = 0;
+  const at = Date.now();
+  for (const provider of picked) {
+    const session = convPanelSession(conv.id, provider);
+    if (convPanelRunning.has(session)) continue;   // one turn a thread, the same as a chat
+    const bytes = new Uint32Array(2);
+    crypto.getRandomValues(bytes);
+    const requestId = `wp_${bytes[0].toString(36)}${bytes[1].toString(36)}`;
+    // `provider` asks the relay to open the thread if this is the first message to it. A panel's
+    // threads are made by being written to rather than up front, so a provider nobody asked
+    // anything is a provider with no conversation rather than an empty one.
+    if (!webchatAsk({type: 'webchat_send', request_id: requestId, session, provider,
+                     message: text})) return;
+    // `message` and `reply` are what the thread draws while the turn is in flight: nothing is in
+    // the adapter's record until it ends, so this page's own deltas are the only copy there is.
+    convPanelRunning.set(session, {requestId, provider, at, message: text, reply: '',
+      status: 'Sending…'});
+    sent += 1;
+  }
+  if (!sent) { showToast('Still waiting on the last reply.'); return; }
+  input.value = '';
+  autoGrow(input);
+  syncConvCursor();
+  // The picks went with the message, so they go the way they do after a member send.
+  dockPicks = [];
+  dockPicked.clear();
+  dockTokens.clear();
+  drawDockPicks();
+  renderConvDock();
+  showToast(`Sending to ${sent} ${sent === 1 ? 'provider' : 'providers'}…`, 'info');
+}
+
+// What is being said right now, as thread entries: the question, and the answer as far as it has
+// arrived. Provisional, in the sense the conversation thread already has -- unfilled bubbles that
+// are replaced by the recorded ones the moment the turn ends and the thread is read back.
+function convPanelLiveEntries(convId) {
+  const out = [];
+  for (const [session, held] of convPanelRunning) {
+    if (!session.startsWith(`${convId}:`)) continue;
+    const provider = webchatProvider(held.provider) || {};
+    const label = provider.label || held.provider;
+    const mark = typeof WEBCHAT_MARKS !== 'undefined'
+      ? (WEBCHAT_MARKS[webchatFamily(held.provider)] || WEBCHAT_MARKS['']) : {};
+    const common = {
+      key: webchatThreadKey(held.provider), foreign: true, label,
+      agent: held.provider, color: mark.colour, sign: webchatMark(held.provider, 14),
+      at_src: 'sent',
+    };
+    out.push(Object.assign({who: 'user', text: held.message, at: held.at, seen: held.at}, common));
+    // The answer bubble exists from the moment the question goes out, so the wait is visible as
+    // the thing that is being waited for rather than as nothing at all.
+    out.push(Object.assign({
+      who: 'provider', text: held.reply || '', at: held.at + 1, seen: held.at + 1,
+      draft: !held.reply, live: true,
+    }, common));
+  }
+  return out;
+}
+
+// A turn event for one of a panel's threads. Answers true when it owned the event, which is what
+// keeps it out of the chat view's single-turn bookkeeping.
+function convPanelTurn(msg) {
+  const held = convPanelRunning.get(msg.session);
+  if (!held || held.requestId !== msg.requestId) return false;
+  if (msg.event === 'delta') {
+    held.reply += msg.delta || '';
+    held.status = 'Replying…';
+    convPanelPaint();
+    return true;
+  }
+  if (msg.event === 'queued' || msg.event === 'start') {
+    held.status = msg.event === 'start' ? `Waiting for ${held.provider}` : 'Queued';
+    convPanelPaint();
+    return true;
+  }
+  if (msg.event === 'done' || msg.event === 'error') {
+    convPanelRunning.delete(msg.session);
+    if (msg.event === 'error') {
+      showToast(`${held.provider}: ${msg.error || 'the provider failed'}`);
+    }
+    // The thread is read back from the adapter rather than assembled from the deltas: this page
+    // never holds a panel's history, and the answer as stored is the one every other reader sees.
+    if (typeof webchatThreadInvalidate === 'function') webchatThreadInvalidate(msg.session);
+    webchatAsk({type: 'webchat_open', session: msg.session});
+  }
+  renderConvDock();
+  convPanelPaint(true);
+  return true;
+}
+
+// Redrawing the thread on every delta would rebuild it several times a second and take the
+// reader's text selection with it. Coalesced onto the next frame, and forced when a turn ends --
+// that one has to land whether or not a frame was already owed.
+let convPanelPaintDue = 0;
+function convPanelPaint(now) {
+  if (typeof renderConvView !== 'function') return;
+  if (now) { convPanelPaintDue = 0; renderConvView(); return; }
+  if (convPanelPaintDue) return;
+  convPanelPaintDue = requestAnimationFrame(() => {
+    convPanelPaintDue = 0;
+    renderConvView();
+  });
+}
 
   </script>
   <!-- The New agent dialog, on both pages: a conversation gains a member that does not exist
@@ -34791,6 +36209,22 @@ function nlmSourceDelete(source) {
       const asking = live && typeof convLiveSyncing === 'function' && convLiveSyncing();
       hangSyncPill(document.getElementById('paneSyncing'), asking && !!thread && !thread.hidden);
       hangSyncPill(document.getElementById('convViewSyncing'), asking && !!convViewId);
+      // How a provider's answer is drawn. Offered only in a conversation that has provider threads
+      // in it -- over a thread of panes there is nothing here written in Markdown, and a toggle
+      // that changes nothing is worse than one that is not there.
+      hangSyncMd(document.getElementById('convMarkdown'),
+        !!convViewId && typeof webchatThreadSessions === 'function'
+        && webchatThreadSessions(convViewId).length > 0);
+    }
+
+    function hangSyncMd(btn, offered) {
+      if (!btn) return;
+      const on = typeof webchatMarkdownOn === 'function' && webchatMarkdownOn();
+      btn.classList.toggle('on', offered);
+      btn.classList.toggle('live', on);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.title = on ? 'Showing formatted Markdown — tap for the text the provider sent'
+        : 'Showing the text the provider sent — tap to format it';
     }
 
     function hangSyncPill(el, on) {
