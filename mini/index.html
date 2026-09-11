@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-10">
+  <meta name="app-built" content="2026-09-11">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -20653,7 +20653,12 @@
     // own store, keyed by fingerprint rather than by pane, because that is what the record is
     // addressed by — see conv_live.js.
     const CONV_LIVE_STORE = 'live';
-    const CONV_DB_VERSION = 2;
+    // And the third source: what the web-agent adapter holds for a provider thread. Kept apart from
+    // both of the others for the same reason they are kept apart from each other -- this one is not
+    // this browser's witness and not the relay's record, it is a copy of somebody else's, read back
+    // to save asking for it again. Keyed by session name, which is what the adapter addresses it by.
+    const CONV_WEB_STORE = 'webchat';
+    const CONV_DB_VERSION = 3;
     const CONV_INDEX_KEY = 'herdr_conversations', CONV_PENDING_KEY = 'herdr_conversations_pending',
       CONV_FALLBACK_KEY = 'herdr_transcripts';
     // What the fallback keeps instead. It is sharing one 5 MB cap with everything else this app
@@ -20687,6 +20692,10 @@
           }
           if (!db.objectStoreNames.contains(CONV_LIVE_STORE)) {
             const s = db.createObjectStore(CONV_LIVE_STORE, { keyPath: 'fp' });
+            s.createIndex('touched', 'touched');
+          }
+          if (!db.objectStoreNames.contains(CONV_WEB_STORE)) {
+            const s = db.createObjectStore(CONV_WEB_STORE, { keyPath: 'name' });
             s.createIndex('touched', 'touched');
           }
         };
@@ -23767,7 +23776,7 @@ function webchatReceiveState(msg) {
       // The pages every session was holding went with the process, so what this phone shows for
       // the open chat is a transcript nobody can confirm — the same position a reconnect leaves
       // it in.
-      if (webchatCurrent) webchatAsk({type: 'webchat_open', session: webchatCurrent});
+      if (webchatCurrent) webchatReread(webchatCurrent);
       webchatSettle(true, what);
     }
   }
@@ -23781,7 +23790,7 @@ function webchatReceiveState(msg) {
     // The thread on screen was read over a socket that has gone. Ask again rather than leave a
     // transcript nobody can confirm — and it is the same ask that brings back a reply which
     // landed while this page was not listening.
-    if (webchatStale) webchatAsk({type: 'webchat_open', session: webchatCurrent});
+    if (webchatStale) webchatReread(webchatCurrent);
     renderWebchatView();
   }
   if (webchatOffered) webchatStale = false;
@@ -24296,14 +24305,28 @@ function webchatRefresh() {
   webchatAsk({type: 'webchat_refresh'});
 }
 
+// Ask for a thread again and mean it. Every caller here is somewhere the page has reason to doubt
+// what it holds -- a socket that went away, a browser that was restarted, a tab that was closed
+// under a running turn -- and in none of those does the adapter's `updatedAt` necessarily move. So
+// the held copy is dropped rather than checked, which is what separates this from an ordinary open.
+function webchatReread(name) {
+  if (typeof webchatThreadInvalidate === 'function') webchatThreadInvalidate(name);
+  webchatAsk({type: 'webchat_open', session: name});
+}
+
 function webchatOpenCard(card) {
   webchatOpen(card.dataset.session);
 }
 
 function webchatOpen(name) {
   webchatCurrent = name;
-  webchatMessages = [];
-  webchatTruncated = false;
+  // What this browser was told last time, if the provider has not spoken since. The adapter's copy
+  // is still the authority -- this is a cache of it, and `webchatThreadHeld` answers only for a
+  // thread whose `updatedAt` has not moved. Without it every entry into a chat drew an empty
+  // thread and waited on a round trip for history the page already had on disk.
+  const held = typeof webchatThreadHeld === 'function' ? webchatThreadHeld(name) : null;
+  webchatMessages = held ? held.messages : [];
+  webchatTruncated = held ? !!held.truncated : false;
   // A turn of this chat's that is still in flight, put back rather than dropped. Opening the chat
   // a question was asked in is exactly when the reader wants to see that it is still being
   // answered — and the alternative is a thread showing neither the question nor the wait.
@@ -24324,7 +24347,7 @@ function webchatOpen(name) {
   syncBlockCursor(input);
   webchatDrawChips();
   renderWebchatView();
-  webchatAsk({type: 'webchat_open', session: name});
+  if (!held) webchatAsk({type: 'webchat_open', session: name});
   // Asked on entry, not only when the menu is opened: the dot is on the header the whole time a
   // chat is on screen, and a dot that says nothing until you open the drawer behind it is a light
   // nobody reads. It opens nothing and drives no browser, which is what makes this affordable.
@@ -24388,7 +24411,7 @@ function webchatReceiveResult(msg) {
         + ' that had not finished. Their replies may be missing — Sync to check.');
       webchatNeedsSync.add(webchatCurrent);
     }
-    if (webchatCurrent) webchatAsk({type: 'webchat_open', session: webchatCurrent});
+    if (webchatCurrent) webchatReread(webchatCurrent);
     // A stop is meant to leave the browser down, so it is the one rung that is not followed by an
     // attempt to open anything. What went right is said once the tab answers rather than here:
     // this message means the relay accepted the press, which is not what anybody is asking.
@@ -25250,8 +25273,13 @@ function webchatRetry() {
   showToast('Your last message is back in the box. Send when ready.', 'info');
 }
 
+// Read the provider's page again, whatever this browser thinks it holds. So what is held is
+// dropped first: a sync is what a reader presses when they believe the cached copy is wrong, and
+// keeping it would let the stamp check answer the next visit out of exactly that copy.
 function webchatSync() {
-  if (webchatCurrent) webchatAsk({type: 'webchat_sync', session: webchatCurrent});
+  if (!webchatCurrent) return;
+  if (typeof webchatThreadInvalidate === 'function') webchatThreadInvalidate(webchatCurrent);
+  webchatAsk({type: 'webchat_sync', session: webchatCurrent});
 }
 
 function webchatClear() {
@@ -25673,6 +25701,90 @@ const webchatThreadCache = new Map();
 // Asked and not yet answered, so a render every three seconds does not ask five times a second.
 const webchatThreadWait = new Set();
 
+// --- Kept between visits ---
+//
+// The adapter's copy is the authority and this is a cache of it, held the way the relay's record is
+// held: in IndexedDB beside the transcripts, read back once per page, and asked for again only when
+// the session's `updatedAt` says the provider has spoken since. Without it every reload, every
+// provider filter and every walk back into a conversation drew an empty thread and waited on the
+// adapter to say what it had already said.
+//
+// Threads kept on disk, oldest touched evicted first -- the rule the other two stores use.
+const WEBCHAT_THREAD_KEEP = 300;
+let webchatThreadLoaded = null, webchatThreadReady = false;
+
+function webchatThreadHydrate() {
+  if (webchatThreadReady || webchatThreadLoaded) return;
+  // No store to read: ready now rather than a tick from now. A caller that has to wait for a
+  // resolved promise to learn there was nothing to wait for would skip the fetch it came to make.
+  if (typeof openConvDB !== 'function') { webchatThreadReady = true; return; }
+  webchatThreadLoaded = (async () => {
+    const db = await openConvDB();
+    if (!db) { webchatThreadReady = true; return; }
+    try {
+      const read = db.transaction(CONV_WEB_STORE, 'readonly').objectStore(CONV_WEB_STORE);
+      for (const rec of (await idbReq(read.getAll())) || []) {
+        // Never over something this session has already been told: a live answer is newer than
+        // anything on disk by construction.
+        if (!rec || !rec.name || webchatThreadCache.has(rec.name)) continue;
+        webchatThreadCache.set(rec.name, {
+          messages: rec.messages || [], stamp: rec.stamp || '',
+          truncated: !!rec.truncated, error: '',
+        });
+      }
+    } catch (e) { /* the session keeps its own copy in memory */ }
+    webchatThreadReady = true;
+    webchatThreadRepaint();
+  })();
+}
+
+// Write-through, one thread at a time, after the answer that changed it. Silent on failure: a full
+// quota costs the next visit a fetch and nothing else.
+async function webchatThreadPersist(name) {
+  const held = webchatThreadCache.get(name);
+  // A failed read is not written down. It is about the adapter's health at one moment, and a
+  // reload tomorrow would draw it as though the thread itself were unreadable.
+  if (!held || held.error || typeof openConvDB !== 'function') return;
+  const db = await openConvDB();
+  if (!db) return;
+  try {
+    const store = db.transaction(CONV_WEB_STORE, 'readwrite').objectStore(CONV_WEB_STORE);
+    await idbReq(store.put({name: name, messages: held.messages || [], stamp: held.stamp || '',
+                            truncated: !!held.truncated, touched: Date.now()}));
+  } catch (e) { return; }
+  try {
+    const read = db.transaction(CONV_WEB_STORE, 'readonly').objectStore(CONV_WEB_STORE);
+    const count = await idbReq(read.count());
+    if (count <= WEBCHAT_THREAD_KEEP) return;
+    const byAge = db.transaction(CONV_WEB_STORE, 'readwrite').objectStore(CONV_WEB_STORE);
+    const stale = (await idbReq(byAge.index('touched').getAllKeys())) || [];
+    for (const key of stale.slice(0, count - WEBCHAT_THREAD_KEEP)) byAge.delete(key);
+  } catch (e) { /* the cap is a tidy-up, not a correctness property */ }
+}
+
+// Everything this browser is keeping of the adapter's threads. The Settings button beside the one
+// that forgets the relay's record, and the same promise: nothing is lost that cannot be read again.
+async function webchatThreadForget() {
+  webchatThreadCache.clear();
+  webchatThreadWait.clear();
+  if (typeof openConvDB !== 'function') return;
+  const db = await openConvDB();
+  if (!db) return;
+  try {
+    await idbReq(db.transaction(CONV_WEB_STORE, 'readwrite').objectStore(CONV_WEB_STORE).clear());
+  } catch (e) { /* nothing lost that cannot be re-read */ }
+}
+
+// What is held for one thread, and only when it is what the adapter has now. Every reader goes
+// through this rather than the map, so "is this current" is answered in one place.
+function webchatThreadHeld(name) {
+  const held = webchatThreadCache.get(name);
+  if (!held || held.error) return null;
+  const session = typeof webchatSession === 'function' ? webchatSession(name) : null;
+  const stamp = (session && (session.updatedAt || session.createdAt)) || '';
+  return stamp && held.stamp === stamp ? held : null;
+}
+
 // The sessions of one conversation. The namespace is the conversation's own id, which is what the
 // binding put in the agent's environment — so this needs nothing stored on the conversation and
 // works for a room whose binding a person has since edited.
@@ -25685,6 +25797,12 @@ function webchatThreadSessions(convId) {
 // Ask for anything not held, or held from before the provider last said something. `updatedAt` is
 // the adapter's own stamp on the session, so a thread that has not moved costs nothing.
 function webchatThreadFetch(convId) {
+  // Not before the disk has been read, or the first render of every page would ask for every
+  // thread it is about to be handed. The hydrate repaints, which comes back here.
+  if (!webchatThreadReady) {
+    webchatThreadHydrate();
+    if (!webchatThreadReady) return;
+  }
   for (const session of webchatThreadSessions(convId)) {
     const name = session.name;
     const stamp = session.updatedAt || session.createdAt || '';
@@ -25708,14 +25826,21 @@ function webchatThreadInvalidate(name) {
 
 function webchatThreadStore(msg) {
   const name = msg.name || '';
-  if (!name || !webchatThreadWait.delete(name)) return;
+  if (!name) return;
+  // Whoever asked. The chat view asks for the thread it is opening and the conversation window
+  // asks for every thread in its namespace; both answers are the same history, and gating this on
+  // the second kind meant a chat read on its own page was fetched again the next time it was
+  // opened from anywhere.
+  const mine = webchatThreadWait.delete(name);
   const session = webchatSession(name);
   webchatThreadCache.set(name, {
     messages: Array.isArray(msg.messages) ? msg.messages : [],
     stamp: (session && (session.updatedAt || session.createdAt)) || '',
+    truncated: !!msg.truncated,
     error: '',
   });
-  webchatThreadRepaint();
+  webchatThreadPersist(name);
+  if (mine) webchatThreadRepaint();
 }
 
 // A history that could not be read. Kept rather than retried on the next render: an adapter that
@@ -36222,32 +36347,48 @@ function convPanelPaint(now) {
       const paneTidy = document.getElementById('paneTidy');
       const convTidy = document.getElementById('convTidy');
       if (paneTidy) paneTidy.classList.toggle('on', !!activePane);
-      if (convTidy) convTidy.classList.toggle('on', !!convViewId);
+      // Whether the conversation on screen has anything the relay wrote down. A panel is providers
+      // and nobody else: no pane ever ran for it, so the relay has no turn, no transcript and no
+      // commit for it, and every one of these controls was offered over a thread it could say
+      // nothing about. The record button was the loud one -- pressed, it replaced the providers'
+      // answers with an empty record and the reader had to find their way back.
+      const recorded = hangConvRecorded();
+      if (convTidy) convTidy.classList.toggle('on', recorded);
       // Which record the thread is reading. Offered only where there is a thread to read — over the
       // pane's rows there is no bubble for it to change — and pressed is a state, so it is marked
       // on the button rather than said in a toast the reader has to remember.
       const thread = document.getElementById('convThread');
       hangSyncLive(document.getElementById('paneLive'), !!thread && !thread.hidden);
-      hangSyncLive(document.getElementById('convLive'), !!convViewId);
+      hangSyncLive(document.getElementById('convLive'), recorded);
       // What was committed between the messages. Offered only where the relay's record is being
       // read: this browser's own transcript has no commits in it, and a toggle that changes
       // nothing is worse than one that is not there.
       const live = typeof convLiveOn === 'function' && convLiveOn();
       hangSyncCommits(document.getElementById('paneCommits'),
                       live && !!thread && !thread.hidden);
-      hangSyncCommits(document.getElementById('convCommits'), live && !!convViewId);
+      hangSyncCommits(document.getElementById('convCommits'), live && recorded);
       // Whether the relay has been asked something that has not come back. Only where the record is
       // what is on screen: a warm fetch runs with the toggle off, and a pill over this browser's own
       // transcript would be about a thread the reader is not looking at.
       const asking = live && typeof convLiveSyncing === 'function' && convLiveSyncing();
       hangSyncPill(document.getElementById('paneSyncing'), asking && !!thread && !thread.hidden);
-      hangSyncPill(document.getElementById('convViewSyncing'), asking && !!convViewId);
+      hangSyncPill(document.getElementById('convViewSyncing'), asking && recorded);
       // How a provider's answer is drawn. Offered only in a conversation that has provider threads
       // in it -- over a thread of panes there is nothing here written in Markdown, and a toggle
       // that changes nothing is worse than one that is not there.
       hangSyncMd(document.getElementById('convMarkdown'),
         !!convViewId && typeof webchatThreadSessions === 'function'
         && webchatThreadSessions(convViewId).length > 0);
+    }
+
+    // A conversation the relay could have written something about: one with members, which means
+    // one that has had a pane in it. Membership rather than mode, because it is the true statement
+    // -- an agent conversation whose harness has not come up yet has nothing recorded either, and
+    // an ordinary room reduced to no members has nothing left to read.
+    function hangConvRecorded() {
+      if (!convViewId || typeof loadConvIndex !== 'function') return !!convViewId;
+      const conv = loadConvIndex().find(c => c.id === convViewId);
+      return !!conv && ((conv.members || []).length > 0);
     }
 
     function hangSyncMd(btn, offered) {

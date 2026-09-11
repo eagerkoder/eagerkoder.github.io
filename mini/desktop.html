@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-10">
+  <meta name="app-built" content="2026-09-11">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -11015,7 +11015,12 @@
     // own store, keyed by fingerprint rather than by pane, because that is what the record is
     // addressed by — see conv_live.js.
     const CONV_LIVE_STORE = 'live';
-    const CONV_DB_VERSION = 2;
+    // And the third source: what the web-agent adapter holds for a provider thread. Kept apart from
+    // both of the others for the same reason they are kept apart from each other -- this one is not
+    // this browser's witness and not the relay's record, it is a copy of somebody else's, read back
+    // to save asking for it again. Keyed by session name, which is what the adapter addresses it by.
+    const CONV_WEB_STORE = 'webchat';
+    const CONV_DB_VERSION = 3;
     const CONV_INDEX_KEY = 'herdr_conversations', CONV_PENDING_KEY = 'herdr_conversations_pending',
       CONV_FALLBACK_KEY = 'herdr_transcripts';
     // What the fallback keeps instead. It is sharing one 5 MB cap with everything else this app
@@ -11049,6 +11054,10 @@
           }
           if (!db.objectStoreNames.contains(CONV_LIVE_STORE)) {
             const s = db.createObjectStore(CONV_LIVE_STORE, { keyPath: 'fp' });
+            s.createIndex('touched', 'touched');
+          }
+          if (!db.objectStoreNames.contains(CONV_WEB_STORE)) {
+            const s = db.createObjectStore(CONV_WEB_STORE, { keyPath: 'name' });
             s.createIndex('touched', 'touched');
           }
         };
