@@ -12767,10 +12767,14 @@
     }
 
     // One bubble's own fold, in its header. The stylesheet knows when a bubble is cut and the
-    // markup does not, so this is drawn whenever the rules could apply -- the reader has asked for
-    // every bubble to be cut, or this one is filling up under them.
-    function convFoldBtnHtml(live) {
-      if (!live && !convClampOn()) return '';
+    // markup does not, so this is drawn whenever the rules could apply -- this bubble is filling up
+    // under the reader, or it is a provider's and the reader has asked for those to be cut.
+    //
+    // A provider's and never an agent's. What is being cut is a wall of prose from five providers
+    // answering the same question at length; a pane's thread is the app's oldest screen and nothing
+    // here is an improvement to it.
+    function convFoldBtnHtml(live, foreign) {
+      if (!live && !(foreign && convClampOn())) return '';
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
         + 'title="Show all of this message" aria-label="Show all of this message" '
         + `aria-expanded="false">${convIco('unfold')}</button>`;
@@ -12992,7 +12996,7 @@
         // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
         // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
         // one place a reader is not looking.
-        const fold = convFoldBtnHtml(!!e.live);
+        const fold = convFoldBtnHtml(!!e.live, foreign);
         const head = bar || time || fold
           ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
@@ -13033,7 +13037,8 @@
         // `live` is the bubble an answer is arriving into. It is what lights the repairs and what
         // makes the bubble collapse to its first lines while it fills — see `conv-clamped`.
         return rule + git.before +
-          `<div class="conv-msg${user ? ' user' : ''}${side}${state}${e.live ? ' live' : ''}"` +
+          `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
+          `${foreign ? ' foreign' : ''}${e.live ? ' live' : ''}"` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;

@@ -6468,7 +6468,7 @@
       display: block;
     }
 
-    body.conv-clamped .conv-msg:not(.conv-open) .conv-body,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body,
     .conv-msg.live:not(.conv-open) .conv-body {
       /* One line. Two was an attempt to show a little of the answer and it showed a little of
          nothing: what a collapsed thread is for is finding the message, and one line of it is a
@@ -6477,7 +6477,7 @@
       overflow: hidden;
     }
 
-    body.conv-clamped .conv-msg:not(.conv-open),
+    body.conv-clamped .conv-msg.foreign:not(.conv-open),
     .conv-msg.live:not(.conv-open) {
       cursor: pointer;
     }
@@ -7745,6 +7745,18 @@
     .xfer-act .xfer-who-row {
       flex: 1 1 auto;
       min-width: 0;
+    }
+
+    /* The panel row's four switches, two to a line and pinned to the right edge. Aligned to the
+       top of the row rather than centred in it: the pills beside them wrap, so the row grows
+       downwards and a block centred against it would drift away from the line of pills it is
+       about. */
+    .xfer-act .xfer-who-acts {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 6px;
+      flex: 0 0 auto;
+      align-self: flex-start;
     }
 
     /* The conversation's agents. The one that will receive it is lit; the rest are dimmed rather
@@ -22563,10 +22575,14 @@
     }
 
     // One bubble's own fold, in its header. The stylesheet knows when a bubble is cut and the
-    // markup does not, so this is drawn whenever the rules could apply -- the reader has asked for
-    // every bubble to be cut, or this one is filling up under them.
-    function convFoldBtnHtml(live) {
-      if (!live && !convClampOn()) return '';
+    // markup does not, so this is drawn whenever the rules could apply -- this bubble is filling up
+    // under the reader, or it is a provider's and the reader has asked for those to be cut.
+    //
+    // A provider's and never an agent's. What is being cut is a wall of prose from five providers
+    // answering the same question at length; a pane's thread is the app's oldest screen and nothing
+    // here is an improvement to it.
+    function convFoldBtnHtml(live, foreign) {
+      if (!live && !(foreign && convClampOn())) return '';
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
         + 'title="Show all of this message" aria-label="Show all of this message" '
         + `aria-expanded="false">${convIco('unfold')}</button>`;
@@ -22788,7 +22804,7 @@
         // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
         // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
         // one place a reader is not looking.
-        const fold = convFoldBtnHtml(!!e.live);
+        const fold = convFoldBtnHtml(!!e.live, foreign);
         const head = bar || time || fold
           ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
@@ -22829,7 +22845,8 @@
         // `live` is the bubble an answer is arriving into. It is what lights the repairs and what
         // makes the bubble collapse to its first lines while it fills — see `conv-clamped`.
         return rule + git.before +
-          `<div class="conv-msg${user ? ' user' : ''}${side}${state}${e.live ? ' live' : ''}"` +
+          `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
+          `${foreign ? ' foreign' : ''}${e.live ? ' live' : ''}"` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
@@ -31821,6 +31838,15 @@ function nlmSourceDelete(source) {
       return byDockMru('who', live, convMemberKey);
     }
 
+    // Whether this conversation stands in front of web providers at all -- an agent bound to some,
+    // or a panel. Read off the grant rather than off the mode: what decides it is whether there can
+    // be a provider's bubble in the thread, and both kinds hold one.
+    function dockHasWeb() {
+      const conv = typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === convViewId) : null;
+      return !!(conv && conv.webchat && (conv.webchat.providers || []).length);
+    }
+
     // Whoever wrote the picked messages. Two agents' messages are two conversations being quoted as
     // one, which is what the transfer sheet has always refused, so the row stands down rather than
     // guessing which of them the payload belongs to.
@@ -32505,9 +32531,12 @@ function nlmSourceDelete(source) {
         // arrow says only that something moves.
         (target ? `<button class="xfer-who-more open" onclick="openDockPane()" ` +
           `title="Open ${to}'s terminal" aria-label="Open ${to}'s terminal">${shellGlyph()}</button>` : '') +
-        // How long the bubbles above are. The same switch the panel composer carries, because it is
-        // one preference about one thread and a reader reaches it from whichever composer is there.
-        (typeof convClampBtnHtml === 'function' ? convClampBtnHtml('xfer-who-more') : '') +
+        // How long a provider's bubbles are, for a conversation that has any. An agent bound to
+        // five providers reads the same wall of prose a panel does; what it does not have is a
+        // panel's row to reach the switch from, and a conversation of panes alone must not grow a
+        // control for a kind of bubble it will never hold.
+        (dockHasWeb() && typeof convClampBtnHtml === 'function'
+          ? convClampBtnHtml('xfer-who-more') : '') +
         `</div>` +
         `<div class="xfer-act"><div class="xfer-chip-row">${chips}</div>` +
         `<button class="xfer-chip more" onclick="toggleDockMenu()" ` +
@@ -33167,6 +33196,10 @@ function convPanelRowHtml(conv) {
   const all = picked.size === ids.length;
   return `<div class="xfer-act">`
     + `<div class="xfer-who-row wrap">${pills}</div>`
+    // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
+    // be and a single line of four buttons was taking a third of a phone's width off them -- and
+    // four near-identical chips in a line is not a thing anybody reads at a glance either.
+    + `<div class="xfer-who-acts">`
     + `<button class="xfer-who-more list" onclick="convPanelAll()" aria-pressed="${all}" `
     + `title="${all ? 'Send to none of them' : 'Send to all of them'}" `
     + `aria-label="${all ? 'Send to none of them' : 'Send to all of them'}">`
@@ -33192,7 +33225,7 @@ function convPanelRowHtml(conv) {
     // How long the bubbles are, beside the two switches for who they go to. A panel is the thread
     // that most needs it: five providers answering at length is a thread nobody can scroll.
     + (typeof convClampBtnHtml === 'function' ? convClampBtnHtml('xfer-who-more') : '')
-    + `</div>`;
+    + `</div></div>`;
 }
 
 // The composer's send, for a panel. One message, one request each, and the answers land in the
