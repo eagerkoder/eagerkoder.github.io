@@ -12666,7 +12666,136 @@
     // Both are worth showing by default — a thread that went quiet for the length of a turn reads
     // as broken — and both are worth being able to switch off while checking chronology, which is
     // the one job they get in the way of.
-    function convProvisional(e) { return !!e && (!!e.draft || e.at_src === 'backfill'); }
+    // A provider's message is the one exception, and it is not an exception at all: what makes an
+    // entry provisional is that the words may still change, and a provider's are written down in
+    // the adapter's own record before this page ever sees them. `backfill` on one of those is
+    // about the *time* — the adapter stamped the row when it wrote it, not when it was said — and
+    // the tilde in front of the clock is what says so. Without this, "final messages only" emptied
+    // a panel's thread completely: every provider message carries that stamp.
+    function convProvisional(e) {
+      if (!e) return false;
+      if (e.draft) return true;
+      if (e.foreign) return false;
+      return e.at_src === 'backfill';
+    }
+
+    // --- reading a long thread two lines at a time ---
+    //
+    // A bubble is as tall as what was said in it, which is right for reading one answer and wrong
+    // for finding one: five providers answering at length is a thread nobody can scroll. So every
+    // bubble can be cut to its first lines, and a cut bubble opens on a tap.
+    //
+    // A class on `<body>` and not a flag the render reads: the switch changes nothing about what
+    // was said, so flipping it must not rebuild the thread under whoever is reading it — and on the
+    // desktop page it has five threads to reach, each in a column this file knows nothing about.
+    // A streaming bubble is cut either way: it is growing under the reader, and the thread walking
+    // downwards while an answer arrives is the thing people complain about.
+    const CONV_CLAMP_KEY = 'herdr_conv_clamp';
+
+    function convClampOn() {
+      try { return localStorage.getItem(CONV_CLAMP_KEY) === '1'; } catch (e) { return false; }
+    }
+
+    function convClampApply() {
+      // Guarded for the slices, which run these modules in a context with no DOM at all.
+      if (typeof document === 'undefined' || !document.body) return;
+      document.body.classList.toggle('conv-clamped', convClampOn());
+    }
+
+    function convClampToggle() {
+      const next = !convClampOn();
+      try { localStorage.setItem(CONV_CLAMP_KEY, next ? '1' : '0'); } catch (e) { /* session only */ }
+      // Whatever was opened by hand goes back with it: the button says "collapse everything", and
+      // a bubble that stayed open because somebody read it an hour ago is not everything.
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+      }
+      convClampApply();
+      if (typeof renderConvDock === 'function') renderConvDock();
+      if (typeof renderConvView === 'function') renderConvView();
+      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      if (window.cue) cue('tick');
+    }
+
+    // A cut bubble opens on a tap anywhere in it. No control of its own: two lines of text have
+    // nothing to select and nothing else to press, and a chevron per bubble is a control on every
+    // message in the thread to serve the few that are cut.
+    if (typeof document !== 'undefined') {
+      document.addEventListener('click', e => {
+        if (!e.target.closest) return;
+        const msg = e.target.closest('.conv-msg');
+        if (!msg || msg.classList.contains('conv-open')) return;
+        if (e.target.closest('button, a, input, textarea, select')) return;
+        // Cut or not is the stylesheet's answer, not this file's: the rules name two different
+        // reasons a bubble is short and neither is written down here.
+        const body = msg.querySelector('.conv-body');
+        if (!body || getComputedStyle(body).maxHeight === 'none') return;
+        // Through the header's own button where there is one, so the icon it wears is not left
+        // saying the opposite of what the bubble is doing.
+        const btn = msg.querySelector('.conv-fold');
+        if (btn) convFoldToggle(btn);
+        else msg.classList.add('conv-open');
+      });
+      convClampApply();
+    }
+
+    // --- the little icons the composer's switches and a bubble's fold wear ---
+    //
+    // Drawn rather than typed. The glyphs these replace -- ☐ ☑ ⌃ ⌄ ◉ ◎ -- are a font lottery: they
+    // land at whatever size and weight the platform's fallback has for them, next to buttons that
+    // were designed, and on a phone half of them arrive as emoji. Fourteen pixels of path is the
+    // same picture on every device, takes the button's own colour, and scales with it.
+    const CONV_ICONS = {
+      // One, and several stacked behind it: what the Select switch is choosing between.
+      one: '<rect x="3" y="3" width="8" height="8" rx="2"/>',
+      many: '<rect x="2" y="4.5" width="7.5" height="7.5" rx="2"/>'
+        + '<path d="M5 2.5h5.2A1.8 1.8 0 0 1 12 4.3v5.2"/>',
+      // Two chevrons meeting in the middle, and two leaving it.
+      fold: '<path d="M3.5 3.5 7 6.8 10.5 3.5"/><path d="M3.5 10.5 7 7.2 10.5 10.5"/>',
+      unfold: '<path d="M3.5 6.5 7 3.2 10.5 6.5"/><path d="M3.5 7.5 7 10.8 10.5 7.5"/>',
+      // Reading what you are writing to, and reading all of them.
+      eye: '<path d="M1.2 7S3.4 3.2 7 3.2 12.8 7 12.8 7 10.6 10.8 7 10.8 1.2 7 1.2 7Z"/>'
+        + '<circle cx="7" cy="7" r="1.7"/>',
+      eyeOff: '<path d="M1.2 7S3.4 3.2 7 3.2 12.8 7 12.8 7 10.6 10.8 7 10.8 1.2 7 1.2 7Z"/>'
+        + '<circle cx="7" cy="7" r="1.7"/><path d="M2.2 11.8 11.8 2.2"/>',
+    };
+
+    function convIco(name) {
+      return `<svg class="conv-ico" viewBox="0 0 14 14" fill="none" stroke="currentColor" `
+        + `stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
+        + `${CONV_ICONS[name] || ''}</svg>`;
+    }
+
+    // One bubble's own fold, in its header. The stylesheet knows when a bubble is cut and the
+    // markup does not, so this is drawn whenever the rules could apply -- the reader has asked for
+    // every bubble to be cut, or this one is filling up under them.
+    function convFoldBtnHtml(live) {
+      if (!live && !convClampOn()) return '';
+      return '<button class="conv-fold" onclick="convFoldToggle(this)" '
+        + 'title="Show all of this message" aria-label="Show all of this message" '
+        + `aria-expanded="false">${convIco('unfold')}</button>`;
+    }
+
+    function convFoldToggle(btn) {
+      const msg = btn && btn.closest('.conv-msg');
+      if (!msg) return;
+      const open = msg.classList.toggle('conv-open');
+      btn.innerHTML = convIco(open ? 'fold' : 'unfold');
+      const say = open ? 'Cut this message back to one line' : 'Show all of this message';
+      btn.title = say;
+      btn.setAttribute('aria-label', say);
+      btn.setAttribute('aria-expanded', String(open));
+    }
+
+    // The switch itself, for whichever composer row is asking. Both rows draw it, because both
+    // stand under a thread and neither is the only one a reader uses.
+    function convClampBtnHtml(cls) {
+      const on = convClampOn();
+      const say = on ? 'Show the messages in full' : 'Cut every message to its first lines';
+      return `<button class="${cls || 'xfer-who-more'} clamp${on ? ' on' : ''}" ` +
+        `onclick="convClampToggle()" aria-pressed="${on}" ` +
+        `title="${say}" aria-label="${say}">${convIco(on ? 'unfold' : 'fold')}</button>`;
+    }
 
 
     function convSpan(ms) {
@@ -12842,7 +12971,30 @@
         // reasons it is. `~` in front of the clock already says backfill, so only the draft is
         // spelled out.
         const mark = e.draft ? '<span class="conv-state">draft</span>' : '';
-        const head = bar || time ? `<span class="conv-who">${bar}${time}${mark}</span>` : '';
+        // What can be done to a bubble that is still waiting: reopen the provider's tab, or ask the
+        // same question again. Drawn at the end of the header, which is the bubble's top right, and
+        // only where the page holds the turn -- it is the only party that still has the message.
+        // Hung over the bubble's top right rather than placed at the end of its header — the same
+        // corner, and the same shape, as the Esc and working chips a pane's bubble wears. In the
+        // header they sat behind a long provider name and read as part of the label; a repair is
+        // not a label, and while the answer is streaming it is the only control on screen.
+        // Named rather than drawn as glyphs: ⟲ and ↻ are the same arrow to anybody who is not
+        // already sure which is which, and this is a control pressed while something is going
+        // wrong. The two are the repairs in order of violence -- reopen the page, then read the
+        // thread back off it in case the answer arrived and this page missed it.
+        const acts = e.acts ? `<span class="conv-acts">`
+          + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(e.acts.provider)}')" `
+          + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
+          + `Reconnect</button>`
+          + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(e.acts.session)}')" `
+          + `title="Read this thread back off the provider's page" `
+          + `aria-label="Read this thread back off the provider's page">Sync</button></span>` : '';
+        // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
+        // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
+        // one place a reader is not looking.
+        const fold = convFoldBtnHtml(!!e.live);
+        const head = bar || time || fold
+          ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
         // history, not a reading preference, and can change when a pair is created or reopened.
         const side = paired && key === me.key ? ' conv-right' : '';
@@ -12861,9 +13013,13 @@
         // same switch the Web Agents chat view carries, because it is one preference about one
         // kind of answer. `data-text` stays the raw text: a quote lifted out of a bubble is the
         // words, not the markup that drew them.
-        const body = foreign && e.text && typeof markdownHtml === 'function'
+        const said = foreign && e.text && typeof markdownHtml === 'function'
           && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
           ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
+        // What was said, in a box of its own. The bubble cannot be the thing that is cut short:
+        // three controls hang over its top edge and the clip that shortened it took them with it.
+        // So the cut is here, around the words and nothing else.
+        const body = `<span class="conv-body">${said}</span>`;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
@@ -12874,10 +13030,13 @@
         // Who said it, for the composer's token to name: two bubbles of the same length from two
         // members read alike once they are cut to `[#1 …]`, and a quote is worth nothing if the
         // reader cannot tell whose it is without scrolling back to it.
+        // `live` is the bubble an answer is arriving into. It is what lights the repairs and what
+        // makes the bubble collapse to its first lines while it fills — see `conv-clamped`.
         return rule + git.before +
-          `<div class="conv-msg${user ? ' user' : ''}${side}${state}" data-key="${escapeHtml(key)}"` +
+          `<div class="conv-msg${user ? ' user' : ''}${side}${state}${e.live ? ' live' : ''}"` +
+          ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
-          ` style="--conv-agent:${color}">${tick}${head}${body}</div>` + git.after;
+          ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
       }).join('');
     }
 
