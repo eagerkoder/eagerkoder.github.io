@@ -3742,6 +3742,14 @@
 
     /* Pane menu — anchored to its gear button, so it needs a positioned ancestor of its own
        rather than the header, whose other children must stay in normal flow. */
+    /* `display: flex` below is an author rule and `[hidden]` is the user agent's, so the attribute
+       loses and a hidden wrapper stays on screen. Every other wrapper in the app is hidden by its
+       container going; this one is hidden on its own, in a header it shares with a conversation
+       that has nothing to do with web providers. */
+    .term-menu-wrap[hidden] {
+      display: none;
+    }
+
     .term-menu-wrap {
       position: relative;
       display: flex;
@@ -4581,6 +4589,24 @@
       min-height: var(--head-h);
       background: var(--bg);
       border-bottom: 1px solid var(--border);
+    }
+
+    /* The header paints above what is under it, so a drawer hanging off the server pill is not
+       covered by the roster panel or the thread -- both of which carry their own background and
+       are laid out after it. */
+    .conv-view-head {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Opened rightwards, because the pill is on the left of the caption row. The chat view's
+       drawers hang off buttons at the right edge of a header and are anchored to it; this one is
+       two badges in from the left, and anchoring it the same way put most of its width off the
+       side of the screen. */
+    #convServerMenu {
+      left: 0;
+      right: auto;
+      max-width: min(86vw, 320px);
     }
 
     /* The controls set the first row's height; nothing in it may set a taller one, and the back
@@ -6416,6 +6442,13 @@
       gap: 4px;
     }
 
+    /* A grouped bubble carries a set of these per provider and shows the set belonging to the lit
+       pill. `[hidden]` is a user-agent rule and loses to the `display` above it, so without this
+       every provider's repairs draw in the same corner, on top of each other. */
+    .conv-acts[hidden] {
+      display: none;
+    }
+
     /* Named, so the chip is as wide as its word. The shape the Esc chip is, for the same reason it
        is: they sit in the same corner and one of them is never on a bubble the other is. */
     .conv-act {
@@ -6468,17 +6501,124 @@
       display: block;
     }
 
-    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body,
-    .conv-msg.live:not(.conv-open) .conv-body {
-      /* One line. Two was an attempt to show a little of the answer and it showed a little of
+    /* `[hidden]` is a user-agent rule and loses to any author `display`, which the line above is —
+       so a grouped bubble's four hidden answers were drawn stacked under the one that was showing
+       and the pills appeared to do nothing. The same trap `.term-menu-wrap[hidden]` fell into. */
+    .conv-body[hidden] {
+      display: none;
+    }
+
+    /* The question that produced this answer, above it and inside the same bubble — the paragraph
+       view. Green, because that is the colour it wore as a bubble of its own, and proportional for
+       the same reason a user bubble is: it is something a person typed, not program output. The
+       rule under it is what makes the pair read as a question and an answer; two blocks of prose
+       with only space between them read as one message that changed voice halfway down. */
+    .conv-msg.conv-qa .conv-ask {
+      display: block;
+      color: var(--green);
+      font-family: inherit;
+      /* A point larger than the answer under it. The question is the shorter half and the one a
+         reader scans a thread by, and at the same size the two halves of the bubble read as one
+         block of text that changes colour halfway down. */
+      font-size: calc(1em + 1px);
+      /* Ruled off from the header above it as well as from the answer below it, so the bubble is
+         three bands and not a header with a two-tone message under it. The upper rule is the
+         bubble's own border colour, the lower one the question's green: the first separates a
+         label from the content, the second separates two voices. */
+      padding-top: 6px;
+      margin-top: 6px;
+      border-top: 1px solid color-mix(in srgb, var(--conv-agent, var(--border)) 30%, var(--border));
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid color-mix(in srgb, var(--green) 35%, var(--border));
+      /* A wash of the question's own green, pulled out to the bubble's edges so the band runs the
+         full width rather than floating as a box inside one. Faint on purpose: it is there to say
+         where the question ends, and the rules under and over it already say that — this is what
+         makes the pair read at a glance instead of after reading it. */
+      margin-left: -10px;
+      margin-right: -10px;
+      padding-left: 10px;
+      padding-right: 10px;
+      background: color-mix(in srgb, var(--green) 7%, transparent);
+    }
+
+    /* Cut, the question and the answer get a line each — so a collapsed bubble is two lines
+       whichever view is on, and both halves of the pair are represented in it. A question cut to
+       nothing would leave the reader looking for the exchange by its answer alone. */
+    /* Which provider's answer this bubble is showing, under the question all of them were asked.
+       A row that scrolls rather than wraps: five providers is the case this exists for, and a
+       header that grows a second line moves every bubble under it. */
+    .conv-msg.conv-group .conv-pills {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      margin-bottom: 6px;
+      padding-bottom: 2px;
+    }
+
+    .conv-msg.conv-group .conv-pills::-webkit-scrollbar {
+      display: none;
+    }
+
+    .conv-msg.conv-group .conv-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--conv-agent, var(--border)) 40%, var(--border));
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.72em;
+      cursor: pointer;
+    }
+
+    /* The lit one carries the provider's own colour, which is the colour its bubble wore when the
+       answers were five bubbles: the pill is standing in for that bubble's identity. */
+    .conv-msg.conv-group .conv-pill.on {
+      color: var(--conv-agent, var(--text));
+      border-color: var(--conv-agent, var(--text));
+      background: color-mix(in srgb, var(--conv-agent, var(--text)) 12%, transparent);
+    }
+
+    .conv-msg.conv-group .conv-pill svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+    }
+
+    /* The provider's name beside its mark. Marks alone are a row of logos, and the two families
+       that ship a monochrome glyph are not telling apart at 13px — which is the size a pill is. */
+    .conv-msg.conv-group .conv-pill-name {
+      max-width: 12ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-ask {
+      max-height: 1.45em;
+      overflow: hidden;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body {
+      /* Only where the reader asked for it. A bubble that is filling up was cut as well, so that
+         an arriving answer did not push the thread around — but the answer is the thing being
+         waited for, and the thread is redrawn on every delta, so a bubble opened by hand closed
+         itself again a fraction of a second later.
+         One line. Two was an attempt to show a little of the answer and it showed a little of
          nothing: what a collapsed thread is for is finding the message, and one line of it is a
          label. `em` against the bubble's own text, so it follows the conversation-text control. */
       max-height: 1.45em;
       overflow: hidden;
     }
 
-    body.conv-clamped .conv-msg.foreign:not(.conv-open),
-    .conv-msg.live:not(.conv-open) {
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) {
       cursor: pointer;
     }
 
@@ -7335,6 +7475,16 @@
        commits one, and a third button repeating either would read as one state with two switches. */
     .hang-md.live {
       color: var(--orange);
+      border-color: var(--orange);
+    }
+
+    /* The paragraph switch has three states, so being lit is not enough to say which one it is in.
+       Paired is the orange of the Markdown switch beside it -- both are about how one answer is
+       drawn -- and grouped is filled, because a fan-out folded into one bubble is the bigger claim
+       of the two and the one a reader needs to recognise before wondering where four answers went. */
+    .hang-para.grouped {
+      color: var(--bg);
+      background: var(--orange);
       border-color: var(--orange);
     }
 
@@ -10012,11 +10162,17 @@
         <span class="kinds" id="convViewAgents"></span>
         <!-- The adapter, for a conversation standing in front of web providers. The chat view has
              this pill in its own header and a panel or an agent conversation had nowhere to learn
-             it at all: when five threads stop at once it is this process and not any of them. It
-             opens the roster, which is where the per-provider repairs are. Written by
-             webchatConvPill and hidden for every conversation that is not a web one. -->
-        <button class="head-pill unknown" id="convServerPill" onclick="toggleConvRoster()"
-          aria-controls="convViewRoster" aria-label="Adapter status" hidden></button>
+             it at all: when five threads stop at once it is this process and not any of them.
+             Written by webchatConvPill and hidden for every conversation that is not a web one.
+             It opens the adapter's own drawer, the same one the chat view's server pill opens:
+             which browser is wedged is a question the roster's provider rows already answer, and
+             a pill that opened that list was a second way to the thing above it. -->
+        <span class="term-menu-wrap webchat-wrap" id="convServerWrap" hidden>
+          <button class="head-pill unknown" id="convServerPill" onclick="convServerMenu()"
+            aria-haspopup="true" aria-expanded="false" aria-controls="convServerMenu"
+            aria-label="Adapter status"></button>
+          <div class="term-menu webchat-menu" id="convServerMenu" role="menu" hidden></div>
+        </span>
         <span class="count" id="convViewCount"></span>
       </span>
     </div>
@@ -10059,6 +10215,18 @@
       <!-- How a provider's answer is drawn, for a conversation that has provider threads in it.
            The same switch the Web Agents chat view carries and the same stored preference: it is
            one decision about one kind of answer, wherever that answer is being read. -->
+      <!-- The paragraph view: a provider's answer under the question that produced it, in one
+           bubble. Offered wherever the Markdown switch is, because it is the same kind of
+           decision about the same kind of answer. The icon is the pair itself — a short line
+           over a rule over two long ones. -->
+      <button class="hang-btn hang-md hang-para" id="convPara" onclick="convParaToggle()"
+        aria-pressed="false" aria-label="Show each answer under the question that produced it">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 7h9" />
+          <path d="M3 11.5h18" />
+          <path d="M5 15.5h14M5 19h9" />
+        </svg></button>
       <button class="hang-btn hang-md" id="convMarkdown" onclick="webchatToggleMarkdown()"
         aria-pressed="true" aria-label="Show provider replies as formatted Markdown">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
@@ -19820,6 +19988,65 @@
     }
 
   </script>
+  <!-- The conversation discriminator, before every module that asks it: which kind of
+       thread a conversation is and, for a web one, who spends its grant. Three pure
+       functions with no dependencies, so it goes first among the conversation's own. -->
+  <script>
+// --- What kind of conversation this is ---------------------------------------------------------
+//
+// One entity, one fork. A conversation is a room; what differs is what the thread in it is made
+// of. `panes` is the original -- the members are herdr panes and the thread is what they said.
+// `providers` stands in front of browser threads the web-agent adapter drives, and its own mode
+// says who spends the grant: an agent conversation has a harness bound to it, a panel has nobody
+// and the person at the composer picks per message.
+//
+// Named for what each kind *is*, never for which optional block the row happens to carry. The
+// kinds are a list here and not a chain of `if`s about fields, because there are more of them
+// coming -- a notebook, and whatever follows it -- and each one should be a row plus its own
+// accessor rather than another clause somebody has to find. `panes` is the fallback because it is
+// the one kind that carries no block of its own.
+//
+// Derived and never stored. The grant is edited from the app after the conversation is made --
+// the Providers editor rewrites it -- so a stored kind would be the copy that goes stale, and the
+// shared document would need a version for a fact it already holds.
+//
+// Arbitration is not a kind. A session points at a conversation from the relay's own table and can
+// be paused, so a room running one is the same room it was before it started.
+//
+// Ask these for a label or for which composer to draw. A feature asks the narrowest fact it can
+// instead -- whether this thread has provider bubbles in it, whether this room grants a provider
+// -- because a control gated on the kind is a control that leaks the first time the kinds grow
+// another member.
+//
+// The `Of` suffix is not decoration. These are globals on a page of thirty classic scripts, where
+// the last declaration of a name wins and nothing warns: a plain `convMode` collided with
+// conversation_view.js's own switch of that name, which loads later and silently replaced it.
+const CONV_KINDS = [
+  // A panel whose providers have all been taken away is still a panel: the composer it wants is
+  // the one that asks which provider, even while the answer is none.
+  ['providers', conv => convGrantOf(conv).length > 0
+    || !!(conv && conv.webchat && conv.webchat.mode === 'panel')],
+];
+
+function convGrantOf(conv) {
+  const granted = conv && conv.webchat && conv.webchat.providers;
+  return Array.isArray(granted) ? granted : [];
+}
+
+function convKindOf(conv) {
+  for (const [kind, holds] of CONV_KINDS) if (holds(conv)) return kind;
+  return 'panes';
+}
+
+// Who spends a `providers` conversation's grant. Kind-scoped by name, because a mode belongs to
+// the kind that has one: a second kind with modes of its own gets its own accessor rather than
+// crowding into this one's values.
+function convWebModeOf(conv) {
+  if (convKindOf(conv) !== 'providers') return '';
+  return conv.webchat.mode === 'panel' ? 'panel' : 'agent';
+}
+
+  </script>
   <script>
     // --- Conversation recorder (pure) --- start
     // A pane keeps a few hundred lines of history and then forgets. This turns what is on screen
@@ -20783,11 +21010,11 @@
     // `*` is the agent choosing for itself and has no marks to draw: naming every provider on the
     // card would be the app answering a question the agent has not been asked yet.
     function convWebBadge(conv) {
-      const granted = conv && conv.webchat && conv.webchat.providers;
-      if (!Array.isArray(granted) || !granted.length) return null;
+      const granted = convGrantOf(conv);
+      if (!granted.length) return null;
       const any = granted.includes('*');
       return {
-        kind: conv.webchat.mode === 'panel' ? 'Panel' : 'Agent',
+        kind: convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent',
         any: any,
         providers: any ? [] : Array.from(new Set(granted)),
       };
@@ -22525,6 +22752,135 @@
       if (window.cue) cue('tick');
     }
 
+    // --- The paragraph view ----------------------------------------------------------------
+    //
+    // A provider thread is a sequence of questions and answers, and drawn as separate bubbles the
+    // two are as far apart as any two messages: on a phone the question that produced an answer is
+    // often off the top of the screen by the time the answer is read. This puts the pair in one
+    // bubble under the answer's own header -- the question above a rule, the answer below it --
+    // which is the shape the providers' own pages use and the shape a reader of five parallel
+    // threads is comparing.
+    //
+    // Only for provider bubbles, and only for a question this page can see was asked of that same
+    // provider. A pane's thread is not merged: a prompt and a reply there are two members of a
+    // conversation speaking, not one exchange.
+    //
+    // Three states rather than two, on one button. The third is the same view with the fan-out
+    // folded up: one question put to five providers is five exchanges of identical text, and the
+    // grouped view draws them as one -- the question once, a pill per provider, and the answer of
+    // whichever pill is lit. It is a way of reading a panel rather than a different thread, which
+    // is why it is a state of this switch and not a switch of its own.
+    const CONV_PARA_KEY = 'herdr_conv_para';
+
+    function convParaState() {
+      try { return localStorage.getItem(CONV_PARA_KEY) || '0'; } catch (e) { return '0'; }
+    }
+
+    function convParaOn() {
+      const state = convParaState();
+      return state === '1' || state === '2';
+    }
+
+    function convGroupOn() {
+      return convParaState() === '2';
+    }
+
+    function convParaToggle() {
+      const next = convParaState() === '0' ? '1' : convParaState() === '1' ? '2' : '0';
+      try { localStorage.setItem(CONV_PARA_KEY, next); } catch (e) { /* session only */ }
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+      }
+      if (typeof renderConvView === 'function') renderConvView();
+      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      if (typeof hangSync === 'function') hangSync();
+      if (window.cue) cue('tick');
+    }
+
+    // Which bubbles are a pair, without moving anything in the list. The entries keep their
+    // positions and their indexes -- a pick is stored as an index into this array, so an array
+    // rebuilt with the questions taken out would tick the wrong messages -- and the pass answers
+    // two questions instead: which index holds a question that has been folded away, and which
+    // answer is carrying it.
+    function convParaPairs(entries) {
+      const ask = new Map(), hide = new Set();
+      if (!convParaOn()) return {ask, hide};
+      for (let i = 0; i < entries.length; i++) {
+        const q = entries[i];
+        if (!q || !q.foreign || q.event || q.who !== 'user') continue;
+        // The next thing that provider said, not the next entry in the thread. One question put to
+        // five providers arrives as five questions and then five answers, sorted by the time each
+        // was said -- so the answer to this one is rarely the row under it, and an adjacent-only
+        // pairing left a panel's thread looking exactly as it did before the view was turned on.
+        for (let j = i + 1; j < entries.length; j++) {
+          const a = entries[j];
+          if (!a || !a.foreign || a.event) continue;
+          if ((a.agent || '') !== (q.agent || '')) continue;
+          // That provider was asked twice before it answered. The answer follows the last thing
+          // it was asked, so the earlier question keeps its own bubble: its answer is missing from
+          // the record, and folding it in here would put another question's answer under it.
+          if (a.who === 'user') break;
+          if (ask.has(j)) break;
+          ask.set(j, q);
+          hide.add(i);
+          break;
+        }
+      }
+      return {ask, hide};
+    }
+
+    // How far apart two questions of identical text are still one ask. A fan-out is sent in a
+    // single press and lands inside a second; the window is wide enough to survive a slow provider
+    // and short enough that asking the same thing again tomorrow is a second exchange.
+    const CONV_GROUP_MS = 15 * 60 * 1000;
+
+    // Which provider's answer a group is showing. Kept here rather than in the DOM because the
+    // thread is redrawn on every poll and a reader who picked one provider's answer should not be
+    // handed another one back a second later.
+    const convGroupPicked = new Map();
+
+    // The fan-outs, as a lead answer carrying the others. Same question text, same window; a group
+    // of one is not a group and stays the ordinary pair it already was.
+    function convParaGroups(entries, ask) {
+      const lead = new Map(), folded = new Set();
+      if (!convGroupOn()) return {lead, folded};
+      const open = new Map();
+      for (const i of Array.from(ask.keys()).sort((a, b) => a - b)) {
+        const q = ask.get(i);
+        const text = String(q.text || '').trim();
+        if (!text) continue;
+        const at = convAt(q);
+        const held = open.get(text);
+        if (held && at - held.at <= CONV_GROUP_MS) {
+          lead.get(held.head).push(i);
+          folded.add(i);
+        } else {
+          open.set(text, {at, head: i});
+          lead.set(i, [i]);
+        }
+      }
+      for (const [i, members] of Array.from(lead)) if (members.length < 2) lead.delete(i);
+      return {lead, folded};
+    }
+
+    // A pill lights and the body under it is swapped, in place. Not a re-render: the thread is a
+    // long list and this is a control inside one bubble of it, and redrawing the lot would cost the
+    // reader their scroll position to answer "what did the other one say".
+    function convGroupPick(btn, provider) {
+      const msg = btn && btn.closest('.conv-msg');
+      if (!msg) return;
+      convGroupPicked.set(msg.dataset.group || '', provider);
+      msg.querySelectorAll('.conv-pill').forEach(pill => {
+        const on = pill.dataset.prov === provider;
+        pill.classList.toggle('on', on);
+        pill.setAttribute('aria-pressed', String(on));
+      });
+      msg.querySelectorAll('.conv-body, .conv-acts[data-prov]').forEach(part => {
+        part.hidden = part.dataset.prov !== provider;
+      });
+      if (window.cue) cue('tick');
+    }
+
     // A cut bubble opens on a tap anywhere in it. No control of its own: two lines of text have
     // nothing to select and nothing else to press, and a chevron per bubble is a control on every
     // message in the thread to serve the few that are cut.
@@ -22575,14 +22931,19 @@
     }
 
     // One bubble's own fold, in its header. The stylesheet knows when a bubble is cut and the
-    // markup does not, so this is drawn whenever the rules could apply -- this bubble is filling up
-    // under the reader, or it is a provider's and the reader has asked for those to be cut.
+    // markup does not, so this is drawn whenever the rule could apply: a provider's bubble, and
+    // the reader has asked for those to be cut.
+    //
+    // A bubble that is filling up is not one of them. It used to be -- the thought was that an
+    // answer arriving should not push the thread around -- and it was wrong twice over: an answer
+    // is the thing the reader is waiting for, and the thread is redrawn on every delta, so a
+    // bubble opened by hand closed itself again a fraction of a second later.
     //
     // A provider's and never an agent's. What is being cut is a wall of prose from five providers
     // answering the same question at length; a pane's thread is the app's oldest screen and nothing
     // here is an improvement to it.
-    function convFoldBtnHtml(live, foreign) {
-      if (!live && !(foreign && convClampOn())) return '';
+    function convFoldBtnHtml(streaming, foreign) {
+      if (!(foreign && convClampOn())) return '';
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
         + 'title="Show all of this message" aria-label="Show all of this message" '
         + `aria-expanded="false">${convIco('unfold')}</button>`;
@@ -22609,6 +22970,19 @@
         `title="${say}" aria-label="${say}">${convIco(on ? 'unfold' : 'fold')}</button>`;
     }
 
+
+    // What a provider returns *is* Markdown. Drawn as such when the reader has it on -- the same
+    // switch the Web Agents chat view carries, because it is one preference about one kind of
+    // answer. Its own function because a grouped bubble draws several answers and only shows one:
+    // the same text, five times over, and none of it belongs in the loop that builds the bubble.
+    // `data-text` stays the raw text either way: a quote lifted out of a bubble is the words, not
+    // the markup that drew them.
+    function convSaidHtml(e) {
+      const text = escapeHtml(e.text || '');
+      return e.foreign && e.text && typeof markdownHtml === 'function'
+        && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
+        ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
+    }
 
     function convSpan(ms) {
       const m = Math.max(1, Math.round(ms / 60000));
@@ -22649,7 +23023,13 @@
       // the commit it was at. A branch is the same for twenty messages in a row, so what is drawn
       // is the moment it changes, which cannot be decided from one entry alone.
       const gitSeen = new Map();
+      const para = convParaPairs(entries);
+      const groups = convParaGroups(entries, para.ask);
       return entries.map((e, i) => {
+        // Folded into the answer below it. Drawn as nothing rather than removed, so every index
+        // this thread hands out -- picks, the live status writer, the transfer sheet -- still names
+        // the entry it named before the reader turned this on.
+        if (para.hide.has(i) || groups.folded.has(i)) return '';
         const at = convAt(e);
         // The arbitrator, which is a different kind of thing from a message and is drawn as one.
         // It is not a speaker in this conversation — it has no side, no member colour and no
@@ -22730,6 +23110,12 @@
         // harness, so every fallback to "the pane this thread is read through" is wrong for it:
         // an unmarked one wore the reading pane's own badge and alias.
         const foreign = !!e.foreign;
+        // An answer arriving into this bubble *right now*: a provider's turn that is still being
+        // streamed into the page. Not the record's own `live`, which conv_live.js sets on every
+        // turn it hands over and which means "this row came from the relay's record" -- a pane's
+        // whole thread carries it, so the fold button and the one-line cut meant for a filling
+        // bubble were drawn on every recorded message in every conversation, on both pages.
+        const streaming = foreign && !!e.live;
         const live = foreign ? null : agents.find(x => convMemberKey(x) === key);
         // The harness the entry was recorded under, not the one running in that pane today: a
         // conversation outlives its panes, and a member that has exited still gets its own badge.
@@ -22759,7 +23145,7 @@
         // and badge already identify the speaker; a second colour ring made a working dot look
         // like it had changed to an unrelated warning state.
         const dot = live ? statusColor(live)
-          : (foreign && e.live ? 'var(--dot-live)' : 'var(--dot-cold)');
+          : (streaming ? 'var(--dot-live)' : 'var(--dot-cold)');
         // A web provider's mark, beside its name and in its own colour. It used to be a light
         // grey label and nothing else, which in a thread of five providers is five rows that read
         // the same. The mark is what the card, the pill and the picker already identify it by.
@@ -22767,8 +23153,21 @@
           ? `<span class="conv-foreign" style="--conv-agent:${color}">${e.sign}` +
             `<span class="conv-foreign-name">${name}</span></span>`
           : '';
-        const who = sign
-          ? `<span class="dot${e.live ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
+        // Every answer to one question, in one bubble: the providers are the pills under the
+        // question and the header names none of them, because the bubble is about the ask.
+        const group = groups.lead.get(i);
+        // A group's key is the question it is about -- the same key across a redraw, so the pill
+        // the reader lit is still lit a poll later.
+        const gkey = group ? `g${convAt(para.ask.get(i))}` : '';
+        const shown = group
+          ? (group.some(m => (entries[m].agent || '') === convGroupPicked.get(gkey))
+            ? convGroupPicked.get(gkey) : (entries[group[0]].agent || ''))
+          : '';
+        const who = group
+          ? `<span class="dot" style="background:${dot}"></span>` +
+            `<span class="conv-foreign-name">${group.length} providers</span>`
+          : sign
+          ? `<span class="dot${streaming ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
           : `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
             `style="background:${dot}"></span>${name}${badge}`;
         const bar = user ? [who, from].filter(Boolean).join(' · ') : who;
@@ -22794,17 +23193,29 @@
         // already sure which is which, and this is a control pressed while something is going
         // wrong. The two are the repairs in order of violence -- reopen the page, then read the
         // thread back off it in case the answer arrived and this page missed it.
-        const acts = e.acts ? `<span class="conv-acts">`
-          + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(e.acts.provider)}')" `
-          + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
-          + `Reconnect</button>`
-          + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(e.acts.session)}')" `
-          + `title="Read this thread back off the provider's page" `
-          + `aria-label="Read this thread back off the provider's page">Sync</button></span>` : '';
+        // A grouped bubble holds an answer per provider, so it holds a set of repairs per provider
+        // too -- shown and hidden with the answer they belong to. Reconnect reopens *that*
+        // provider's tab and Sync re-reads *that* thread; one pair of buttons for five answers
+        // would repair whichever of them happened to be first.
+        const actsFor = (entry, prov) => {
+          if (!entry || !entry.acts) return '';
+          const tag = prov === undefined ? ''
+            : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
+          return `<span class="conv-acts"${tag}>`
+            + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
+            + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
+            + `Reconnect</button>`
+            + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
+            + `title="Read this thread back off the provider's page" `
+            + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
+        };
+        const acts = group
+          ? group.map(m => actsFor(entries[m], (entries[m].agent || '') === shown)).join('')
+          : actsFor(e);
         // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
         // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
         // one place a reader is not looking.
-        const fold = convFoldBtnHtml(!!e.live, foreign);
+        const fold = convFoldBtnHtml(streaming, foreign);
         const head = bar || time || fold
           ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
@@ -22821,17 +23232,41 @@
           `<button class="conv-pick" onclick="${pick === true || !pick ? 'toggleConvPick' : pick}(${i})" ` +
           `aria-pressed="false" aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
-        // What a provider returns *is* Markdown. Drawn as such when the reader has it on -- the
-        // same switch the Web Agents chat view carries, because it is one preference about one
-        // kind of answer. `data-text` stays the raw text: a quote lifted out of a bubble is the
-        // words, not the markup that drew them.
-        const said = foreign && e.text && typeof markdownHtml === 'function'
-          && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
-          ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
+        const said = convSaidHtml(e);
         // What was said, in a box of its own. The bubble cannot be the thing that is cut short:
         // three controls hang over its top edge and the clip that shortened it took them with it.
         // So the cut is here, around the words and nothing else.
-        const body = `<span class="conv-body">${said}</span>`;
+        // The question that produced it, above the answer and inside the same bubble. Its own
+        // colour is the user's green, which is the colour it wore as a bubble of its own, and the
+        // rule under it is what makes the pair read as a question and an answer rather than as one
+        // message that changes voice halfway down. Escaped and never drawn as Markdown: what was
+        // typed into the composer is what was sent, and a question with a `#` in it is not a
+        // heading.
+        const asked = para.ask.get(i);
+        const ask = asked
+          ? `<span class="conv-ask">${escapeHtml(asked.text || '')}</span>` : '';
+        const pills = group ? '<span class="conv-pills">' + group.map(m => {
+          const g = entries[m];
+          const id = escapeHtml(g.agent || '');
+          const on = (g.agent || '') === shown;
+          return `<button class="conv-pill${on ? ' on' : ''}" data-prov="${id}" ` +
+            `onclick="convGroupPick(this, '${id}')" aria-pressed="${on}" ` +
+            `title="${escapeHtml(g.label || g.agent || '')}" ` +
+            `aria-label="Show what ${escapeHtml(g.label || g.agent || '')} answered" ` +
+            `style="--conv-agent:${g.color || 'var(--muted)'}">${g.sign || ''}` +
+            `<span class="conv-pill-name">${escapeHtml(g.label || g.agent || '')}</span></button>`;
+        }).join('') + '</span>' : '';
+        // Every answer is drawn and all but one is hidden, so lighting another pill is a class and
+        // an attribute rather than a redraw of the thread the reader is scrolled into.
+        const bodies = group
+          ? group.map(m => {
+            const g = entries[m];
+            const on = (g.agent || '') === shown;
+            return `<span class="conv-body" data-prov="${escapeHtml(g.agent || '')}"` +
+              `${on ? '' : ' hidden'}>${convSaidHtml(g)}</span>`;
+          }).join('')
+          : `<span class="conv-body">${said}</span>`;
+        const body = `${ask}${pills}${bodies}`;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
@@ -22846,7 +23281,9 @@
         // makes the bubble collapse to its first lines while it fills — see `conv-clamped`.
         return rule + git.before +
           `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
-          `${foreign ? ' foreign' : ''}${e.live ? ' live' : ''}"` +
+          `${foreign ? ' foreign' : ''}${streaming ? ' live' : ''}${ask ? ' conv-qa' : ''}` +
+          `${group ? ' conv-group' : ''}"` +
+          `${gkey ? ` data-group="${escapeHtml(gkey)}"` : ''}` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
@@ -24414,15 +24851,15 @@ function webchatRoomCard(conv, sessions, compact) {
   // Before the first question there is nothing spoken to, and a card with no mark on it names
   // nothing -- so an empty room wears its grant instead, which is what it is going to ask.
   const spoken = Array.from(new Set(sessions.map(session => session.provider)));
-  const granted = (conv.webchat?.providers || []).filter(id => id !== '*');
+  const granted = convGrantOf(conv).filter(id => id !== '*');
   const marks = (spoken.length ? spoken : granted).map(provider => webchatMark(provider, 18)).join('');
   const snippet = !compact && newest.snippet
     ? `<div class="webchat-snippet">${escapeHtml(newest.snippet)}</div>` : '';
-  const kind = conv.webchat?.mode === 'panel' ? 'Panel' : 'Agent';
+  const kind = convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent';
   const said = sessions.length
     ? `${sessions.length} ${sessions.length === 1 ? 'thread' : 'threads'}`
       + ` · ${count} ${count === 1 ? 'message' : 'messages'}${when ? ` · ${escapeHtml(when)}` : ''}`
-    : (conv.webchat?.providers || []).includes('*') ? 'nothing asked yet · any provider'
+    : convGrantOf(conv).includes('*') ? 'nothing asked yet · any provider'
       : `nothing asked yet · ${granted.length} ${granted.length === 1 ? 'provider' : 'providers'}`;
   return `<div class="conversation-card webchat-card webchat-room" role="button" tabindex="0"`
     + ` data-conv-id="${escapeHtml(conv.id)}"`
@@ -24550,8 +24987,8 @@ function renderWebAgents(error = '') {
   // sorted by when it was made, which is the only time it has.
   const empty = [];
   for (const conv of rooms.values()) {
-    const grant = conv.webchat?.providers;
-    if (!Array.isArray(grant) || !grant.length || grouped.has(conv.id)) continue;
+    const grant = convGrantOf(conv);
+    if (!grant.length || grouped.has(conv.id)) continue;
     if (webchatSessions.some(session => session.namespace === conv.id)) continue;
     // Under a provider filter, a conversation that may spend that provider still belongs to it --
     // an empty one has said nothing to anybody, so its grant is all there is to go on.
@@ -24756,8 +25193,13 @@ function webchatReceiveResult(msg) {
       browser_stop: 'stopped the browser for'}[msg.action];
     // Silent when there is a warning on screen: "may be missing — Sync to check" is the thing to
     // read, and a confirmation landing on top of it would bury the only line that needed acting on.
+    // A reconnect only closes: the adapter drops the cached page and stops, so the session ends
+    // `cold` unless something opens one. The tab that has to come back is the one the press was
+    // made from, which for a conversation's bubble is not the chat this page happens to be on.
+    const reopen = webchatReopen.get(msg.provider) || webchatCurrent;
+    webchatReopen.delete(msg.provider);
     webchatSettle(msg.action !== 'browser_stop',
-      msg.abandoned ? '' : `${did} ${name}`.replace(/^./, c => c.toUpperCase()));
+      msg.abandoned ? '' : `${did} ${name}`.replace(/^./, c => c.toUpperCase()), reopen);
   }
   if (msg.action === 'probe') webchatDrawLink(msg.result || msg);
   if (msg.action === 'open_tab') {
@@ -25051,10 +25493,12 @@ let webchatServerOpen = false;
 // under a status line that says what state each is in. The rungs that are about a page rather than
 // a process — Reconnect tab, Check connection — stay in the chat's own ⋯ menu.
 //
-// `prefix` names the buttons. The drawer is drawn in two places at once — a chat's head and the
-// landing page — and one markup written twice under one id is the failure that does not announce
-// itself, which is the rule the desktop's five composers are addressed by.
-function webchatServerHtml(prefix) {
+// `prefix` names the buttons. The drawer is drawn in three places at once — a chat's head, the
+// landing page and a conversation's head — and one markup written twice under one id is the failure
+// that does not announce itself, which is the rule the desktop's five composers are addressed by.
+// `browser` is the second half, for a caller standing in front of a browser this one cannot name:
+// a conversation has no current chat, so `webchatBrowserHtml` would have nothing to read.
+function webchatServerHtml(prefix, browser) {
   const health = webchatHealth();
   const server = health.server;
   const ok = server.state === 'ok';
@@ -25073,7 +25517,7 @@ function webchatServerHtml(prefix) {
       : '')
     + (ok ? '' : '<div class="hint">Nothing on this page can reach a process that is not'
       + ' answering. It has to be started again on the host it runs on.</div>')
-    + webchatBrowserHtml(prefix, health.provider);
+    + (browser === undefined ? webchatBrowserHtml(prefix, health.provider) : browser);
 }
 
 // The provider's own browser, under the same drawer. Withheld with no chat open: which browser is
@@ -25480,9 +25924,11 @@ function webchatServerRestart() {
 // — so without it a successful repair leaves the chat reading `cold`, which is the truth and not
 // what the person pressing Reconnect was trying to reach. Skipped on a relay that does not offer
 // it, in which case the probe below still says what the state is.
-function webchatOpenTab() {
-  if (!webchatCurrent || !webchatCan('open')) return false;
-  return webchatAsk({type: 'webchat_open_tab', session: webchatCurrent});
+// The session is named rather than read off `webchatCurrent`: a conversation of five providers
+// has no open chat, and its bubbles press the same rung.
+function webchatOpenTab(session = webchatCurrent) {
+  if (!session || !webchatCan('open')) return false;
+  return webchatAsk({type: 'webchat_open_tab', session});
 }
 
 // Where a repair, a sync or a restart ends: reopen the tab if this relay can, and say what the
@@ -25492,12 +25938,12 @@ function webchatOpenTab() {
 // itself the moment the relay acknowledged it, which is before the tab exists — so the toast said
 // "done" and the pill went on saying otherwise for another second, and a repair that had actually
 // failed said "done" too.
-function webchatSettle(reopen, what = '') {
+function webchatSettle(reopen, what = '', session = webchatCurrent) {
   // Every one of these closed the page the last probe was about. Keeping that answer would draw a
   // red dot over a tab that has just been reopened.
   webchatLinks.clear();
   webchatSettleFor = what;
-  if (reopen && webchatOpenTab()) return;
+  if (reopen && webchatOpenTab(session)) return;
   if (webchatCan('probe')) { webchatProbe(); return; }
   webchatSettled('');
 }
@@ -25523,14 +25969,20 @@ function webchatRecover(action) {
 // The same rung, named rather than inferred. A conversation of five providers has no "current"
 // one, so the roster's rows pass the provider they are drawn for; a chat has exactly one and reads
 // it off the session it is open on.
-function webchatRecoverProvider(provider, action) {
+function webchatRecoverProvider(provider, action, session = '') {
   if (!provider) return;
   if (webchatAsk({type: `webchat_${action}`, provider})) {
+    if (action === 'reconnect' && session) webchatReopen.set(provider, session);
     showToast(action === 'reconnect' ? `Reopening ${provider}'s tab…`
       : action === 'restart' ? `Restarting ${provider}'s browser…`
         : `Stopping ${provider}'s browser…`, 'info');
   }
 }
+
+// Which thread to open a tab for once a close comes back, keyed by provider because that is all
+// the close answers with. A press from the chat view leaves this empty and falls back to the chat
+// it was pressed in.
+const webchatReopen = new Map();
 
 // --- The recovery ladder, over a conversation of providers -------------------------------------
 //
@@ -25544,7 +25996,7 @@ function webchatRecoverProvider(provider, action) {
 // actually opened a thread on, since "every provider this relay offers" is not a list of anybody's
 // business here.
 function webchatRosterProviders(conv) {
-  const grant = (conv && conv.webchat && conv.webchat.providers) || [];
+  const grant = convGrantOf(conv);
   if (!grant.length || !webchatAvailable) return [];
   const named = grant.filter(id => id !== '*');
   const ids = named.length ? named : Array.from(new Set(
@@ -25593,17 +26045,101 @@ function webchatRosterHtml(conv) {
 // wears, saying the one thing a panel could not find out from anywhere: whether the adapter behind
 // every thread in it is answering. Pressing it opens the roster, which is where the repairs are.
 function webchatConvPill(conv) {
+  const wrap = document.getElementById('convServerWrap');
   const pill = document.getElementById('convServerPill');
-  if (!pill) return;
+  if (!wrap || !pill) return;
   const providers = conv ? webchatRosterProviders(conv) : [];
-  pill.hidden = !providers.length;
-  if (pill.hidden) return;
+  // The wrapper and not the button: the drawer hangs inside it, and a hidden button with a live
+  // menu under it is a menu floating in a conversation that has nothing to do with any of this.
+  wrap.hidden = !providers.length;
+  if (wrap.hidden) {
+    const dock = document.getElementById('convServerMenu');
+    if (dock) dock.hidden = true;
+    return;
+  }
+  // Open while the adapter is going down and coming back is exactly when this is open, so it is
+  // rewritten on the render rather than only when it is opened.
+  const dock = document.getElementById('convServerMenu');
+  if (dock && !dock.hidden) dock.innerHTML = convServerHtml();
   const state = webchatHealth().server;
   pill.className = `head-pill ${state.state}`;
   pill.title = state.why;
-  pill.setAttribute('aria-label', `Adapter: ${state.why || 'not checked yet'}`);
+  pill.setAttribute('aria-label', `Server: ${state.why || 'not checked yet'}`);
+  // `server`, the word the chat view's pill wears for the same process. Two names for one thing
+  // read as two things, and this pill now opens the same drawer that one does.
   pill.innerHTML = `<span class="dot" aria-hidden="true"></span>`
-    + `<span class="head-pill-name">adapter</span>`;
+    + `<span class="head-pill-name">server</span>`;
+}
+
+// The adapter's drawer, in a conversation's header. The chat view's copy is `webchatMenu('server')`
+// -- one of four drawers that take turns -- and this page has no such set, so it is its own toggle
+// over the same markup.
+function convServerMenu() {
+  const dock = document.getElementById('convServerMenu');
+  const pill = document.getElementById('convServerPill');
+  if (!dock || !pill) return;
+  const open = dock.hidden;
+  if (open) dock.innerHTML = convServerHtml();
+  dock.hidden = !open;
+  pill.setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  setTimeout(() => document.addEventListener('click', convServerMenuAway,
+    {capture: true, once: true}), 0);
+}
+
+// What the drawer holds: the same two things the chat's own drawer holds -- the adapter, and the
+// browser its providers run in.
+function convServerHtml() {
+  const conv = typeof loadConvIndex === 'function'
+    ? loadConvIndex().find(c => c.id === convViewId) : null;
+  return webchatServerHtml('convServer', convBrowserHtml(conv));
+}
+
+// The browser, for a conversation rather than for a chat. One entry and not one per provider:
+// restarting or stopping a browser takes down every driver sharing that Chrome profile -- the
+// adapter does that itself, whichever provider is named -- and every signed-in provider shares one
+// profile. A row per provider was the same repair drawn five times. Any of the conversation's
+// providers therefore names the browser, so the first one is the handle.
+// ponytail: a signed-out provider declares a profile of its own, so a conversation mixing the two
+// has a second browser this entry does not reach. Group the handles by profile if that ever bites.
+function convBrowserHtml(conv) {
+  const providers = conv ? webchatRosterProviders(conv) : [];
+  if (!providers.length) return '';
+  const handle = providers[0].id;
+  const rungs = [
+    ['restart', 'BrowserRestart', 'Restart browser', 'restart',
+      'Restart the browser? Every tab on this profile closes.'],
+    ['browser', 'BrowserStop', 'Stop browser', 'browser_stop',
+      'Stop the browser? Every tab on this profile closes.'],
+  ].filter(([can]) => webchatCan(can));
+  if (!rungs.length) return '';
+  // A profile somebody else's Chrome is holding is the one state where restarting is the wrong
+  // advice, and a browser that is down is not a fault -- the next message brings it up. Said in
+  // words, the way the chat's own line says them.
+  const down = providers.every(provider => provider.ready === 'down');
+  const foreign = providers.some(provider => provider.ready === 'foreign');
+  const why = foreign ? 'This profile is held by another Chrome. Close it there, not here'
+    : down ? 'The browser is down. The next message brings it up, or Restart browser does'
+      : 'The browser is up. No tab open for this chat — the next message opens one';
+  return '<div class="menu-sep"></div>'
+    + `<div class="webchat-link ${down ? 'stale' : 'hot'}" role="status">`
+    + `<span class="dot" style="background:${down ? 'var(--red)' : 'var(--muted)'}"></span>`
+    + `${escapeHtml(why)}</div>`
+    + rungs.map(([, suffix, label, action, arm]) =>
+      `<button class="menu-item danger arm-btn" id="convServer${suffix}" `
+      + `onclick="armButton(this, ${escapeHtml(JSON.stringify(arm))}, `
+      + `() => webchatRecoverProvider('${escapeHtml(handle)}', '${action}'))" `
+      + `aria-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`).join('');
+}
+
+function convServerMenuAway(event) {
+  if (event.target.closest?.('#convServerWrap')) {
+    document.addEventListener('click', convServerMenuAway, {capture: true, once: true});
+    return;
+  }
+  const dock = document.getElementById('convServerMenu');
+  if (dock) dock.hidden = true;
+  document.getElementById('convServerPill')?.setAttribute('aria-expanded', 'false');
 }
 
 function webchatInputKey(event) {
@@ -25903,7 +26439,7 @@ function webchatEditProviders(convId) {
   const badge = typeof convWebBadge === 'function' ? convWebBadge(conv) : null;
   if (!badge || !webchatAvailable) return;
   webchatEditing = convId;
-  webchatNewIs = conv.webchat.mode === 'panel' ? 'panel' : 'agent';
+  webchatNewIs = convWebModeOf(conv) === 'panel' ? 'panel' : 'agent';
   webchatNewPicked.clear();
   for (const provider of badge.providers) webchatNewPicked.add(provider);
   const any = document.getElementById('webchatNewAny');
@@ -26035,9 +26571,9 @@ function webchatGrantOf(conv) {
   // A panel is the same grant driven by the person at the composer, so there is nobody to hand a
   // bearer to. Checked by mode rather than by whether a member happens to be in it: adding an
   // agent to a panel must not quietly turn it into an agent conversation behind the reader.
-  if (conv?.webchat?.mode === 'panel') return '';
-  const providers = conv?.webchat?.providers;
-  if (!Array.isArray(providers) || !providers.length) return '';
+  if (convWebModeOf(conv) === 'panel') return '';
+  const providers = convGrantOf(conv);
+  if (!providers.length) return '';
   return providers.includes('*') ? '*' : Array.from(new Set(providers)).sort().join(',');
 }
 
@@ -26351,7 +26887,7 @@ function webchatThreadEntries(convId) {
         // A reading gets the same standing a watched send has; an upper bound gets the tilde the
         // thread already draws for a stamp that is an ordering rather than a time.
         at: at, seen: at, at_src: when && when.sure ? 'webchat' : 'backfill',
-        key: webchatThreadKey(session.provider), foreign: true,
+        key: webchatThreadKey(session.provider), foreign: true, session: session.name,
         // The mark the card, the pill and the picker all name this provider by. Every entry and
         // not only the error one: a thread of five providers drawn with five grey labels reads as
         // one voice.
@@ -26371,7 +26907,17 @@ function webchatThreadEntries(convId) {
   // filters nothing.
   const solo = typeof convPanelSoloOf === 'function' ? convPanelSoloOf(convId) : '';
   const kept = solo ? out.filter(entry => entry.agent === solo) : out;
-  return kept.sort((a, b) => (a.at || 0) - (b.at || 0));
+  const ordered = kept.sort((a, b) => (a.at || 0) - (b.at || 0));
+  // The two repairs, on every provider bubble. They used to arrive with a running turn and leave
+  // with it, so the one moment nobody could reach them was after the thing they repair had already
+  // gone wrong; then on the newest bubble alone, which is right until the answer worth re-reading
+  // is three exchanges back. An answer that came back short or half-rendered is re-read from the
+  // bubble it is in, which is the one the reader is looking at when they decide it is wrong.
+  for (const entry of ordered) {
+    if (!entry.foreign || entry.event || entry.who === 'user') continue;
+    if (!entry.acts && entry.session) entry.acts = {session: entry.session, provider: entry.agent};
+  }
+  return ordered;
 }
 
   </script>
@@ -31844,7 +32390,7 @@ function nlmSourceDelete(source) {
     function dockHasWeb() {
       const conv = typeof loadConvIndex === 'function'
         ? loadConvIndex().find(c => c.id === convViewId) : null;
-      return !!(conv && conv.webchat && (conv.webchat.providers || []).length);
+      return convGrantOf(conv).length > 0;
     }
 
     // Whoever wrote the picked messages. Two agents' messages are two conversations being quoted as
@@ -32969,13 +33515,13 @@ const convPanelPicks = new Map();
 // one thread; a panel has as many in flight as it has providers lit, and each finishes on its own.
 const convPanelRunning = new Map();
 
-// This conversation, if it is a panel. `mode` and not the presence of providers: an agent
+// This conversation, if it is a panel. The mode and not the presence of providers: an agent
 // conversation carries the same grant and is driven by a pane, so telling them apart by the field
 // they share would put this composer in front of the agent's conversation as well.
 function convPanelOf(convId) {
   if (!convId || typeof loadConvIndex !== 'function') return null;
   const conv = loadConvIndex().find(c => c.id === convId);
-  return conv && conv.webchat && conv.webchat.mode === 'panel' ? conv : null;
+  return convWebModeOf(conv) === 'panel' ? conv : null;
 }
 
 // The providers a panel may spend, narrowed to the ones this relay is actually offering. A grant
@@ -32983,7 +33529,7 @@ function convPanelOf(convId) {
 // that answers 404 when pressed — and the threads it already holds are still read, because reading
 // is namespace-wide and never narrowed by the grant.
 function convPanelProviders(conv) {
-  const granted = (conv && conv.webchat && conv.webchat.providers) || [];
+  const granted = convGrantOf(conv);
   if (typeof webchatProvider !== 'function') return [];
   const ids = granted.filter(id => id !== '*' && webchatProvider(id));
   // Newest thread first. The grant's order is the order somebody ticked boxes in a picker weeks
@@ -33308,19 +33854,19 @@ function convPanelLiveEntries(convId) {
 }
 
 // Reopen this provider's tab. The rung the app's own chat view calls Reconnect: the adapter drops
-// the cached page and closes the tab, and the next message opens a new one. Provider-scoped rather
-// than session-scoped, because the wedge belongs to a tab and every session on that provider
-// shares it -- which is also why it is worth having here, where five providers are in flight and
-// only one of them is stuck.
-function convPanelReconnect(provider) {
+// the cached page and closes the tab, and something has to open one again -- which is why the
+// session is carried along with the provider. Provider-scoped rather than session-scoped on the way
+// in, because the wedge belongs to a tab and every session on that provider shares it -- which is
+// also why it is worth having here, where five providers are in flight and only one of them is
+// stuck. The reopen and the reporting are `web_agent.js`'s, so a bubble and a chat say the same
+// things about the same repair.
+function convPanelReconnect(provider, session) {
   if (!provider) return;
   if (typeof webchatCan === 'function' && !webchatCan('reconnect')) {
     showToast('This relay does not offer the recovery controls.');
     return;
   }
-  if (webchatAsk({type: 'webchat_reconnect', provider})) {
-    showToast(`Reopening ${webchatProvider(provider)?.label || provider}'s tab…`, 'info');
-  }
+  webchatRecoverProvider(provider, 'reconnect', session || '');
 }
 
 // Ask the same question again. The turn in flight is stopped first -- a provider holding its own
@@ -36992,9 +37538,10 @@ function convPanelPaint(now) {
       // How a provider's answer is drawn. Offered only in a conversation that has provider threads
       // in it -- over a thread of panes there is nothing here written in Markdown, and a toggle
       // that changes nothing is worse than one that is not there.
-      hangSyncMd(document.getElementById('convMarkdown'),
-        !!convViewId && typeof webchatThreadSessions === 'function'
-        && webchatThreadSessions(convViewId).length > 0);
+      const web = !!convViewId && typeof webchatThreadSessions === 'function'
+        && webchatThreadSessions(convViewId).length > 0;
+      hangSyncMd(document.getElementById('convMarkdown'), web);
+      hangSyncPara(document.getElementById('convPara'), web);
     }
 
     // A conversation the relay could have written something about: one with members, which means
@@ -37015,6 +37562,24 @@ function convPanelPaint(now) {
       btn.setAttribute('aria-pressed', String(on));
       btn.title = on ? 'Showing formatted Markdown — tap for the text the provider sent'
         : 'Showing the text the provider sent — tap to format it';
+    }
+
+    // The same shape as the Markdown switch and offered on the same threads: both are about how a
+    // provider's answer is drawn, and neither has anything to say about a thread of panes.
+    function hangSyncPara(btn, offered) {
+      if (!btn) return;
+      const state = typeof convParaState === 'function' ? convParaState() : '0';
+      btn.classList.toggle('on', offered);
+      btn.classList.toggle('live', state !== '0');
+      btn.classList.toggle('grouped', state === '2');
+      btn.setAttribute('aria-pressed', String(state !== '0'));
+      // Three states, so the title says the one it is in and the one the next tap goes to. A
+      // button that cycles and does not say where it is going is one people press three times.
+      btn.title = state === '0'
+        ? 'Showing every message in its own bubble — tap to pair each answer with its question'
+        : state === '1'
+        ? 'Showing each answer under its question — tap to fold one question’s answers into one bubble'
+        : 'Showing one bubble per question, with a pill per provider — tap for one bubble each';
     }
 
     function hangSyncPill(el, on) {

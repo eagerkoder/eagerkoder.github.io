@@ -10012,6 +10012,65 @@
     }
 
   </script>
+  <!-- The conversation discriminator, before every module that asks it: which kind of
+       thread a conversation is and, for a web one, who spends its grant. Three pure
+       functions with no dependencies, so it goes first among the conversation's own. -->
+  <script>
+// --- What kind of conversation this is ---------------------------------------------------------
+//
+// One entity, one fork. A conversation is a room; what differs is what the thread in it is made
+// of. `panes` is the original -- the members are herdr panes and the thread is what they said.
+// `providers` stands in front of browser threads the web-agent adapter drives, and its own mode
+// says who spends the grant: an agent conversation has a harness bound to it, a panel has nobody
+// and the person at the composer picks per message.
+//
+// Named for what each kind *is*, never for which optional block the row happens to carry. The
+// kinds are a list here and not a chain of `if`s about fields, because there are more of them
+// coming -- a notebook, and whatever follows it -- and each one should be a row plus its own
+// accessor rather than another clause somebody has to find. `panes` is the fallback because it is
+// the one kind that carries no block of its own.
+//
+// Derived and never stored. The grant is edited from the app after the conversation is made --
+// the Providers editor rewrites it -- so a stored kind would be the copy that goes stale, and the
+// shared document would need a version for a fact it already holds.
+//
+// Arbitration is not a kind. A session points at a conversation from the relay's own table and can
+// be paused, so a room running one is the same room it was before it started.
+//
+// Ask these for a label or for which composer to draw. A feature asks the narrowest fact it can
+// instead -- whether this thread has provider bubbles in it, whether this room grants a provider
+// -- because a control gated on the kind is a control that leaks the first time the kinds grow
+// another member.
+//
+// The `Of` suffix is not decoration. These are globals on a page of thirty classic scripts, where
+// the last declaration of a name wins and nothing warns: a plain `convMode` collided with
+// conversation_view.js's own switch of that name, which loads later and silently replaced it.
+const CONV_KINDS = [
+  // A panel whose providers have all been taken away is still a panel: the composer it wants is
+  // the one that asks which provider, even while the answer is none.
+  ['providers', conv => convGrantOf(conv).length > 0
+    || !!(conv && conv.webchat && conv.webchat.mode === 'panel')],
+];
+
+function convGrantOf(conv) {
+  const granted = conv && conv.webchat && conv.webchat.providers;
+  return Array.isArray(granted) ? granted : [];
+}
+
+function convKindOf(conv) {
+  for (const [kind, holds] of CONV_KINDS) if (holds(conv)) return kind;
+  return 'panes';
+}
+
+// Who spends a `providers` conversation's grant. Kind-scoped by name, because a mode belongs to
+// the kind that has one: a second kind with modes of its own gets its own accessor rather than
+// crowding into this one's values.
+function convWebModeOf(conv) {
+  if (convKindOf(conv) !== 'providers') return '';
+  return conv.webchat.mode === 'panel' ? 'panel' : 'agent';
+}
+
+  </script>
   <script>
     // --- Conversation recorder (pure) --- start
     // A pane keeps a few hundred lines of history and then forgets. This turns what is on screen
@@ -10975,11 +11034,11 @@
     // `*` is the agent choosing for itself and has no marks to draw: naming every provider on the
     // card would be the app answering a question the agent has not been asked yet.
     function convWebBadge(conv) {
-      const granted = conv && conv.webchat && conv.webchat.providers;
-      if (!Array.isArray(granted) || !granted.length) return null;
+      const granted = convGrantOf(conv);
+      if (!granted.length) return null;
       const any = granted.includes('*');
       return {
-        kind: conv.webchat.mode === 'panel' ? 'Panel' : 'Agent',
+        kind: convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent',
         any: any,
         providers: any ? [] : Array.from(new Set(granted)),
       };
@@ -12717,6 +12776,135 @@
       if (window.cue) cue('tick');
     }
 
+    // --- The paragraph view ----------------------------------------------------------------
+    //
+    // A provider thread is a sequence of questions and answers, and drawn as separate bubbles the
+    // two are as far apart as any two messages: on a phone the question that produced an answer is
+    // often off the top of the screen by the time the answer is read. This puts the pair in one
+    // bubble under the answer's own header -- the question above a rule, the answer below it --
+    // which is the shape the providers' own pages use and the shape a reader of five parallel
+    // threads is comparing.
+    //
+    // Only for provider bubbles, and only for a question this page can see was asked of that same
+    // provider. A pane's thread is not merged: a prompt and a reply there are two members of a
+    // conversation speaking, not one exchange.
+    //
+    // Three states rather than two, on one button. The third is the same view with the fan-out
+    // folded up: one question put to five providers is five exchanges of identical text, and the
+    // grouped view draws them as one -- the question once, a pill per provider, and the answer of
+    // whichever pill is lit. It is a way of reading a panel rather than a different thread, which
+    // is why it is a state of this switch and not a switch of its own.
+    const CONV_PARA_KEY = 'herdr_conv_para';
+
+    function convParaState() {
+      try { return localStorage.getItem(CONV_PARA_KEY) || '0'; } catch (e) { return '0'; }
+    }
+
+    function convParaOn() {
+      const state = convParaState();
+      return state === '1' || state === '2';
+    }
+
+    function convGroupOn() {
+      return convParaState() === '2';
+    }
+
+    function convParaToggle() {
+      const next = convParaState() === '0' ? '1' : convParaState() === '1' ? '2' : '0';
+      try { localStorage.setItem(CONV_PARA_KEY, next); } catch (e) { /* session only */ }
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+      }
+      if (typeof renderConvView === 'function') renderConvView();
+      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      if (typeof hangSync === 'function') hangSync();
+      if (window.cue) cue('tick');
+    }
+
+    // Which bubbles are a pair, without moving anything in the list. The entries keep their
+    // positions and their indexes -- a pick is stored as an index into this array, so an array
+    // rebuilt with the questions taken out would tick the wrong messages -- and the pass answers
+    // two questions instead: which index holds a question that has been folded away, and which
+    // answer is carrying it.
+    function convParaPairs(entries) {
+      const ask = new Map(), hide = new Set();
+      if (!convParaOn()) return {ask, hide};
+      for (let i = 0; i < entries.length; i++) {
+        const q = entries[i];
+        if (!q || !q.foreign || q.event || q.who !== 'user') continue;
+        // The next thing that provider said, not the next entry in the thread. One question put to
+        // five providers arrives as five questions and then five answers, sorted by the time each
+        // was said -- so the answer to this one is rarely the row under it, and an adjacent-only
+        // pairing left a panel's thread looking exactly as it did before the view was turned on.
+        for (let j = i + 1; j < entries.length; j++) {
+          const a = entries[j];
+          if (!a || !a.foreign || a.event) continue;
+          if ((a.agent || '') !== (q.agent || '')) continue;
+          // That provider was asked twice before it answered. The answer follows the last thing
+          // it was asked, so the earlier question keeps its own bubble: its answer is missing from
+          // the record, and folding it in here would put another question's answer under it.
+          if (a.who === 'user') break;
+          if (ask.has(j)) break;
+          ask.set(j, q);
+          hide.add(i);
+          break;
+        }
+      }
+      return {ask, hide};
+    }
+
+    // How far apart two questions of identical text are still one ask. A fan-out is sent in a
+    // single press and lands inside a second; the window is wide enough to survive a slow provider
+    // and short enough that asking the same thing again tomorrow is a second exchange.
+    const CONV_GROUP_MS = 15 * 60 * 1000;
+
+    // Which provider's answer a group is showing. Kept here rather than in the DOM because the
+    // thread is redrawn on every poll and a reader who picked one provider's answer should not be
+    // handed another one back a second later.
+    const convGroupPicked = new Map();
+
+    // The fan-outs, as a lead answer carrying the others. Same question text, same window; a group
+    // of one is not a group and stays the ordinary pair it already was.
+    function convParaGroups(entries, ask) {
+      const lead = new Map(), folded = new Set();
+      if (!convGroupOn()) return {lead, folded};
+      const open = new Map();
+      for (const i of Array.from(ask.keys()).sort((a, b) => a - b)) {
+        const q = ask.get(i);
+        const text = String(q.text || '').trim();
+        if (!text) continue;
+        const at = convAt(q);
+        const held = open.get(text);
+        if (held && at - held.at <= CONV_GROUP_MS) {
+          lead.get(held.head).push(i);
+          folded.add(i);
+        } else {
+          open.set(text, {at, head: i});
+          lead.set(i, [i]);
+        }
+      }
+      for (const [i, members] of Array.from(lead)) if (members.length < 2) lead.delete(i);
+      return {lead, folded};
+    }
+
+    // A pill lights and the body under it is swapped, in place. Not a re-render: the thread is a
+    // long list and this is a control inside one bubble of it, and redrawing the lot would cost the
+    // reader their scroll position to answer "what did the other one say".
+    function convGroupPick(btn, provider) {
+      const msg = btn && btn.closest('.conv-msg');
+      if (!msg) return;
+      convGroupPicked.set(msg.dataset.group || '', provider);
+      msg.querySelectorAll('.conv-pill').forEach(pill => {
+        const on = pill.dataset.prov === provider;
+        pill.classList.toggle('on', on);
+        pill.setAttribute('aria-pressed', String(on));
+      });
+      msg.querySelectorAll('.conv-body, .conv-acts[data-prov]').forEach(part => {
+        part.hidden = part.dataset.prov !== provider;
+      });
+      if (window.cue) cue('tick');
+    }
+
     // A cut bubble opens on a tap anywhere in it. No control of its own: two lines of text have
     // nothing to select and nothing else to press, and a chevron per bubble is a control on every
     // message in the thread to serve the few that are cut.
@@ -12767,14 +12955,19 @@
     }
 
     // One bubble's own fold, in its header. The stylesheet knows when a bubble is cut and the
-    // markup does not, so this is drawn whenever the rules could apply -- this bubble is filling up
-    // under the reader, or it is a provider's and the reader has asked for those to be cut.
+    // markup does not, so this is drawn whenever the rule could apply: a provider's bubble, and
+    // the reader has asked for those to be cut.
+    //
+    // A bubble that is filling up is not one of them. It used to be -- the thought was that an
+    // answer arriving should not push the thread around -- and it was wrong twice over: an answer
+    // is the thing the reader is waiting for, and the thread is redrawn on every delta, so a
+    // bubble opened by hand closed itself again a fraction of a second later.
     //
     // A provider's and never an agent's. What is being cut is a wall of prose from five providers
     // answering the same question at length; a pane's thread is the app's oldest screen and nothing
     // here is an improvement to it.
-    function convFoldBtnHtml(live, foreign) {
-      if (!live && !(foreign && convClampOn())) return '';
+    function convFoldBtnHtml(streaming, foreign) {
+      if (!(foreign && convClampOn())) return '';
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
         + 'title="Show all of this message" aria-label="Show all of this message" '
         + `aria-expanded="false">${convIco('unfold')}</button>`;
@@ -12801,6 +12994,19 @@
         `title="${say}" aria-label="${say}">${convIco(on ? 'unfold' : 'fold')}</button>`;
     }
 
+
+    // What a provider returns *is* Markdown. Drawn as such when the reader has it on -- the same
+    // switch the Web Agents chat view carries, because it is one preference about one kind of
+    // answer. Its own function because a grouped bubble draws several answers and only shows one:
+    // the same text, five times over, and none of it belongs in the loop that builds the bubble.
+    // `data-text` stays the raw text either way: a quote lifted out of a bubble is the words, not
+    // the markup that drew them.
+    function convSaidHtml(e) {
+      const text = escapeHtml(e.text || '');
+      return e.foreign && e.text && typeof markdownHtml === 'function'
+        && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
+        ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
+    }
 
     function convSpan(ms) {
       const m = Math.max(1, Math.round(ms / 60000));
@@ -12841,7 +13047,13 @@
       // the commit it was at. A branch is the same for twenty messages in a row, so what is drawn
       // is the moment it changes, which cannot be decided from one entry alone.
       const gitSeen = new Map();
+      const para = convParaPairs(entries);
+      const groups = convParaGroups(entries, para.ask);
       return entries.map((e, i) => {
+        // Folded into the answer below it. Drawn as nothing rather than removed, so every index
+        // this thread hands out -- picks, the live status writer, the transfer sheet -- still names
+        // the entry it named before the reader turned this on.
+        if (para.hide.has(i) || groups.folded.has(i)) return '';
         const at = convAt(e);
         // The arbitrator, which is a different kind of thing from a message and is drawn as one.
         // It is not a speaker in this conversation — it has no side, no member colour and no
@@ -12922,6 +13134,12 @@
         // harness, so every fallback to "the pane this thread is read through" is wrong for it:
         // an unmarked one wore the reading pane's own badge and alias.
         const foreign = !!e.foreign;
+        // An answer arriving into this bubble *right now*: a provider's turn that is still being
+        // streamed into the page. Not the record's own `live`, which conv_live.js sets on every
+        // turn it hands over and which means "this row came from the relay's record" -- a pane's
+        // whole thread carries it, so the fold button and the one-line cut meant for a filling
+        // bubble were drawn on every recorded message in every conversation, on both pages.
+        const streaming = foreign && !!e.live;
         const live = foreign ? null : agents.find(x => convMemberKey(x) === key);
         // The harness the entry was recorded under, not the one running in that pane today: a
         // conversation outlives its panes, and a member that has exited still gets its own badge.
@@ -12951,7 +13169,7 @@
         // and badge already identify the speaker; a second colour ring made a working dot look
         // like it had changed to an unrelated warning state.
         const dot = live ? statusColor(live)
-          : (foreign && e.live ? 'var(--dot-live)' : 'var(--dot-cold)');
+          : (streaming ? 'var(--dot-live)' : 'var(--dot-cold)');
         // A web provider's mark, beside its name and in its own colour. It used to be a light
         // grey label and nothing else, which in a thread of five providers is five rows that read
         // the same. The mark is what the card, the pill and the picker already identify it by.
@@ -12959,8 +13177,21 @@
           ? `<span class="conv-foreign" style="--conv-agent:${color}">${e.sign}` +
             `<span class="conv-foreign-name">${name}</span></span>`
           : '';
-        const who = sign
-          ? `<span class="dot${e.live ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
+        // Every answer to one question, in one bubble: the providers are the pills under the
+        // question and the header names none of them, because the bubble is about the ask.
+        const group = groups.lead.get(i);
+        // A group's key is the question it is about -- the same key across a redraw, so the pill
+        // the reader lit is still lit a poll later.
+        const gkey = group ? `g${convAt(para.ask.get(i))}` : '';
+        const shown = group
+          ? (group.some(m => (entries[m].agent || '') === convGroupPicked.get(gkey))
+            ? convGroupPicked.get(gkey) : (entries[group[0]].agent || ''))
+          : '';
+        const who = group
+          ? `<span class="dot" style="background:${dot}"></span>` +
+            `<span class="conv-foreign-name">${group.length} providers</span>`
+          : sign
+          ? `<span class="dot${streaming ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
           : `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
             `style="background:${dot}"></span>${name}${badge}`;
         const bar = user ? [who, from].filter(Boolean).join(' · ') : who;
@@ -12986,17 +13217,29 @@
         // already sure which is which, and this is a control pressed while something is going
         // wrong. The two are the repairs in order of violence -- reopen the page, then read the
         // thread back off it in case the answer arrived and this page missed it.
-        const acts = e.acts ? `<span class="conv-acts">`
-          + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(e.acts.provider)}')" `
-          + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
-          + `Reconnect</button>`
-          + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(e.acts.session)}')" `
-          + `title="Read this thread back off the provider's page" `
-          + `aria-label="Read this thread back off the provider's page">Sync</button></span>` : '';
+        // A grouped bubble holds an answer per provider, so it holds a set of repairs per provider
+        // too -- shown and hidden with the answer they belong to. Reconnect reopens *that*
+        // provider's tab and Sync re-reads *that* thread; one pair of buttons for five answers
+        // would repair whichever of them happened to be first.
+        const actsFor = (entry, prov) => {
+          if (!entry || !entry.acts) return '';
+          const tag = prov === undefined ? ''
+            : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
+          return `<span class="conv-acts"${tag}>`
+            + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
+            + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
+            + `Reconnect</button>`
+            + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
+            + `title="Read this thread back off the provider's page" `
+            + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
+        };
+        const acts = group
+          ? group.map(m => actsFor(entries[m], (entries[m].agent || '') === shown)).join('')
+          : actsFor(e);
         // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
         // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
         // one place a reader is not looking.
-        const fold = convFoldBtnHtml(!!e.live, foreign);
+        const fold = convFoldBtnHtml(streaming, foreign);
         const head = bar || time || fold
           ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
@@ -13013,17 +13256,41 @@
           `<button class="conv-pick" onclick="${pick === true || !pick ? 'toggleConvPick' : pick}(${i})" ` +
           `aria-pressed="false" aria-label="Select this message">✓</button>`;
         const text = escapeHtml(e.text || '');
-        // What a provider returns *is* Markdown. Drawn as such when the reader has it on -- the
-        // same switch the Web Agents chat view carries, because it is one preference about one
-        // kind of answer. `data-text` stays the raw text: a quote lifted out of a bubble is the
-        // words, not the markup that drew them.
-        const said = foreign && e.text && typeof markdownHtml === 'function'
-          && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
-          ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
+        const said = convSaidHtml(e);
         // What was said, in a box of its own. The bubble cannot be the thing that is cut short:
         // three controls hang over its top edge and the clip that shortened it took them with it.
         // So the cut is here, around the words and nothing else.
-        const body = `<span class="conv-body">${said}</span>`;
+        // The question that produced it, above the answer and inside the same bubble. Its own
+        // colour is the user's green, which is the colour it wore as a bubble of its own, and the
+        // rule under it is what makes the pair read as a question and an answer rather than as one
+        // message that changes voice halfway down. Escaped and never drawn as Markdown: what was
+        // typed into the composer is what was sent, and a question with a `#` in it is not a
+        // heading.
+        const asked = para.ask.get(i);
+        const ask = asked
+          ? `<span class="conv-ask">${escapeHtml(asked.text || '')}</span>` : '';
+        const pills = group ? '<span class="conv-pills">' + group.map(m => {
+          const g = entries[m];
+          const id = escapeHtml(g.agent || '');
+          const on = (g.agent || '') === shown;
+          return `<button class="conv-pill${on ? ' on' : ''}" data-prov="${id}" ` +
+            `onclick="convGroupPick(this, '${id}')" aria-pressed="${on}" ` +
+            `title="${escapeHtml(g.label || g.agent || '')}" ` +
+            `aria-label="Show what ${escapeHtml(g.label || g.agent || '')} answered" ` +
+            `style="--conv-agent:${g.color || 'var(--muted)'}">${g.sign || ''}` +
+            `<span class="conv-pill-name">${escapeHtml(g.label || g.agent || '')}</span></button>`;
+        }).join('') + '</span>' : '';
+        // Every answer is drawn and all but one is hidden, so lighting another pill is a class and
+        // an attribute rather than a redraw of the thread the reader is scrolled into.
+        const bodies = group
+          ? group.map(m => {
+            const g = entries[m];
+            const on = (g.agent || '') === shown;
+            return `<span class="conv-body" data-prov="${escapeHtml(g.agent || '')}"` +
+              `${on ? '' : ' hidden'}>${convSaidHtml(g)}</span>`;
+          }).join('')
+          : `<span class="conv-body">${said}</span>`;
+        const body = `${ask}${pills}${bodies}`;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
@@ -13038,7 +13305,9 @@
         // makes the bubble collapse to its first lines while it fills — see `conv-clamped`.
         return rule + git.before +
           `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
-          `${foreign ? ' foreign' : ''}${e.live ? ' live' : ''}"` +
+          `${foreign ? ' foreign' : ''}${streaming ? ' live' : ''}${ask ? ' conv-qa' : ''}` +
+          `${group ? ' conv-group' : ''}"` +
+          `${gkey ? ` data-group="${escapeHtml(gkey)}"` : ''}` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
