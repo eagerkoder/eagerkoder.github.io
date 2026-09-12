@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-11">
+  <meta name="app-built" content="2026-09-12">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -3054,6 +3054,24 @@
     }
 
     .conv-glyph { display: block; }
+
+    /* The providers a room reaches, after its name: what it is about reads first, and the marks
+       say who is in it. Pushed left of the kind chip and allowed to shrink rather than wrap, since
+       a room of six is six marks on a phone. */
+    .webchat-providers {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      min-width: 0;
+      overflow: hidden;
+      flex: 0 1 auto;
+    }
+
+    /* A conversation whose thread is web providers rather than panes: a rectangular bubble
+       with tail on the right in the app's yellow/amber. */
+    .conv-glyph.web {
+      color: var(--orange);
+    }
 
     /* The Project card's folder, sized and seated like the agent card's robot so the two lists
        read as one column. Blue rather than the agent's pink or the conversation's green: three
@@ -6578,6 +6596,14 @@
 
     /* The lit one carries the provider's own colour, which is the colour its bubble wore when the
        answers were five bubbles: the pill is standing in for that bubble's identity. */
+    /* Waiting on that provider: a dotted outline beside the grey the mark and the answer already
+       wear. The pill is 13px of logo and a name — a shade of grey is not enough on a phone in
+       sunlight, and the dots read as "still coming" at any size. */
+    .conv-msg.conv-group .conv-pill.waiting {
+      border-style: dotted;
+      border-color: var(--muted);
+    }
+
     .conv-msg.conv-group .conv-pill.on {
       color: var(--conv-agent, var(--text));
       border-color: var(--conv-agent, var(--text));
@@ -6599,23 +6625,56 @@
       white-space: nowrap;
     }
 
-    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-ask {
-      max-height: 1.45em;
+    /* Only where the reader asked for it. A bubble that is filling up was cut as well, so that an
+       arriving answer did not push the thread around — but the answer is the thing being waited
+       for, and the thread is redrawn on every delta, so a bubble opened by hand closed itself
+       again a fraction of a second later.
+
+       One line of the question and one of the answer, each ending in the browser's own ellipsis:
+       what a collapsed thread is for is finding the message, and a line that stops mid-word with
+       no mark says the message is short rather than that it was cut. A height in `em` cut the
+       line and drew nothing to say so, which is the whole difference between this and that. */
+    /* `:not([hidden])` is load-bearing: `[hidden]` is a rule of the browser's own stylesheet and
+       any author `display` beats it, so a grouped bubble drawn with every provider's answer in it
+       and all but one hidden would have shown all of them the moment the thread was collapsed. */
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-ask,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body:not([hidden]) {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 1;
+      line-clamp: 1;
+      max-height: none;
       overflow: hidden;
+    }
+
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-ask {
       padding-bottom: 4px;
       margin-bottom: 4px;
     }
 
-    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body {
-      /* Only where the reader asked for it. A bubble that is filling up was cut as well, so that
-         an arriving answer did not push the thread around — but the answer is the thing being
-         waited for, and the thread is redrawn on every delta, so a bubble opened by hand closed
-         itself again a fraction of a second later.
-         One line. Two was an attempt to show a little of the answer and it showed a little of
-         nothing: what a collapsed thread is for is finding the message, and one line of it is a
-         label. `em` against the bubble's own text, so it follows the conversation-text control. */
-      max-height: 1.45em;
-      overflow: hidden;
+    /* An answer drawn as Markdown is headings, paragraphs and tables, and a clamp over a stack of
+       blocks cuts the stack rather than the words in it — the first block's own last line then
+       ends wherever it ends, with no ellipsis. Flattened to one run of text for as long as the
+       bubble is collapsed, which is the one line the reader is being shown. */
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body:not([hidden]) .conv-md,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body:not([hidden]) .conv-md * {
+      display: inline;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      font-size: inherit;
+      font-weight: inherit;
+    }
+
+    /* The copy button a fence carries, and the rule a heading draws: controls and furniture inside
+       a line that is standing in for a message. */
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body .conv-md button,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body .conv-md hr,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body .conv-md svg,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body .conv-md img,
+    body.conv-clamped .conv-msg.foreign:not(.conv-open) .conv-body[hidden] {
+      display: none;
     }
 
     body.conv-clamped .conv-msg.foreign:not(.conv-open) {
@@ -6804,6 +6863,14 @@
       gap: 4px;
       margin: 4px 0 8px;
       padding: 0 4px;
+    }
+
+    /* The repairs, when the line carrying them is a rail rather than a bubble -- a send that did
+       not go is reported as one. The bubble version hangs them over its top right corner, which is
+       a claim about a box this line does not have; here they are simply the last thing on the
+       line. */
+    .conv-arb-to .conv-acts {
+      position: static;
     }
 
     /* A delivery the relay could not prove is the one badge that has to be found rather than read
@@ -7909,6 +7976,24 @@
       align-self: flex-start;
     }
 
+    /* An agent room stacks both rows: its providers above, its members below. A hairline between
+       them, because they are two questions and not one long row of chips -- and the same hairline
+       the composer already divides itself with rather than a gap, which would read as two boxes.
+       Anchored on the provider row by name: the member row is itself two blocks, and a plain
+       sibling rule would rule between those as well. */
+    .xfer-row .xfer-providers + .xfer-act {
+      border-top: 1px solid var(--border);
+      padding-top: 5px;
+      margin-top: 1px;
+    }
+
+    /* A provider is lit, so the message is not going to the agent. Said on the rows that are losing
+       it rather than only on the one that is gaining it: the pills are lit either way, and a lit
+       pill nobody noticed is how a message meant for the agent gets spent on a paid account. */
+    .conv-dock.to-providers .xfer-row .xfer-act:not(.xfer-providers) {
+      opacity: 0.4;
+    }
+
     /* The conversation's agents. The one that will receive it is lit; the rest are dimmed rather
        than hidden, because which agents are in this conversation is information and a row showing
        only the chosen one would answer a different question. */
@@ -8997,7 +9082,7 @@
         font-size: 0.6rem;
         font-weight: 400;
         color: var(--muted);
-        background: var(--bg-alt, rgba(127, 127, 127, 0.12));
+        background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 4px;
         padding: 0 4px;
@@ -14375,8 +14460,8 @@
     // line here rather than a line in each of the four functions below. Settings is display:none in
     // its class, so an empty string would hide it; the conversation view is a flex column.
     const PANELS = { settingsView: 'block', timelineView: 'flex', convView: 'flex' };
-    if (document.getElementById('webAgentView')) PANELS.webAgentView = 'flex';
-    if (document.getElementById('nlmView')) PANELS.nlmView = 'flex';
+    if (typeof document !== 'undefined' && document.getElementById('webAgentView')) PANELS.webAgentView = 'flex';
+    if (typeof document !== 'undefined' && document.getElementById('nlmView')) PANELS.nlmView = 'flex';
 
     // A half-written message belongs to the conversation it was being written to, and leaving the
     // window is not sending it. openConversation files its own on the way to another conversation;
@@ -17011,6 +17096,24 @@
         startIntent = Object.assign({}, startIntent, {ref: msg.ref});
         convNotePending(startIntent.conv, msg.ref, '', msg.label || msg.name || '');
       }
+      // A start made for a Web Agents conversation comes up already holding its binding. The relay
+      // writes the file and sources it at the pane's shell in the one moment there is a shell
+      // there — before the harness is attached — so the credential is in the harness process and
+      // inherited by every tool call, rather than in whichever shell the agent remembered to
+      // source it from. Sent after the ref above, because it needs one: the agent is minted before
+      // its pane exists and is recognised by the name this start gave itself.
+      //
+      // webchat_bind.js still reconciles it afterwards and finds it already agrees, which is what
+      // covers every other route into a bound conversation — a restart, a second pane, a grant
+      // edited later.
+      if (!terminal && msg.ref && startIntent && startIntent.conv &&
+          typeof webchatGrantOf === 'function' && typeof loadConvIndex === 'function') {
+        const bound = (loadConvIndex() || []).find(c => c.id === startIntent.conv);
+        const grant = bound ? webchatGrantOf(bound) : '';
+        if (grant) {
+          msg.webchat = {ns: bound.id, providers: grant === '*' ? ['*'] : grant.split(',')};
+        }
+      }
       // A terminal has no ref to be waited on by, and keeps the pending slot. An agent goes out
       // named, so two submits in the same few seconds cannot land on each other's intent.
       if (terminal) ws.send(JSON.stringify(msg));
@@ -17153,7 +17256,7 @@
       const meta = `${n} pane${n === 1 ? '' : 's'}` + (live ? ` · ${live} live` : '');
       return `<button class="pair-pick${c.id === convViewId ? ' on' : ''}" ` +
         `onclick="closeRecentSheet(); openConversation('${escapeHtml(c.id)}')">` +
-        `<span class="kind conv-kind">${convGlyph()}</span>` +
+        `<span class="kind conv-kind">${convGlyph(c)}</span>` +
         `<span class="info"><span class="name">${escapeHtml(c.name)}</span>` +
         `<span class="meta">${escapeHtml(meta)}</span></span>` +
         `</button>`;
@@ -21036,7 +21139,19 @@ function convWebModeOf(conv) {
     // does not reliably change that, so `color: var(--green)` was a request the font could refuse
     // and on a phone it simply did. An inline SVG has no font in it: it is green because it takes
     // currentColor, on every platform, and it is still markup rather than an image to load.
-    function convGlyph() {
+    //
+    // A conversation whose thread is web providers rather than panes wears a rectangular bubble
+    // with its tail on the right, in the app's yellow/amber: it is still a conversation -- the
+    // glyph says so -- and the shape and direction say at a glance that the voices in it are web
+    // models. Drawn off the kind rather than off a stored field, so the Providers editor turning a
+    // room into one is the whole of it; a caller with no conversation to hand gets the ordinary mark.
+    function convGlyph(conv) {
+      const web = typeof convKindOf === 'function' && conv && convKindOf(conv) === 'providers';
+      if (web) {
+        return '<svg class="conv-glyph web" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
+          'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+          'aria-hidden="true"><path d="M3 15a2 2 0 0 0 2 2h12l4 4V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/></svg>';
+      }
       return '<svg class="conv-glyph" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
         'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
         'aria-hidden="true"><path d="M20.5 11.5a8 8 0 0 1-8.5 8 8.6 8.6 0 0 1-3.9-.9L3.5 20l1.4-4.2' +
@@ -22383,7 +22498,7 @@ function convWebModeOf(conv) {
         const msgs = (c.members || []).reduce((t, m) => t + (m.messages || 0), 0);
         const meta = `${n} member${n > 1 ? 's' : ''}` + (msgs ? ` · ${msgs} messages` : '');
         return `<button class="pair-pick${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleConvMember('${escapeHtml(c.id)}')">
-      <span class="kind conv-kind">${convGlyph()}</span>
+      <span class="kind conv-kind">${convGlyph(c)}</span>
       <span class="info"><span class="name">${escapeHtml(c.name)}</span><span class="meta">${meta}</span></span>
       <span class="pair-tick" aria-hidden="true">${on ? '✓' : ''}</span>
     </button>`;
@@ -22744,6 +22859,7 @@ function convWebModeOf(conv) {
       // a bubble that stayed open because somebody read it an hour ago is not everything.
       if (typeof document !== 'undefined') {
         document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+        convOpened.clear();
       }
       convClampApply();
       if (typeof renderConvDock === 'function') renderConvDock();
@@ -22790,6 +22906,7 @@ function convWebModeOf(conv) {
       try { localStorage.setItem(CONV_PARA_KEY, next); } catch (e) { /* session only */ }
       if (typeof document !== 'undefined') {
         document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+        convOpened.clear();
       }
       if (typeof renderConvView === 'function') renderConvView();
       if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
@@ -22839,6 +22956,12 @@ function convWebModeOf(conv) {
     // handed another one back a second later.
     const convGroupPicked = new Map();
 
+    // Which bubbles the reader has opened out of the cut, keyed by the same thing the lit pill is
+    // keyed by. The thread is redrawn on every poll and every delta, so a class put on the element
+    // by hand lives about as long as the next snapshot: a reader clicking through a grouped
+    // bubble's pills watched it snap shut under them. The bubble is rebuilt open instead.
+    const convOpened = new Set();
+
     // The fan-outs, as a lead answer carrying the others. Same question text, same window; a group
     // of one is not a group and stays the ordinary pair it already was.
     function convParaGroups(entries, ask) {
@@ -22859,7 +22982,23 @@ function convWebModeOf(conv) {
           lead.set(i, [i]);
         }
       }
-      for (const [i, members] of Array.from(lead)) if (members.length < 2) lead.delete(i);
+      // A group of one is not a group -- except while it is waiting, where the pill and its
+      // provider's mark are the only thing saying who the question went to.
+      for (const [i, members] of Array.from(lead)) {
+        if (members.length < 2 && !convWaitingOn(entries[i])) lead.delete(i);
+      }
+      // The pills in the order this app names providers in, not the order the answers happened to
+      // arrive in. The same five providers compared across three sittings have to be in the same
+      // places each time, or the reader is re-reading the pills instead of the answers -- and the
+      // fastest provider is not a heading. The bubble itself does not move: it stays at the index
+      // the thread put it at, which is when the question was asked.
+      if (typeof webchatOrderOf === 'function') {
+        for (const members of lead.values()) {
+          members.sort((a, b) =>
+            (webchatOrderOf(entries[a].agent || '') - webchatOrderOf(entries[b].agent || ''))
+            || (a - b));
+        }
+      }
       return {lead, folded};
     }
 
@@ -22892,13 +23031,15 @@ function convWebModeOf(conv) {
         if (e.target.closest('button, a, input, textarea, select')) return;
         // Cut or not is the stylesheet's answer, not this file's: the rules name two different
         // reasons a bubble is short and neither is written down here.
-        const body = msg.querySelector('.conv-body');
-        if (!body || getComputedStyle(body).maxHeight === 'none') return;
+        const body = msg.querySelector('.conv-body:not([hidden])') || msg.querySelector('.conv-body');
+        if (!body) return;
+        const cut = getComputedStyle(body);
+        if (cut.maxHeight === 'none' && cut.webkitLineClamp === 'none') return;
         // Through the header's own button where there is one, so the icon it wears is not left
         // saying the opposite of what the bubble is doing.
         const btn = msg.querySelector('.conv-fold');
         if (btn) convFoldToggle(btn);
-        else msg.classList.add('conv-open');
+        else { msg.classList.add('conv-open'); convOpenedSet(msg, true); }
       });
       convClampApply();
     }
@@ -22942,22 +23083,62 @@ function convWebModeOf(conv) {
     // A provider's and never an agent's. What is being cut is a wall of prose from five providers
     // answering the same question at length; a pane's thread is the app's oldest screen and nothing
     // here is an improvement to it.
-    function convFoldBtnHtml(streaming, foreign) {
+    function convFoldBtnHtml(streaming, foreign, open) {
       if (!(foreign && convClampOn())) return '';
+      const say = open ? 'Cut this message back to one line' : 'Show all of this message';
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
-        + 'title="Show all of this message" aria-label="Show all of this message" '
-        + `aria-expanded="false">${convIco('unfold')}</button>`;
+        + `title="${say}" aria-label="${say}" `
+        + `aria-expanded="${open ? 'true' : 'false'}">${convIco(open ? 'fold' : 'unfold')}</button>`;
+    }
+
+    function convOpenedSet(msg, open) {
+      const okey = msg && msg.dataset ? msg.dataset.openKey || '' : '';
+      if (!okey) return;
+      if (open) convOpened.add(okey);
+      else convOpened.delete(okey);
     }
 
     function convFoldToggle(btn) {
       const msg = btn && btn.closest('.conv-msg');
       if (!msg) return;
       const open = msg.classList.toggle('conv-open');
+      convOpenedSet(msg, open);
       btn.innerHTML = convIco(open ? 'fold' : 'unfold');
       const say = open ? 'Cut this message back to one line' : 'Show all of this message';
       btn.title = say;
       btn.setAttribute('aria-label', say);
       btn.setAttribute('aria-expanded', String(open));
+    }
+
+    // What can be done to a bubble that is still waiting, or to a send that did not go: reopen the
+    // provider's tab, read the thread back off it, or ask the same question again. Drawn at the
+    // bubble's top right -- the same corner, and the same shape, as the Esc and working chips a
+    // pane's bubble wears -- and only where this page holds the turn, since it is the only party
+    // that still has the message.
+    //
+    // Named rather than drawn as glyphs: the arrows are the same arrow to anybody who is not
+    // already sure which is which, and these are pressed while something is going wrong. In order
+    // of violence: send it again, reopen the page, read the thread back in case the answer arrived
+    // and this page missed it.
+    //
+    // A grouped bubble holds an answer per provider, so it holds a set of repairs per provider too
+    // -- shown and hidden with the answer they belong to. One pair of buttons for five answers
+    // would repair whichever of them happened to be first.
+    function convActsHtml(entry, prov) {
+      if (!entry || !entry.acts) return '';
+      const tag = prov === undefined ? ''
+        : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
+      const retry = entry.acts.retry
+        ? `<button class="conv-act" onclick="convPanelRetry('${escapeHtml(entry.acts.session)}')" `
+          + `title="Send this message again" aria-label="Send this message again">Retry</button>`
+        : '';
+      return `<span class="conv-acts"${tag}>${retry}`
+        + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
+        + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
+        + `Reconnect</button>`
+        + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
+        + `title="Read this thread back off the provider's page" `
+        + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
     }
 
     // The switch itself, for whichever composer row is asking. Both rows draw it, because both
@@ -22977,7 +23158,28 @@ function convWebModeOf(conv) {
     // the same text, five times over, and none of it belongs in the loop that builds the bubble.
     // `data-text` stays the raw text either way: a quote lifted out of a bubble is the words, not
     // the markup that drew them.
+    // A bubble a question has gone out into and nothing has come back from yet. Its own state
+    // rather than an empty one: a provider that has not started answering, an answer that is
+    // still being streamed and an answer that arrived are three different things to a reader
+    // watching five threads at once, and the first of them used to draw as a bubble with nothing
+    // in it -- which in the paragraph and grouped views reads as no bubble at all.
+    function convWaitingOn(e) {
+      return !!(e && e.foreign && e.live && !String(e.text || '').trim());
+    }
+
+    // The colour a bubble, a header and a pill wear. Grey until something is in it, the provider's
+    // own colour from the first delta on -- so a thread of five fills in, one colour at a time,
+    // and the ones still out are visibly still out.
+    function convEntryColor(e, fallback) {
+      if (convWaitingOn(e)) return 'var(--muted)';
+      return (e && e.color) || fallback || 'var(--muted)';
+    }
+
     function convSaidHtml(e) {
+      if (convWaitingOn(e)) {
+        return `<span class="conv-waiting">Waiting for ` +
+          `${escapeHtml(e.label || e.agent || 'an answer')}\u2026</span>`;
+      }
       const text = escapeHtml(e.text || '');
       return e.foreign && e.text && typeof markdownHtml === 'function'
         && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
@@ -23050,6 +23252,10 @@ function convWebModeOf(conv) {
             (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
                       `${escapeHtml(e.text)}</span>` : '') +
             (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
+            // A send that failed is one of these lines, and the way out of it belongs on the line
+            // that reports it: this page is holding the only copy of the message, since nothing
+            // was ever sent and the adapter stored nothing.
+            convActsHtml(e) +
             '</div>';
         }
         if (e.who === 'arbiter') {
@@ -23128,7 +23334,7 @@ function convWebModeOf(conv) {
         const config = foreign ? '' : (live && live.config) || spawn.config || me.config || '';
         // `color` is carried by an entry that is not a pane at all — a web provider, whose
         // identifying colour is its own mark's and not any harness's.
-        const color = e.color || agentColor(agent) || 'var(--muted)';
+        const color = convEntryColor(e, agentColor(agent));
         // The name it goes by now, not the one stamped when the words were recorded — see
         // convMemberName. An ended member has no live pane and keeps its stamp.
         const name = escapeHtml(foreign ? (e.label || '')
@@ -23165,7 +23371,7 @@ function convWebModeOf(conv) {
           : '';
         const who = group
           ? `<span class="dot" style="background:${dot}"></span>` +
-            `<span class="conv-foreign-name">${group.length} providers</span>`
+            `<span class="conv-foreign-name">${group.length} provider${group.length === 1 ? '' : 's'}</span>`
           : sign
           ? `<span class="dot${streaming ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
           : `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
@@ -23197,25 +23403,17 @@ function convWebModeOf(conv) {
         // too -- shown and hidden with the answer they belong to. Reconnect reopens *that*
         // provider's tab and Sync re-reads *that* thread; one pair of buttons for five answers
         // would repair whichever of them happened to be first.
-        const actsFor = (entry, prov) => {
-          if (!entry || !entry.acts) return '';
-          const tag = prov === undefined ? ''
-            : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
-          return `<span class="conv-acts"${tag}>`
-            + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
-            + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
-            + `Reconnect</button>`
-            + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
-            + `title="Read this thread back off the provider's page" `
-            + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
-        };
         const acts = group
-          ? group.map(m => actsFor(entries[m], (entries[m].agent || '') === shown)).join('')
-          : actsFor(e);
+          ? group.map(m => convActsHtml(entries[m], (entries[m].agent || '') === shown)).join('')
+          : convActsHtml(e);
         // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
         // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
         // one place a reader is not looking.
-        const fold = convFoldBtnHtml(streaming, foreign);
+        // The key this bubble is remembered as open under: a group's question, or this bubble's
+        // own member and time. Not the index, which moves as the thread grows.
+        const okey = gkey || `${key}|${at}`;
+        const open = convOpened.has(okey);
+        const fold = convFoldBtnHtml(streaming, foreign, open);
         const head = bar || time || fold
           ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
@@ -23249,11 +23447,15 @@ function convWebModeOf(conv) {
           const g = entries[m];
           const id = escapeHtml(g.agent || '');
           const on = (g.agent || '') === shown;
-          return `<button class="conv-pill${on ? ' on' : ''}" data-prov="${id}" ` +
+          // A pill for a provider nothing has come back from yet: grey, like its answer, and
+          // outlined rather than drawn — the same "not settled" the unfilled bubble says, said on
+          // a control small enough that colour alone does not carry it.
+          const out = convWaitingOn(g) ? ' waiting' : '';
+          return `<button class="conv-pill${on ? ' on' : ''}${out}" data-prov="${id}" ` +
             `onclick="convGroupPick(this, '${id}')" aria-pressed="${on}" ` +
             `title="${escapeHtml(g.label || g.agent || '')}" ` +
             `aria-label="Show what ${escapeHtml(g.label || g.agent || '')} answered" ` +
-            `style="--conv-agent:${g.color || 'var(--muted)'}">${g.sign || ''}` +
+            `style="--conv-agent:${convEntryColor(g)}">${g.sign || ''}` +
             `<span class="conv-pill-name">${escapeHtml(g.label || g.agent || '')}</span></button>`;
         }).join('') + '</span>' : '';
         // Every answer is drawn and all but one is hidden, so lighting another pill is a class and
@@ -23282,8 +23484,9 @@ function convWebModeOf(conv) {
         return rule + git.before +
           `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
           `${foreign ? ' foreign' : ''}${streaming ? ' live' : ''}${ask ? ' conv-qa' : ''}` +
-          `${group ? ' conv-group' : ''}"` +
+          `${group ? ' conv-group' : ''}${open ? ' conv-open' : ''}"` +
           `${gkey ? ` data-group="${escapeHtml(gkey)}"` : ''}` +
+          ` data-open-key="${escapeHtml(okey)}"` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
@@ -24596,7 +24799,7 @@ const WEBCHAT_MARKS = {
     body: '<path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>'},
   gemini: {colour: '#8e7cf0', fill: true,
     body: '<path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>'},
-  grok: {colour: '#cbd5e1', fill: true,
+  grok: {colour: '#cbd5e1', fill: true, span: 18.75,
     body: '<g transform="scale(0.046875)"><path d="M210.484 312.759L343.465 210.383C349.984 205.364 359.302 207.322 362.408 215.117C378.758 256.231 371.454 305.64 338.925 339.563C306.397 373.487 261.137 380.927 219.768 363.983L174.577 385.803C239.394 432.008 318.104 420.581 367.289 369.251C406.303 328.564 418.386 273.104 407.088 223.091L407.19 223.198C390.807 149.726 411.218 120.359 453.03 60.3072C454.02 58.8833 455.01 57.4595 456 56L400.978 113.382V113.204L210.45 312.794"/><path d="M183.042 337.641C136.519 291.294 144.54 219.567 184.236 178.203C213.59 147.59 261.683 135.096 303.666 153.464L348.755 131.75C340.632 125.627 330.221 119.042 318.275 114.414C264.277 91.2407 199.63 102.774 155.735 148.516C113.513 192.549 100.236 260.254 123.036 318.027C140.069 361.206 112.148 391.748 84.0229 422.575C74.0561 433.503 64.0553 444.431 56 456L183.007 337.677"/></g>'},
   deepseek: {colour: '#4d6bfe', fill: true,
     body: '<path d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/>'},
@@ -24604,10 +24807,10 @@ const WEBCHAT_MARKS = {
     body: '<path d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/>'},
   perplexity: {colour: '#1fb8cd', fill: true,
     body: '<path d="M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z"/>'},
-  nano: {colour: '#94a3b8',
+  nano: {colour: '#94a3b8', span: 15,
     body: '<rect x="4.5" y="4.5" width="15" height="15" rx="4.5"/><circle cx="12" cy="12" r="2"/>'},
   // Anything this app has never heard of: the section's own globe, which is what the header wears.
-  '': {colour: 'var(--muted)',
+  '': {colour: 'var(--muted)', span: 18,
     body: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>'},
 };
 
@@ -24617,12 +24820,27 @@ function webchatFamily(id) {
   return String(id || '').replace(/-anon$/, '').replace(/-coder$/, '');
 }
 
+// Every mark drawn to the same box. They come from eight different hands: most fill the 24-unit
+// viewBox corner to corner, Grok's own artwork stops at 18.75 and the two drawn here are smaller
+// again — so a row of them had one provider a third larger than the next, which reads as emphasis
+// nobody meant. `span` is the longer side of a mark's own bounding box, measured rather than
+// guessed, and the scale is what puts that side on WEBCHAT_MARK_BOX. All of them are centred on
+// (12, 12) already, so the transform is a scale about the middle and nothing else.
+const WEBCHAT_MARK_BOX = 20;
+
 function webchatMark(id, size = 16) {
   const mark = WEBCHAT_MARKS[webchatFamily(id)] || WEBCHAT_MARKS[''];
+  const scale = WEBCHAT_MARK_BOX / (mark.span || 24);
+  // The stroke is scaled with the glyph, so a stroked mark drawn larger came out heavier than the
+  // filled ones beside it. Divided back out, the weight is the same at every size.
+  const stroke = mark.fill ? 0 : Number((1.7 / scale).toFixed(2));
+  const body = scale === 1 ? mark.body
+    : `<g transform="translate(12 12) scale(${Number(scale.toFixed(4))}) translate(-12 -12)">`
+      + `${mark.body}</g>`;
   return `<svg class="webchat-mark" width="${size}" height="${size}" viewBox="0 0 24 24"`
     + ` fill="${mark.fill ? 'currentColor' : 'none'}"`
-    + ` stroke="${mark.fill ? 'none' : 'currentColor'}" stroke-width="${mark.fill ? 0 : 1.7}" stroke-linecap="round" stroke-linejoin="round"`
-    + ` style="color:${mark.colour}" aria-hidden="true">${mark.body}</svg>`;
+    + ` stroke="${mark.fill ? 'none' : 'currentColor'}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"`
+    + ` style="color:${mark.colour}" aria-hidden="true">${body}</svg>`;
 }
 
 // A provider's browser is up, down, or held by a Chrome this adapter does not drive. The last is
@@ -24659,41 +24877,47 @@ function webchatToggleAnon() {
   if (window.cue) cue('tick');
 }
 
-// Which providers live under the fold rather than on the first line. The `-anon` drivers, and a
-// `-coder` variant of a provider whose ordinary driver is already up there: it is the same account
-// reached in a second mode, so it belongs with the other second-line row rather than taking a slot
-// on the line anybody actually looks at.
+// The order the providers are named in, wherever this app lists them: the filter pills, the
+// picker's columns, and the pills under a grouped question. One order everywhere and the same one
+// every time -- a list that reorders itself by what was used last is one you have to read before
+// you can reach for anything in it, and five answers to one question compared across three
+// sittings must be in the same places each time or the comparison is somebody else's.
+//
+// By family, so a provider's second driver sits with the provider. Anything this app has not heard
+// of keeps the adapter's own driver order, behind the ones it has.
+const WEBCHAT_ORDER = ['chatgpt', 'claude', 'perplexity', 'gemini', 'grok', 'deepseek', 'qwen'];
+
+function webchatOrderOf(id) {
+  const at = WEBCHAT_ORDER.indexOf(webchatFamily(id));
+  return at === -1 ? WEBCHAT_ORDER.length : at;
+}
+
+// Stable by construction: anything the order ties on keeps the position it arrived in.
+function webchatInOrder(items, idOf = item => (item && item.id) || item) {
+  return items
+    .map((item, index) => ({item, index, at: webchatOrderOf(idOf(item))}))
+    .sort((a, b) => (a.at - b.at) || (a.index - b.index))
+    .map(row => row.item);
+}
+
+// A driver that is not one of the general chats: a `-coder` variant, which is the same account in
+// a mode for one kind of work, and the browser's own built-in model, which is a different thing
+// again -- no account, no history, and answers only while the page is open. They are picked
+// deliberately or not at all, so they are their own section and a column's All never takes them.
+function webchatOther(id) {
+  return /-coder$/.test(id) || webchatFamily(id) === 'nano';
+}
+
+// Which providers live under the fold rather than on the first line: the `-anon` drivers reached
+// without a login, and the two above.
 function webchatFolded(id) {
-  return /-anon$/.test(id) || /-coder$/.test(id);
-}
-
-// When a provider was last said anything to, as milliseconds. The rows below the pills are already
-// ordered by this, so ordering the pills by it too means the one you were last in is the one under
-// your thumb — the same rule the agent switcher and the recents list follow. A provider nobody has
-// used yet has no date and keeps the adapter's own driver order behind the ones that do.
-function webchatUsedAt(id) {
-  let newest = 0;
-  for (const session of webchatSessions) {
-    if (session.provider !== id) continue;
-    const at = Date.parse(session.updatedAt || session.createdAt || '');
-    if (at > newest) newest = at;
-  }
-  return newest;
-}
-
-function webchatByRecency(providers) {
-  // Stable by construction: the sort is on the index for anything the two sides tie on, which for
-  // providers with no session at all is all of them.
-  return providers
-    .map((provider, index) => ({provider, index, at: webchatUsedAt(provider.id)}))
-    .sort((a, b) => (b.at - a.at) || (a.index - b.index))
-    .map(row => row.provider);
+  return /-anon$/.test(id) || webchatOther(id);
 }
 
 function webchatPillsHtml() {
   if (webchatProviders.length < 2) return '';
-  const folded = webchatByRecency(webchatProviders.filter(provider => webchatFolded(provider.id)));
-  const named = webchatByRecency(webchatProviders.filter(provider => !webchatFolded(provider.id)));
+  const folded = webchatInOrder(webchatProviders.filter(provider => webchatFolded(provider.id)));
+  const named = webchatInOrder(webchatProviders.filter(provider => !webchatFolded(provider.id)));
   const open = webchatAnonOpen();
   // On the line that divides the two rows rather than floating over the first one. It is a control
   // about what is *below* it, and a rule to its left is what says so — where hanging it off the
@@ -24866,10 +25090,15 @@ function webchatRoomCard(conv, sessions, compact) {
     + ` onclick="openConversation(this.dataset.convId)"`
     + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();`
     + `openConversation(this.dataset.convId)}">`
+    // Mark, name, then the providers: the same shape every other card on this page has, where the
+    // glyph says what kind of thing the row is and the name says which one. The provider marks
+    // were standing in for the glyph, so a room read as a row of logos with a name after them --
+    // and a room of five providers led with five marks before it said what it was about.
     + `<div class="conversation-title"><span class="dot${live ? ' pulse' : ''}"`
     + ` style="background:${live ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true"></span>`
-    + `<span class="conv-kind">${marks}</span>`
-    + `<span class="name">${escapeHtml(conv.name || conv.id)}</span>`
+    + `<span class="conv-kind">${typeof convGlyph === 'function' ? convGlyph(conv) : ''}</span>`
+    + `<span class="name">${escapeHtml(conv.name || newest.title || `Untitled ${kind.toLowerCase()}`)}</span>`
+    + `<span class="webchat-providers" title="${escapeHtml(kind)}">${marks}</span>`
     + `<span class="webchat-since">${kind}</span></div>`
     + snippet
     + `<div class="conversation-meta names">`
@@ -26340,12 +26569,20 @@ function webchatNewRender() {
         + (count ? `<span class="webchat-pill-n">${count}</span>` : '') + '</button>';
     }).join('') + '</div>';
   const anon = provider => /-anon$/.test(provider.id);
-  const signedIn = webchatProviders.filter(provider => !anon(provider));
-  const guests = webchatProviders.filter(anon);
+  const other = provider => webchatOther(provider.id);
+  const signedIn = webchatInOrder(
+    webchatProviders.filter(provider => !anon(provider) && !other(provider)));
+  const guests = webchatInOrder(webchatProviders.filter(anon));
+  // The third column, and the reason it is one: a column's All takes the column it is in, so a
+  // set picked as "everyone I am signed in to" stops meaning "and the coder model, and the one in
+  // the browser" -- which is what it meant while those two sat in that column.
+  const others = webchatInOrder(webchatProviders.filter(provider => other(provider) && !anon(provider)));
+  const cols = signedIn.length + guests.length + others.length;
   document.getElementById('webchatNewCols').innerHTML =
     (signedIn.length ? column('Signed in', signedIn) : '')
     + (guests.length ? column('No login', guests) : '')
-    + (signedIn.length || guests.length ? '' : '<p class="pair-empty">No providers are enabled.</p>');
+    + (others.length ? column('Other', others) : '')
+    + (cols ? '' : '<p class="pair-empty">No providers are enabled.</p>');
   document.getElementById('webchatNewModeChat')
     .setAttribute('aria-selected', String(webchatNewIs === 'chat'));
   document.getElementById('webchatNewModeAgent').setAttribute('aria-selected', String(agent));
@@ -30870,7 +31107,7 @@ function nlmSourceDelete(source) {
         // jobs, which is why a conversation card and an agent card opened the same way but did not
         // read as different things.
         `<div class="conversation-title"><span class="dot${r.pulse}${r.ended}" style="background:${r.dot}"` +
-        ` aria-hidden="true"></span><span class="conv-kind">${convGlyph()}</span>` +
+        ` aria-hidden="true"></span><span class="conv-kind">${convGlyph(r.c)}</span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
         // Which providers this conversation talks to, beside its name. Without it an agent
         // conversation and an ordinary one are the same card, and the only place the difference
@@ -31784,7 +32021,13 @@ function nlmSourceDelete(source) {
       // Written once per open rather than on every redraw: it never changes, and this runs on every
       // recorded read of every member.
       const mark = document.getElementById('convViewMark');
-      if (mark && !mark.firstChild) mark.innerHTML = convGlyph();
+      // Rewritten when the conversation under it changes rather than once for the life of the
+      // element: the mark says what kind of room this is, and the header is reused by every room
+      // this view opens.
+      if (mark && mark.dataset.conv !== conv.id) {
+        mark.innerHTML = convGlyph(conv);
+        mark.dataset.conv = conv.id;
+      }
       const members = conv.members || [], hidden = convHidden(conv.id);
       const shown = members.filter(m => !hidden.has(m.aid));
       const open = document.getElementById('convViewOpen');
@@ -32866,9 +33109,17 @@ function nlmSourceDelete(source) {
       // module: the row is multi-select and its send fans out, neither of which a member row is or
       // does, and folding both into one builder would be two rows wearing one name.
       const panel = typeof convPanelOf === 'function' ? convPanelOf(convViewId) : null;
+      // An agent room has both. Its thread already folds in what its agent asked the providers, so
+      // the reader could see five voices in it with nothing saying who they were, which of them
+      // was mid-turn, or how to read one alone -- while the room next door had exactly that row.
+      // Stacked rather than merged: they answer two different questions, and which one a message
+      // is aimed at is the thing the reader has to be able to see at a glance.
+      const web = typeof convWebOf === 'function' ? convWebOf(convViewId) : null;
+      const aimed = !panel && typeof convWebAimed === 'function' && !!convWebAimed(convViewId);
       // Always the whole membership. A pick decides what is being sent, never who is in the
       // conversation or who may have it.
-      const html = panel ? convPanelRowHtml(panel) : (all.length ? dockRowHtml(all) : '');
+      const html = (web ? convPanelRowHtml(web) : '')
+        + (panel ? '' : (all.length ? dockRowHtml(all) : ''));
       row.hidden = !html;
       if (!html) { closeDockMenu(); row.dataset.sig = ''; }
       // Rebuilt only when what it says changed. This runs on every snapshot, and replacing the row
@@ -32878,7 +33129,11 @@ function nlmSourceDelete(source) {
       // still readable, and a composer that could only fail is worse than none. A panel has no
       // members at all and never will -- nothing is spawned for one -- so its composer is gated on
       // its providers instead, which is what the row above is made of.
-      dock.hidden = panel ? !convPanelProviders(panel).length : !all.length;
+      dock.hidden = panel ? !convPanelProviders(panel).length : !(all.length || web);
+      // Which of the two rows this message is going to. The pills say it themselves; this says it
+      // about the row that is *not* getting it, because a lit pill nobody noticed is how a message
+      // meant for the agent ends up spent on four paid accounts.
+      dock.classList.toggle('to-providers', !!aimed);
       paintDockAccent();
       syncDockHeight();
     }
@@ -33250,11 +33505,12 @@ function nlmSourceDelete(source) {
     // Typed text, to whoever the row has lit. No checkpoint and no prefill: there is no pane on
     // screen to prefill *into*, and what is being sent is what the composer already shows.
     function convSend() {
-      // A panel is written to before anything else is asked, because it has no members and every
-      // question below is about which member. Its own send: one message to as many providers as
-      // are lit, which is the thing a panel is for.
-      const panel = typeof convPanelOf === 'function' ? convPanelOf(convViewId) : null;
-      if (panel) return convPanelSend(panel);
+      // Providers are written to before anything else is asked, because the questions below are
+      // all about which member. A panel always lands here -- it has no members and every send it
+      // makes is to providers -- and an agent room lands here only once the reader has lit one,
+      // which is how "ask this one yourself" is said without leaving the room.
+      const aim = typeof convWebAimed === 'function' ? convWebAimed(convViewId) : null;
+      if (aim) return convPanelSend(aim);
       // With bubbles picked there is one message being written, and the row's Send is a labelled
       // second view of this button rather than a different one. Sending only the typed half here
       // would quietly drop the quote the pick put on the message.
@@ -33450,7 +33706,7 @@ function nlmSourceDelete(source) {
         // this container instead -- where an inline handler on the inner row would never see it.
         // Which provider it was about is answered by the first tap rather than by the target.
         row.addEventListener('dblclick', e => {
-          if (typeof convPanelOf !== 'function' || !convPanelOf(convViewId)) return;
+          if (typeof convWebOf !== 'function' || !convWebOf(convViewId)) return;
           convPanelSoloPick(e);
         });
         let whoTap = 0, whoPane = '';
@@ -33513,15 +33769,61 @@ const convPanelPicks = new Map();
 
 // Threads with a turn in flight, by session name. The chat view tracks one turn because it draws
 // one thread; a panel has as many in flight as it has providers lit, and each finishes on its own.
+//
+// A turn that failed stays here with `failed` set on it. Deleting it took the question with it --
+// the adapter stored nothing, because nothing was ever sent -- so a provider that refused left the
+// reader looking at a thread with no sign they had typed anything at all, and no way to send it
+// again short of typing it out. What is held is the only copy of that message there is.
 const convPanelRunning = new Map();
 
+// In flight, as against merely remembered. A failed turn is not a reason to refuse the next one.
+function convPanelBusy(session) {
+  const held = convPanelRunning.get(session);
+  return !!held && !held.failed;
+}
+
 // This conversation, if it is a panel. The mode and not the presence of providers: an agent
-// conversation carries the same grant and is driven by a pane, so telling them apart by the field
-// they share would put this composer in front of the agent's conversation as well.
+// conversation carries the same grant too, and the two differ in what the *composer* does with it
+// — a panel has no members and every send it makes is to a provider, where an agent room's send
+// goes to the pane unless the reader has aimed it somewhere else.
 function convPanelOf(convId) {
   if (!convId || typeof loadConvIndex !== 'function') return null;
   const conv = loadConvIndex().find(c => c.id === convId);
   return convWebModeOf(conv) === 'panel' ? conv : null;
+}
+
+// This conversation, if it has providers a person can aim a message at — either mode. Everything
+// in this file below the send is about the pill row, and the pill row belongs to both: an agent
+// room folds five providers' bubbles into its thread and used to offer no way to see which
+// providers those were, which was mid-turn, or to read one of them alone. The controls existed and
+// the room they were needed in could not reach them.
+//
+// A grant of `*` draws nothing: it is the agent choosing for itself, and there is no list to make
+// pills out of. A panel is returned even with nothing drawable, because its row is the one that
+// has to explain the emptiness — it is the only composer that room has.
+function convWebOf(convId) {
+  if (!convId || typeof loadConvIndex !== 'function') return null;
+  const conv = loadConvIndex().find(c => c.id === convId);
+  if (convWebModeOf(conv) === 'panel') return conv;
+  if (convWebModeOf(conv) !== 'agent') return null;
+  return convPanelProviders(conv).length ? conv : null;
+}
+
+// Where the composer's next send goes, or null for "to the members, the ordinary way".
+//
+// A panel always answers itself: it has no members, so every send it makes is to providers and the
+// row's own guard is what refuses one aimed at nobody. An agent room answers only once the reader
+// has lit a provider, which is how "ask this one yourself" is said without leaving the room — and
+// nothing lit is its default, so the pills cost the member send nothing.
+//
+// One function and not a clause in each caller: the send and the row that dims itself beside it
+// are two views of the same decision, and the way they drift is one of them learning about a mode
+// the other has not.
+function convWebAimed(convId) {
+  const conv = convWebOf(convId);
+  if (!conv) return null;
+  if (convWebModeOf(conv) === 'panel') return conv;
+  return convPanelPicked(conv).size ? conv : null;
 }
 
 // The providers a panel may spend, narrowed to the ones this relay is actually offering. A grant
@@ -33532,24 +33834,23 @@ function convPanelProviders(conv) {
   const granted = convGrantOf(conv);
   if (typeof webchatProvider !== 'function') return [];
   const ids = granted.filter(id => id !== '*' && webchatProvider(id));
-  // Newest thread first. The grant's order is the order somebody ticked boxes in a picker weeks
-  // ago; what a reader reaches for is the one they were last talking to. A provider with no thread
-  // yet keeps its place at the back rather than jumping to the front on a zero stamp.
-  const when = (id) => {
-    const session = typeof webchatSession === 'function'
-      ? webchatSession(convPanelSession(conv.id, id)) : null;
-    return Date.parse((session && (session.updatedAt || session.createdAt)) || '') || 0;
-  };
-  return ids.map((id, i) => ({id, i, at: when(id)}))
-    .sort((a, b) => (b.at - a.at) || (a.i - b.i))
-    .map(row => row.id);
+  // The order this app names providers in, which is the order the picker offered them and the
+  // order the pills under a grouped answer are in. It used to be newest thread first, on the
+  // theory that what a reader reaches for is whoever they were last talking to -- but the dock is
+  // a row of targets a message is aimed at, and a row that reorders itself between two sends is
+  // one where the thumb that meant Claude lands on Grok.
+  return typeof webchatInOrder === 'function' ? webchatInOrder(ids, id => id) : ids;
 }
 
 function convPanelPicked(conv) {
   const ids = convPanelProviders(conv);
   let picked = convPanelPicks.get(conv.id);
   if (!picked) {
-    picked = new Set(ids);
+    // Everyone, for a panel: it has no other target, and a panel opening with nobody lit is a
+    // composer that can only fail. Nobody, for an agent room: it already has a target, and a room
+    // that opened with four providers lit would send the first thing typed in it to four paid
+    // accounts instead of to the agent the person came to talk to.
+    picked = new Set(convWebModeOf(conv) === 'panel' ? ids : []);
     convPanelPicks.set(conv.id, picked);
   }
   // A provider that has gone away is not lit, and a grant that has grown does not silently light
@@ -33589,7 +33890,7 @@ function convPanelSwitchOn(convId) {
 }
 
 function convPanelSwitchToggle() {
-  const conv = convPanelOf(convViewId);
+  const conv = convWebOf(convViewId);
   if (!conv) return;
   if (convPanelSwitch.has(conv.id)) {
     convPanelSwitch.delete(conv.id);
@@ -33622,7 +33923,7 @@ const CONV_PANEL_DOUBLE_MS = 500;
 // already means, and a panel is the same question asked of providers. Holding several at once is
 // what the Select switch beside All is for.
 function convPanelToggle(provider) {
-  const conv = convPanelOf(convViewId);
+  const conv = convWebOf(convViewId);
   if (!conv) return;
   const picked = convPanelPicked(conv);
   // Talking to somebody the thread is not showing is not a state anybody asked for. Reading one
@@ -33640,6 +33941,12 @@ function convPanelToggle(provider) {
   if (convPanelMulti.has(conv.id)) {
     if (picked.has(provider)) picked.delete(provider);
     else picked.add(provider);
+  } else if (picked.size === 1 && picked.has(provider) && convWebModeOf(conv) !== 'panel') {
+    // An agent room has somewhere else for the message to go, so the lit pill is a toggle: tapping
+    // it again aims the composer back at the agent. A panel has nowhere else, which is why the
+    // same tap there leaves the provider lit rather than emptying the row.
+    picked.clear();
+    convPanelSolo.delete(conv.id);
   } else {
     // Tapping the one already alone in the row leaves it there rather than emptying it: a
     // composer addressed to nobody is one that can only fail.
@@ -33654,7 +33961,7 @@ function convPanelToggle(provider) {
 }
 
 function convPanelSelect() {
-  const conv = convPanelOf(convViewId);
+  const conv = convWebOf(convViewId);
   if (!conv) return;
   if (convPanelMulti.has(conv.id)) convPanelMulti.delete(conv.id);
   else {
@@ -33674,7 +33981,7 @@ function convPanelSelect() {
 // two clicks so the element the browser hands the second one is not the pill it began on.
 function convPanelSoloPick(event) {
   if (event && event.preventDefault) event.preventDefault();
-  const conv = convPanelOf(convViewId);
+  const conv = convWebOf(convViewId);
   // Nothing to do in switch mode: the first tap of the two already narrowed the thread to this
   // provider, so the second could only undo it -- a double tap that threw away exactly what the
   // switch was turned on to do, and announced it as "showing every provider".
@@ -33703,7 +34010,7 @@ function convPanelSoloPick(event) {
 // everyone lit it clears — so the same press is always the one that changes what is in front of
 // you, and there is never a button that does nothing.
 function convPanelAll() {
-  const conv = convPanelOf(convViewId);
+  const conv = convWebOf(convViewId);
   if (!conv) return;
   const ids = convPanelProviders(conv);
   const picked = convPanelPicked(conv);
@@ -33717,7 +34024,7 @@ function convPanelRowHtml(conv) {
   const ids = convPanelProviders(conv);
   const picked = convPanelPicked(conv);
   if (!ids.length) {
-    return `<div class="xfer-act"><span class="pair-empty">`
+    return `<div class="xfer-act xfer-providers"><span class="pair-empty">`
       + `None of this panel's providers are switched on.</span></div>`;
   }
   const solo = convPanelSoloOf(conv.id);
@@ -33727,7 +34034,7 @@ function convPanelRowHtml(conv) {
     const provider = webchatProvider(id) || {};
     const name = escapeHtml(provider.label || id);
     const on = picked.has(id);
-    const busy = convPanelRunning.has(convPanelSession(conv.id, id));
+    const busy = convPanelBusy(convPanelSession(conv.id, id));
     // What the tap will do, which is not what it does in the other mode.
     const say = multi ? (on ? 'Stop sending to' : 'Also send to')
       : follows ? 'Read and send to' : 'Send to';
@@ -33740,7 +34047,9 @@ function convPanelRowHtml(conv) {
       + `</span>${webchatMark(id, 14)}${name}</button>`;
   }).join('');
   const all = picked.size === ids.length;
-  return `<div class="xfer-act">`
+  // Named, because an agent room stacks this over the member row and the member row is itself two
+  // blocks: "the last one before the rest" cannot be said with a sibling selector.
+  return `<div class="xfer-act xfer-providers">`
     + `<div class="xfer-who-row wrap">${pills}</div>`
     // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
     // be and a single line of four buttons was taking a third of a phone's width off them -- and
@@ -33794,7 +34103,7 @@ function convPanelSend(conv) {
   const at = Date.now();
   for (const provider of picked) {
     const session = convPanelSession(conv.id, provider);
-    if (convPanelRunning.has(session)) continue;   // one turn a thread, the same as a chat
+    if (convPanelBusy(session)) continue;   // one turn a thread, the same as a chat
     const bytes = new Uint32Array(2);
     crypto.getRandomValues(bytes);
     const requestId = `wp_${bytes[0].toString(36)}${bytes[1].toString(36)}`;
@@ -33839,6 +34148,15 @@ function convPanelLiveEntries(convId) {
       at_src: 'sent',
     };
     out.push(Object.assign({who: 'user', text: held.message, at: held.at, seen: held.at}, common));
+    if (held.failed) {
+      // The question stays above it, so the text is still there to be read, copied, or sent again.
+      out.push(Object.assign({
+        who: 'provider', text: held.failed, at: held.at + 1, seen: held.at + 1,
+        event: true, warn: true, lede: `${label} did not take it`,
+        acts: {session, provider: held.provider, retry: true},
+      }, common));
+      continue;
+    }
     // The answer bubble exists from the moment the question goes out, so the wait is visible as
     // the thing that is being waited for rather than as nothing at all.
     out.push(Object.assign({
@@ -33886,7 +34204,9 @@ function convPanelSync(session) {
 function convPanelRetry(session) {
   const held = convPanelRunning.get(session);
   if (!held) return;
-  webchatAsk({type: 'webchat_stop', request_id: held.requestId, session: session});
+  // A turn that failed is not running, so there is nothing to stop -- and asking anyway would take
+  // the provider's lane for the length of a round trip the retry is about to need.
+  if (!held.failed) webchatAsk({type: 'webchat_stop', request_id: held.requestId, session: session});
   const bytes = new Uint32Array(2);
   crypto.getRandomValues(bytes);
   const requestId = `wp_${bytes[0].toString(36)}${bytes[1].toString(36)}`;
@@ -33915,9 +34235,14 @@ function convPanelTurn(msg) {
     return true;
   }
   if (msg.event === 'done' || msg.event === 'error') {
-    convPanelRunning.delete(msg.session);
     if (msg.event === 'error') {
-      showToast(`${held.provider}: ${msg.error || 'the provider failed'}`);
+      // Kept, not dropped: see the note on convPanelRunning. What streamed before it failed is
+      // kept with it, since a reply that broke off halfway is still most of an answer.
+      held.failed = msg.error || 'the provider failed';
+      held.status = '';
+      showToast(`${held.provider}: ${held.failed}`);
+    } else {
+      convPanelRunning.delete(msg.session);
     }
     // The thread is read back from the adapter rather than assembled from the deltas: this page
     // never holds a panel's history, and the answer as stored is the one every other reader sees.
@@ -34789,7 +35114,7 @@ function convPanelPaint(now) {
         ? `<button class="qa-goconv" data-id="${escapeHtml(here.id)}" ` +
         `onclick="openConversation(this.dataset.id)" ` +
         `title="Open the conversation ${escapeHtml(here.name)}" ` +
-        `aria-label="Open the conversation ${escapeHtml(here.name)}">${convGlyph()}` +
+        `aria-label="Open the conversation ${escapeHtml(here.name)}">${convGlyph(here)}` +
         `<span class="qa-goconv-name">${escapeHtml(here.name)}</span></button>`
         : '';
       const navRow = `<div class="qa-nav"><div class="qa-left">` +

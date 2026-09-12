@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-11">
+  <meta name="app-built" content="2026-09-12">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -3594,6 +3594,12 @@
 
     .conv-glyph { display: block; }
 
+    /* A conversation whose thread is web providers rather than panes: a rectangular bubble
+       with tail on the right in the app's yellow/amber. */
+    .conv-glyph.web {
+      color: var(--orange);
+    }
+
     /* The Project card's folder, sized and seated like the agent card's robot so the two lists
        read as one column. Blue rather than the agent's pink or the conversation's green: three
        kinds of card on one page, three marks, and the colour is half of what tells them apart. */
@@ -4904,6 +4910,7 @@
     .pairs,
     .recents,
     .conversations,
+    .web-agents,
     .launcher {
       padding: 0 12px 12px;
     }
@@ -5764,8 +5771,14 @@
       gap: 8px;
     }
 
-    .ql-primary, .ql-secondary {
+    /* Two of them side by side share the row; one on its own is the width of what it sits in.
+       `flex: 1` on the button itself would stretch it down a column-flex parent instead. */
+    .ql-actions > .ql-primary,
+    .ql-actions > .ql-secondary {
       flex: 1;
+    }
+
+    .ql-primary, .ql-secondary {
       padding: 11px;
       border-radius: 8px;
       font-weight: 600;
@@ -5784,6 +5797,13 @@
       border: 1px solid var(--border);
       background: var(--bg);
       color: var(--muted);
+    }
+
+    #startSubmit:disabled,
+    .ql-primary:disabled,
+    .ql-secondary:disabled {
+      opacity: 0.5;
+      cursor: default;
     }
 
     .section-header {
@@ -11060,7 +11080,19 @@ function convWebModeOf(conv) {
     // does not reliably change that, so `color: var(--green)` was a request the font could refuse
     // and on a phone it simply did. An inline SVG has no font in it: it is green because it takes
     // currentColor, on every platform, and it is still markup rather than an image to load.
-    function convGlyph() {
+    //
+    // A conversation whose thread is web providers rather than panes wears a rectangular bubble
+    // with its tail on the right, in the app's yellow/amber: it is still a conversation -- the
+    // glyph says so -- and the shape and direction say at a glance that the voices in it are web
+    // models. Drawn off the kind rather than off a stored field, so the Providers editor turning a
+    // room into one is the whole of it; a caller with no conversation to hand gets the ordinary mark.
+    function convGlyph(conv) {
+      const web = typeof convKindOf === 'function' && conv && convKindOf(conv) === 'providers';
+      if (web) {
+        return '<svg class="conv-glyph web" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
+          'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+          'aria-hidden="true"><path d="M3 15a2 2 0 0 0 2 2h12l4 4V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/></svg>';
+      }
       return '<svg class="conv-glyph" viewBox="0 0 24 24" width="1em" height="1em" fill="none" ' +
         'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
         'aria-hidden="true"><path d="M20.5 11.5a8 8 0 0 1-8.5 8 8.6 8.6 0 0 1-3.9-.9L3.5 20l1.4-4.2' +
@@ -12407,7 +12439,7 @@ function convWebModeOf(conv) {
         const msgs = (c.members || []).reduce((t, m) => t + (m.messages || 0), 0);
         const meta = `${n} member${n > 1 ? 's' : ''}` + (msgs ? ` · ${msgs} messages` : '');
         return `<button class="pair-pick${on ? ' on' : ''}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleConvMember('${escapeHtml(c.id)}')">
-      <span class="kind conv-kind">${convGlyph()}</span>
+      <span class="kind conv-kind">${convGlyph(c)}</span>
       <span class="info"><span class="name">${escapeHtml(c.name)}</span><span class="meta">${meta}</span></span>
       <span class="pair-tick" aria-hidden="true">${on ? '✓' : ''}</span>
     </button>`;
@@ -12768,6 +12800,7 @@ function convWebModeOf(conv) {
       // a bubble that stayed open because somebody read it an hour ago is not everything.
       if (typeof document !== 'undefined') {
         document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+        convOpened.clear();
       }
       convClampApply();
       if (typeof renderConvDock === 'function') renderConvDock();
@@ -12814,6 +12847,7 @@ function convWebModeOf(conv) {
       try { localStorage.setItem(CONV_PARA_KEY, next); } catch (e) { /* session only */ }
       if (typeof document !== 'undefined') {
         document.querySelectorAll('.conv-open').forEach(el => el.classList.remove('conv-open'));
+        convOpened.clear();
       }
       if (typeof renderConvView === 'function') renderConvView();
       if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
@@ -12863,6 +12897,12 @@ function convWebModeOf(conv) {
     // handed another one back a second later.
     const convGroupPicked = new Map();
 
+    // Which bubbles the reader has opened out of the cut, keyed by the same thing the lit pill is
+    // keyed by. The thread is redrawn on every poll and every delta, so a class put on the element
+    // by hand lives about as long as the next snapshot: a reader clicking through a grouped
+    // bubble's pills watched it snap shut under them. The bubble is rebuilt open instead.
+    const convOpened = new Set();
+
     // The fan-outs, as a lead answer carrying the others. Same question text, same window; a group
     // of one is not a group and stays the ordinary pair it already was.
     function convParaGroups(entries, ask) {
@@ -12883,7 +12923,23 @@ function convWebModeOf(conv) {
           lead.set(i, [i]);
         }
       }
-      for (const [i, members] of Array.from(lead)) if (members.length < 2) lead.delete(i);
+      // A group of one is not a group -- except while it is waiting, where the pill and its
+      // provider's mark are the only thing saying who the question went to.
+      for (const [i, members] of Array.from(lead)) {
+        if (members.length < 2 && !convWaitingOn(entries[i])) lead.delete(i);
+      }
+      // The pills in the order this app names providers in, not the order the answers happened to
+      // arrive in. The same five providers compared across three sittings have to be in the same
+      // places each time, or the reader is re-reading the pills instead of the answers -- and the
+      // fastest provider is not a heading. The bubble itself does not move: it stays at the index
+      // the thread put it at, which is when the question was asked.
+      if (typeof webchatOrderOf === 'function') {
+        for (const members of lead.values()) {
+          members.sort((a, b) =>
+            (webchatOrderOf(entries[a].agent || '') - webchatOrderOf(entries[b].agent || ''))
+            || (a - b));
+        }
+      }
       return {lead, folded};
     }
 
@@ -12916,13 +12972,15 @@ function convWebModeOf(conv) {
         if (e.target.closest('button, a, input, textarea, select')) return;
         // Cut or not is the stylesheet's answer, not this file's: the rules name two different
         // reasons a bubble is short and neither is written down here.
-        const body = msg.querySelector('.conv-body');
-        if (!body || getComputedStyle(body).maxHeight === 'none') return;
+        const body = msg.querySelector('.conv-body:not([hidden])') || msg.querySelector('.conv-body');
+        if (!body) return;
+        const cut = getComputedStyle(body);
+        if (cut.maxHeight === 'none' && cut.webkitLineClamp === 'none') return;
         // Through the header's own button where there is one, so the icon it wears is not left
         // saying the opposite of what the bubble is doing.
         const btn = msg.querySelector('.conv-fold');
         if (btn) convFoldToggle(btn);
-        else msg.classList.add('conv-open');
+        else { msg.classList.add('conv-open'); convOpenedSet(msg, true); }
       });
       convClampApply();
     }
@@ -12966,22 +13024,62 @@ function convWebModeOf(conv) {
     // A provider's and never an agent's. What is being cut is a wall of prose from five providers
     // answering the same question at length; a pane's thread is the app's oldest screen and nothing
     // here is an improvement to it.
-    function convFoldBtnHtml(streaming, foreign) {
+    function convFoldBtnHtml(streaming, foreign, open) {
       if (!(foreign && convClampOn())) return '';
+      const say = open ? 'Cut this message back to one line' : 'Show all of this message';
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
-        + 'title="Show all of this message" aria-label="Show all of this message" '
-        + `aria-expanded="false">${convIco('unfold')}</button>`;
+        + `title="${say}" aria-label="${say}" `
+        + `aria-expanded="${open ? 'true' : 'false'}">${convIco(open ? 'fold' : 'unfold')}</button>`;
+    }
+
+    function convOpenedSet(msg, open) {
+      const okey = msg && msg.dataset ? msg.dataset.openKey || '' : '';
+      if (!okey) return;
+      if (open) convOpened.add(okey);
+      else convOpened.delete(okey);
     }
 
     function convFoldToggle(btn) {
       const msg = btn && btn.closest('.conv-msg');
       if (!msg) return;
       const open = msg.classList.toggle('conv-open');
+      convOpenedSet(msg, open);
       btn.innerHTML = convIco(open ? 'fold' : 'unfold');
       const say = open ? 'Cut this message back to one line' : 'Show all of this message';
       btn.title = say;
       btn.setAttribute('aria-label', say);
       btn.setAttribute('aria-expanded', String(open));
+    }
+
+    // What can be done to a bubble that is still waiting, or to a send that did not go: reopen the
+    // provider's tab, read the thread back off it, or ask the same question again. Drawn at the
+    // bubble's top right -- the same corner, and the same shape, as the Esc and working chips a
+    // pane's bubble wears -- and only where this page holds the turn, since it is the only party
+    // that still has the message.
+    //
+    // Named rather than drawn as glyphs: the arrows are the same arrow to anybody who is not
+    // already sure which is which, and these are pressed while something is going wrong. In order
+    // of violence: send it again, reopen the page, read the thread back in case the answer arrived
+    // and this page missed it.
+    //
+    // A grouped bubble holds an answer per provider, so it holds a set of repairs per provider too
+    // -- shown and hidden with the answer they belong to. One pair of buttons for five answers
+    // would repair whichever of them happened to be first.
+    function convActsHtml(entry, prov) {
+      if (!entry || !entry.acts) return '';
+      const tag = prov === undefined ? ''
+        : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
+      const retry = entry.acts.retry
+        ? `<button class="conv-act" onclick="convPanelRetry('${escapeHtml(entry.acts.session)}')" `
+          + `title="Send this message again" aria-label="Send this message again">Retry</button>`
+        : '';
+      return `<span class="conv-acts"${tag}>${retry}`
+        + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
+        + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
+        + `Reconnect</button>`
+        + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
+        + `title="Read this thread back off the provider's page" `
+        + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
     }
 
     // The switch itself, for whichever composer row is asking. Both rows draw it, because both
@@ -13001,7 +13099,28 @@ function convWebModeOf(conv) {
     // the same text, five times over, and none of it belongs in the loop that builds the bubble.
     // `data-text` stays the raw text either way: a quote lifted out of a bubble is the words, not
     // the markup that drew them.
+    // A bubble a question has gone out into and nothing has come back from yet. Its own state
+    // rather than an empty one: a provider that has not started answering, an answer that is
+    // still being streamed and an answer that arrived are three different things to a reader
+    // watching five threads at once, and the first of them used to draw as a bubble with nothing
+    // in it -- which in the paragraph and grouped views reads as no bubble at all.
+    function convWaitingOn(e) {
+      return !!(e && e.foreign && e.live && !String(e.text || '').trim());
+    }
+
+    // The colour a bubble, a header and a pill wear. Grey until something is in it, the provider's
+    // own colour from the first delta on -- so a thread of five fills in, one colour at a time,
+    // and the ones still out are visibly still out.
+    function convEntryColor(e, fallback) {
+      if (convWaitingOn(e)) return 'var(--muted)';
+      return (e && e.color) || fallback || 'var(--muted)';
+    }
+
     function convSaidHtml(e) {
+      if (convWaitingOn(e)) {
+        return `<span class="conv-waiting">Waiting for ` +
+          `${escapeHtml(e.label || e.agent || 'an answer')}\u2026</span>`;
+      }
       const text = escapeHtml(e.text || '');
       return e.foreign && e.text && typeof markdownHtml === 'function'
         && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
@@ -13074,6 +13193,10 @@ function convWebModeOf(conv) {
             (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
                       `${escapeHtml(e.text)}</span>` : '') +
             (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
+            // A send that failed is one of these lines, and the way out of it belongs on the line
+            // that reports it: this page is holding the only copy of the message, since nothing
+            // was ever sent and the adapter stored nothing.
+            convActsHtml(e) +
             '</div>';
         }
         if (e.who === 'arbiter') {
@@ -13152,7 +13275,7 @@ function convWebModeOf(conv) {
         const config = foreign ? '' : (live && live.config) || spawn.config || me.config || '';
         // `color` is carried by an entry that is not a pane at all — a web provider, whose
         // identifying colour is its own mark's and not any harness's.
-        const color = e.color || agentColor(agent) || 'var(--muted)';
+        const color = convEntryColor(e, agentColor(agent));
         // The name it goes by now, not the one stamped when the words were recorded — see
         // convMemberName. An ended member has no live pane and keeps its stamp.
         const name = escapeHtml(foreign ? (e.label || '')
@@ -13189,7 +13312,7 @@ function convWebModeOf(conv) {
           : '';
         const who = group
           ? `<span class="dot" style="background:${dot}"></span>` +
-            `<span class="conv-foreign-name">${group.length} providers</span>`
+            `<span class="conv-foreign-name">${group.length} provider${group.length === 1 ? '' : 's'}</span>`
           : sign
           ? `<span class="dot${streaming ? ' pulse' : ''}" style="background:${dot}"></span>${sign}`
           : `<span class="dot${live && live.status === 'working' ? ' pulse' : ''}" ` +
@@ -13221,25 +13344,17 @@ function convWebModeOf(conv) {
         // too -- shown and hidden with the answer they belong to. Reconnect reopens *that*
         // provider's tab and Sync re-reads *that* thread; one pair of buttons for five answers
         // would repair whichever of them happened to be first.
-        const actsFor = (entry, prov) => {
-          if (!entry || !entry.acts) return '';
-          const tag = prov === undefined ? ''
-            : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
-          return `<span class="conv-acts"${tag}>`
-            + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
-            + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
-            + `Reconnect</button>`
-            + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
-            + `title="Read this thread back off the provider's page" `
-            + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
-        };
         const acts = group
-          ? group.map(m => actsFor(entries[m], (entries[m].agent || '') === shown)).join('')
-          : actsFor(e);
+          ? group.map(m => convActsHtml(entries[m], (entries[m].agent || '') === shown)).join('')
+          : convActsHtml(e);
         // The fold, at the end of the header. It used to be a chevron the stylesheet drew in the
         // bottom corner, which is the one part of a cut bubble that is hardest to aim at and the
         // one place a reader is not looking.
-        const fold = convFoldBtnHtml(streaming, foreign);
+        // The key this bubble is remembered as open under: a group's question, or this bubble's
+        // own member and time. Not the index, which moves as the thread grows.
+        const okey = gkey || `${key}|${at}`;
+        const open = convOpened.has(okey);
+        const fold = convFoldBtnHtml(streaming, foreign, open);
         const head = bar || time || fold
           ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
         // The pane being read is always the right side. Stored member order is conversation
@@ -13273,11 +13388,15 @@ function convWebModeOf(conv) {
           const g = entries[m];
           const id = escapeHtml(g.agent || '');
           const on = (g.agent || '') === shown;
-          return `<button class="conv-pill${on ? ' on' : ''}" data-prov="${id}" ` +
+          // A pill for a provider nothing has come back from yet: grey, like its answer, and
+          // outlined rather than drawn — the same "not settled" the unfilled bubble says, said on
+          // a control small enough that colour alone does not carry it.
+          const out = convWaitingOn(g) ? ' waiting' : '';
+          return `<button class="conv-pill${on ? ' on' : ''}${out}" data-prov="${id}" ` +
             `onclick="convGroupPick(this, '${id}')" aria-pressed="${on}" ` +
             `title="${escapeHtml(g.label || g.agent || '')}" ` +
             `aria-label="Show what ${escapeHtml(g.label || g.agent || '')} answered" ` +
-            `style="--conv-agent:${g.color || 'var(--muted)'}">${g.sign || ''}` +
+            `style="--conv-agent:${convEntryColor(g)}">${g.sign || ''}` +
             `<span class="conv-pill-name">${escapeHtml(g.label || g.agent || '')}</span></button>`;
         }).join('') + '</span>' : '';
         // Every answer is drawn and all but one is hidden, so lighting another pill is a class and
@@ -13306,8 +13425,9 @@ function convWebModeOf(conv) {
         return rule + git.before +
           `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
           `${foreign ? ' foreign' : ''}${streaming ? ' live' : ''}${ask ? ' conv-qa' : ''}` +
-          `${group ? ' conv-group' : ''}"` +
+          `${group ? ' conv-group' : ''}${open ? ' conv-open' : ''}"` +
           `${gkey ? ` data-group="${escapeHtml(gkey)}"` : ''}` +
+          ` data-open-key="${escapeHtml(okey)}"` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
@@ -16346,6 +16466,24 @@ function convWebModeOf(conv) {
         msg.ref = newStartRef();
         startIntent = Object.assign({}, startIntent, {ref: msg.ref});
         convNotePending(startIntent.conv, msg.ref, '', msg.label || msg.name || '');
+      }
+      // A start made for a Web Agents conversation comes up already holding its binding. The relay
+      // writes the file and sources it at the pane's shell in the one moment there is a shell
+      // there — before the harness is attached — so the credential is in the harness process and
+      // inherited by every tool call, rather than in whichever shell the agent remembered to
+      // source it from. Sent after the ref above, because it needs one: the agent is minted before
+      // its pane exists and is recognised by the name this start gave itself.
+      //
+      // webchat_bind.js still reconciles it afterwards and finds it already agrees, which is what
+      // covers every other route into a bound conversation — a restart, a second pane, a grant
+      // edited later.
+      if (!terminal && msg.ref && startIntent && startIntent.conv &&
+          typeof webchatGrantOf === 'function' && typeof loadConvIndex === 'function') {
+        const bound = (loadConvIndex() || []).find(c => c.id === startIntent.conv);
+        const grant = bound ? webchatGrantOf(bound) : '';
+        if (grant) {
+          msg.webchat = {ns: bound.id, providers: grant === '*' ? ['*'] : grant.split(',')};
+        }
       }
       // A terminal has no ref to be waited on by, and keeps the pending slot. An agent goes out
       // named, so two submits in the same few seconds cannot land on each other's intent.
@@ -24548,7 +24686,7 @@ function convWebModeOf(conv) {
           `${live.length ? '' : ' ended'}" style="background:` +
           `${lead ? statusColor(lead) : 'var(--dot-cold)'}" aria-hidden="true"></span>` +
           '<div class="desk-conv-body">' +
-          `<strong><span class="desk-conv-kind">${convGlyph()}</span>` +
+          `<strong><span class="desk-conv-kind">${convGlyph(c)}</span>` +
           `<span class="desk-name">${escapeHtml(c.name || c.id)}</span>` +
           // Nothing running, and the tier, said in words beside the dot: a hollow dot is the
           // glance, and these are for the reader who has not learned yet what hollow means.
@@ -26763,7 +26901,7 @@ function convWebModeOf(conv) {
           .map(a => `<span class="desk-badge-agent">${agentBadge(a)}</span>`).join('') +
         unique('project').map(p => ` <span class="badge proj">@${escapeHtml(p)}</span>`).join('');
       return {
-        glyph: typeof convGlyph === 'function' ? convGlyph() : '#',
+        glyph: typeof convGlyph === 'function' ? convGlyph(conv) : '#',
         meta: badges || `<span class="desk-cmd-kind">${members.length ? 'nothing running' : 'empty'}</span>`,
       };
     }
