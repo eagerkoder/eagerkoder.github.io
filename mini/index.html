@@ -3055,9 +3055,9 @@
 
     .conv-glyph { display: block; }
 
-    /* The providers a room reaches, after its name: what it is about reads first, and the marks
-       say who is in it. Pushed left of the kind chip and allowed to shrink rather than wrap, since
-       a room of six is six marks on a phone. */
+    /* The providers a room reaches, on the line under its name: what it is about reads first, and
+       the marks say who is in it. Allowed to shrink rather than wrap, since a room of six is six
+       marks on a phone. */
     .webchat-providers {
       display: inline-flex;
       align-items: center;
@@ -7987,11 +7987,27 @@
       margin-top: 1px;
     }
 
-    /* A provider is lit, so the message is not going to the agent. Said on the rows that are losing
-       it rather than only on the one that is gaining it: the pills are lit either way, and a lit
-       pill nobody noticed is how a message meant for the agent gets spent on a paid account. */
-    .conv-dock.to-providers .xfer-row .xfer-act:not(.xfer-providers) {
+    /* A provider is lit, so the message is not going to the agent. Said on what is losing it rather
+       than only on what is gaining it: the pills are lit either way, and a lit pill nobody noticed
+       is how a message meant for the agent gets spent on a paid account. An agent room draws both
+       in one row, so what dims there is the member chip rather than a row of its own. */
+    .conv-dock.to-providers .xfer-row .xfer-act:not(.xfer-providers),
+    .conv-dock.to-providers .xfer-merged .xfer-who[data-pane] {
       opacity: 0.4;
+    }
+
+    /* The agent, standing in the line of pills rather than on a row under them. It keeps the
+       accent border every member chip has, which is what tells it from a provider when the two are
+       side by side; the extra margin is so the line reads as "the agent, then the providers"
+       rather than as one run of chips. */
+    .xfer-merged .xfer-who[data-pane] {
+      margin-right: 6px;
+    }
+
+    /* Send carries a picked bubble, which is a message rather than a switch: it takes the width of
+       the block instead of half a row of the two-up grid the switches sit in. */
+    .xfer-who-acts .xfer-send {
+      grid-column: 1 / -1;
     }
 
     /* The conversation's agents. The one that will receive it is lit; the rest are dimmed rather
@@ -9060,6 +9076,18 @@
         gap: 6px;
         font-size: 0.7rem;
         color: var(--muted);
+      }
+
+      /* A room's second line: who is in it, and what kind of room it is. Under the name rather
+         than beside it, because a phone's card is about as wide as a name and the marks were
+         taking that width from it. The badge sits after the marks and not at the far end -- they
+         are one statement about the room, and a chip pushed to the right edge reads as a control. */
+      .webchat-sub {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 3px;
+        min-width: 0;
       }
 
       /* When a thread was started, beside what it is called. Small, muted and never wrapping: it
@@ -24741,6 +24769,9 @@ function webchatReceiveState(msg) {
     }
   }
   webchatCheckTurn();
+  // Before the render, so a room that has just earned its name is drawn under it rather than under
+  // the placeholder for one more poll.
+  if (webchatAutoName() && typeof renderConversations === 'function') renderConversations();
   renderWebAgents(msg.error || '');
   if (webchatAwaitingServer) {
     const what = webchatAwaitingServer;
@@ -25058,6 +25089,37 @@ function webchatRoomSessions(convId) {
   return webchatByRecent(webchatSessions.filter(session => session.namespace === convId));
 }
 
+// A room nobody named is called "Web agents" or "Panel", which says what kind of thing it is and
+// never which one it is -- a list of them is the same two words over and over. The provider's own
+// title for the first thread opened under it says what was actually asked, so that is adopted as
+// the room's name the first time one arrives.
+//
+// `autoname` is the flag for a name the app chose, and it is not `auto`: that marks the evictable
+// tier, and a room somebody made by hand is never in it. Renaming by hand clears the flag, so a
+// name a person typed is never overwritten, and the adoption happens once -- a room keeps the name
+// it was given as the threads under it move on.
+function webchatAutoName() {
+  if (typeof loadConvIndex !== 'function' || typeof saveConvIndex !== 'function') return false;
+  const items = loadConvIndex();
+  let moved = false;
+  for (const conv of items) {
+    if (!conv || !conv.autoname) continue;
+    // The first thread, not the newest: what a room is about is the question it was opened for,
+    // and the newest title is whatever it drifted onto this afternoon.
+    const first = webchatSessions
+      .filter(session => session.namespace === conv.id && session.title)
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')))[0];
+    if (!first) continue;
+    const name = String(first.title).trim().slice(0, 64);
+    if (!name) continue;
+    conv.name = name;
+    delete conv.autoname;
+    moved = true;
+  }
+  if (moved) saveConvIndex(items);
+  return moved;
+}
+
 // One card standing for a conversation's whole panel of threads, in place of the several loose
 // cards they would otherwise be. Which is the difference the list has to show: five rows called
 // `c_ab12ef:chatgpt` are five providers being asked one question, and drawn flat they read as five
@@ -25080,26 +25142,32 @@ function webchatRoomCard(conv, sessions, compact) {
   const snippet = !compact && newest.snippet
     ? `<div class="webchat-snippet">${escapeHtml(newest.snippet)}</div>` : '';
   const kind = convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent';
+  // A room whose grant is `*` has no list to draw marks from and never will: the agent picks per
+  // question. The badge carries that where the marks would have been, so the second line says what
+  // the room reaches whether that is four logos or the word for "whichever it needs".
+  const any = convGrantOf(conv).includes('*');
   const said = sessions.length
     ? `${sessions.length} ${sessions.length === 1 ? 'thread' : 'threads'}`
       + ` · ${count} ${count === 1 ? 'message' : 'messages'}${when ? ` · ${escapeHtml(when)}` : ''}`
-    : convGrantOf(conv).includes('*') ? 'nothing asked yet · any provider'
+    : any ? 'nothing asked yet'
       : `nothing asked yet · ${granted.length} ${granted.length === 1 ? 'provider' : 'providers'}`;
   return `<div class="conversation-card webchat-card webchat-room" role="button" tabindex="0"`
     + ` data-conv-id="${escapeHtml(conv.id)}"`
     + ` onclick="openConversation(this.dataset.convId)"`
     + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();`
     + `openConversation(this.dataset.convId)}">`
-    // Mark, name, then the providers: the same shape every other card on this page has, where the
-    // glyph says what kind of thing the row is and the name says which one. The provider marks
-    // were standing in for the glyph, so a room read as a row of logos with a name after them --
-    // and a room of five providers led with five marks before it said what it was about.
+    // Mark and name, and nothing else: the title line answers "which conversation is this", and a
+    // room of five providers had five logos and a kind chip competing with its name for the width
+    // of a phone. Who is in it and what kind of thing it is are a second question, so they are on
+    // a second line where they have the room to be read.
     + `<div class="conversation-title"><span class="dot${live ? ' pulse' : ''}"`
     + ` style="background:${live ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true"></span>`
     + `<span class="conv-kind">${typeof convGlyph === 'function' ? convGlyph(conv) : ''}</span>`
     + `<span class="name">${escapeHtml(conv.name || newest.title || `Untitled ${kind.toLowerCase()}`)}</span>`
+    + `</div>`
+    + `<div class="webchat-sub">`
     + `<span class="webchat-providers" title="${escapeHtml(kind)}">${marks}</span>`
-    + `<span class="webchat-since">${kind}</span></div>`
+    + `<span class="webchat-since">${kind}${any ? ' · Any' : ''}</span></div>`
     + snippet
     + `<div class="conversation-meta names">`
     + `<span class="webchat-id">${escapeHtml(conv.id)}</span> · ${said}`
@@ -26626,7 +26694,9 @@ function webchatNewAgent() {
   const items = loadConvIndex();
   const id = convNewId(items);
   saveConvIndex([{
-    id, name: 'Web agents', created: Date.now(), members: [],
+    // The agent sheet has no name field -- what this room is about is what the agent is about to
+    // ask, which nobody has typed yet. So it is named after the fact, from the first thread.
+    id, name: 'Web agents', autoname: true, created: Date.now(), members: [],
     // What makes this conversation an agent one, and the only thing that does. Read on every
     // snapshot by webchat_bind.js, which is what turns it into a binding.
     webchat: {providers},
@@ -26653,7 +26723,7 @@ function webchatNewPanel() {
   const id = convNewId(items);
   const name = document.getElementById('webchatNewName').value.trim();
   saveConvIndex([{
-    id, name: name || 'Panel', created: Date.now(), members: [],
+    id, name: name || 'Panel', autoname: !name, created: Date.now(), members: [],
     webchat: {providers, mode: 'panel'},
   }].concat(items));
   closeWebchatNew();
@@ -31715,7 +31785,9 @@ function nlmSourceDelete(source) {
       if (next === null) return;
       const name = next.trim().slice(0, 64);
       if (!name || name === conv.name) return;
-      convEdit(c => { c.name = name; delete c.auto; });
+      // `autoname` too: a name somebody typed is never replaced by a provider's title for
+      // one of the threads under it.
+      convEdit(c => { c.name = name; delete c.auto; delete c.autoname; });
     }
 
     // A grouping is a view over transcripts, so a copy of one costs a row in the index and not a
@@ -32691,14 +32763,23 @@ function nlmSourceDelete(source) {
 
     function setDockTarget(paneId) {
       const now = Date.now();
+      let aimed = false;
       if (now - dockLastPick.at > DOCK_DOUBLE_MS) dockLastPick = {pane: paneId, at: now};
       else dockLastPick.at = now;
       dockTarget = paneId;
       if (convViewId) {
         if (paneId) convComposerTargets.set(convViewId, paneId);
         else convComposerTargets.delete(convViewId);
+        // Addressing a member is addressing a member. In an agent room the pills beside it can
+        // still be aiming the send past the agent, so choosing the agent puts the aim back —
+        // here rather than on the chip, because the bubble's double-tap and the list behind the
+        // menu are the same choice made somewhere else.
+        if (paneId && typeof convPanelAimAgent === 'function') aimed = convPanelAimAgent(convViewId);
       }
       renderConvDock();
+      // Only when it moved: the thread is redrawn on the poll anyway, and a repaint per chip tap
+      // would be a fetch nobody asked for.
+      if (aimed && typeof convPanelPaint === 'function') convPanelPaint(true);
       if (window.cue) cue('tick');
     }
 
@@ -33112,14 +33193,16 @@ function nlmSourceDelete(source) {
       // An agent room has both. Its thread already folds in what its agent asked the providers, so
       // the reader could see five voices in it with nothing saying who they were, which of them
       // was mid-turn, or how to read one alone -- while the room next door had exactly that row.
-      // Stacked rather than merged: they answer two different questions, and which one a message
-      // is aimed at is the thing the reader has to be able to see at a glance.
+      // One row rather than two: the agent stands in the same line as the pills, because who this
+      // message goes to is one question with one answer and it was being asked on two lines.
       const web = typeof convWebOf === 'function' ? convWebOf(convViewId) : null;
       const aimed = !panel && typeof convWebAimed === 'function' && !!convWebAimed(convViewId);
+      const merged = !panel && web && all.length;
       // Always the whole membership. A pick decides what is being sent, never who is in the
       // conversation or who may have it.
-      const html = (web ? convPanelRowHtml(web) : '')
-        + (panel ? '' : (all.length ? dockRowHtml(all) : ''));
+      const html = merged ? dockAgentRowHtml(web, all)
+        : (web ? convPanelRowHtml(web) : '')
+          + (panel ? '' : (all.length ? dockRowHtml(all) : ''));
       row.hidden = !html;
       if (!html) { closeDockMenu(); row.dataset.sig = ''; }
       // Rebuilt only when what it says changed. This runs on every snapshot, and replacing the row
@@ -33252,34 +33335,84 @@ function nlmSourceDelete(source) {
 
     function keepConvCaret() { keepBlockCaret(document.getElementById('convInput')); }
 
-    function dockRowHtml(list) {
-      const target = dockAddressed();
-      // One lit, the rest dimmed rather than hidden: which agents are in this conversation is
-      // information, and a row that showed only the chosen one would answer a different question.
-      // Named the way the pane header names one: the live dot, the label, and the harness badge.
-      // Which agent is about to receive another agent's output is the fact worth being sure of, and
-      // "scratch" alone does not say whether that is a codex or a claude.
-      //
-      // Every member is choosable, the author of the picked bubble included: sending an agent its
-      // own words back is a thing people do on purpose.
-      // Addressed first. Only in the row that is drawn — dockMembers stays roster order, because
-      // the fallback target is read off its first entry and a list that reordered itself around
-      // the current choice could never fall back to anything else. Stable, so the rest keep the
-      // order they joined in.
-      const who = list.slice()
+    // One lit, the rest dimmed rather than hidden: which agents are in this conversation is
+    // information, and a row that showed only the chosen one would answer a different question.
+    // Named the way the pane header names one: the live dot, the label, and the harness badge.
+    // Which agent is about to receive another agent's output is the fact worth being sure of, and
+    // "scratch" alone does not say whether that is a codex or a claude.
+    //
+    // Every member is choosable, the author of the picked bubble included: sending an agent its
+    // own words back is a thing people do on purpose.
+    // Addressed first. Only in the row that is drawn — dockMembers stays roster order, because
+    // the fallback target is read off its first entry and a list that reordered itself around
+    // the current choice could never fall back to anything else. Stable, so the rest keep the
+    // order they joined in.
+    //
+    // `lit` is the member the row draws as addressed, which is the addressed one except in an
+    // agent room with a provider aimed: the message is going past the agent, and a chip still lit
+    // under it would be the row saying the opposite of what the send will do.
+    function dockWhoChips(list, target, lit) {
+      const on = lit === undefined ? target : lit;
+      return list.slice()
         .sort((a, b) => (b.pane_id === target) - (a.pane_id === target))
         .map(a => {
         const name = escapeHtml(paneLabel(a));
-        return `<button class="xfer-who${a.pane_id === target ? ' on' : ''}" ` +
+        return `<button class="xfer-who${a.pane_id === on ? ' on' : ''}" ` +
           `style="--who-accent:${agentColor(a.agent) || 'var(--text)'}" ` +
           `data-pane="${escapeHtml(a.pane_id)}" ` +
           `onclick="setDockTarget('${a.pane_id}')" ` +
-          `aria-pressed="${a.pane_id === target}" ` +
+          `aria-pressed="${a.pane_id === on}" ` +
           `title="Talk to ${name}. Double-click to read only ${name}" ` +
           `aria-label="Talk to ${name}">` +
           `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
           `${name}${paneBadge(a)}</button>`;
       }).join('');
+    }
+
+    // The way out of the reading window and into the addressed pane itself. Beside the list it is
+    // chosen from, because "who am I talking to" and "take me there" are the same question asked
+    // twice. A screen rather than an arrow: what it opens is the pane's terminal, and an arrow
+    // says only that something moves.
+    function dockOpenBtnHtml(target, cls) {
+      if (!target) return '';
+      const to = escapeHtml(paneLabel(paneOf(target)) || target);
+      return `<button class="${cls}" onclick="openDockPane()" ` +
+        `title="Open ${to}'s terminal" aria-label="Open ${to}'s terminal">${shellGlyph()}</button>`;
+    }
+
+    // Send belongs to the bubbles. With nothing picked there is nothing for it to carry and the
+    // composer's own send is what fires, so the row would be offering a second button for a
+    // message it does not hold.
+    function dockSendBtnHtml(target) {
+      const n = dockTokens.size;
+      if (!n) return '';
+      return `<button class="xfer-send" onclick="convDockSend()" ` +
+        `title="Send the picked message${n === 1 ? '' : 's'} to ` +
+        `${escapeHtml(paneLabel(paneOf(target)) || target)}" ` +
+        `aria-label="Send the picked messages">Send (${n}) ›</button>`;
+    }
+
+    // An agent room's one row: the agent it is addressed to, the providers it may be asked past,
+    // and the switches for both. Two rows was the honest shape while the member row carried the
+    // whole composer's controls — instruction chips, their list, the settings — and none of those
+    // belong to a room whose other half is web providers: what can be said to a provider is a
+    // message, and half a composer of chips for the agent left the pills fighting for the width.
+    function dockAgentRowHtml(conv, list) {
+      const target = dockAddressed();
+      const aimed = typeof convWebAimed === 'function' && !!convWebAimed(convViewId);
+      return `<div class="xfer-act xfer-providers xfer-merged">`
+        + `<div class="xfer-who-row wrap" ondblclick="soloDockTarget(event)">`
+        + dockWhoChips(list, target, aimed ? '' : target)
+        + convPanelPillsHtml(conv)
+        + `</div>`
+        + convPanelActsHtml(conv,
+            dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target))
+        + `</div>`;
+    }
+
+    function dockRowHtml(list) {
+      const target = dockAddressed();
+      const who = dockWhoChips(list, target);
       // Numbered by the order they were chosen, because that order is what will be written and two
       // lit chips otherwise say nothing about which comes first. In fill mode nothing is lit at
       // all: the instruction is in the box where it can be read, so a second place saying it is on
@@ -33299,21 +33432,11 @@ function nlmSourceDelete(source) {
         `aria-expanded="${optMenuOpen()}" ` +
         `title="How the composer behaves" aria-label="How the composer behaves">` +
         `<svg class="gear-ico" aria-hidden="true" focusable="false"><use href="#icoGear" /></svg></button>`;
-      const n = dockTokens.size;
-      // Send belongs to the bubbles. With nothing picked there is nothing for it to carry and the
-      // composer's own send is what fires, so the row would be offering a second button for a
-      // message it does not hold.
-      const send = n
-        ? `<button class="xfer-send" onclick="convDockSend()" ` +
-          `title="Send the picked message${n === 1 ? '' : 's'} to ` +
-          `${escapeHtml(paneLabel(paneOf(target)) || target)}" ` +
-          `aria-label="Send the picked messages">Send (${n}) ›</button>`
-        : '';
+      const send = dockSendBtnHtml(target);
       // Only the lists scroll. The buttons on the right are pinned, because a row long enough to
       // push them off a phone would hide the controls the row is for — and each is the way back to
       // what scrolled away, so neither can scroll away itself. The same shape on both lines: the
       // things you choose from on the left, the way to see all of them on the right.
-      const to = escapeHtml(paneLabel(paneOf(target)) || target);
       // Double rather than single, and for the same reason a bubble's is: a single tap here already
       // means "talk to this one", and reading only this one is a second thing to want from the same
       // chip. On the row and not on each chip: the row is redrawn between the two clicks, so the
@@ -33326,12 +33449,7 @@ function nlmSourceDelete(source) {
         `aria-expanded="${whoMenuOpen()}" ` +
         `title="Every agent, as a list" aria-label="Every agent, as a list">` +
         `${paneGlyph(paneOf(target))}</button>` +
-        // The way out of the reading window and into the addressed pane itself. Beside the list it
-        // is chosen from, because "who am I talking to" and "take me there" are the same question
-        // asked twice. A screen rather than an arrow: what it opens is the pane's terminal, and an
-        // arrow says only that something moves.
-        (target ? `<button class="xfer-who-more open" onclick="openDockPane()" ` +
-          `title="Open ${to}'s terminal" aria-label="Open ${to}'s terminal">${shellGlyph()}</button>` : '') +
+        dockOpenBtnHtml(target, 'xfer-who-more open') +
         // How long a provider's bubbles are, for a conversation that has any. An agent bound to
         // five providers reads the same wall of prose a panel does; what it does not have is a
         // panel's row to reach the switch from, and a conversation of panes alone must not grow a
@@ -33400,6 +33518,11 @@ function nlmSourceDelete(source) {
     // time this fires the row has reordered twice under the pointer. Restoring the target undoes
     // what the stray second click addressed.
     function soloDockTarget(e) {
+      // An agent room draws its member chips and its provider pills in one row, so this handler
+      // sees a double-click on a pill too — and would read it as the gesture for whichever member
+      // was tapped last. The pill has its own reader; this one is about panes alone.
+      const pill = e && e.target && e.target.closest ? e.target.closest('[data-provider]') : null;
+      if (pill) return;
       if (e && e.preventDefault) e.preventDefault();
       const paneId = dockLastPick.pane;
       const live = agents.find(a => a.pane_id === paneId);
@@ -33707,6 +33830,11 @@ function nlmSourceDelete(source) {
         // Which provider it was about is answered by the first tap rather than by the target.
         row.addEventListener('dblclick', e => {
           if (typeof convWebOf !== 'function' || !convWebOf(convViewId)) return;
+          // In an agent room the member chips share that row, and this one falls back to the pill
+          // the last tap named when the target has none — which on a member chip is the wrong
+          // gesture answered with the right provider.
+          const who = e.target.closest && e.target.closest('.xfer-who');
+          if (who && who.dataset.pane) return;
           convPanelSoloPick(e);
         });
         let whoTap = 0, whoPane = '';
@@ -33912,6 +34040,29 @@ function convPanelSwitchToggle() {
   if (window.cue) cue('tick');
 }
 
+// Aim the composer back at the agent, whatever the row was doing. Tapping the member chip means
+// "talk to the agent" and it has to mean that from every state the pills can be in — several lit
+// in Select, one lit with the thread narrowed to it, a solo set by a double tap — because the
+// alternative is a tap that lights the agent and sends to a paid account anyway.
+//
+// A panel is refused rather than emptied: it has no member to aim at, so a cleared row there is a
+// composer that can only fail. Nothing calls it for one, and this is where that stays true.
+// Answers whether it changed anything, so the caller knows whether the thread above the row has
+// to be redrawn as well: dropping a solo changes what is on screen, and leaving that to the next
+// poll is what makes a filter look like a fetch.
+function convPanelAimAgent(convId) {
+  const conv = convWebOf(convId);
+  if (!conv || convWebModeOf(conv) === 'panel') return false;
+  const picked = convPanelPicked(conv);
+  const narrowed = !!convPanelSoloOf(conv.id);
+  if (!picked.size && !narrowed) return false;
+  picked.clear();
+  // The narrowing goes with the aim, the same as it does when a lit pill is tapped off: reading
+  // one provider alone while writing to the agent is a filter nobody can find the control for.
+  convPanelSolo.delete(conv.id);
+  return true;
+}
+
 // Which pill the gesture is about, recorded at the first tap. The row is rebuilt between the two
 // -- a tap changes what is lit, which changes the row's signature -- so by the time the second one
 // lands the element the first one hit is gone, and with it any chance of reading the provider off
@@ -34020,13 +34171,12 @@ function convPanelAll() {
   if (window.cue) cue('tick');
 }
 
-function convPanelRowHtml(conv) {
+// The pills alone, without the row they usually sit in. An agent room draws them beside its
+// member rather than above it, and a second copy of this markup there is a second place for a
+// provider's dot, its mark and what a tap means to drift apart.
+function convPanelPillsHtml(conv) {
   const ids = convPanelProviders(conv);
   const picked = convPanelPicked(conv);
-  if (!ids.length) {
-    return `<div class="xfer-act xfer-providers"><span class="pair-empty">`
-      + `None of this panel's providers are switched on.</span></div>`;
-  }
   const solo = convPanelSoloOf(conv.id);
   const multi = convPanelMulti.has(conv.id);
   const follows = convPanelSwitchOn(conv.id);
@@ -34046,15 +34196,23 @@ function convPanelRowHtml(conv) {
       + `style="background:${busy ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true">`
       + `</span>${webchatMark(id, 14)}${name}</button>`;
   }).join('');
+  return pills;
+}
+
+// The switches that belong to those pills: who a tap addresses, whether several may be lit at
+// once, whether the thread narrows to whoever is being written to, and how long a bubble is.
+// `extra` is whatever the row they are drawn in adds after them — an agent room puts its own
+// controls here rather than growing a second block of buttons for them.
+function convPanelActsHtml(conv, extra) {
+  const ids = convPanelProviders(conv);
+  const picked = convPanelPicked(conv);
+  const multi = convPanelMulti.has(conv.id);
+  const follows = convPanelSwitchOn(conv.id);
   const all = picked.size === ids.length;
-  // Named, because an agent room stacks this over the member row and the member row is itself two
-  // blocks: "the last one before the rest" cannot be said with a sibling selector.
-  return `<div class="xfer-act xfer-providers">`
-    + `<div class="xfer-who-row wrap">${pills}</div>`
-    // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
-    // be and a single line of four buttons was taking a third of a phone's width off them -- and
-    // four near-identical chips in a line is not a thing anybody reads at a glance either.
-    + `<div class="xfer-who-acts">`
+  // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
+  // be and a single line of four buttons was taking a third of a phone's width off them -- and
+  // four near-identical chips in a line is not a thing anybody reads at a glance either.
+  return `<div class="xfer-who-acts">`
     + `<button class="xfer-who-more list" onclick="convPanelAll()" aria-pressed="${all}" `
     + `title="${all ? 'Send to none of them' : 'Send to all of them'}" `
     + `aria-label="${all ? 'Send to none of them' : 'Send to all of them'}">`
@@ -34080,7 +34238,21 @@ function convPanelRowHtml(conv) {
     // How long the bubbles are, beside the two switches for who they go to. A panel is the thread
     // that most needs it: five providers answering at length is a thread nobody can scroll.
     + (typeof convClampBtnHtml === 'function' ? convClampBtnHtml('xfer-who-more') : '')
-    + `</div></div>`;
+    + (extra || '')
+    + `</div>`;
+}
+
+function convPanelRowHtml(conv) {
+  if (!convPanelProviders(conv).length) {
+    return `<div class="xfer-act xfer-providers"><span class="pair-empty">`
+      + `None of this panel's providers are switched on.</span></div>`;
+  }
+  // Named, because the composer dims whichever row is not getting the message and "the one that
+  // is about providers" cannot be said with a sibling selector.
+  return `<div class="xfer-act xfer-providers">`
+    + `<div class="xfer-who-row wrap">${convPanelPillsHtml(conv)}</div>`
+    + convPanelActsHtml(conv, '')
+    + `</div>`;
 }
 
 // The composer's send, for a panel. One message, one request each, and the answers land in the
