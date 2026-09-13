@@ -23203,13 +23203,22 @@ function convWebModeOf(conv) {
       return (e && e.color) || fallback || 'var(--muted)';
     }
 
+    // Set by convEntriesHtml, for the whole of one render. Off by default, which is every thread
+    // that is not a web-agent room -- a pane thread, an ordinary conversation, a desktop column
+    // showing either.
+    let convMdAgents = false;
+
     function convSaidHtml(e) {
       if (convWaitingOn(e)) {
         return `<span class="conv-waiting">Waiting for ` +
           `${escapeHtml(e.label || e.agent || 'an answer')}\u2026</span>`;
       }
       const text = escapeHtml(e.text || '');
-      return e.foreign && e.text && typeof markdownHtml === 'function'
+      // A prompt this app delivered is never drawn as Markdown: what was typed into the composer
+      // is what was sent, and a question with a `#` in it is not a heading. Same rule the
+      // paragraph view's `conv-ask` follows.
+      const md = e.foreign || (convMdAgents && e.who !== 'user');
+      return md && e.text && typeof markdownHtml === 'function'
         && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
         ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
     }
@@ -23246,8 +23255,15 @@ function convWebModeOf(conv) {
     // back to: the pane the thread is being read through, or nothing at all when it is being read
     // as a record with no pane behind it. `pick` is off for a thread that is not a selection —
     // the standalone view reads, it does not transfer.
-    function convEntriesHtml(entries, self, paired, pick) {
+    function convEntriesHtml(entries, self, paired, pick, conv) {
       const me = self || {};
+      // Whether a member's own turn in this thread is Markdown. A fact about the conversation and
+      // not about the entry, so it is set once per render rather than asked per bubble: a pane's
+      // turn is terminal output everywhere else in the app, and an asterisk in a log is an
+      // asterisk. In a web-agent room the agent is asked to answer in Markdown -- the brief in
+      // relay/prompts/webchat.md says so -- and its turns sit beside provider answers that are
+      // drawn as Markdown already, so one room read two ways.
+      convMdAgents = !!(conv && typeof convWebBadge === 'function' && convWebBadge(conv));
       let last = 0;
       // Where each member's work stood at the last entry drawn for it — the branch it was on and
       // the commit it was at. A branch is the same for twenty messages in a row, so what is drawn
@@ -24092,7 +24108,7 @@ function convWebModeOf(conv) {
         // Above the oldest bubble, which is where the reader is by the time they want it.
         (typeof convOlderHtml === 'function' ? convOlderHtml(want) : '') + (entries.length
         ? convEntriesHtml(entries, { key: key, agent: a.agent, config: a.config,
-                                     label: paneLabel(a) }, paired)
+                                     label: paneLabel(a) }, paired, undefined, conv)
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional — a live draft, or ' +
             'backfill off the scrollback. Turn "final messages only" off in the pane menu to see it.</p>'
@@ -32202,7 +32218,7 @@ function nlmSourceDelete(source) {
         // Same fallback the visibility filter above uses: a single-member thread's entries carry no
         // key, and the dock reads a bubble's key to know who wrote it — an unkeyed bubble has no
         // source and so no target to exclude.
-        ? convEntriesHtml(entries, {key: twoCol ? rightKey : keys[0]}, twoCol, 'toggleConvDockPick')
+        ? convEntriesHtml(entries, {key: twoCol ? rightKey : keys[0]}, twoCol, 'toggleConvDockPick', conv)
         : (all.length
           ? '<p class="conv-empty">Everything recorded here is still provisional. Turn "final ' +
             'messages only" off in the pane menu to see it.</p>'

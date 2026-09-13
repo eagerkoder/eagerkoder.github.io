@@ -13116,13 +13116,22 @@ function convWebModeOf(conv) {
       return (e && e.color) || fallback || 'var(--muted)';
     }
 
+    // Set by convEntriesHtml, for the whole of one render. Off by default, which is every thread
+    // that is not a web-agent room -- a pane thread, an ordinary conversation, a desktop column
+    // showing either.
+    let convMdAgents = false;
+
     function convSaidHtml(e) {
       if (convWaitingOn(e)) {
         return `<span class="conv-waiting">Waiting for ` +
           `${escapeHtml(e.label || e.agent || 'an answer')}\u2026</span>`;
       }
       const text = escapeHtml(e.text || '');
-      return e.foreign && e.text && typeof markdownHtml === 'function'
+      // A prompt this app delivered is never drawn as Markdown: what was typed into the composer
+      // is what was sent, and a question with a `#` in it is not a heading. Same rule the
+      // paragraph view's `conv-ask` follows.
+      const md = e.foreign || (convMdAgents && e.who !== 'user');
+      return md && e.text && typeof markdownHtml === 'function'
         && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
         ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
     }
@@ -13159,8 +13168,15 @@ function convWebModeOf(conv) {
     // back to: the pane the thread is being read through, or nothing at all when it is being read
     // as a record with no pane behind it. `pick` is off for a thread that is not a selection —
     // the standalone view reads, it does not transfer.
-    function convEntriesHtml(entries, self, paired, pick) {
+    function convEntriesHtml(entries, self, paired, pick, conv) {
       const me = self || {};
+      // Whether a member's own turn in this thread is Markdown. A fact about the conversation and
+      // not about the entry, so it is set once per render rather than asked per bubble: a pane's
+      // turn is terminal output everywhere else in the app, and an asterisk in a log is an
+      // asterisk. In a web-agent room the agent is asked to answer in Markdown -- the brief in
+      // relay/prompts/webchat.md says so -- and its turns sit beside provider answers that are
+      // drawn as Markdown already, so one room read two ways.
+      convMdAgents = !!(conv && typeof convWebBadge === 'function' && convWebBadge(conv));
       let last = 0;
       // Where each member's work stood at the last entry drawn for it — the branch it was on and
       // the commit it was at. A branch is the same for twenty messages in a row, so what is drawn
@@ -22835,7 +22851,7 @@ function convWebModeOf(conv) {
       // has no selection bar: what the desktop page offers instead is Transfer, off the composer.
       // `deskConvPick` rather than false: a bubble is picked here as it is on the phone, and the
       // pick is what the ⇥ transfer takes when the reader has not dragged over the text.
-      return convEntriesHtml(entries, null, false, 'deskConvPick') + slots;
+      return convEntriesHtml(entries, null, false, 'deskConvPick', conv) + slots;
     }
 
     // --- picking bubbles, per column ---
@@ -24087,8 +24103,8 @@ function convWebModeOf(conv) {
     }
 
     // The one write this page makes to the conversations document that is not a join: what the user
-    // named is permanent and what the app named for them is not, so naming clears `auto` — the same
-    // rule the phone's Rename follows (D4).
+    // named is permanent and what the app named for them is not, so naming clears both automatic
+    // name flags — the same rule the phone's Rename follows (D4).
     function deskRenameConv(conv) {
       if (!conv) return;
       const next = prompt('Name for this conversation', conv.name || '');
@@ -24100,6 +24116,7 @@ function convWebModeOf(conv) {
       if (!row) return;
       row.name = name;
       delete row.auto;
+      delete row.autoname;
       saveConvIndex(items);
       deskRenderAll();
     }
