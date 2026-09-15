@@ -6390,18 +6390,21 @@
       font-family: inherit;
     }
 
-    /* The bubble a search led to, for two seconds. A thread opened at its middle looks exactly like
+    /* The bubble a search led to, for four seconds. A thread opened at its middle looks exactly like
        a thread scrolled to its middle, so without this there is nothing saying which of the bubbles
        on screen is the one that was pressed. The ring is outside the border rather than replacing
-       it, so the agent's own tint is still readable underneath. */
+       it, so the agent's own tint is still readable underneath, and the wash behind it is what
+       carries the mark once the ring has faded. Four seconds because a thread redraws itself as its
+       history lands, and the reader is still arriving while that happens. */
     .conv-msg.landed {
       outline: 2px solid var(--blue);
       outline-offset: 2px;
-      animation: convLanded 2s ease-out;
+      background: color-mix(in srgb, var(--blue) 12%, var(--surface));
+      animation: convLanded 4s ease-out;
     }
 
     @keyframes convLanded {
-      0%, 60% { outline-color: var(--blue); }
+      0%, 70% { outline-color: var(--blue); }
       100% { outline-color: transparent; }
     }
 
@@ -9236,11 +9239,21 @@
       }
 
       /* The mark keeps its own colour whether or not the pill is lit -- it is what identifies the
-         provider, and a strip whose glyphs all went grey would be eight identical pills. */
+         provider, and a strip whose glyphs all went grey would be eight identical pills.
+         The lit one is the answer to "why is this list short", and in grey-on-grey it was a
+         question the reader had to go and ask the strip. So it takes the accent outright: the
+         app's blue, a ring around it, and the name in the weight the section heading uses. */
       .webchat-pill.on {
         color: var(--text);
-        border-color: var(--muted);
-        background: color-mix(in srgb, var(--muted) 14%, var(--surface));
+        font-weight: 600;
+        border-color: var(--blue);
+        background: color-mix(in srgb, var(--blue) 18%, var(--surface));
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 45%, transparent);
+      }
+
+      .webchat-pill.on .webchat-pill-n {
+        color: var(--text);
+        opacity: 1;
       }
 
       /* Only `foreign`. A browser that is down is not a problem -- the next turn brings it back
@@ -10282,6 +10295,18 @@
          the positioned box the conversation window hangs its own corner controls off. -->
     <div class="conv-wrap">
       <div class="hang-float">
+        <!-- The same three-state switch the conversation window carries, on the same stored
+             preference: one decision about how an exchange is drawn, wherever it is being read.
+             A single-provider chat has nothing to fan out, so its third state draws the paragraph
+             view and its title says why. -->
+        <button class="hang-btn on hang-md hang-para" id="webAgentPara" onclick="convParaToggle()"
+          aria-pressed="false" aria-label="Show each answer under the question that produced it">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 7h9" />
+            <path d="M3 11.5h18" />
+            <path d="M5 15.5h14M5 19h9" />
+          </svg></button>
         <button class="hang-btn on" id="webAgentMarkdown" onclick="webchatToggleMarkdown()"
           aria-pressed="true" aria-label="Show the reply as formatted Markdown">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
@@ -23040,19 +23065,25 @@ function convWebModeOf(conv) {
     // which is the shape the providers' own pages use and the shape a reader of five parallel
     // threads is comparing.
     //
-    // Only for provider bubbles, and only for a question this page can see was asked of that same
-    // provider. A pane's thread is not merged: a prompt and a reply there are two members of a
-    // conversation speaking, not one exchange.
+    // For any speaker in the thread, and only for a question this page can see was put to that
+    // same speaker. It was provider bubbles alone on the argument that a prompt and a reply in a
+    // pane are two members of a conversation speaking rather than one exchange -- which is true of
+    // the record and false of the reading: a prompt somebody typed and the turn it produced are
+    // the same pair the providers' own pages draw, and a thread where half the bubbles pair and
+    // half do not is two views at once.
     //
     // Three states rather than two, on one button. The third is the same view with the fan-out
     // folded up: one question put to five providers is five exchanges of identical text, and the
     // grouped view draws them as one -- the question once, a pill per provider, and the answer of
     // whichever pill is lit. It is a way of reading a panel rather than a different thread, which
-    // is why it is a state of this switch and not a switch of its own.
+    // is why it is a state of this switch and not a switch of its own. A thread with nothing to
+    // fold -- one provider, one pane -- draws it as the paragraph view, which is what it is.
     const CONV_PARA_KEY = 'herdr_conv_para';
 
+    // Paired unless somebody turned it off. The question that produced an answer is the thing a
+    // reader scans a thread by, and a thread of lone answers makes them go and find it.
     function convParaState() {
-      try { return localStorage.getItem(CONV_PARA_KEY) || '0'; } catch (e) { return '0'; }
+      try { return localStorage.getItem(CONV_PARA_KEY) || '1'; } catch (e) { return '1'; }
     }
 
     function convParaOn() {
@@ -23073,6 +23104,9 @@ function convWebModeOf(conv) {
       }
       if (typeof renderConvView === 'function') renderConvView();
       if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      // The Web Agents chat view reads the same preference and is a third place it is drawn.
+      if (typeof renderWebchatView === 'function' && typeof webchatCurrent !== 'undefined'
+          && webchatCurrent) renderWebchatView();
       if (typeof hangSync === 'function') hangSync();
       if (window.cue) cue('tick');
     }
@@ -23082,22 +23116,30 @@ function convWebModeOf(conv) {
     // rebuilt with the questions taken out would tick the wrong messages -- and the pass answers
     // two questions instead: which index holds a question that has been folded away, and which
     // answer is carrying it.
+    // Who an entry belongs to, for pairing. Both halves, because neither is enough on its own:
+    // `key` is the member of the conversation and tells two claude panes in one room apart where
+    // the harness id does not, and `agent` tells two providers apart in a thread whose entries were
+    // read under one member. A question pairs with an answer only when both agree.
+    function convParaWho(e) {
+      return e ? `${e.key || ''} ${e.agent || ''}` : '';
+    }
+
     function convParaPairs(entries) {
       const ask = new Map(), hide = new Set();
       if (!convParaOn()) return {ask, hide};
       for (let i = 0; i < entries.length; i++) {
         const q = entries[i];
-        if (!q || !q.foreign || q.event || q.who !== 'user') continue;
-        // The next thing that provider said, not the next entry in the thread. One question put to
+        if (!q || q.event || q.who !== 'user') continue;
+        // The next thing that speaker said, not the next entry in the thread. One question put to
         // five providers arrives as five questions and then five answers, sorted by the time each
         // was said -- so the answer to this one is rarely the row under it, and an adjacent-only
         // pairing left a panel's thread looking exactly as it did before the view was turned on.
         for (let j = i + 1; j < entries.length; j++) {
           const a = entries[j];
-          if (!a || !a.foreign || a.event) continue;
-          if ((a.agent || '') !== (q.agent || '')) continue;
-          // That provider was asked twice before it answered. The answer follows the last thing
-          // it was asked, so the earlier question keeps its own bubble: its answer is missing from
+          if (!a || a.event) continue;
+          if (convParaWho(a) !== convParaWho(q)) continue;
+          // That speaker was asked twice before it answered. The answer follows the last thing it
+          // was asked, so the earlier question keeps its own bubble: its answer is missing from
           // the record, and folding it in here would put another question's answer under it.
           if (a.who === 'user') break;
           if (ask.has(j)) break;
@@ -25310,6 +25352,11 @@ function webchatRoomCard(conv, sessions, compact) {
   const marks = (spoken.length ? spoken : granted).map(provider => webchatMark(provider, 18)).join('');
   const snippet = !compact && newest.snippet
     ? `<div class="webchat-snippet">${escapeHtml(newest.snippet)}</div>` : '';
+  // What is in it, in the shape the Conversations section says it: which harnesses, and which
+  // Projects they are working in. An agent room holds a pane like any other conversation, and the
+  // card that stands for it was the one card in the app that did not say which. A panel has no
+  // members and draws nothing, which is the true statement about a panel.
+  const badges = webchatRoomBadges(conv);
   const kind = convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent';
   // A room whose grant is `*` has no list to draw marks from and never will: the agent picks per
   // question. The badge carries that where the marks would have been, so the second line says what
@@ -25337,10 +25384,29 @@ function webchatRoomCard(conv, sessions, compact) {
     + `<div class="webchat-sub">`
     + `<span class="webchat-providers" title="${escapeHtml(kind)}">${marks}</span>`
     + `<span class="webchat-since">${kind}${any ? ' · Any' : ''}</span></div>`
+    + (badges ? `<div class="conversation-meta kinds">${badges}</div>` : '')
     + snippet
     + `<div class="conversation-meta names">`
     + `<span class="webchat-id">${escapeHtml(conv.id)}</span> · ${said}`
     + `</div></div>`;
+}
+
+// The harnesses and Projects of a room's members, each named once: a conversation of four claudes
+// in one Project is one badge and one Project, because the card says what is in it rather than how
+// many. The member record first and the live pane second, which is the order the Conversations
+// section reads them in and is right for a member that has come back under a new name.
+function webchatRoomBadges(conv) {
+  const members = (conv && conv.members) || [];
+  if (!members.length || typeof agentBadge !== 'function') return '';
+  const live = typeof agents === 'undefined' ? [] : (agents || []);
+  const found = members.map(member => {
+    const pane = live.find(a => typeof convMemberKey === 'function'
+      && convMemberKey(a) === member.aid) || {};
+    return {agent: member.agent || pane.agent || '', project: member.project || pane.project || ''};
+  });
+  const unique = field => Array.from(new Set(found.map(one => one[field]).filter(Boolean)));
+  return unique('agent').map(kind => agentBadge(kind)).join('')
+    + unique('project').map(name => ` <span class="badge proj">@${escapeHtml(name)}</span>`).join('');
 }
 
 function webchatCard(session, provider, compact) {
@@ -25572,27 +25638,77 @@ function webchatOpenCard(card) {
 // entry into a chat still lands where every chat app lands: on the newest thing said.
 let webchatLandOn = '';
 
+// The bubble a search led to, and until when it stays lit. Held here rather than as a class on the
+// element: the thread is redrawn on every delta and on every history read, and a class put on by
+// hand lives about as long as the next render — which in practice was until the history landed, a
+// few hundred milliseconds after the reader arrived.
+let webchatLanded = '';
+let webchatLandedUntil = 0;
+
+const WEBCHAT_LANDED_MS = 4000;
+
+// The bubble the message belongs to, which in the paragraph view is not always a bubble of its own:
+// a question folded into its answer is `data-qid` there and `data-mid` with the view off.
+function webchatBubbleFor(thread, id) {
+  if (!thread || !id) return null;
+  try {
+    const at = CSS.escape(String(id));
+    return thread.querySelector(`[data-mid="${at}"], [data-qid="${at}"]`);
+  } catch (_error) { return null; }
+}
+
 // Scroll to the bubble a search matched, if it is on screen. False means the ordinary bottom scroll
 // should happen instead — either nothing was asked for, or the history holding it has not arrived
 // yet, in which case the next render tries again with the same target still set.
 function webchatLandTo(thread) {
+  // The light, put back after a redraw for as long as it has left to run. Before the scroll, so a
+  // render that arrives while the reader is already there relights without moving them.
+  if (webchatLanded && Date.now() < webchatLandedUntil) {
+    const lit = webchatBubbleFor(thread, webchatLanded);
+    if (lit) {
+      lit.classList.add('landed');
+      // And the thread is left where the reader is. Every render here ends by scrolling to the
+      // bottom, so a poll landing a second after they arrived took them straight back off the
+      // bubble they had just been sent to.
+      if (!webchatLandOn) return true;
+    }
+  }
   if (!webchatLandOn) return false;
-  let row = null;
-  try { row = thread.querySelector(`[data-mid="${CSS.escape(webchatLandOn)}"]`); }
-  catch (_error) { row = null; }
+  const row = webchatBubbleFor(thread, webchatLandOn);
   if (!row) return false;
+  webchatLanded = webchatLandOn;
+  webchatLandedUntil = Date.now() + WEBCHAT_LANDED_MS;
   webchatLandOn = '';
-  row.scrollIntoView({block: 'center'});
-  // Two seconds of a lit edge, because a thread scrolled to its middle looks like a thread scrolled
-  // to its middle: without this there is nothing saying which of the bubbles on screen was the hit.
+  // The top of the bubble rather than its middle. An answer is usually taller than the window, so
+  // centring it puts the reader somewhere in the middle of a paragraph with the question that
+  // produced it off the top of the screen — which is the thing they pressed.
+  const top = row.getBoundingClientRect().top - thread.getBoundingClientRect().top;
+  thread.scrollTop += top - 8;
+  // A lit edge, because a thread opened at its middle looks exactly like a thread somebody scrolled
+  // to the middle of: without this nothing says which of the bubbles on screen is the hit.
   row.classList.add('landed');
-  setTimeout(() => row.classList.remove('landed'), 2000);
+  // One sweep of the thread rather than a timer per element: a redraw between here and the expiry
+  // leaves the class on a bubble this closure has never seen, and the detached one it is holding
+  // is nobody's problem.
+  clearTimeout(webchatLandedTimer);
+  webchatLandedTimer = setTimeout(webchatUnland, WEBCHAT_LANDED_MS);
   return true;
+}
+
+let webchatLandedTimer = 0;
+
+function webchatUnland() {
+  webchatLanded = '';
+  webchatLandedUntil = 0;
+  document.querySelectorAll('#webAgentThread .landed')
+    .forEach(el => el.classList.remove('landed'));
 }
 
 function webchatOpen(name, at = '') {
   webchatCurrent = name;
   webchatLandOn = at || '';
+  // A light left over from the last chat is about a bubble that is no longer on screen.
+  if (webchatLanded) webchatUnland();
   // What this browser was told last time, if the provider has not spoken since. The adapter's copy
   // is still the authority -- this is a cache of it, and `webchatThreadHeld` answers only for a
   // thread whose `updatedAt` has not moved. Without it every entry into a chat drew an empty
@@ -26274,13 +26390,44 @@ function webchatWhen(message) {
     ? null : {at: parsed, sure: false, src: 'written'};
 }
 
-function webchatMessageHtml(message, index) {
+// Which message is folded into which, in a single chat. The same shape `convParaPairs` answers for
+// a conversation's entries and a much smaller question: one provider answering in order, so the
+// answer to a question is the next thing that is not another question.
+function webchatParaPairs(messages) {
+  const ask = new Map(), hide = new Set();
+  if (typeof convParaOn !== 'function' || !convParaOn()) return {ask, hide};
+  for (let i = 0; i < messages.length; i++) {
+    if (!messages[i] || messages[i].role !== 'user') continue;
+    for (let j = i + 1; j < messages.length; j++) {
+      // Asked twice before it answered. The answer follows the last thing it was asked, so the
+      // earlier question keeps its own bubble rather than taking another question's answer.
+      if (messages[j].role === 'user') break;
+      ask.set(j, messages[i]);
+      hide.add(i);
+      break;
+    }
+  }
+  return {ask, hide};
+}
+
+function webchatMessageHtml(message, index, asked) {
   const user = message.role === 'user';
   const when = webchatWhen(message);
+  // The question that produced this answer, above it and inside the same bubble. Escaped and never
+  // drawn as Markdown: what was typed into the composer is what was sent, and a question with a
+  // `#` in it is not a heading. Same class and same rules as the conversation window's, because it
+  // is the same pair read in a different place.
+  const ask = asked
+    ? `<span class="conv-ask">${escapeHtml(asked.markdown || asked.content || '')}</span>` : '';
   // The adapter's own id for this message, carried so a search result can name the bubble it
   // matched. It is what `/recall` answers with as `qMsgId` and `aMsgId`, and the only thing on
   // this page that survives a re-render — an index does not, since a thread grows at the end.
-  return `<div class="conv-msg${user ? ' user' : ''}"${message.id ? ` data-mid="${escapeHtml(String(message.id))}"` : ''}`
+  //
+  // A paired bubble answers to either half: a hit names the question, and the question is now part
+  // of the answer's bubble rather than a bubble of its own.
+  const mid = message.id ? ` data-mid="${escapeHtml(String(message.id))}"` : '';
+  const qid = asked && asked.id ? ` data-qid="${escapeHtml(String(asked.id))}"` : '';
+  return `<div class="conv-msg${user ? ' user' : ''}${ask ? ' conv-qa' : ''}"${mid}${qid}`
     + ` style="--conv-agent:${user ? 'var(--green)' : 'var(--blue)'}">`
     + `<div class="conv-who">${user ? 'You' : escapeHtml(webchatSession(webchatCurrent)?.provider || 'Web Agent')}`
     + `${when ? `<span class="conv-time" title="${escapeHtml(when.at.toLocaleString())} · `
@@ -26290,6 +26437,7 @@ function webchatMessageHtml(message, index) {
     // pasting anywhere else, and it is the only form that survives the Markdown toggle either way.
     + `${typeof index === 'number' ? `<button type="button" class="conv-copy" data-at="${index}"`
       + ` onclick="webchatCopyMessage(this)" aria-label="Copy this message">⧉</button>` : ''}</div>`
+    + ask
     + webchatBodyHtml(message, user) + '</div>';
 }
 
@@ -26351,8 +26499,13 @@ function renderWebchatView() {
   const earlier = webchatTruncated
     ? `<p class="pair-empty">Showing the most recent ${webchatMessages.length} messages.`
       + ' Earlier ones stay on this host.</p>' : '';
+  // Drawn as nothing rather than dropped, so every index this view hands out -- Copy is one --
+  // still names the message it named before the reader turned this on.
+  const para = webchatParaPairs(webchatMessages);
   thread.innerHTML = earlier
-    + webchatMessages.map((message, at) => webchatMessageHtml(message, at)).join('') + provisional;
+    + webchatMessages.map((message, at) =>
+      para.hide.has(at) ? '' : webchatMessageHtml(message, at, para.ask.get(at))).join('')
+    + provisional;
   if (!webchatLandTo(thread)) {
     requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
   }
@@ -26382,6 +26535,23 @@ function renderWebchatView() {
     md.setAttribute('aria-pressed', String(on));
     md.title = on ? 'Showing formatted Markdown — tap for the text the provider sent'
       : 'Showing the text the provider sent — tap to format it';
+  }
+  // The same three-state switch the conversation window carries, on the same stored preference:
+  // one decision about how an exchange is drawn, wherever it is being read. A single-provider chat
+  // has nothing to fan out, so its third state is the paragraph view and the title says so rather
+  // than leaving a press that appears to do nothing.
+  const paraBtn = document.getElementById('webAgentPara');
+  if (paraBtn && typeof convParaState === 'function') {
+    const state = convParaState();
+    paraBtn.classList.add('on');
+    paraBtn.classList.toggle('live', state !== '0');
+    paraBtn.classList.toggle('grouped', state === '2');
+    paraBtn.setAttribute('aria-pressed', String(state !== '0'));
+    paraBtn.title = state === '0'
+      ? 'Showing every message in its own bubble — tap to pair each answer with its question'
+      : state === '1'
+      ? 'Showing each answer under its question — tap to fold one question’s answers into one bubble'
+      : 'Showing each answer under its question — one provider, so there is nothing to fold';
   }
   // The header's theme picker is static markup, so its options are written by the render.
   const themeSelect = document.getElementById('webAgentTheme');
@@ -31600,7 +31770,18 @@ function nlmSourceDelete(source) {
       const el = document.getElementById('conversations');
       if (!el) return;
       const now = Date.now();
-      const list = convLandingList();
+      const all = convLandingList();
+      // A conversation that reaches the web providers is the Web Agents section's card, and it was
+      // drawn in both -- the same room, twice on one screen, under two different summaries of
+      // itself. This section is the one about panes; that one is the one about providers, and a
+      // room with a grant belongs to it whichever mode it is in.
+      //
+      // Only the landing lists are narrowed. `all` still holds every conversation, because the tab
+      // strip draws from it and a strip that could not show the conversation on screen is worse
+      // than one carrying a tab this section does not list.
+      const mine = c => !(typeof convWebBadge === 'function' && convWebBadge(c));
+      const list = {all: all.all, shown: all.shown.filter(mine),
+                    archived: all.archived.filter(mine), autos: all.autos.filter(mine)};
       // Both lists, because the archive is drawn from the same rows: building only the shown ones
       // left `archivedRows` matching nothing, so the Archive button counted cards it could never
       // draw and an archived conversation could not be got back at.

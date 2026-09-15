@@ -12818,19 +12818,25 @@ function convWebModeOf(conv) {
     // which is the shape the providers' own pages use and the shape a reader of five parallel
     // threads is comparing.
     //
-    // Only for provider bubbles, and only for a question this page can see was asked of that same
-    // provider. A pane's thread is not merged: a prompt and a reply there are two members of a
-    // conversation speaking, not one exchange.
+    // For any speaker in the thread, and only for a question this page can see was put to that
+    // same speaker. It was provider bubbles alone on the argument that a prompt and a reply in a
+    // pane are two members of a conversation speaking rather than one exchange -- which is true of
+    // the record and false of the reading: a prompt somebody typed and the turn it produced are
+    // the same pair the providers' own pages draw, and a thread where half the bubbles pair and
+    // half do not is two views at once.
     //
     // Three states rather than two, on one button. The third is the same view with the fan-out
     // folded up: one question put to five providers is five exchanges of identical text, and the
     // grouped view draws them as one -- the question once, a pill per provider, and the answer of
     // whichever pill is lit. It is a way of reading a panel rather than a different thread, which
-    // is why it is a state of this switch and not a switch of its own.
+    // is why it is a state of this switch and not a switch of its own. A thread with nothing to
+    // fold -- one provider, one pane -- draws it as the paragraph view, which is what it is.
     const CONV_PARA_KEY = 'herdr_conv_para';
 
+    // Paired unless somebody turned it off. The question that produced an answer is the thing a
+    // reader scans a thread by, and a thread of lone answers makes them go and find it.
     function convParaState() {
-      try { return localStorage.getItem(CONV_PARA_KEY) || '0'; } catch (e) { return '0'; }
+      try { return localStorage.getItem(CONV_PARA_KEY) || '1'; } catch (e) { return '1'; }
     }
 
     function convParaOn() {
@@ -12851,6 +12857,9 @@ function convWebModeOf(conv) {
       }
       if (typeof renderConvView === 'function') renderConvView();
       if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      // The Web Agents chat view reads the same preference and is a third place it is drawn.
+      if (typeof renderWebchatView === 'function' && typeof webchatCurrent !== 'undefined'
+          && webchatCurrent) renderWebchatView();
       if (typeof hangSync === 'function') hangSync();
       if (window.cue) cue('tick');
     }
@@ -12860,22 +12869,30 @@ function convWebModeOf(conv) {
     // rebuilt with the questions taken out would tick the wrong messages -- and the pass answers
     // two questions instead: which index holds a question that has been folded away, and which
     // answer is carrying it.
+    // Who an entry belongs to, for pairing. Both halves, because neither is enough on its own:
+    // `key` is the member of the conversation and tells two claude panes in one room apart where
+    // the harness id does not, and `agent` tells two providers apart in a thread whose entries were
+    // read under one member. A question pairs with an answer only when both agree.
+    function convParaWho(e) {
+      return e ? `${e.key || ''} ${e.agent || ''}` : '';
+    }
+
     function convParaPairs(entries) {
       const ask = new Map(), hide = new Set();
       if (!convParaOn()) return {ask, hide};
       for (let i = 0; i < entries.length; i++) {
         const q = entries[i];
-        if (!q || !q.foreign || q.event || q.who !== 'user') continue;
-        // The next thing that provider said, not the next entry in the thread. One question put to
+        if (!q || q.event || q.who !== 'user') continue;
+        // The next thing that speaker said, not the next entry in the thread. One question put to
         // five providers arrives as five questions and then five answers, sorted by the time each
         // was said -- so the answer to this one is rarely the row under it, and an adjacent-only
         // pairing left a panel's thread looking exactly as it did before the view was turned on.
         for (let j = i + 1; j < entries.length; j++) {
           const a = entries[j];
-          if (!a || !a.foreign || a.event) continue;
-          if ((a.agent || '') !== (q.agent || '')) continue;
-          // That provider was asked twice before it answered. The answer follows the last thing
-          // it was asked, so the earlier question keeps its own bubble: its answer is missing from
+          if (!a || a.event) continue;
+          if (convParaWho(a) !== convParaWho(q)) continue;
+          // That speaker was asked twice before it answered. The answer follows the last thing it
+          // was asked, so the earlier question keeps its own bubble: its answer is missing from
           // the record, and folding it in here would put another question's answer under it.
           if (a.who === 'user') break;
           if (ask.has(j)) break;
