@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-12">
+  <meta name="app-built" content="2026-09-15">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -6390,6 +6390,21 @@
       font-family: inherit;
     }
 
+    /* The bubble a search led to, for two seconds. A thread opened at its middle looks exactly like
+       a thread scrolled to its middle, so without this there is nothing saying which of the bubbles
+       on screen is the one that was pressed. The ring is outside the border rather than replacing
+       it, so the agent's own tint is still readable underneath. */
+    .conv-msg.landed {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+      animation: convLanded 2s ease-out;
+    }
+
+    @keyframes convLanded {
+      0%, 60% { outline-color: var(--blue); }
+      100% { outline-color: transparent; }
+    }
+
     /* A message that is not settled yet: the live draft above a working composer, or backfill read
        off the scrollback. No fill at all rather than a different one — an unfilled bubble against a
        wall of washed ones is unmistakable on any of the eleven themes and borrows no meaning from a
@@ -9360,6 +9375,123 @@
 
       .webchat-picker .pair-empty { grid-column: 1 / -1; }
 
+
+      /* The search box, between the provider pills and the list. Over the list rather than under
+         it: what it does is replace the list, and a control that changes what is below it belongs
+         above it. */
+      .webchat-search {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin: 6px 0 4px;
+      }
+
+      .webchat-search-input {
+        flex: 1;
+        min-width: 0;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.8rem;
+      }
+
+      .webchat-search-input:focus {
+        outline: none;
+        border-color: var(--blue);
+      }
+
+      .webchat-search-count {
+        margin: 6px 0 2px;
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+
+      /* What the record already knows, over the exchanges it was distilled from. Its own block
+         rather than a card, because a fact is not somewhere you can go — there is nothing to open
+         and nothing to open it in. */
+      .webchat-facts {
+        margin: 6px 0;
+        padding: 8px 10px;
+        border-left: 2px solid var(--blue);
+        background: var(--surface);
+        border-radius: 0 8px 8px 0;
+      }
+
+      .webchat-facts-head {
+        color: var(--muted);
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 6px;
+      }
+
+      .webchat-fact + .webchat-fact { margin-top: 8px; }
+      .webchat-fact-text { font-size: 0.78rem; line-height: 1.45; }
+
+      /* A conversation's threads, under the conversation. The group is the level the list above
+         the search is already at: five providers asked one question are five threads, and drawn
+         flat they read as five unrelated results. */
+      .webchat-room-hits {
+        margin: 8px 0;
+        padding-left: 8px;
+        border-left: 2px solid var(--blue);
+      }
+
+      .webchat-room-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 2px 6px;
+        cursor: pointer;
+      }
+
+      .webchat-room-head .name {
+        font-size: 0.8rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .webchat-room-head .webchat-providers { display: flex; gap: 2px; flex: 0 0 auto; }
+      .webchat-room-head .webchat-since { margin-left: auto; flex: 0 0 auto; }
+      .webchat-room-hits .webchat-card { margin-left: 0; }
+
+      /* A fact that names where it came from is somewhere you can go, and says so. One that does
+         not stays plain text rather than looking pressable. */
+      .webchat-fact.go { cursor: pointer; }
+      .webchat-fact.go:hover .webchat-fact-text { color: var(--blue); }
+
+      /* A hit is a question and the answer it got, and the pair is the unit. Three lines each,
+         clamped: enough to recognise the exchange, and not so much that four hits fill the page
+         somebody is scanning. */
+      .webchat-hit {
+        margin: 6px 0 0;
+        padding-left: 8px;
+        border-left: 2px solid var(--border);
+      }
+
+      .webchat-hit-q, .webchat-hit-a {
+        font-size: 0.72rem;
+        line-height: 1.45;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .webchat-hit-q { color: var(--text); }
+      .webchat-hit-a { color: var(--muted); margin-top: 2px; }
+
+      /* A row that leads somewhere says so on the rail it already has, rather than by growing a
+         button: the pair is the thing being pressed, and a chevron beside it would be a second
+         target for the same press. */
+      .webchat-hit.go { cursor: pointer; }
+      .webchat-hit.go:hover { border-left-color: var(--blue); }
+      .webchat-hit.go:hover .webchat-hit-q { color: var(--blue); }
 
       /* One line, clipped. Two lines of every answer would make the list scroll as far as the
          conversations themselves, which is the thing a list exists to save you. */
@@ -15006,6 +15138,9 @@
       }
       else if (msg.type === 'webchat_history') {
         if (typeof webchatReceiveHistory === 'function') webchatReceiveHistory(msg);
+      }
+      else if (msg.type === 'webchat_recall') {
+        if (typeof webchatReceiveRecall === 'function') webchatReceiveRecall(msg);
       }
       else if (msg.type === 'webchat_models') {
         if (typeof webchatReceiveModels === 'function') webchatReceiveModels(msg);
@@ -23156,15 +23291,27 @@ function convWebModeOf(conv) {
       if (!entry || !entry.acts) return '';
       const tag = prov === undefined ? ''
         : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
+      // Session labels may contain quotes. JSON creates JavaScript string literals and HTML
+      // escaping keeps those literals inside the attribute after the browser decodes it.
+      const session = escapeHtml(JSON.stringify(entry.acts.session));
+      const provider = escapeHtml(JSON.stringify(entry.acts.provider));
       const retry = entry.acts.retry
-        ? `<button class="conv-act" onclick="convPanelRetry('${escapeHtml(entry.acts.session)}')" `
+        ? `<button class="conv-act" onclick="convPanelRetry(${session})" `
           + `title="Send this message again" aria-label="Send this message again">Retry</button>`
         : '';
-      return `<span class="conv-acts"${tag}>${retry}`
-        + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
+      // Reply first, because it is the one that is pressed when nothing is wrong. The composer
+      // builds the provider's primary thread name for itself and can create no other, so this
+      // matters for the additional threads an agent labels for sub-questions it needs to run at
+      // once: the bubble is the only place a reader can say which of those they mean. Without it,
+      // replying to one opened a fresh conversation at the provider carrying none of what they
+      // were reading.
+      const reply = `<button class="conv-act" onclick="convPanelReply(${session}, ${provider})" `
+        + `title="Reply in this thread" aria-label="Reply in this thread">Reply</button>`;
+      return `<span class="conv-acts"${tag}>${reply}${retry}`
+        + `<button class="conv-act" onclick="convPanelReconnect(${provider}, ${session})" `
         + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
         + `Reconnect</button>`
-        + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
+        + `<button class="conv-act" onclick="convPanelSync(${session})" `
         + `title="Read this thread back off the provider's page" `
         + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
     }
@@ -24854,6 +25001,12 @@ const WEBCHAT_MARKS = {
     body: '<path d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/>'},
   perplexity: {colour: '#1fb8cd', fill: true,
     body: '<path d="M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z"/>'},
+  copilot: {colour: '#00a4ef', fill: true,
+    body: '<path d="m12.902 6.402c-0.496 0-0.851 0.056-1.067 0.169 0.491-1.456 0.864-3.812 3.048-3.812 2.085 0 1.967 2.508 2.864 3.643zm1.947 2.049c-0.643 2.271-1.27 4.557-1.998 6.809-0.22 0.66-0.83 1.118-1.524 1.118h-2.472c0.169-0.254 0.305-0.525 0.389-0.83 0.643-2.269 1.27-4.555 1.998-6.809 0.22-0.66 0.83-1.118 1.524-1.118h2.472c-0.169 0.254-0.305 0.525-0.389 0.83m-5.735 12.786c-2.085 0-1.967-2.506-2.864-3.641h4.845c0.498 0 0.854-0.056 1.067-0.169-0.491 1.456-0.864 3.81-3.048 3.81m14.105-13.768h0.017c-0.593-0.694-1.492-1.05-2.661-1.05h-0.66c-0.626-0.051-1.185-0.474-1.388-1.067l-0.66-1.88c-0.389-1.12-1.456-1.882-2.644-1.882h-8.619c-3.186 0-4.557 4.083-5.302 6.555-0.694 2.305-2.286 6.2-0.44 8.384 0.847 0.999 2.117 1.05 3.321 1.05 0.626 0.051 1.185 0.474 1.388 1.067l0.66 1.88c0.389 1.12 1.456 1.882 2.641 1.882h8.621c3.183 0 4.555-4.083 5.302-6.555 0.559-1.829 1.236-4.081 1.202-5.893 0-0.917-0.203-1.814-0.779-2.491"/>'},
+  'google-ai': {colour: '#4285f4', fill: true,
+    body: '<path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/>'},
+  google: {colour: '#4285f4', fill: true,
+    body: '<path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/>'},
   nano: {colour: '#94a3b8', span: 15,
     body: '<rect x="4.5" y="4.5" width="15" height="15" rx="4.5"/><circle cx="12" cy="12" r="2"/>'},
   // Anything this app has never heard of: the section's own globe, which is what the header wears.
@@ -24867,7 +25020,7 @@ function webchatFamily(id) {
   return String(id || '').replace(/-anon$/, '').replace(/-coder$/, '');
 }
 
-// Every mark drawn to the same box. They come from eight different hands: most fill the 24-unit
+// Every mark drawn to the same box. They come from ten different hands: most fill the 24-unit
 // viewBox corner to corner, Grok's own artwork stops at 18.75 and the two drawn here are smaller
 // again — so a row of them had one provider a third larger than the next, which reads as emphasis
 // nobody meant. `span` is the longer side of a mark's own bounding box, measured rather than
@@ -24932,7 +25085,7 @@ function webchatToggleAnon() {
 //
 // By family, so a provider's second driver sits with the provider. Anything this app has not heard
 // of keeps the adapter's own driver order, behind the ones it has.
-const WEBCHAT_ORDER = ['chatgpt', 'claude', 'perplexity', 'gemini', 'grok', 'deepseek', 'qwen'];
+const WEBCHAT_ORDER = ['chatgpt', 'claude', 'perplexity', 'gemini', 'grok', 'deepseek', 'qwen', 'copilot', 'google-ai'];
 
 function webchatOrderOf(id) {
   const at = WEBCHAT_ORDER.indexOf(webchatFamily(id));
@@ -25320,9 +25473,19 @@ function renderWebAgents(error = '') {
   })));
   const cards = rows
     .sort((a, b) => String(b.at).localeCompare(String(a.at))).map(row => row.html);
-  el.innerHTML = header + webchatPillsHtml()
-    + `<div class="webchat-list${compact ? ' compact' : ''}">${cards.join('')}</div>`
-    + (cards.length ? '' : webchatEmptyHtml());
+  // A search replaces the list rather than filtering it: what it answers with is a hit inside a
+  // thread, which is a different row from the thread card and cannot be drawn as one.
+  const searching = typeof webchatSearchResultsHtml === 'function' ? webchatSearchResultsHtml() : '';
+  const body = searching
+    || `<div class="webchat-list${compact ? ' compact' : ''}">${cards.join('')}</div>`
+      + (cards.length ? '' : webchatEmptyHtml());
+  // The box keeps what is in it across the re-render this section does on every broadcast.
+  const draw = () => {
+    el.innerHTML = header + webchatPillsHtml()
+      + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '') + body;
+  };
+  if (typeof webchatSearchKeep === 'function') webchatSearchKeep(draw);
+  else draw();
   applySections();
 }
 
@@ -25405,8 +25568,31 @@ function webchatOpenCard(card) {
   webchatOpen(card.dataset.session);
 }
 
-function webchatOpen(name) {
+// A message this chat should be opened *at*, rather than at its end. Empty at rest, so an ordinary
+// entry into a chat still lands where every chat app lands: on the newest thing said.
+let webchatLandOn = '';
+
+// Scroll to the bubble a search matched, if it is on screen. False means the ordinary bottom scroll
+// should happen instead — either nothing was asked for, or the history holding it has not arrived
+// yet, in which case the next render tries again with the same target still set.
+function webchatLandTo(thread) {
+  if (!webchatLandOn) return false;
+  let row = null;
+  try { row = thread.querySelector(`[data-mid="${CSS.escape(webchatLandOn)}"]`); }
+  catch (_error) { row = null; }
+  if (!row) return false;
+  webchatLandOn = '';
+  row.scrollIntoView({block: 'center'});
+  // Two seconds of a lit edge, because a thread scrolled to its middle looks like a thread scrolled
+  // to its middle: without this there is nothing saying which of the bubbles on screen was the hit.
+  row.classList.add('landed');
+  setTimeout(() => row.classList.remove('landed'), 2000);
+  return true;
+}
+
+function webchatOpen(name, at = '') {
   webchatCurrent = name;
+  webchatLandOn = at || '';
   // What this browser was told last time, if the provider has not spoken since. The adapter's copy
   // is still the authority -- this is a cache of it, and `webchatThreadHeld` answers only for a
   // thread whose `updatedAt` has not moved. Without it every entry into a chat drew an empty
@@ -25482,6 +25668,14 @@ function webchatReceiveHistory(msg) {
   // provider had finished.
   if (!webchatTurn?.running) webchatTurn = null;
   renderWebchatView();
+  // The history is here and the bubble a search named is not in it: the relay asks for the newest
+  // few hundred messages and a hit can be older than that. Said rather than silently ignored --
+  // the alternative is a chat that opens at its end for no stated reason, which is exactly the
+  // thing this landing exists to stop looking like.
+  if (webchatLandOn) {
+    webchatLandOn = '';
+    showToast('That exchange is older than the messages kept on this page.', 'info');
+  }
 }
 
 function webchatReceiveResult(msg) {
@@ -26083,7 +26277,11 @@ function webchatWhen(message) {
 function webchatMessageHtml(message, index) {
   const user = message.role === 'user';
   const when = webchatWhen(message);
-  return `<div class="conv-msg${user ? ' user' : ''}" style="--conv-agent:${user ? 'var(--green)' : 'var(--blue)'}">`
+  // The adapter's own id for this message, carried so a search result can name the bubble it
+  // matched. It is what `/recall` answers with as `qMsgId` and `aMsgId`, and the only thing on
+  // this page that survives a re-render — an index does not, since a thread grows at the end.
+  return `<div class="conv-msg${user ? ' user' : ''}"${message.id ? ` data-mid="${escapeHtml(String(message.id))}"` : ''}`
+    + ` style="--conv-agent:${user ? 'var(--green)' : 'var(--blue)'}">`
     + `<div class="conv-who">${user ? 'You' : escapeHtml(webchatSession(webchatCurrent)?.provider || 'Web Agent')}`
     + `${when ? `<span class="conv-time" title="${escapeHtml(when.at.toLocaleString())} · `
       + `${escapeHtml(when.src || 'unknown')}">${when.sure ? '' : '~'}`
@@ -26155,7 +26353,9 @@ function renderWebchatView() {
       + ' Earlier ones stay on this host.</p>' : '';
   thread.innerHTML = earlier
     + webchatMessages.map((message, at) => webchatMessageHtml(message, at)).join('') + provisional;
-  requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
+  if (!webchatLandTo(thread)) {
+    requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
+  }
   document.getElementById('webAgentSend').hidden = !!webchatTurn?.running;
   document.getElementById('webAgentStop').hidden = !webchatTurn?.running;
   // Standing, rather than appearing when the app suspects a missing reply: reading the thread back
@@ -27241,6 +27441,304 @@ function webchatThreadEntries(convId) {
     if (!entry.acts && entry.session) entry.acts = {session: entry.session, provider: entry.agent};
   }
   return ordered;
+}
+
+  </script>
+  <!-- After web_agent.js, whose marks, provider list and open path it borrows. Nothing reads it
+       at load time: renderWebAgents calls it if it is there, so the section still draws on a page
+       that never loaded it. -->
+  <script>
+// --- Web Agents: searching the record ---
+//
+// One box over the chat list for "what did we already decide about this". The list above it is
+// ordered by recency, which answers *what was I last doing* and nothing else — and the record now
+// goes back further than anybody's memory of which provider they asked.
+//
+// This half searches the provider threads alone: the adapter's own record, FTS5 over exchanges,
+// ranked. The relay's conversation log — what the agents in the panes said — is the other half and
+// is not wired up here, because it is a substring grep capped at twenty rows and drawing it beside
+// a ranked list would make the ranked list look broken. See the asymmetry note in PLAN-recall.md.
+//
+// Always every namespace. A person at this page is not standing in a room — rooms belong to the
+// agents — so a search narrowed to one would be answering a question nobody asked.
+
+// What the relay answered, or null when no search is running. The box is present either way; this
+// is only about whether the results replace the card list.
+let webchatSearchResult = null;
+let webchatSearchQuery = '';
+let webchatSearchBusy = false;
+
+// Long enough for a sentence out of the question somebody is actually asking, which is what the
+// ranking wants — the whole point of a coverage floor is that more words narrow it.
+const WEBCHAT_SEARCH_MAX = 500;
+
+function webchatSearchBoxHtml() {
+  const busy = webchatSearchBusy;
+  return '<div class="webchat-search">'
+    + `<input id="webchatSearchInput" type="search" class="webchat-search-input"`
+    + ` placeholder="Search every chat…" maxlength="${WEBCHAT_SEARCH_MAX}"`
+    + ` autocomplete="off" autocapitalize="off" spellcheck="false"`
+    + ` aria-label="Search the Web Agent record"`
+    + ` onkeydown="if(event.key==='Enter'){event.preventDefault();webchatSearchGo()}">`
+    + `<button class="section-action" onclick="webchatSearchGo()"`
+    + ` aria-label="Search">${busy ? '…' : 'Search'}</button>`
+    + (webchatSearchResult
+      ? '<button class="section-action" onclick="webchatSearchClear()"'
+        + ' aria-label="Clear search">✕</button>'
+      : '')
+    + '</div>';
+}
+
+// The section re-renders on every `webchat_state` the relay broadcasts, which is often — a bound
+// agent opening a thread is enough. Without this the box empties itself under whoever is typing
+// into it, and the caret jumps to the front of what is left.
+function webchatSearchKeep(render) {
+  const before = document.getElementById('webchatSearchInput');
+  const held = before
+    ? {value: before.value, at: before.selectionStart,
+       focused: document.activeElement === before}
+    : null;
+  render();
+  const after = document.getElementById('webchatSearchInput');
+  if (!after || !held) return;
+  after.value = held.value;
+  if (!held.focused) return;
+  after.focus();
+  try { after.setSelectionRange(held.at, held.at); } catch (_error) { /* not a text input */ }
+}
+
+function webchatSearchGo() {
+  const input = document.getElementById('webchatSearchInput');
+  const query = (input?.value || '').trim().slice(0, WEBCHAT_SEARCH_MAX);
+  if (!query) { webchatSearchClear(); return; }
+  // The query is held here rather than read back off the box when the answer lands: the answer is
+  // drawn under the words it was asked with, and by then somebody may have typed the next ones.
+  webchatSearchQuery = query;
+  webchatSearchBusy = true;
+  renderWebAgents();
+  if (!webchatAsk({type: 'webchat_recall', query})) {
+    webchatSearchBusy = false;
+    renderWebAgents();
+  }
+}
+
+function webchatSearchClear() {
+  webchatSearchResult = null;
+  webchatSearchQuery = '';
+  webchatSearchBusy = false;
+  const input = document.getElementById('webchatSearchInput');
+  if (input) input.value = '';
+  renderWebAgents();
+}
+
+function webchatReceiveRecall(msg) {
+  // An answer to a query nobody is waiting for any more — somebody cleared the box, or searched
+  // again before this came back. Dropping it keeps the results under the words on screen.
+  if ((msg.query || '') !== webchatSearchQuery) return;
+  webchatSearchBusy = false;
+  webchatSearchResult = msg;
+  renderWebAgents();
+}
+
+// A hit names its thread, and the thread may be in a conversation this browser can open. Both are
+// the adapter's own session name, which is what every card on this page is already keyed by.
+function webchatSearchOpen(name, at = '') {
+  if (typeof webchatOpen === 'function') webchatOpen(name, at);
+}
+
+// One exchange, rather than the thread it is in. A hit is a question and the answer it got, and
+// opening the thread at its end put the reader at whatever was said last -- which in a thread with
+// forty exchanges in it is not the one they pressed. The question is what it lands on: the answer
+// is the next bubble down, so landing on the question puts both on screen in the order they
+// happened. Stops the press reaching the card under it, which opens the same thread at its end.
+function webchatSearchOpenHit(element, press) {
+  if (press) press.stopPropagation();
+  webchatSearchOpen(element.dataset.session, element.dataset.mid || '');
+}
+
+// What a distilled fact is called, said in words rather than in the extractor's vocabulary. The
+// three kinds are the ones `webchat facts` asks a provider for, and `claim` on its own read as a
+// label on the text rather than as a statement about where the sentence came from.
+const WEBCHAT_FACT_KIND = {
+  claim: 'Stated',
+  decision: 'Decided',
+  definition: 'Defined',
+};
+
+function webchatSearchFactsHtml(facts) {
+  if (!facts || !facts.length) return '';
+  // Above the exchanges, because a fact is the answer written out and an exchange is where the
+  // answer was given. A reader who stops at the first line has still been answered.
+  return '<div class="webchat-facts"><div class="webchat-facts-head">'
+    + `What the record says — ${facts.length}</div>`
+    + facts.map(fact => {
+      const sure = typeof fact.confidence === 'number'
+        ? ` · ${Math.round(fact.confidence * 100)}% of the providers asked` : '';
+      const kind = WEBCHAT_FACT_KIND[fact.kind] || 'Stated';
+      // A fact names the exchange it was distilled from, so it is somewhere you can go after all
+      // -- which is the first thing anybody wants from a sentence presented as true. It opens
+      // whatever its thread opens, so a fact out of an agent conversation lands in the
+      // conversation and one out of a loose chat lands in the chat.
+      const where = webchatSearchWhere(fact.session);
+      return `<div class="webchat-fact${where ? ' go' : ''}"`
+        + (where
+          ? ` role="button" tabindex="0" data-go="${escapeHtml(where.id)}"`
+            + ` data-kind="${escapeHtml(where.kind)}"`
+            + ' onclick="webchatSearchGoTo(this.dataset.kind, this.dataset.go)"'
+            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \')'
+            + '{event.preventDefault();webchatSearchGoTo(this.dataset.kind, this.dataset.go)}"'
+          : '')
+        + '>'
+        + `<div class="webchat-fact-text">${escapeHtml(fact.statement || '')}</div>`
+        + '<div class="conversation-meta names">'
+        + `${escapeHtml(kind)} · ${escapeHtml(where ? where.label : (fact.session || ''))}`
+        + `${escapeHtml(sure)}</div></div>`;
+    }).join('') + '</div>';
+}
+
+// Where a thread name leads. A thread whose namespace is a conversation this browser knows opens
+// the conversation -- opening one provider's thread instead is picking half of a conversation and
+// calling it the conversation, which is the rule the room cards in the list already follow.
+function webchatSearchWhere(session) {
+  if (!session) return null;
+  const rooms = typeof webchatRooms === 'function' ? webchatRooms() : new Map();
+  const namespace = String(session).split(':')[0];
+  const conv = rooms.get(namespace);
+  if (conv) return {kind: 'conv', id: conv.id, label: conv.name || conv.id};
+  const known = typeof webchatSession === 'function' ? webchatSession(session) : null;
+  const provider = known && typeof webchatProvider === 'function'
+    ? webchatProvider(known.provider) : null;
+  return {kind: 'thread', id: session,
+    label: known && typeof webchatName === 'function' ? webchatName(known, provider) : session};
+}
+
+function webchatSearchGoTo(kind, id) {
+  if (kind === 'conv' && typeof openConversation === 'function') openConversation(id);
+  else webchatSearchOpen(id);
+}
+
+// A conversation's threads, under the conversation. A thread is one provider by construction --
+// its name is `<namespace>:<provider>`, so five providers asked one question are five threads --
+// and the list above this search folds exactly those into one room card for exactly that reason.
+// Grouped results were one level deeper than the list they replace, and each card opened one
+// provider's half of a conversation.
+//
+// The thread card itself is unchanged and is what goes inside: what the reader wants out of a hit
+// is the question and the answer under the thread they were said in, and that was already right.
+function webchatSearchRoomHtml(conv, threads) {
+  const spoken = Array.from(new Set(threads.map(thread => thread.provider).filter(Boolean)));
+  const marks = typeof webchatMark === 'function'
+    ? spoken.map(provider => webchatMark(provider, 18)).join('') : '';
+  const matched = threads.reduce((n, thread) => n + Number(thread.total || 0), 0);
+  return '<div class="webchat-room-hits">'
+    + `<div class="webchat-room-head" role="button" tabindex="0"`
+    + ` data-conv-id="${escapeHtml(conv.id)}"`
+    + ` onclick="webchatSearchGoTo('conv', this.dataset.convId)"`
+    + ` onkeydown="if(event.key==='Enter'||event.key===' ')`
+    + `{event.preventDefault();webchatSearchGoTo('conv', this.dataset.convId)}">`
+    + `<span class="conv-kind">${typeof convGlyph === 'function' ? convGlyph(conv) : ''}</span>`
+    + `<span class="name">${escapeHtml(conv.name || conv.id)}</span>`
+    + `<span class="webchat-providers">${marks}</span>`
+    + `<span class="webchat-since">${threads.length}`
+    + ` ${threads.length === 1 ? 'thread' : 'threads'} · ${matched}`
+    + ` hit${matched === 1 ? '' : 's'}</span></div>`
+    + threads.map(webchatSearchThreadHtml).join('')
+    + '</div>';
+}
+
+function webchatSearchThreadHtml(thread) {
+  const provider = typeof webchatProvider === 'function'
+    ? webchatProvider(thread.provider) : null;
+  const known = typeof webchatSession === 'function' ? webchatSession(thread.name) : null;
+  // What the conversation was about, over the rows that matched in it. A thread whose summary is
+  // older than the thread says so: the heading is then true about less than the whole of it.
+  const summary = thread.summary
+    ? `<div class="webchat-snippet">${escapeHtml(thread.summary.split('\n').join(' · '))}`
+      + `${thread.stale ? ' (summary is older than the thread)' : ''}</div>`
+    : '';
+  const of = thread.exchanges && thread.exchanges !== thread.total
+    ? `${thread.total} of ${thread.exchanges}` : `${thread.total}`;
+  // The pair, in the order it happened. An answer fragment with no question over it is the one
+  // shape of result that is useless to a person: an agent can go and read the thread, and somebody
+  // looking at a phone wants the Q and the A in the row.
+  //
+  // Each row opens the thread *at itself* where the record named the message it came out of, which
+  // is the difference between finding an exchange and finding the thread an exchange is in.
+  const hits = (thread.hits || []).map(hit => {
+    const mid = hit.qMsgId || hit.aMsgId || '';
+    return `<div class="webchat-hit${mid ? ' go' : ''}"`
+      + (mid
+        ? ` role="button" tabindex="0" data-session="${escapeHtml(thread.name)}"`
+          + ` data-mid="${escapeHtml(String(mid))}"`
+          + ' onclick="webchatSearchOpenHit(this, event)"'
+          + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \')'
+          + '{event.preventDefault();webchatSearchOpenHit(this, event)}"'
+        : '')
+      + '>'
+      + `<div class="webchat-hit-q">${escapeHtml(hit.question || '(not recorded)')}</div>`
+      + `<div class="webchat-hit-a">${escapeHtml(hit.answer || '(not recorded)')}</div>`
+      + '</div>';
+  }).join('');
+  const more = thread.more
+    ? `<div class="conversation-meta names">…${thread.more} more in this thread</div>` : '';
+  const label = known && typeof webchatName === 'function'
+    ? webchatName(known, provider) : thread.name;
+  // A card is one provider's thread and opens that thread, which is what it says it is. The
+  // conversation is reachable from the heading above it, so both are a press away rather than one
+  // standing in for the other -- a group head that opened the conversation and cards that opened
+  // it too left no way back to the provider a hit was actually said by.
+  return `<div class="conversation-card webchat-card" role="button" tabindex="0"`
+    + ` data-session="${escapeHtml(thread.name)}"`
+    + ` onclick="webchatSearchOpen(this.dataset.session)"`
+    + ` onkeydown="if(event.key==='Enter'||event.key===' ')`
+    + `{event.preventDefault();webchatSearchOpen(this.dataset.session)}">`
+    + '<div class="conversation-title">'
+    + `<span class="conv-kind">${typeof webchatMark === 'function' ? webchatMark(thread.provider, 18) : ''}</span>`
+    + `<span class="name">${escapeHtml(label)}</span></div>`
+    + summary
+    + hits
+    + more
+    + '<div class="conversation-meta names">'
+    + `<span class="webchat-id">${escapeHtml(thread.name)}</span> · `
+    + `${escapeHtml((thread.providers || [thread.provider]).join(' + '))}`
+    + ` · ${escapeHtml(of)} exchange${of === '1' ? '' : 's'}</div></div>`;
+}
+
+function webchatSearchResultsHtml() {
+  if (webchatSearchBusy && !webchatSearchResult) {
+    return `<p class="pair-empty">Searching for “${escapeHtml(webchatSearchQuery)}”…</p>`;
+  }
+  const found = webchatSearchResult;
+  if (!found) return '';
+  const threads = found.threads || [];
+  if (!threads.length && !(found.facts || []).length) {
+    // Named as the whole record rather than as "no results", because the two are different
+    // answers and only one of them means there is nothing to find.
+    return `<p class="pair-empty">Nothing in any chat for “${escapeHtml(webchatSearchQuery)}”.</p>`;
+  }
+  const total = Number(found.total || 0);
+  // Threads whose namespace is a conversation are drawn under it; the rest stand on their own, the
+  // way a loose chat does in the list. Ranking is the server's and is preserved: a room takes the
+  // position of the best-ranked thread in it rather than being sorted by anything of its own.
+  const rooms = typeof webchatRooms === 'function' ? webchatRooms() : new Map();
+  const grouped = new Map();
+  const rows = [];
+  for (const thread of threads) {
+    const conv = rooms.get(String(thread.name || '').split(':')[0]);
+    if (!conv) { rows.push({html: () => webchatSearchThreadHtml(thread)}); continue; }
+    if (!grouped.has(conv.id)) {
+      const list = [];
+      grouped.set(conv.id, list);
+      rows.push({html: () => webchatSearchRoomHtml(conv, list)});
+    }
+    grouped.get(conv.id).push(thread);
+  }
+  return webchatSearchFactsHtml(found.facts)
+    + `<div class="webchat-search-count">${total} hit${total === 1 ? '' : 's'}`
+    + ` for “${escapeHtml(webchatSearchQuery)}”, every chat</div>`
+    + `<div class="webchat-list">${rows.map(row => row.html()).join('')}</div>`
+    + '<p class="pair-empty">Provider threads only — what the agents in the panes said is not'
+    + ' searched here yet.</p>';
 }
 
   </script>
@@ -34003,8 +34501,91 @@ function convPanelPicked(conv) {
   return picked;
 }
 
+// Which thread a reply is aimed at, per conversation. Empty for the ordinary case: a provider's
+// primary thread is named after the room and the provider, which is the name the agents use too
+// and the only one this composer can build. It fills in when somebody replies to a bubble
+// belonging to a labelled additional thread — those carry a part nothing here can guess, so before
+// this a reply to one of them opened a second conversation at the provider with none of the
+// history the reader was looking at.
+const convPanelReplyTo = new Map();
+
+// What to call a thread on screen: its label when it has one, and the provider's own name for its
+// primary thread.
+function convPanelThreadLabel(convId, session) {
+  const rest = session.slice(`${convId}:`.length).split(':');
+  const provider = webchatProvider(rest[0]);
+  const name = (provider && provider.label) || rest[0];
+  return rest[1] ? `${name} · ${rest.slice(1).join(':')}` : name;
+}
+
+// The provider a thread name belongs to, for a thread in this conversation. The name is
+// `<conversation>:<provider>` and optionally `:<label>`, so the provider is the first segment
+// after the room — and a name from another room belongs to no provider here, which is what keeps
+// a reply inside the conversation it was pressed in.
+function convPanelThreadProvider(convId, session) {
+  const prefix = `${convId}:`;
+  if (!session || !session.startsWith(prefix)) return '';
+  return session.slice(prefix.length).split(':')[0];
+}
+
+// The aim, if it still stands. A reply is to exactly one thread, so anything that leaves one
+// provider lit leaves the aim — including lighting a second one beside it, which would otherwise
+// send the reply to a thread nobody named as well as to the one they did.
+//
+// Checked on the way out rather than when the picks change, because every control that changes
+// them does so through the set this hands back, after this has already looked at it.
+function convPanelAim(convId) {
+  const aimed = convPanelReplyTo.get(convId);
+  if (!aimed) return '';
+  const conv = convWebOf(convId);
+  const picked = conv ? convPanelPicked(conv) : null;
+  if (picked && (picked.size !== 1 || !picked.has(convPanelThreadProvider(convId, aimed)))) {
+    convPanelReplyTo.delete(convId);
+    return '';
+  }
+  return aimed;
+}
+
 function convPanelSession(convId, provider) {
+  const aimed = convPanelAim(convId);
+  // Held per conversation rather than per provider, so it has to agree about the provider before
+  // it is used: a reply aimed at one provider's labelled thread must not rename another
+  // provider's send.
+  if (aimed && convPanelThreadProvider(convId, aimed) === provider) return aimed;
   return `${convId}:${provider}`;
+}
+
+// Aim the composer at one thread by name. The bubble knows which thread it is in — every provider
+// bubble carries it, because the two repairs beside this needed it first — so a reply needs no
+// picker and cannot be aimed at the wrong one.
+function convPanelReply(session, provider) {
+  const conv = convWebOf(convViewId);
+  if (!conv || !session || convPanelThreadProvider(conv.id, session) !== provider) return;
+  // Lit alone, and lit before the aim is set: a reply is to one thread, leaving four other
+  // providers lit would send it to them as well in threads the reader never named — and the
+  // reading of the picks is what drops an aim whose provider is not lit, so an aim written first
+  // would be dropped by the very call that lights it.
+  const picked = convPanelPicked(conv);
+  picked.clear();
+  picked.add(provider);
+  convPanelReplyTo.set(conv.id, session);
+  convPanelReplyDraw();
+  const input = document.getElementById('convInput');
+  if (input) input.focus();
+}
+
+// Stop aiming, and go back to the room's own thread for whatever is lit.
+function convPanelReplyClear() {
+  const conv = convWebOf(convViewId);
+  if (!conv || !convPanelReplyTo.has(conv.id)) return;
+  convPanelReplyTo.delete(conv.id);
+  convPanelReplyDraw();
+}
+
+function convPanelReplyDraw() {
+  if (typeof renderConvDock === 'function') renderConvDock();
+  if (typeof convPanelPaint === 'function') convPanelPaint(true);
+  if (window.cue) cue('tick');
 }
 
 // Which conversations are picking several providers at once rather than switching between them.
@@ -34228,7 +34809,17 @@ function convPanelActsHtml(conv, extra) {
   // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
   // be and a single line of four buttons was taking a third of a phone's width off them -- and
   // four near-identical chips in a line is not a thing anybody reads at a glance either.
-  return `<div class="xfer-who-acts">`
+  // What a reply is aimed at, when it is aimed at anything. Named rather than implied: a send that
+  // silently went somewhere other than the room's own thread would be the very fault this exists
+  // to fix, and the label is also how it is put back.
+  const aimed = convPanelAim(conv.id);
+  const reply = aimed
+    ? `<button class="xfer-who-more pick on" onclick="convPanelReplyClear()" `
+      + `title="Reply in this thread — press to go back to the room's own" `
+      + `aria-label="Replying in ${escapeHtml(aimed)}. Press to go back to this room's own thread">`
+      + `↩ ${escapeHtml(convPanelThreadLabel(conv.id, aimed))}</button>`
+    : '';
+  return `<div class="xfer-who-acts">${reply}`
     + `<button class="xfer-who-more list" onclick="convPanelAll()" aria-pressed="${all}" `
     + `title="${all ? 'Send to none of them' : 'Send to all of them'}" `
     + `aria-label="${all ? 'Send to none of them' : 'Send to all of them'}">`
@@ -34307,6 +34898,9 @@ function convPanelSend(conv) {
     sent += 1;
   }
   if (!sent) { showToast('Still waiting on the last reply.'); return; }
+  // The aim went with the message. Holding it would turn one reply into a thread the composer
+  // stays pointed at, which is a mode nobody asked for.
+  convPanelReplyTo.delete(conv.id);
   input.value = '';
   autoGrow(input);
   syncConvCursor();

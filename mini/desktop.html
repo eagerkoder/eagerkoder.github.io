@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-12">
+  <meta name="app-built" content="2026-09-15">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -13069,15 +13069,27 @@ function convWebModeOf(conv) {
       if (!entry || !entry.acts) return '';
       const tag = prov === undefined ? ''
         : ` data-prov="${escapeHtml(entry.agent || '')}"${prov ? '' : ' hidden'}`;
+      // Session labels may contain quotes. JSON creates JavaScript string literals and HTML
+      // escaping keeps those literals inside the attribute after the browser decodes it.
+      const session = escapeHtml(JSON.stringify(entry.acts.session));
+      const provider = escapeHtml(JSON.stringify(entry.acts.provider));
       const retry = entry.acts.retry
-        ? `<button class="conv-act" onclick="convPanelRetry('${escapeHtml(entry.acts.session)}')" `
+        ? `<button class="conv-act" onclick="convPanelRetry(${session})" `
           + `title="Send this message again" aria-label="Send this message again">Retry</button>`
         : '';
-      return `<span class="conv-acts"${tag}>${retry}`
-        + `<button class="conv-act" onclick="convPanelReconnect('${escapeHtml(entry.acts.provider)}', '${escapeHtml(entry.acts.session)}')" `
+      // Reply first, because it is the one that is pressed when nothing is wrong. The composer
+      // builds the provider's primary thread name for itself and can create no other, so this
+      // matters for the additional threads an agent labels for sub-questions it needs to run at
+      // once: the bubble is the only place a reader can say which of those they mean. Without it,
+      // replying to one opened a fresh conversation at the provider carrying none of what they
+      // were reading.
+      const reply = `<button class="conv-act" onclick="convPanelReply(${session}, ${provider})" `
+        + `title="Reply in this thread" aria-label="Reply in this thread">Reply</button>`;
+      return `<span class="conv-acts"${tag}>${reply}${retry}`
+        + `<button class="conv-act" onclick="convPanelReconnect(${provider}, ${session})" `
         + `title="Reopen this provider's tab" aria-label="Reopen this provider's tab">`
         + `Reconnect</button>`
-        + `<button class="conv-act" onclick="convPanelSync('${escapeHtml(entry.acts.session)}')" `
+        + `<button class="conv-act" onclick="convPanelSync(${session})" `
         + `title="Read this thread back off the provider's page" `
         + `aria-label="Read this thread back off the provider's page">Sync</button></span>`;
     }
@@ -14778,6 +14790,9 @@ function convWebModeOf(conv) {
       }
       else if (msg.type === 'webchat_history') {
         if (typeof webchatReceiveHistory === 'function') webchatReceiveHistory(msg);
+      }
+      else if (msg.type === 'webchat_recall') {
+        if (typeof webchatReceiveRecall === 'function') webchatReceiveRecall(msg);
       }
       else if (msg.type === 'webchat_models') {
         if (typeof webchatReceiveModels === 'function') webchatReceiveModels(msg);
