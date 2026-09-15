@@ -10811,6 +10811,18 @@
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3.5" /><path d="M12 2v6.5M12 15.5V22" />
           </svg></button>
+        <!-- The paragraph view, on the pane's own thread. A prompt and the turn it produced are
+             one exchange here too, and this is the one thread where the pair is always the same
+             speaker — so the switch belongs wherever bubbles are drawn, not only where providers
+             are. Offered only over the thread: the rows have no bubble for it to change. -->
+        <button class="hang-btn hang-md hang-para" id="panePara" onclick="convParaToggle()"
+          aria-pressed="false" aria-label="Show each answer under the question that produced it">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 7h9" />
+            <path d="M3 11.5h18" />
+            <path d="M5 15.5h14M5 19h9" />
+          </svg></button>
         <div class="block-nav" id="blockNav" hidden>
           <button onclick="stepBlock(1)" title="Next agent message" aria-label="Next agent message">↓</button>
           <button onclick="stepBlock(-1)" title="Previous agent message" aria-label="Previous agent message">↑</button>
@@ -38829,7 +38841,13 @@ function convPanelPaint(now) {
       const web = !!convViewId && typeof webchatThreadSessions === 'function'
         && webchatThreadSessions(convViewId).length > 0;
       hangSyncMd(document.getElementById('convMarkdown'), web);
-      hangSyncPara(document.getElementById('convPara'), web);
+      // The paragraph view is offered over every thread, not only the ones with providers in them.
+      // It was drawn beside the Markdown switch on the argument that both are about how a
+      // provider's answer is drawn -- which stopped being true when a pane's prompt began pairing
+      // with the turn it produced. A conversation of panes has exchanges in it too, and the switch
+      // that folds them was missing from the only view that could show them.
+      hangSyncPara(document.getElementById('convPara'), !!convViewId);
+      hangSyncPara(document.getElementById('panePara'), !!thread && !thread.hidden);
     }
 
     // A conversation the relay could have written something about: one with members, which means
