@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-15">
+  <meta name="app-built" content="2026-09-16">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -13248,8 +13248,13 @@ function convWebModeOf(conv) {
         if (e.event) {
           const when = convClock(e);
           last = at;
-          return `<div class="conv-arb-to">` +
-            `<span class="conv-commits-lede">${e.sign || arbSign(13)} ${escapeHtml(e.lede || '')}</span>` +
+          // The mark in front of the line. `undefined` is "this is the arbitrator's" and an empty
+          // string is "this one has no mark at all" -- a falsy test made those the same thing, so
+          // an event belonging to something else wore the scales.
+          const sign = e.sign === undefined ? arbSign(13) : e.sign;
+          return `<div class="conv-arb-to${e.cls ? ` ${e.cls}` : ''}">` +
+            `<span class="conv-commits-lede">${sign}${sign ? ' ' : ''}` +
+            `${escapeHtml(e.lede || '')}</span>` +
             (e.text ? `<span class="conv-commit${e.warn ? ' warn' : ''}">` +
                       `${escapeHtml(e.text)}</span>` : '') +
             (when ? `<span class="conv-commit quiet">${escapeHtml(when)}</span>` : '') +
