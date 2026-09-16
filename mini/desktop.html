@@ -7473,6 +7473,19 @@
       return parts.join(' · ') || a.pane_id;
     }
 
+    // A list rebuilt on every poll detaches whatever a finger is resting on: a tap that began
+    // before the rewrite ends on an element that is no longer in the document, so the row has to
+    // be pressed a second time. Between two snapshots these lists are nearly always identical, so
+    // the write is skipped when the markup has not moved. The signature is a property rather than
+    // a `data-` attribute because it is the whole markup — several tens of kilobytes — and the DOM
+    // is not where that belongs.
+    function paintList(el, html) {
+      if (!el || el._painted === html) return false;
+      el._painted = html;
+      el.innerHTML = html;
+      return true;
+    }
+
   </script>
   <script>
     // --- Shared user state ---
@@ -13036,6 +13049,8 @@ function convWebModeOf(conv) {
         + '<circle cx="7" cy="7" r="1.7"/>',
       eyeOff: '<path d="M1.2 7S3.4 3.2 7 3.2 12.8 7 12.8 7 10.6 10.8 7 10.8 1.2 7 1.2 7Z"/>'
         + '<circle cx="7" cy="7" r="1.7"/><path d="M2.2 11.8 11.8 2.2"/>',
+      copy: '<rect x="5" y="5" width="7.2" height="7.2" rx="1.6"/>'
+        + '<path d="M9.4 2.8H3.4a1.6 1.6 0 0 0-1.6 1.6v6"/>',
     };
 
     function convIco(name) {
@@ -13062,6 +13077,35 @@ function convWebModeOf(conv) {
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
         + `title="${say}" aria-label="${say}" `
         + `aria-expanded="${open ? 'true' : 'false'}">${convIco(open ? 'fold' : 'unfold')}</button>`;
+    }
+
+    // The copy, in every bubble's header. One per bubble rather than one per band: in the
+    // paragraph and grouped views the question and the answer are one bubble, and what a reader
+    // wants out of a pair is the pair.
+    function convCopyBtnHtml() {
+      return '<button class="conv-copy" onclick="convCopyMsg(this)" '
+        + 'title="Copy this message" aria-label="Copy this message">'
+        + `${convIco('copy')}</button>`;
+    }
+
+    // What was said, as the Markdown it was said in. A provider answers in Markdown and the thread
+    // draws it, so a selection dragged across the rendered answer takes the bullets and leaves the
+    // syntax behind -- and a question is in the bubble above or the band above, depending on which
+    // of the three views is on. This copies the text the record holds, in the shape it holds it.
+    function convCopyMsg(btn) {
+      const msg = btn && btn.closest ? btn.closest('.conv-msg') : null;
+      if (!msg) return;
+      // A grouped bubble holds an answer per provider and shows one. The copy is of the answer
+      // being read, never of whichever provider happened to be first.
+      const shown = msg.querySelector('.conv-body:not([hidden])');
+      const said = (shown && shown.dataset.text) || msg.dataset.text || '';
+      const ask = msg.dataset.ask || '';
+      const text = ask && said ? `${ask}\n\n${said}` : (ask || said);
+      if (!text || typeof writeClipboard !== 'function') return;
+      writeClipboard(text, () => {
+        if (typeof showToast === 'function') showToast('Copied');
+      });
+      if (typeof window !== 'undefined' && window.cue) cue('tick');
     }
 
     function convOpenedSet(msg, open) {
@@ -13420,8 +13464,10 @@ function convWebModeOf(conv) {
         const okey = gkey || `${key}|${at}`;
         const open = convOpened.has(okey);
         const fold = convFoldBtnHtml(streaming, foreign, open);
-        const head = bar || time || fold
-          ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
+        // The header is drawn on every bubble now, because the copy is on every bubble: a message
+        // with no name, no clock and no fold still has words in it somebody may want.
+        const head = `<span class="conv-who">${bar}${time}${mark}${fold}`
+          + `${convCopyBtnHtml()}</span>`;
         // The pane being read is always the right side. Stored member order is conversation
         // history, not a reading preference, and can change when a pair is created or reopened.
         const side = paired && key === me.key ? ' conv-right' : '';
@@ -13471,9 +13517,10 @@ function convWebModeOf(conv) {
             const g = entries[m];
             const on = (g.agent || '') === shown;
             return `<span class="conv-body" data-prov="${escapeHtml(g.agent || '')}"` +
+              ` data-text="${escapeHtml(g.text || '')}"` +
               `${on ? '' : ' hidden'}>${convSaidHtml(g)}</span>`;
           }).join('')
-          : `<span class="conv-body">${said}</span>`;
+          : `<span class="conv-body" data-text="${text}">${said}</span>`;
         const body = `${ask}${pills}${bodies}`;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
@@ -13495,6 +13542,9 @@ function convWebModeOf(conv) {
           ` data-open-key="${escapeHtml(okey)}"` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
+          // The question this bubble is the answer to, where the two are drawn as one -- so a copy
+          // out of a paragraph or grouped bubble carries the pair the reader is looking at.
+          (asked ? ` data-ask="${escapeHtml(asked.text || '')}"` : '') +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
       }).join('');
     }
@@ -14540,7 +14590,14 @@ function convWebModeOf(conv) {
     function syncBranchBadges() {
       const of = id => (typeof paneOf === 'function' && id) ? paneOf(id) : null;
       syncBranchBadge('paneBranch', of(typeof activePane === 'undefined' ? '' : activePane));
-      syncBranchBadge('convBranch', of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+      // Never over a web conversation. What a room of providers produces is threads, not commits,
+      // and the badge there named whatever checkout its agent's pane happened to be started in --
+      // a fact about the harness's shell and about nothing anybody in that room is doing.
+      const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(row => row.id === convViewId) : null;
+      const web = typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
+      syncBranchBadge('convBranch',
+        web ? null : of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
     }
 
     const convGitRule = (cls, body) => `<div class="conv-rule git ${cls}">${body}</div>`;

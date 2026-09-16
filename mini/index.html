@@ -6733,6 +6733,33 @@
       opacity: 1;
     }
 
+    /* The copy, at the end of every header. Same shape as the fold, and beside it when there is
+       one -- the fold is what takes the free space, so this follows rather than competes for it. */
+    .conv-who .conv-copy {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6em;
+      height: 1.6em;
+      padding: 0;
+      margin-left: auto;
+      flex: 0 0 auto;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      opacity: 0.55;
+      cursor: pointer;
+    }
+
+    .conv-who .conv-fold + .conv-copy {
+      margin-left: 2px;
+    }
+
+    .conv-who .conv-copy:hover {
+      color: var(--text);
+      opacity: 1;
+    }
+
     /* Everything in the header is measured in its own ems, so the row scales as one piece. */
     .conv-who .badge {
       font-size: 1em;
@@ -6892,30 +6919,36 @@
       padding: 0 4px;
     }
 
-    /* The head of a Studio room: the topic, drawn as a badge between two sittings rather than as a
-       step in a session. Bigger than the rails around it because it is not one of them -- it is the
-       line that says what everything under it is about, and at the rail's own 0.68 it read as
-       another piece of bookkeeping. */
+    /* The head of a Studio room: the seam between one topic and the next. It is not a rail --
+       nothing did it, and nothing about it is bookkeeping -- it is the line saying everything
+       under it is a different conversation from everything above it. So it is drawn as a divider
+       across the whole thread rather than as a mark in the middle of one: a coloured rule, a
+       filled badge sitting on it, and the topic itself in the same colour and bigger than the
+       messages it introduces. */
     .conv-arb-to.conv-topic {
-      margin: 14px 0 10px;
-      gap: 6px;
+      margin: 20px 0 12px;
+      gap: 8px;
+      align-items: center;
+      padding-top: 10px;
+      border-top: 2px solid var(--blue);
     }
 
     .conv-arb-to.conv-topic .conv-commits-lede {
-      padding: 2px 8px;
+      padding: 2px 9px;
       border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--panel, var(--bg));
-      color: var(--muted);
-      font-size: max(8px, calc(var(--conv-font, 13px) * 0.78));
+      border: 1px solid var(--blue);
+      background: var(--blue);
+      color: var(--bg);
+      font-weight: 700;
+      font-size: max(8px, calc(var(--conv-font, 13px) * 0.72));
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
     }
 
     .conv-arb-to.conv-topic .conv-commit {
-      font-size: max(11px, calc(var(--conv-font, 13px) * 1.05));
-      font-weight: 600;
-      color: var(--text);
+      font-size: max(12px, calc(var(--conv-font, 13px) * 1.15));
+      font-weight: 700;
+      color: var(--blue);
     }
 
     .conv-arb-to.conv-topic .conv-commit.quiet {
@@ -8159,6 +8192,28 @@
     /* Pinned to the right-hand end while the providers scroll under it. It is the way to the ones
        the line does not reach, so it is the one thing in the line that must never be the thing
        scrolled past -- and it carries the count of what is lit out of sight. */
+    /* A glyph in a line of words. At the label size beside it, it read as punctuation rather than
+       as the way into what the next topic comes up as. */
+    .xfer-row .xfer-who-more.studio-gear {
+      font-size: 1.15rem;
+      line-height: 1;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+
+    /* A setting rather than a target: the label carries its own one-line hint under it, so the row
+       is two lines and reads left-aligned. */
+    .studio-set-row {
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .studio-set-hint {
+      display: block;
+      margin-top: 2px;
+      white-space: normal;
+    }
+
     .xfer-row .xfer-who.studio-add {
       border-style: dashed;
       font-size: 1rem;
@@ -11582,6 +11637,20 @@
     </div>
   </div>
 
+  <!-- What the next topic comes up as. The same three keys the Settings screen holds, in front of
+       the button that spends them. -->
+  <div id="studioSetupSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeStudioSetup()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Studio defaults</span>
+        <button onclick="closeStudioSetup()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="studioSetupBody" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
   <div id="startSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeStart()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div
@@ -12890,6 +12959,19 @@
       parts.push(a.agent);
       if (a.label && a.label !== a.project) parts.push(a.label);
       return parts.join(' · ') || a.pane_id;
+    }
+
+    // A list rebuilt on every poll detaches whatever a finger is resting on: a tap that began
+    // before the rewrite ends on an element that is no longer in the document, so the row has to
+    // be pressed a second time. Between two snapshots these lists are nearly always identical, so
+    // the write is skipped when the markup has not moved. The signature is a property rather than
+    // a `data-` attribute because it is the whole markup — several tens of kilobytes — and the DOM
+    // is not where that belongs.
+    function paintList(el, html) {
+      if (!el || el._painted === html) return false;
+      el._painted = html;
+      el.innerHTML = html;
+      return true;
     }
 
   </script>
@@ -23767,6 +23849,8 @@ function convWebModeOf(conv) {
         + '<circle cx="7" cy="7" r="1.7"/>',
       eyeOff: '<path d="M1.2 7S3.4 3.2 7 3.2 12.8 7 12.8 7 10.6 10.8 7 10.8 1.2 7 1.2 7Z"/>'
         + '<circle cx="7" cy="7" r="1.7"/><path d="M2.2 11.8 11.8 2.2"/>',
+      copy: '<rect x="5" y="5" width="7.2" height="7.2" rx="1.6"/>'
+        + '<path d="M9.4 2.8H3.4a1.6 1.6 0 0 0-1.6 1.6v6"/>',
     };
 
     function convIco(name) {
@@ -23793,6 +23877,35 @@ function convWebModeOf(conv) {
       return '<button class="conv-fold" onclick="convFoldToggle(this)" '
         + `title="${say}" aria-label="${say}" `
         + `aria-expanded="${open ? 'true' : 'false'}">${convIco(open ? 'fold' : 'unfold')}</button>`;
+    }
+
+    // The copy, in every bubble's header. One per bubble rather than one per band: in the
+    // paragraph and grouped views the question and the answer are one bubble, and what a reader
+    // wants out of a pair is the pair.
+    function convCopyBtnHtml() {
+      return '<button class="conv-copy" onclick="convCopyMsg(this)" '
+        + 'title="Copy this message" aria-label="Copy this message">'
+        + `${convIco('copy')}</button>`;
+    }
+
+    // What was said, as the Markdown it was said in. A provider answers in Markdown and the thread
+    // draws it, so a selection dragged across the rendered answer takes the bullets and leaves the
+    // syntax behind -- and a question is in the bubble above or the band above, depending on which
+    // of the three views is on. This copies the text the record holds, in the shape it holds it.
+    function convCopyMsg(btn) {
+      const msg = btn && btn.closest ? btn.closest('.conv-msg') : null;
+      if (!msg) return;
+      // A grouped bubble holds an answer per provider and shows one. The copy is of the answer
+      // being read, never of whichever provider happened to be first.
+      const shown = msg.querySelector('.conv-body:not([hidden])');
+      const said = (shown && shown.dataset.text) || msg.dataset.text || '';
+      const ask = msg.dataset.ask || '';
+      const text = ask && said ? `${ask}\n\n${said}` : (ask || said);
+      if (!text || typeof writeClipboard !== 'function') return;
+      writeClipboard(text, () => {
+        if (typeof showToast === 'function') showToast('Copied');
+      });
+      if (typeof window !== 'undefined' && window.cue) cue('tick');
     }
 
     function convOpenedSet(msg, open) {
@@ -24151,8 +24264,10 @@ function convWebModeOf(conv) {
         const okey = gkey || `${key}|${at}`;
         const open = convOpened.has(okey);
         const fold = convFoldBtnHtml(streaming, foreign, open);
-        const head = bar || time || fold
-          ? `<span class="conv-who">${bar}${time}${mark}${fold}</span>` : '';
+        // The header is drawn on every bubble now, because the copy is on every bubble: a message
+        // with no name, no clock and no fold still has words in it somebody may want.
+        const head = `<span class="conv-who">${bar}${time}${mark}${fold}`
+          + `${convCopyBtnHtml()}</span>`;
         // The pane being read is always the right side. Stored member order is conversation
         // history, not a reading preference, and can change when a pair is created or reopened.
         const side = paired && key === me.key ? ' conv-right' : '';
@@ -24202,9 +24317,10 @@ function convWebModeOf(conv) {
             const g = entries[m];
             const on = (g.agent || '') === shown;
             return `<span class="conv-body" data-prov="${escapeHtml(g.agent || '')}"` +
+              ` data-text="${escapeHtml(g.text || '')}"` +
               `${on ? '' : ' hidden'}>${convSaidHtml(g)}</span>`;
           }).join('')
-          : `<span class="conv-body">${said}</span>`;
+          : `<span class="conv-body" data-text="${text}">${said}</span>`;
         const body = `${ask}${pills}${bodies}`;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
@@ -24226,6 +24342,9 @@ function convWebModeOf(conv) {
           ` data-open-key="${escapeHtml(okey)}"` +
           ` data-key="${escapeHtml(key)}"` +
           ` data-i="${i}" data-at="${escapeHtml(at)}" data-text="${text}" data-who="${name}"` +
+          // The question this bubble is the answer to, where the two are drawn as one -- so a copy
+          // out of a paragraph or grouped bubble carries the pair the reader is looking at.
+          (asked ? ` data-ask="${escapeHtml(asked.text || '')}"` : '') +
           ` style="--conv-agent:${color}">${tick}${head}${acts}${body}</div>` + git.after;
       }).join('');
     }
@@ -25862,7 +25981,13 @@ function webchatRoomCard(conv, sessions, compact) {
   // nothing -- so an empty room wears its grant instead, which is what it is going to ask.
   const spoken = Array.from(new Set(sessions.map(session => session.provider)));
   const granted = convGrantOf(conv).filter(id => id !== '*');
-  const marks = (spoken.length ? spoken : granted).map(provider => webchatMark(provider, 18)).join('');
+  // A Studio room is granted every provider this relay offers, so its grant is not a statement
+  // about the room -- it is the relay's list, and a row of twenty logos over a room nobody has
+  // asked anything in says only that the relay has twenty drivers. It draws what has been spoken
+  // to and, before that, nothing.
+  const dynamic = typeof convWebModeOf === 'function' && convWebModeOf(conv) === 'studio';
+  const marks = (spoken.length ? spoken : dynamic ? [] : granted)
+    .map(provider => webchatMark(provider, 18)).join('');
   const snippet = !compact && newest.snippet
     ? `<div class="webchat-snippet">${escapeHtml(newest.snippet)}</div>` : '';
   // What is in it, in the shape the Conversations section says it: which harnesses, and which
@@ -25878,7 +26003,7 @@ function webchatRoomCard(conv, sessions, compact) {
   const said = sessions.length
     ? `${sessions.length} ${sessions.length === 1 ? 'thread' : 'threads'}`
       + ` · ${count} ${count === 1 ? 'message' : 'messages'}${when ? ` · ${escapeHtml(when)}` : ''}`
-    : any ? 'nothing asked yet'
+    : any || dynamic ? 'nothing asked yet'
       : `nothing asked yet · ${granted.length} ${granted.length === 1 ? 'provider' : 'providers'}`;
   return `<div class="conversation-card webchat-card webchat-room" role="button" tabindex="0"`
     + ` data-conv-id="${escapeHtml(conv.id)}"`
@@ -26069,8 +26194,10 @@ function renderWebAgents(error = '') {
   // already there, and it is the same card whether or not anything has been searched for.
   const studio = typeof studioCardHtml === 'function' ? studioCardHtml() : '';
   const draw = () => {
-    el.innerHTML = header + studio + webchatPillsHtml()
-      + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '') + body;
+    // Skipped when nothing moved: this section is redrawn on every broadcast, and a rewrite
+    // between a finger going down and coming up swallows the tap. See paintList.
+    paintList(el, header + studio + webchatPillsHtml()
+      + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '') + body);
   };
   if (typeof webchatSearchKeep === 'function') webchatSearchKeep(draw);
   else draw();
@@ -30223,7 +30350,14 @@ function nlmSourceDelete(source) {
     function syncBranchBadges() {
       const of = id => (typeof paneOf === 'function' && id) ? paneOf(id) : null;
       syncBranchBadge('paneBranch', of(typeof activePane === 'undefined' ? '' : activePane));
-      syncBranchBadge('convBranch', of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+      // Never over a web conversation. What a room of providers produces is threads, not commits,
+      // and the badge there named whatever checkout its agent's pane happened to be started in --
+      // a fact about the harness's shell and about nothing anybody in that room is doing.
+      const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(row => row.id === convViewId) : null;
+      const web = typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
+      syncBranchBadge('convBranch',
+        web ? null : of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
     }
 
     const convGitRule = (cls, body) => `<div class="conv-rule git ${cls}">${body}</div>`;
@@ -32544,7 +32678,7 @@ function nlmSourceDelete(source) {
       // second exit that lands somewhere the reader did not ask for.
       const mode = archiveOn || autoOn;
       el.classList.toggle('compact', compactOn(CONV_COMPACT_KEY));
-      el.innerHTML = `<div class="section-header">` +
+      const html = `<div class="section-header">` +
         `${archiveOn ? 'Archived conversations' : autoOn ? 'Auto conversations' : 'Conversations'}` +
         `${mode ? (archiveOn ? archiveControl : autoControl) + compactControl
           : compactControl + autoControl + archiveControl + newControl}</div>` +
@@ -32553,6 +32687,9 @@ function nlmSourceDelete(source) {
         : activeRows.length ? activeRows.map(r => card(r, false)).join('')
         : '<p class="pair-empty">No conversations yet. Start one here, or record a pane into one '
           + 'from its own menu.</p>');
+      // Only when it moved: this runs on every snapshot, and rewriting the list under a finger is
+      // what made a card need two taps to open. See paintList.
+      paintList(el, html);
       applySections();
     }
 
@@ -35950,6 +36087,9 @@ function setStudioHide(on) {
 function setStudioAgent(id) {
   studioSetPref(STUDIO_AGENT_KEY, id || STUDIO_DEFAULT_AGENT);
   syncStudioSettings();
+  // The composer says which agent a room that has none would start, so it is stale the moment
+  // this changes.
+  if (typeof renderConvDock === 'function') renderConvDock();
 }
 
 // The Settings rows, which are three facts about how a Studio room comes up rather than three
@@ -36211,9 +36351,9 @@ function studioActsHtml(conv) {
         + ` title="Open this agent's terminal" aria-label="Open this agent's terminal">`
         + `${shellGlyph()}</button>`
       : '')
-    // The defaults a Spawn will use. They are the same two settings for every room, so the gear
-    // goes to where they live rather than to a copy of them.
-    + `<button class="xfer-who-more" onclick="openStudioSettings()"`
+    // The defaults the next Spawn will use, in a drawer over the composer. Bigger than the words
+    // beside it: it is a glyph among labels, and at their size it read as punctuation.
+    + `<button class="xfer-who-more studio-gear" onclick="openStudioSetup()"`
     + ` title="Studio settings — which agent a room starts, and whether it starts one"`
     + ` aria-label="Studio settings">⚙</button>`
     + `<button class="xfer-who-more studio-new" onclick="openStudioTopic()"`
@@ -36339,9 +36479,65 @@ function studioAgentLabel() {
   return (row && (row.label || row.id)) || '';
 }
 
-// The defaults a Spawn will use — which agent, and whether a new topic starts one at all. They are
-// this browser's and they apply to every room, so this opens the Settings screen at them rather
-// than drawing a second copy of two selects that would then have to agree with the first.
+// The defaults a Spawn will use, in a drawer over the composer that opened it. They are this
+// browser's and they apply to every Studio room, which is why they are also three rows on the
+// Settings screen — but the moment anybody wants them is the moment before pressing New, and a
+// setting two screens away from the button it governs is one nobody finds. Both write the same
+// three keys and both redraw the other, so neither is a second copy of the answer.
+function openStudioSetup() {
+  const sheet = document.getElementById('studioSetupSheet');
+  if (!sheet) return;
+  studioSetupDraw();
+  sheet.style.display = 'block';
+}
+
+function closeStudioSetup() {
+  const sheet = document.getElementById('studioSetupSheet');
+  if (sheet) sheet.style.display = 'none';
+}
+
+function studioSetupDraw() {
+  const body = document.getElementById('studioSetupBody');
+  if (body) body.innerHTML = studioSetupSheetHtml();
+}
+
+// A toggle, and the agent. The toggles stay open when pressed — the drawer is where these are set
+// and somebody setting two of them should not have to open it twice — and the agent closes it,
+// because choosing one is the answer to the question the drawer asked.
+function studioSetupSheetHtml() {
+  const row = (on, call, label, hint) =>
+    `<button type="button" class="webchat-pick-row studio-set-row${on ? ' on' : ''}"`
+    + ` aria-pressed="${on}" onclick="${call}">`
+    + `<span class="webchat-pill-name">${escapeHtml(label)}`
+    + `<span class="hint studio-set-hint">${escapeHtml(hint)}</span></span>`
+    + `<span class="webchat-pill-n">${on ? 'On' : 'Off'}</span></button>`;
+  const offered = typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
+  const held = studioAgentId();
+  // The held one is listed even when the relay is no longer offering it: a drawer that silently
+  // left it out would say this browser starts something it does not.
+  const rows = offered.some(cfg => cfg.id === held)
+    ? offered : offered.concat([{id: held, label: held, kind: ''}]);
+  return row(studioSpawnOn(), 'setStudioSpawn(!studioSpawnOn());studioSetupDraw()',
+    'Start an agent with a new topic',
+    'Off, the room comes up with its providers and Spawn is what starts one')
+    + row(studioHideOn(), 'setStudioHide(!studioHideOn());studioSetupDraw()',
+      'List only the newest topic',
+      'Nothing is deleted — the earlier rooms come back when this goes off')
+    + '<p class="hint studio-pick-more">Agent a new topic starts</p>'
+    + rows.map(cfg => {
+      const on = cfg.id === held;
+      const name = escapeHtml(cfg.label || cfg.id);
+      return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}"`
+        + ` data-config="${escapeHtml(cfg.id)}" aria-pressed="${on}"`
+        + ` onclick="setStudioAgent(this.dataset.config);closeStudioSetup()"`
+        + ` aria-label="Start new topics with ${name}">`
+        + `<span class="webchat-pill-name">${name}</span>`
+        + (cfg.kind ? `<span class="webchat-pill-n">${escapeHtml(cfg.kind)}</span>` : '')
+        + '</button>';
+    }).join('');
+}
+
+// The rest of what this browser holds, which is a screen rather than a drawer.
 function openStudioSettings() {
   if (typeof openPanel === 'function') openPanel('settingsView');
   const group = document.getElementById('studioAgentPick');
@@ -40451,7 +40647,10 @@ function studioCardHtml() {
       const live = typeof convLiveOn === 'function' && convLiveOn();
       hangSyncCommits(document.getElementById('paneCommits'),
                       live && !!thread && !thread.hidden);
-      hangSyncCommits(document.getElementById('convCommits'), live && recorded);
+      // Never over a room of web providers. What is produced there is threads with providers, and
+      // the commits the toggle would draw belong to whatever checkout its agent's pane happened to
+      // be started in -- a fact about that harness's shell rather than about the work in the room.
+      hangSyncCommits(document.getElementById('convCommits'), live && recorded && !hangConvWeb());
       // Whether the relay has been asked something that has not come back. Only where the record is
       // what is on screen: a warm fetch runs with the toggle off, and a pill over this browser's own
       // transcript would be about a thread the reader is not looking at.
@@ -40478,9 +40677,19 @@ function studioCardHtml() {
     // -- an agent conversation whose harness has not come up yet has nothing recorded either, and
     // an ordinary room reduced to no members has nothing left to read.
     function hangConvRecorded() {
+      const conv = hangConvOf();
       if (!convViewId || typeof loadConvIndex !== 'function') return !!convViewId;
-      const conv = loadConvIndex().find(c => c.id === convViewId);
       return !!conv && ((conv.members || []).length > 0);
+    }
+
+    function hangConvOf() {
+      if (!convViewId || typeof loadConvIndex !== 'function') return null;
+      return loadConvIndex().find(c => c.id === convViewId) || null;
+    }
+
+    // A conversation that exists for its providers, in any of the three shapes that takes.
+    function hangConvWeb() {
+      return typeof convWebModeOf === 'function' && !!convWebModeOf(hangConvOf());
     }
 
     function hangSyncMd(btn, offered) {
