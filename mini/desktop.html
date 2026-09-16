@@ -10066,10 +10066,11 @@
 // the last declaration of a name wins and nothing warns: a plain `convMode` collided with
 // conversation_view.js's own switch of that name, which loads later and silently replaced it.
 const CONV_KINDS = [
-  // A panel whose providers have all been taken away is still a panel: the composer it wants is
-  // the one that asks which provider, even while the answer is none.
+  // A panel whose providers have all been taken away is still a panel, and a Studio room with
+  // none left is still a Studio room: the composer each wants is the one that asks which provider,
+  // even while the answer is none.
   ['providers', conv => convGrantOf(conv).length > 0
-    || !!(conv && conv.webchat && conv.webchat.mode === 'panel')],
+    || ['panel', 'studio'].includes((conv && conv.webchat && conv.webchat.mode) || '')],
 ];
 
 function convGrantOf(conv) {
@@ -10085,9 +10086,23 @@ function convKindOf(conv) {
 // Who spends a `providers` conversation's grant. Kind-scoped by name, because a mode belongs to
 // the kind that has one: a second kind with modes of its own gets its own accessor rather than
 // crowding into this one's values.
+// `studio` is the third: one agent and every provider, in a room made per topic. It sits with the
+// agent mode everywhere the question is "is there a harness in here" — it has one, it is bound, and
+// its composer addresses it by default — and with the panel where the question is "does this room
+// exist for its providers", which is why it is drawn even with an empty grant.
+// What each mode is called on a card. A ternary answered "panel or not", which stopped being the
+// question the moment there were three of them.
+const CONV_WEB_LABELS = {panel: 'Panel', studio: 'Studio', agent: 'Agent'};
+
+function convWebLabelOf(conv) {
+  return CONV_WEB_LABELS[convWebModeOf(conv)] || '';
+}
+
 function convWebModeOf(conv) {
   if (convKindOf(conv) !== 'providers') return '';
-  return conv.webchat.mode === 'panel' ? 'panel' : 'agent';
+  const mode = conv.webchat.mode;
+  if (mode === 'panel' || mode === 'studio') return mode;
+  return 'agent';
 }
 
   </script>
@@ -11058,7 +11073,7 @@ function convWebModeOf(conv) {
       if (!granted.length) return null;
       const any = granted.includes('*');
       return {
-        kind: convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent',
+        kind: convWebLabelOf(conv),
         any: any,
         providers: any ? [] : Array.from(new Set(granted)),
       };
@@ -14787,6 +14802,12 @@ function convWebModeOf(conv) {
       }
       else if (msg.type === 'start_options') {
         startOptions = msg;
+        // The default Studio alias, written into the shared config document the first time a relay
+        // that could run it says what it offers. Here rather than at the press that uses it: the
+        // relay derives each config row and refuses a start naming an id it has not been told
+        // about, so an alias minted in the same breath as the start would be refused by it.
+        if (typeof studioSeedAgent === 'function') studioSeedAgent();
+        if (typeof syncStudioSettings === 'function') syncStudioSettings();
         render();
       }
       // Its presence is the feature gate, the way start_options gates Start — so an empty list is
@@ -14995,6 +15016,9 @@ function convWebModeOf(conv) {
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        // A link the page was loaded on that named something only a snapshot can resolve — an
+        // agent id, a landing section, a pane. After the render, which is what fills those lists.
+        if (typeof hashResume === 'function') hashResume();
         if (typeof renderBandwidth === 'function') renderBandwidth();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.

@@ -1274,6 +1274,15 @@
       flex-direction: column;
     }
 
+    /* A deep link is being resolved: the destination needs the relay to answer, and what was on
+       screen for that second was the landing page — the one screen the reader did not ask for,
+       followed by a jump off it. Hidden rather than removed, so the list keeps its layout and
+       nothing reflows when it comes back. Capped in hashroute.js: a page that never connects gets
+       its landing page back. */
+    body.deeplink-pending #agentListView {
+      visibility: hidden;
+    }
+
     /* Landing-page sections share the same outer spacing. Pairs owns its inner two-card layout. */
     .agents,
     .terminals,
@@ -9389,31 +9398,179 @@
       .webchat-picker .pair-empty { grid-column: 1 / -1; }
 
 
+      /* The way in. One card, above the pills and the search, wearing the accent rather than the
+         surface every other card wears: it is the only row in this section that makes something
+         rather than opening something that is already there. */
+      .studio-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 8px 0 2px;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--border));
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--blue) 10%, var(--surface));
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .studio-card:hover {
+        border-color: var(--blue);
+        background: color-mix(in srgb, var(--blue) 16%, var(--surface));
+      }
+
+      .studio-card:focus-visible {
+        outline: none;
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+      }
+
+      .studio-card-mark {
+        flex: 0 0 auto;
+        color: var(--blue);
+        font-size: 0.9rem;
+      }
+
+      /* min-width:0, so a long topic name ellipsises instead of pushing the + off the card. */
+      .studio-card-body {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .studio-card-name {
+        font-size: 0.82rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .studio-card-meta {
+        color: var(--muted);
+        font-size: 0.68rem;
+      }
+
+      .studio-card-new {
+        flex: 0 0 auto;
+        width: 28px;
+        height: 28px;
+        border: 1px solid color-mix(in srgb, var(--blue) 40%, var(--border));
+        border-radius: 999px;
+        background: var(--bg);
+        color: var(--blue);
+        font-size: 1rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .studio-card-new:hover { border-color: var(--blue); }
+
       /* The search box, between the provider pills and the list. Over the list rather than under
          it: what it does is replace the list, and a control that changes what is below it belongs
          above it. */
       .webchat-search {
         display: flex;
         gap: 6px;
-        align-items: center;
+        /* stretch, so the button is exactly the pill's height without either of them being told
+           what that height is — the field's own padding and font decide it. */
+        align-items: stretch;
         margin: 6px 0 4px;
       }
 
-      .webchat-search-input {
+      /* The same shape as the search bar at the foot of the landing page: a pill, the glyph
+         first, the field bare inside it. Flat rather than glass — that one floats over the list it
+         searches and this one sits in the page. A <label>, so a tap on the padding beside the
+         glyph focuses the field: the whole pill is the control. */
+      .webchat-search-box {
         flex: 1;
         min-width: 0;
-        padding: 7px 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-sizing: border-box;
+        padding: 0 12px;
+        cursor: text;
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 999px;
         background: var(--bg);
+      }
+
+      /* The ring belongs to the pill, since the pill is what the reader sees. */
+      .webchat-search-box:focus-within {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+      }
+
+      .webchat-search-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 7px 0;
+        border: 0;
+        background: none;
         color: var(--text);
         font: inherit;
         font-size: 0.8rem;
       }
 
-      .webchat-search-input:focus {
+      .webchat-search-input:focus { outline: none; }
+
+      /* The glyph says what the pill is for. Once a search has been made the ✕ that undoes it
+         takes the same place — one box, so nothing beside it moves when they swap. */
+      .webchat-search-icon {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        color: var(--muted);
+        pointer-events: none;
+      }
+
+      button.webchat-search-icon {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--blue);
+        cursor: pointer;
+        pointer-events: auto;
+      }
+
+      button.webchat-search-icon:hover { color: var(--text); }
+
+      /* The affirmative half of the control, so it is drawn as one thing with the pill beside it:
+         the same round end, the same border weight, in the blue the app uses for "this is the
+         action". `.section-action` is styled only inside a `.section-header`, so out here it was
+         a bare browser button sitting against a rounded field.
+
+         Every colour is mixed from --blue rather than named, which is what keeps it right across
+         the eleven themes: a hard-coded tint is one theme's answer written down. */
+      .webchat-search .section-action {
+        flex: 0 0 auto;
+        padding: 0 14px;
+        border: 1px solid color-mix(in srgb, var(--blue) 40%, var(--border));
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--blue) 10%, var(--bg));
+        color: var(--blue);
+        font: inherit;
+        font-size: 0.8rem;
+        cursor: pointer;
+      }
+
+      .webchat-search .section-action:hover {
+        background: color-mix(in srgb, var(--blue) 18%, var(--bg));
+        border-color: var(--blue);
+      }
+
+      .webchat-search .section-action:active {
+        background: color-mix(in srgb, var(--blue) 26%, var(--bg));
+      }
+
+      .webchat-search .section-action:focus-visible {
         outline: none;
         border-color: var(--blue);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
       }
 
       .webchat-search-count {
@@ -9924,6 +10081,48 @@
            the first tile saved is what switches it back on, so there has to be somewhere to save
            one from that is not the section itself. -->
       <button class="setting-action" onclick="openLauncherEdit()">Edit launcher tiles…</button>
+    </div>
+
+    <div class="setting-group">
+      <label for="deepLinksPick">Address bar follows the screen</label>
+      <select id="deepLinksPick" onchange="setDeepLinks(this.value === 'on')">
+        <option value="on">On</option>
+        <option value="off">Off</option>
+      </select>
+      <div class="hint">On, the address bar names what you are looking at — a pane, a conversation,
+        a provider thread, a notebook — so the link can be copied and sent to somebody, and a
+        refresh comes back to it instead of to this list. Off keeps the address bar bare and a
+        refresh lands on the main page. A link somebody sends you still opens, either way.</div>
+    </div>
+
+    <div class="setting-group">
+      <label for="studioAgentPick">Studio agent</label>
+      <select id="studioAgentPick" onchange="setStudioAgent(this.value)"></select>
+      <div class="hint">Which agent a new Studio room starts. The list is the agent configs this
+        relay offers; the default is <code>claude-haiku</code>, an alias of stock claude, which is
+        written into the configs the first time a relay that can run it connects.</div>
+    </div>
+
+    <div class="setting-group">
+      <label for="studioSpawnPick">Start the agent with the room</label>
+      <select id="studioSpawnPick" onchange="setStudioSpawn(this.value === 'on')">
+        <option value="on">On</option>
+        <option value="off">Off</option>
+      </select>
+      <div class="hint">On, a new Studio topic starts its agent in the background while you are
+        typing the first message. Off, the room comes up with its providers and no agent, and
+        Spawn in the composer is what starts one.</div>
+    </div>
+
+    <div class="setting-group">
+      <label for="studioHidePick">Hide earlier Studio topics</label>
+      <select id="studioHidePick" onchange="setStudioHide(this.value === 'on')">
+        <option value="off">Off</option>
+        <option value="on">On</option>
+      </select>
+      <div class="hint">Each Studio topic is a room of its own, and they all list here by recency.
+        On, only the newest is listed — the card at the top still opens it, and nothing is deleted:
+        turning this off brings every earlier topic back.</div>
     </div>
 
     <div class="setting-group">
@@ -11118,6 +11317,33 @@
         <p class="hint">Kept in this browser. Other browsers keep their own names for the same
           chat, and the provider is never told. Save an empty field to go back to the provider's
           own title.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- New topic. A Studio topic is a room, so this is the one question asked before one is made:
+       what it is about. The generated name is already in the placeholder, so pressing Start with
+       an empty field is a complete answer rather than a skipped step. -->
+  <div id="studioTopicSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeStudioTopic()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">New topic</span>
+        <button onclick="closeStudioTopic()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <label class="start-field">Topic<input id="studioTopicName" type="text" maxlength="64"
+            autocapitalize="sentences" autocomplete="off"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();studioTopicGo()}"
+            placeholder="Studio" /></label>
+        <div class="ql-actions">
+          <button class="ql-secondary" onclick="closeStudioTopic()">Cancel</button>
+          <button class="ql-primary" onclick="studioTopicGo()">Start</button>
+        </div>
+        <p class="hint">The agent working on the current topic is ended and a new room is opened
+          with fresh provider threads. Everything said under the old topic stays where it is and
+          keeps its own card in the list.</p>
       </div>
     </div>
   </div>
@@ -14531,6 +14757,9 @@
           || !sectionOrder.some((k, i) => i < at && sectionHasContent(k))));
       });
       renderSectionTabs();
+      // A filter is a view, and this is the only path that sets or drops one — syncNavBtns covers
+      // every other view change but never runs for a filter pressed on the landing page.
+      if (typeof hashSync === 'function') hashSync();
     }
 
     // --- Section shortcuts ---
@@ -15155,6 +15384,12 @@
       }
       else if (msg.type === 'start_options') {
         startOptions = msg;
+        // The default Studio alias, written into the shared config document the first time a relay
+        // that could run it says what it offers. Here rather than at the press that uses it: the
+        // relay derives each config row and refuses a start naming an id it has not been told
+        // about, so an alias minted in the same breath as the start would be refused by it.
+        if (typeof studioSeedAgent === 'function') studioSeedAgent();
+        if (typeof syncStudioSettings === 'function') syncStudioSettings();
         render();
       }
       // Its presence is the feature gate, the way start_options gates Start — so an empty list is
@@ -15363,6 +15598,9 @@
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        // A link the page was loaded on that named something only a snapshot can resolve — an
+        // agent id, a landing section, a pane. After the render, which is what fills those lists.
+        if (typeof hashResume === 'function') hashResume();
         if (typeof renderBandwidth === 'function') renderBandwidth();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.
@@ -20325,10 +20563,11 @@
 // the last declaration of a name wins and nothing warns: a plain `convMode` collided with
 // conversation_view.js's own switch of that name, which loads later and silently replaced it.
 const CONV_KINDS = [
-  // A panel whose providers have all been taken away is still a panel: the composer it wants is
-  // the one that asks which provider, even while the answer is none.
+  // A panel whose providers have all been taken away is still a panel, and a Studio room with
+  // none left is still a Studio room: the composer each wants is the one that asks which provider,
+  // even while the answer is none.
   ['providers', conv => convGrantOf(conv).length > 0
-    || !!(conv && conv.webchat && conv.webchat.mode === 'panel')],
+    || ['panel', 'studio'].includes((conv && conv.webchat && conv.webchat.mode) || '')],
 ];
 
 function convGrantOf(conv) {
@@ -20344,9 +20583,23 @@ function convKindOf(conv) {
 // Who spends a `providers` conversation's grant. Kind-scoped by name, because a mode belongs to
 // the kind that has one: a second kind with modes of its own gets its own accessor rather than
 // crowding into this one's values.
+// `studio` is the third: one agent and every provider, in a room made per topic. It sits with the
+// agent mode everywhere the question is "is there a harness in here" — it has one, it is bound, and
+// its composer addresses it by default — and with the panel where the question is "does this room
+// exist for its providers", which is why it is drawn even with an empty grant.
+// What each mode is called on a card. A ternary answered "panel or not", which stopped being the
+// question the moment there were three of them.
+const CONV_WEB_LABELS = {panel: 'Panel', studio: 'Studio', agent: 'Agent'};
+
+function convWebLabelOf(conv) {
+  return CONV_WEB_LABELS[convWebModeOf(conv)] || '';
+}
+
 function convWebModeOf(conv) {
   if (convKindOf(conv) !== 'providers') return '';
-  return conv.webchat.mode === 'panel' ? 'panel' : 'agent';
+  const mode = conv.webchat.mode;
+  if (mode === 'panel' || mode === 'studio') return mode;
+  return 'agent';
 }
 
   </script>
@@ -21317,7 +21570,7 @@ function convWebModeOf(conv) {
       if (!granted.length) return null;
       const any = granted.includes('*');
       return {
-        kind: convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent',
+        kind: convWebLabelOf(conv),
         any: any,
         providers: any ? [] : Array.from(new Set(granted)),
       };
@@ -25369,7 +25622,7 @@ function webchatRoomCard(conv, sessions, compact) {
   // card that stands for it was the one card in the app that did not say which. A panel has no
   // members and draws nothing, which is the true statement about a panel.
   const badges = webchatRoomBadges(conv);
-  const kind = convWebModeOf(conv) === 'panel' ? 'Panel' : 'Agent';
+  const kind = convWebLabelOf(conv);
   // A room whose grant is `*` has no list to draw marks from and never will: the agent picks per
   // question. The badge carries that where the marks would have been, so the second line says what
   // the room reaches whether that is four logos or the word for "whichever it needs".
@@ -25517,6 +25770,12 @@ function renderWebAgents(error = '') {
   // a card of its own. Both kinds are then sorted together by recency, because "what was I last
   // doing" is one question and a section that answered it in two lists would be two lists.
   const rooms = webchatRooms();
+  // Every Studio room but the newest, when the setting asks for it. The card above always opens the
+  // newest, so what is hidden is the topics behind it -- and nothing is deleted: turning the switch
+  // back off brings every one of them back.
+  if (typeof studioHideOn === 'function' && studioHideOn() && typeof studioRooms === 'function') {
+    for (const old of studioRooms().slice(1)) rooms.delete(old.id);
+  }
   const grouped = new Map();
   const loose = [];
   for (const session of shown) {
@@ -25558,8 +25817,11 @@ function renderWebAgents(error = '') {
     || `<div class="webchat-list${compact ? ' compact' : ''}">${cards.join('')}</div>`
       + (cards.length ? '' : webchatEmptyHtml());
   // The box keeps what is in it across the re-render this section does on every broadcast.
+  // Above the pills and the search: it is the way *in* rather than a way of narrowing what is
+  // already there, and it is the same card whether or not anything has been searched for.
+  const studio = typeof studioCardHtml === 'function' ? studioCardHtml() : '';
   const draw = () => {
-    el.innerHTML = header + webchatPillsHtml()
+    el.innerHTML = header + studio + webchatPillsHtml()
       + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '') + body;
   };
   if (typeof webchatSearchKeep === 'function') webchatSearchKeep(draw);
@@ -27054,8 +27316,10 @@ function webchatNewRender() {
   document.getElementById('webchatNewModeAgent').setAttribute('aria-selected', String(agent));
   document.getElementById('webchatNewModePanel').setAttribute('aria-selected', String(panel));
   // A panel's name is the conversation's, and a chat's is the thread's. Only the agent mode has
-  // nothing to name here: what it makes is named by the Start sheet that follows.
-  document.getElementById('webchatNewNameRow').hidden = agent;
+  // nothing to name here: what it makes is named by the Start sheet that follows. Nothing is named
+  // while editing either — the Save there writes the grant and has never written a name, so a
+  // field offering one was a control that did nothing.
+  document.getElementById('webchatNewNameRow').hidden = agent || !!webchatEditing;
   document.getElementById('webchatNewAgentNote').hidden = !agent;
   document.getElementById('webchatNewPanelNote').hidden = !panel;
   // Always there, in all three modes: the sheet has one thing that commits it, and it says so
@@ -27144,7 +27408,11 @@ function webchatEditProviders(convId) {
   const badge = typeof convWebBadge === 'function' ? convWebBadge(conv) : null;
   if (!badge || !webchatAvailable) return;
   webchatEditing = convId;
-  webchatNewIs = convWebModeOf(conv) === 'panel' ? 'panel' : 'agent';
+  // A Studio room's grant is a list a person edits, exactly as a panel's is: `*` is the agent
+  // choosing for itself, and a Studio composer with `*` in its grant would draw no pills at all —
+  // which is the one thing that room cannot do without.
+  const mode = convWebModeOf(conv);
+  webchatNewIs = mode === 'panel' || mode === 'studio' ? 'panel' : 'agent';
   webchatNewPicked.clear();
   for (const provider of badge.providers) webchatNewPicked.add(provider);
   const any = document.getElementById('webchatNewAny');
@@ -27607,6 +27875,13 @@ function webchatThreadEntries(convId) {
   if (typeof convPanelLiveEntries === 'function') {
     for (const entry of convPanelLiveEntries(convId)) out.push(entry);
   }
+  // A Studio room is one topic, and a room nobody has spoken in yet has nothing in it saying which
+  // topic. The entry is drawn from the conversation itself rather than recorded, the same way the
+  // live bubbles above are: it is a fact about the room, not something anybody said in it.
+  if (typeof studioTopicEntry === 'function') {
+    const topic = studioTopicEntry(convId);
+    if (topic) out.push(topic);
+  }
   // Reading one provider alone. The conversation's own solo is built on members and a panel has
   // none, so this is the same idea over the thing it does have; a conversation with no solo set
   // filters nothing.
@@ -27656,19 +27931,56 @@ const WEBCHAT_SEARCH_MAX = 500;
 
 function webchatSearchBoxHtml() {
   const busy = webchatSearchBusy;
+  // A search has been made — or is on its way back — so the glyph is replaced in place by the ✕
+  // that undoes it. Same corner, same size: the control that gets you out is where the one that
+  // said what the box was for already is, which is the shape the landing page's search has.
+  const made = !!webchatSearchResult || !!webchatSearchQuery;
+  const glyph = made
+    ? '<button type="button" class="webchat-search-icon" onclick="webchatSearchDismiss()"'
+      + ' aria-label="Clear the search and show every chat">'
+      + webchatSearchSvg('m6 6 12 12M18 6 6 18') + '</button>'
+    : `<span class="webchat-search-icon">${webchatSearchSvg('')}</span>`;
   return '<div class="webchat-search">'
+    + '<label class="webchat-search-box" for="webchatSearchInput">'
+    + glyph
     + `<input id="webchatSearchInput" type="search" class="webchat-search-input"`
     + ` placeholder="Search every chat…" maxlength="${WEBCHAT_SEARCH_MAX}"`
     + ` autocomplete="off" autocapitalize="off" spellcheck="false"`
     + ` aria-label="Search the Web Agent record"`
-    + ` onkeydown="if(event.key==='Enter'){event.preventDefault();webchatSearchGo()}">`
-    + `<button class="section-action" onclick="webchatSearchGo()"`
+    + ` onkeydown="if(event.key==='Enter'){event.preventDefault();webchatSearchGo()}`
+    + `else if(event.key==='Escape'){event.preventDefault();webchatSearchDismiss(true)}">`
+    + '</label>'
+    + `<button class="section-action webchat-search-go" onclick="webchatSearchGo()"`
     + ` aria-label="Search">${busy ? '…' : 'Search'}</button>`
-    + (webchatSearchResult
-      ? '<button class="section-action" onclick="webchatSearchClear()"'
-        + ' aria-label="Clear search">✕</button>'
-      : '')
     + '</div>';
+}
+
+// The magnifier, or whatever path is handed to it instead. One function because the two glyphs
+// have to be drawn to the same box to swap without moving anything beside them.
+function webchatSearchSvg(path) {
+  return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"'
+    + ' stroke-width="2" stroke-linecap="round" aria-hidden="true">'
+    + (path ? `<path d="${path}"/>` : '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')
+    + '</svg>';
+}
+
+// What the ✕ does, which is more than the Clear it replaced: it puts the section back the way it
+// is found. A search and a provider pill are both narrowings of the same list, and a reader who
+// has pressed the one control that says "give me everything back" does not mean everything except
+// the pill they pressed four minutes ago.
+//
+// Escape does the same thing from the keyboard, and then puts the caret back: somebody who has
+// pressed it is still at the box and usually about to ask something else. The ✕ is a press on the
+// box itself and needs no such help — the field is under the finger that pressed it.
+function webchatSearchDismiss(keepFocus) {
+  // Toggling the pill that is on is how that file already clears one, so the storage write and
+  // the render stay in the one place that owns them.
+  if (typeof webchatFilter !== 'undefined' && webchatFilter
+      && typeof webchatPick === 'function') webchatPick(webchatFilter);
+  webchatSearchClear();
+  // After the render, not before: the field the caret was in has been replaced by the one the
+  // re-render drew.
+  if (keepFocus) document.getElementById('webchatSearchInput')?.focus();
 }
 
 // The section re-renders on every `webchat_state` the relay broadcasts, which is often — a bound
@@ -34107,13 +34419,17 @@ function nlmSourceDelete(source) {
     function dockAgentRowHtml(conv, list) {
       const target = dockAddressed();
       const aimed = typeof convWebAimed === 'function' && !!convWebAimed(convViewId);
+      // A Studio room manages no panes. Its agent is one of a series -- ended when the topic ends,
+      // replaced by the harness picker -- and a button that opened its terminal would be the first
+      // control in that row about a pane rather than about the conversation.
+      const studio = typeof convWebModeOf === 'function' && convWebModeOf(conv) === 'studio';
       return `<div class="xfer-act xfer-providers xfer-merged">`
         + `<div class="xfer-who-row wrap" ondblclick="soloDockTarget(event)">`
         + dockWhoChips(list, target, aimed ? '' : target)
         + convPanelPillsHtml(conv)
         + `</div>`
-        + convPanelActsHtml(conv,
-            dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target))
+        + convPanelActsHtml(conv, studio ? dockSendBtnHtml(target)
+            : dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target))
         + `</div>`;
     }
 
@@ -34639,8 +34955,12 @@ function convPanelOf(convId) {
 function convWebOf(convId) {
   if (!convId || typeof loadConvIndex !== 'function') return null;
   const conv = loadConvIndex().find(c => c.id === convId);
-  if (convWebModeOf(conv) === 'panel') return conv;
-  if (convWebModeOf(conv) !== 'agent') return null;
+  const mode = convWebModeOf(conv);
+  // A panel and a Studio room are both rooms that exist for their providers, so the row is drawn
+  // even with nothing in the grant — it is the only thing there to explain the emptiness. An agent
+  // room's providers are an extra it can do without, so an empty grant there draws no row at all.
+  if (mode === 'panel' || mode === 'studio') return conv;
+  if (mode !== 'agent') return null;
   return convPanelProviders(conv).length ? conv : null;
 }
 
@@ -34999,6 +35319,10 @@ function convPanelActsHtml(conv, extra) {
   const multi = convPanelMulti.has(conv.id);
   const follows = convPanelSwitchOn(conv.id);
   const all = picked.size === ids.length;
+  // A Studio room's row is the lean one. Select and the eye are both second ways to say what the
+  // gestures already say — All is the many, and the double tap is the filter — and this row has
+  // three agent controls and a New in it that the other two modes do not.
+  const lean = convWebModeOf(conv) === 'studio';
   // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
   // be and a single line of four buttons was taking a third of a phone's width off them -- and
   // four near-identical chips in a line is not a thing anybody reads at a glance either.
@@ -35019,25 +35343,28 @@ function convPanelActsHtml(conv, extra) {
     + `${all ? 'None' : 'All'}</button>`
     // Whether a tap adds or switches. A switch is the ordinary thing and the default; this is how
     // a message is put to several of them at once without four taps that each undid the last.
-    + `<button class="xfer-who-more pick${multi ? ' on' : ''}" onclick="convPanelSelect()" `
+    + (lean ? '' : `<button class="xfer-who-more pick${multi ? ' on' : ''}" onclick="convPanelSelect()" `
     + `aria-pressed="${multi}" `
     + `title="${multi ? 'One at a time' : 'Pick several'}" `
     + `aria-label="${multi ? 'Go back to one provider at a time' : 'Pick several providers'}">`
     + `${typeof convIco === 'function' ? convIco(multi ? 'many' : 'one')
-      : (multi ? '☑' : '☐')}</button>`
+      : (multi ? '☑' : '☐')}</button>`)
     // And whether the thread follows what the row is addressing. The double tap does this for one
     // provider once; this is the same narrowing as a state, so a reader working through five
     // providers one at a time sets it once rather than per provider.
-    + `<button class="xfer-who-more switch${follows ? ' on' : ''}" `
+    + (lean ? '' : `<button class="xfer-who-more switch${follows ? ' on' : ''}" `
     + `onclick="convPanelSwitchToggle()" aria-pressed="${follows}" `
     + `title="${follows ? 'Read all of them' : 'Read whoever you are writing to'}" `
     + `aria-label="${follows ? 'Go back to reading every provider'
       : 'Read whichever provider you are writing to'}">`
     + `${typeof convIco === 'function' ? convIco(follows ? 'eye' : 'eyeOff')
-      : (follows ? '◉' : '◎')}</button>`
+      : (follows ? '◉' : '◎')}</button>`)
     // How long the bubbles are, beside the two switches for who they go to. A panel is the thread
     // that most needs it: five providers answering at length is a thread nobody can scroll.
     + (typeof convClampBtnHtml === 'function' ? convClampBtnHtml('xfer-who-more') : '')
+    // The agent's three, and New. Only a Studio room has them: it is the mode with one agent and
+    // no pane management, so what can be done to that agent fits in the row it is addressed from.
+    + (lean && typeof studioActsHtml === 'function' ? studioActsHtml(conv) : '')
     + (extra || '')
     + `</div>`;
 }
@@ -35251,6 +35578,393 @@ function convPanelPaint(now) {
     convPanelPaintDue = 0;
     convPanelDraw();
   });
+}
+
+  </script>
+  <!-- After conv_panel.js, whose pill row it reuses, and after web_agent.js and the
+       conversation store, whose globals every function in it reads. -->
+  <script>
+// --- Studio: one agent, every provider, one room per topic ------------------------------------
+//
+// The third `providers` mode, and the one with no setting-up in front of it. An agent conversation
+// asks which providers before it exists and then a Start dialog asks where; a panel asks which
+// providers and then has nobody to do the work. Studio asks neither: the room comes up holding
+// every provider this relay offers, with one agent already being started behind it, and the first
+// thing the reader does is type.
+//
+// What the modes beside it do is unchanged — nothing here edits a panel or an agent room, and the
+// picker still makes both. This is a fourth way in, not a replacement for the three.
+//
+// A topic is a room. Pressing New mints the next Studio conversation rather than clearing this
+// one: the threads under it keep their own namespace, so last week's question is still a card in
+// the list and still readable, and the agent that answered it is ended rather than re-used. The
+// landing card always points at the newest, which is what makes one card enough for all of them.
+//
+// Everything the composer does with the pills is conv_panel.js's and is shared: a Studio room is
+// not a panel — it has a member — so it falls on the side of every `=== 'panel'` test in that file
+// that an agent room does, and the pills, the solo, the aim and the send are already right.
+
+const STUDIO_MODE = 'studio';
+const STUDIO_AGENT_KEY = 'herdr_studio_agent';
+const STUDIO_SPAWN_KEY = 'herdr_studio_spawn';
+const STUDIO_HIDE_KEY = 'herdr_studio_hide';
+const STUDIO_PROJECT_KEY = 'herdr_studio_project';
+
+// The alias a Studio room is started under until somebody picks another. Derived from stock claude
+// — it names no endpoint and no secret, so it is a model choice and nothing more — and seeded into
+// the shared agent-configs document rather than sent as argv: a config id is what `start_agent`
+// takes, and the relay refuses one it has not been told about.
+const STUDIO_DEFAULT_AGENT = 'claude-haiku';
+const STUDIO_DEFAULT_ALIAS = {
+  id: STUDIO_DEFAULT_AGENT, label: 'Claude Haiku', provider: 'stock-claude',
+  model: 'claude-haiku-4-5', model_option: '', key: '',
+};
+
+function studioPref(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; }
+  catch (e) { return fallback; }
+}
+
+function studioSetPref(key, value) {
+  try { localStorage.setItem(key, value); }
+  catch (e) { /* private mode: this session only */ }
+}
+
+// On by default. A room whose agent has to be started by hand is the friction this mode exists to
+// remove; the switch is for somebody who wants the providers and not the harness.
+function studioSpawnOn() { return studioPref(STUDIO_SPAWN_KEY, 'on') !== 'off'; }
+
+// Off by default: an old topic is still a conversation somebody had, and a list that quietly
+// dropped them would make the record look shorter than it is.
+function studioHideOn() { return studioPref(STUDIO_HIDE_KEY, 'off') === 'on'; }
+
+function studioAgentId() { return studioPref(STUDIO_AGENT_KEY, STUDIO_DEFAULT_AGENT); }
+
+function setStudioSpawn(on) { studioSetPref(STUDIO_SPAWN_KEY, on ? 'on' : 'off'); }
+
+function setStudioHide(on) {
+  studioSetPref(STUDIO_HIDE_KEY, on ? 'on' : 'off');
+  if (typeof renderWebAgents === 'function') renderWebAgents();
+}
+
+function setStudioAgent(id) {
+  studioSetPref(STUDIO_AGENT_KEY, id || STUDIO_DEFAULT_AGENT);
+  syncStudioSettings();
+}
+
+// The Settings rows, which are three facts about how a Studio room comes up rather than three
+// facts about this screen. Drawn from the relay's own config list, so an alias that has been
+// switched off over there is not offered here.
+function syncStudioSettings() {
+  if (typeof document !== 'object' || !document) return;
+  const spawn = document.getElementById('studioSpawnPick');
+  if (spawn) spawn.value = studioSpawnOn() ? 'on' : 'off';
+  const hide = document.getElementById('studioHidePick');
+  if (hide) hide.value = studioHideOn() ? 'on' : 'off';
+  const pick = document.getElementById('studioAgentPick');
+  if (!pick) return;
+  const offered = typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
+  const held = studioAgentId();
+  // The held one is listed even when the relay is not offering it — a select that silently jumped
+  // to another agent would change what the next room starts without saying so.
+  const rows = offered.some(row => row.id === held)
+    ? offered : offered.concat([{id: held, label: held, kind: ''}]);
+  pick.innerHTML = rows.map(row => `<option value="${escapeHtml(row.id)}"`
+    + `${row.id === held ? ' selected' : ''}>`
+    + `${escapeHtml(row.label || row.id)}${row.kind ? ` · ${escapeHtml(row.kind)}` : ''}</option>`)
+    .join('');
+}
+
+// Write the default alias into the shared agent-configs document if nothing holds that id yet.
+//
+// Called when `start_options` lands rather than at the spawn: the relay derives each config row —
+// the harness, whether its key exists, the command line — and refuses a start naming an id it has
+// never seen, so an alias minted in the same press that used it would be refused. Seeded a whole
+// connection early, it is live by the time anybody presses the card.
+function studioSeedAgent() {
+  if (typeof loadAgentConfigs !== 'function' || typeof saveAgentConfigs !== 'function') return;
+  if (studioAgentId() !== STUDIO_DEFAULT_AGENT) return;
+  // Only where the relay offers the provider it is derived from. A row naming a provider this
+  // relay has never heard of draws as an error in the launcher and starts nothing.
+  const providers = typeof agentConfigProviders === 'function' ? agentConfigProviders() : [];
+  if (!providers.some(p => p.id === STUDIO_DEFAULT_ALIAS.provider)) return;
+  const held = loadAgentConfigs();
+  if (held.some(row => row.id === STUDIO_DEFAULT_AGENT)) return;
+  saveAgentConfigs(held.concat([Object.assign({}, STUDIO_DEFAULT_ALIAS)]));
+}
+
+// Which config a spawn may actually name. A config the relay is not offering — never seeded, since
+// switched off, or one this browser remembers from another relay — is dropped rather than sent:
+// the start would be refused outright, and coming up on the stock harness is what the reader
+// wanted anyway.
+function studioAgentConfig() {
+  const id = studioAgentId();
+  return typeof agentConfigLive === 'function' && agentConfigLive(id) ? id : '';
+}
+
+function studioAgentKind() {
+  const config = studioAgentConfig();
+  const kind = config && typeof agentConfigKind === 'function' ? agentConfigKind(config) : '';
+  return kind || 'claude';
+}
+
+// --- The rooms ---------------------------------------------------------------------------------
+
+function studioRooms() {
+  if (typeof loadConvIndex !== 'function') return [];
+  return loadConvIndex()
+    .filter(conv => typeof convWebModeOf === 'function' && convWebModeOf(conv) === STUDIO_MODE)
+    .sort((a, b) => (b.created || 0) - (a.created || 0));
+}
+
+// The newest, which is the one the card points at. There is no "current" stored anywhere: a topic
+// is a room and the newest room is the topic, so a second browser agrees without being told.
+function studioLatest() { return studioRooms()[0] || null; }
+
+function studioIsStudio(convId) {
+  return !!convId && studioRooms().some(conv => conv.id === convId);
+}
+
+// Every provider this relay offers, in the order the app names them everywhere else. The grant is
+// written down at mint rather than left as `*`: `*` is the agent choosing for itself, and this row
+// is a list a person edits in the providers sheet.
+function studioProviders() {
+  if (typeof webchatProviders === 'undefined') return [];
+  const ids = webchatProviders.map(provider => provider.id);
+  return typeof webchatInOrder === 'function' ? webchatInOrder(ids, id => id) : ids;
+}
+
+// What an unnamed topic is called. Numbered rather than dated: two rooms made in one afternoon are
+// told apart by which came second, which is the only thing anybody remembers about them.
+function studioNextName() {
+  const taken = new Set(studioRooms().map(conv => conv.name || ''));
+  for (let n = 1; ; n += 1) {
+    const name = n === 1 ? 'Studio' : `Studio ${n}`;
+    if (!taken.has(name)) return name;
+  }
+}
+
+// The card's press. The newest room if there is one, and otherwise the first — so the feature has
+// no empty state to explain and no sheet in front of it.
+function studioEnter() {
+  const room = studioLatest();
+  if (room && typeof openConversation === 'function') { openConversation(room.id); return; }
+  studioStart('');
+}
+
+// Mint the next topic. The agent of the room being left is ended first: one topic is one session,
+// and a harness still working on the last question is not what the next one should arrive to.
+function studioStart(topic) {
+  if (typeof convNewId !== 'function' || typeof saveConvIndex !== 'function') return null;
+  const prior = studioLatest();
+  if (prior) studioEndAgent(prior);
+  const items = loadConvIndex();
+  const id = convNewId(items);
+  const name = String(topic || '').trim();
+  const conv = {
+    id, name: name || studioNextName(), autoname: !name, created: Date.now(), members: [],
+    // `topic` is kept beside the grant rather than inferred from the name: a room renamed later is
+    // still the room this topic was opened for, and the entry at the head of the thread says what
+    // was asked for at the time.
+    webchat: {providers: studioProviders(), mode: STUDIO_MODE, topic: name, from: prior?.id || ''},
+  };
+  saveConvIndex([conv].concat(items));
+  if (typeof openConversation === 'function') openConversation(id);
+  if (studioSpawnOn()) studioSpawn(conv);
+  if (typeof renderWebAgents === 'function') renderWebAgents();
+  return conv;
+}
+
+// Which Project a Studio agent comes up in. Remembered from the last one, because a room made with
+// no questions asked cannot ask this one either — and otherwise the first Project this relay
+// offers that is somewhere to work.
+function studioProjectId() {
+  const held = studioPref(STUDIO_PROJECT_KEY, '');
+  const list = typeof projects !== 'undefined' && Array.isArray(projects) ? projects : [];
+  if (held && list.some(p => p.id === held)) return held;
+  const first = list.find(p => !p.container && !p.root) || list.find(p => !p.container);
+  return first ? first.id : '';
+}
+
+function studioSpawn(conv) {
+  if (!conv || typeof sendStart !== 'function') return false;
+  const project = studioProjectId();
+  // Nowhere to start is the one case this has to hand back to the reader: the dialog knows how to
+  // ask for a Project, and a silent failure would leave a room with no agent and no reason given.
+  if (!project) {
+    if (typeof openStartDialog === 'function') {
+      openStartDialog('', null, 'agent');
+      startIntent = {conv: conv.id};
+      return true;
+    }
+    return false;
+  }
+  const ref = typeof newStartRef === 'function' ? newStartRef() : '';
+  const grant = typeof convGrantOf === 'function' ? convGrantOf(conv) : [];
+  const msg = {
+    type: 'start_agent', name: studioAgentKind(), role: 'agent', project_id: project,
+    placement: 'new_workspace', ref: ref, label: 'Studio',
+  };
+  const config = studioAgentConfig();
+  if (config) msg.config = config;
+  // Bound before its first frame rather than reconciled a poll later: the relay writes the binding
+  // file and sources it at the pane's shell in the one moment there is a shell there, so every
+  // tool call the harness makes inherits it. webchat_bind.js still reconciles afterwards and finds
+  // it already agrees.
+  if (grant.length) msg.webchat = {ns: conv.id, providers: grant};
+  if (ref && typeof convNotePending === 'function') convNotePending(conv.id, ref, '', 'Studio');
+  startIntent = {conv: conv.id, ref: ref};
+  // Nothing is said to it. A Studio agent is there to be asked something, and an opening prompt
+  // typed at every new topic would be the one line in the thread nobody wrote.
+  startPrompt = '';
+  startStarter = typeof NO_STARTER !== 'undefined' ? NO_STARTER : '';
+  studioSetPref(STUDIO_PROJECT_KEY, project);
+  if (typeof showSpawnStatus === 'function') showSpawnStatus('Starting the Studio agent…', 'busy');
+  sendStart(msg);
+  return true;
+}
+
+// The one member a Studio room has, live. There is only ever one: a room binds one agent, and a
+// second reader of one namespace is two harnesses answering the same question.
+function studioAgentOf(conv) {
+  if (!conv || typeof agents === 'undefined') return null;
+  const keys = new Set((conv.members || []).map(m => m && m.aid).filter(Boolean));
+  return agents.find(a => typeof convMemberKey === 'function' && keys.has(convMemberKey(a))) || null;
+}
+
+function studioEndAgent(conv) {
+  const live = studioAgentOf(conv);
+  if (live && typeof endPane === 'function') endPane(live.pane_id);
+  return !!live;
+}
+
+// --- The composer's three agent controls -------------------------------------------------------
+//
+// Everything a pane needs doing to it lives in the terminal and in the conversation's own roster.
+// A Studio room has one agent and no pane management: start one, stop the one running, or swap it
+// for another harness — which is the whole of what one agent in one room can be asked.
+
+function studioStopAgent() {
+  const conv = studioRoom();
+  if (!conv) return;
+  if (!studioEndAgent(conv)) showToast('No agent is running in this room.');
+}
+
+function studioSpawnAgent() {
+  const conv = studioRoom();
+  if (!conv) return;
+  if (studioAgentOf(conv)) { showToast('An agent is already running here.'); return; }
+  studioSpawn(conv);
+}
+
+// Swap the harness. The dialog is what asks — the one thing a swap must not do is decide for the
+// reader what the replacement is — and `convSwapMember` is the same machinery Restart as… uses, so
+// the replacement continues the member rather than joining beside it.
+function studioSwapAgent() {
+  const conv = studioRoom();
+  if (!conv) return;
+  const live = studioAgentOf(conv);
+  const key = live && typeof convMemberKey === 'function' ? convMemberKey(live)
+    : ((conv.members || [])[0] || {}).aid;
+  if (key && typeof convStartAs === 'function') { convStartAs(key); return; }
+  studioSpawn(conv);
+}
+
+// The room the composer is standing in, when it is a Studio one.
+function studioRoom() {
+  if (typeof convViewId === 'undefined' || !convViewId) return null;
+  return studioRooms().find(conv => conv.id === convViewId) || null;
+}
+
+// The controls that go in the acts row beside All. Lean on purpose: this row already carries the
+// pills, and a second half-composer of chips is what made the agent room's row fight for width.
+function studioActsHtml(conv) {
+  const live = studioAgentOf(conv);
+  const agent = live
+    ? `<button class="xfer-who-more" onclick="studioStopAgent()"`
+      + ` title="Stop the agent in this room" aria-label="Stop the agent in this room">Stop</button>`
+    : `<button class="xfer-who-more" onclick="studioSpawnAgent()"`
+      + ` title="Start an agent in this room" aria-label="Start an agent in this room">Spawn</button>`;
+  return agent
+    + `<button class="xfer-who-more" onclick="studioSwapAgent()"`
+    + ` title="Start a different agent here" aria-label="Start a different agent here">Agent…</button>`
+    + `<button class="xfer-who-more studio-new" onclick="openStudioTopic()"`
+    + ` title="New topic — ends this agent and opens the next room"`
+    + ` aria-label="New topic">+ New</button>`;
+}
+
+// --- The topic sheet ---------------------------------------------------------------------------
+//
+// Asked rather than generated, with the generated one already in the placeholder: naming a topic is
+// the one thing worth a keystroke here, and somebody who has nothing to call it yet presses Start
+// and gets "Studio 4".
+
+function openStudioTopic() {
+  const sheet = document.getElementById('studioTopicSheet');
+  if (!sheet) { studioStart(''); return; }
+  const input = document.getElementById('studioTopicName');
+  if (input) {
+    input.value = '';
+    input.placeholder = studioNextName();
+  }
+  sheet.style.display = 'block';
+  if (input) input.focus();
+}
+
+function closeStudioTopic() {
+  const sheet = document.getElementById('studioTopicSheet');
+  if (sheet) sheet.style.display = 'none';
+}
+
+function studioTopicGo() {
+  const input = document.getElementById('studioTopicName');
+  const name = input ? input.value.trim() : '';
+  closeStudioTopic();
+  studioStart(name);
+}
+
+// The entry at the head of a Studio thread. A topic is a room, so the thread has nothing in it
+// saying what the room is for until somebody speaks — and the one that follows an earlier topic
+// says so, which is the only link between two rooms there is.
+function studioTopicEntry(convId) {
+  const conv = studioRooms().find(c => c.id === convId);
+  if (!conv) return null;
+  const at = conv.created || 0;
+  const from = conv.webchat && conv.webchat.from
+    ? (loadConvIndex().find(c => c.id === conv.webchat.from) || {}).name : '';
+  return {
+    event: true, foreign: true, at: at, seen: at, key: 'studio',
+    lede: 'New topic',
+    text: (conv.webchat && conv.webchat.topic) || conv.name || '',
+    note: from ? `after ${from}` : '',
+  };
+}
+
+// --- The landing card --------------------------------------------------------------------------
+//
+// One card, always, above the pills and the search box. It is the whole of the way in: no picker,
+// no mode tabs, no Project to answer. What it says under the name is what the press will land on —
+// the room it opens and the agent it holds — rather than what the mode is for.
+function studioCardHtml() {
+  const room = studioLatest();
+  const live = room ? studioAgentOf(room) : null;
+  const providers = room && typeof convGrantOf === 'function'
+    ? convGrantOf(room).filter(id => id !== '*').length : studioProviders().length;
+  const name = room ? (room.name || 'Studio') : 'Studio';
+  const agent = live ? (live.agent || 'agent')
+    : (studioSpawnOn() ? `${studioAgentKind()} on open` : 'no agent');
+  return `<div class="studio-card" role="button" tabindex="0" onclick="studioEnter()"`
+    + ` onkeydown="if(event.key==='Enter'||event.key===' ')`
+    + `{event.preventDefault();studioEnter()}"`
+    + ` aria-label="Open ${escapeHtml(name)}">`
+    + `<span class="studio-card-mark" aria-hidden="true">◆</span>`
+    + `<span class="studio-card-body">`
+    + `<span class="studio-card-name">${escapeHtml(name)}</span>`
+    + `<span class="studio-card-meta">${escapeHtml(agent)} · ${providers}`
+    + ` provider${providers === 1 ? '' : 's'}${live ? ' · live' : ''}</span></span>`
+    + `<button class="studio-card-new" onclick="event.stopPropagation();openStudioTopic()"`
+    + ` title="New topic" aria-label="New topic">+</button>`
+    + `</div>`;
 }
 
   </script>
@@ -35824,6 +36538,9 @@ function convPanelPaint(now) {
       // a mouse's back button are one action rather than two that can disagree. go() is
       // asynchronous: popstate below is what actually opens the destination.
       const api = navBrowserHistory();
+      // The address bar is about to move under us — see hashWalkStart. A step is the walk's own,
+      // never somebody arriving at a link.
+      if (typeof hashWalkStart === 'function') hashWalkStart();
       if (api && !navDetached) api.go(i - navIndex);
       else navShow(i);
       return true;
@@ -35863,6 +36580,7 @@ function convPanelPaint(now) {
         return false;
       }
       navLanding = true;
+      if (typeof hashWalkStart === 'function') hashWalkStart();
       api.go(-navDepth);
       return true;
     }
@@ -35882,6 +36600,9 @@ function convPanelPaint(now) {
         btn.setAttribute('aria-label', btn.disabled ? (step < 0 ? 'Back' : 'Forward') : label);
       });
       syncBackLabel();
+      // Every view change already calls this, which makes it the one place the address bar has to
+      // be told. Cheap when nothing moved: hashSync compares before it writes.
+      if (typeof hashSync === 'function') hashSync();
       // The section shortcuts belong to the landing page, and this is the one call every view
       // change already makes. The search bar at its foot is landing-only for the same reason.
       renderSectionTabs();
@@ -36219,6 +36940,263 @@ function convPanelPaint(now) {
                         paneAddr(activeAgent() || activePane))));
       }
     }
+
+  </script>
+  <script>
+    // --- Deep links ---
+    // The address bar says what is on screen, so a reload comes back to it and the link can be
+    // handed to somebody else. A fragment and never a query string: this page is served from three
+    // different places — the relay, GitHub Pages, Cloudflare Pages — and the fragment is the only
+    // part of a URL that belongs to the app rather than to whoever is hosting it.
+    //
+    // Written by *replacing* the entry the walk is standing on, never by pushing one. history.js
+    // already owns this browser's session history — an entry per destination, stepped with `go` —
+    // and a second pusher here would make every Back take two presses.
+    //
+    //   #conversations, #agents, #terminals …   the landing page, narrowed to that section
+    //   #settings, #activity                    a panel
+    //   #agent/<agent id>                       the pane that agent is on, whichever one it is now
+    //   #pane/<pane id>                         a pane herdr named — a terminal has no agent id
+    //   #conv/<id>                              a conversation
+    //   #web/<session>                          one provider thread
+    //   #notebook/<id>                          a notebook
+    //
+    // An agent id is preferred over a pane id wherever the pane has one: herdr recycles pane ids,
+    // so a link written with one opens somebody else's agent a day later.
+
+    const HASH_PANELS = {settings: 'settingsView', activity: 'timelineView'};
+
+    // The switch in Settings, and what it means. Off stops the address bar naming what is on
+    // screen, which takes the refresh-comes-back behaviour with it: there is nothing in the URL
+    // for a reload to come back *to*. A link somebody sends still opens either way — that is the
+    // point of the feature, and nobody turning this off is asking for a link handed to them to
+    // stop working. One preference in localStorage and never the shared document: this is about
+    // one browser's address bar, the same class of setting as the section order or the dock fold.
+    const DEEP_LINK_KEY = 'herdr_deeplinks';
+
+    function deepLinksOn() {
+      try { return localStorage.getItem(DEEP_LINK_KEY) !== 'off'; }
+      catch (e) { return true; }
+    }
+
+    function setDeepLinks(on) {
+      try { localStorage.setItem(DEEP_LINK_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      syncDeepLinks();
+      // Takes effect on the URL that is on screen rather than at the next navigation: switching it
+      // off with a fragment showing and leaving the fragment there would be the switch not working.
+      hashSync();
+    }
+
+    function syncDeepLinks() {
+      const pick = typeof document === 'object' && document
+        ? document.getElementById('deepLinksPick') : null;
+      if (pick) pick.value = deepLinksOn() ? 'on' : 'off';
+    }
+
+    // The last hash this file wrote or acted on. A traversal between two entries that differ only
+    // in their fragment fires `hashchange` as well as `popstate`, and the walk has already opened
+    // the destination by then — without this the arrival would be opened a second time.
+    let hashLast = null;
+
+    // Held while a link could not be resolved yet. See hashResume.
+    let hashPending = '';
+
+    // Set while the walk in history.js is driving the browser's cursor, by that file calling
+    // hashWalkStart before each `go`. A traversal between two entries whose fragments differ moves
+    // the address bar *before* anything here runs, which looks exactly like somebody arriving — and
+    // treating it as one re-opened the pane the reader had just left with the header chevron.
+    //
+    // Told rather than detected: a plain fragment navigation can also arrive as a popstate,
+    // depending on how it was made, and that one *is* an arrival. Only the walk knows which is
+    // which, so the walk is what says so.
+    let hashWalking = false;
+    let hashWalkTimer = 0;
+
+    // A colon is legal in a fragment and is in half of what this app names — a pane is `w1:p1`
+    // and a provider thread is `<conversation>:<provider>` — so it is put back after the encoder
+    // has escaped it. A link nobody can read is a link nobody sends.
+    function hashPart(kind, id) {
+      return '#' + kind + (id ? '/' + encodeURIComponent(id).replace(/%3A/g, ':') : '');
+    }
+
+    // What the screen is, as a link. Read off the screen rather than remembered, for the reason
+    // navHere is: every view in this app can also be left by something that never went through a
+    // navigation — a pane exiting, a conversation deleted under the window reading it.
+    function hashFor() {
+      if (activePane) {
+        const pane = typeof paneOf === 'function' ? paneOf(activePane) : null;
+        return pane && pane.aid ? hashPart('agent', pane.aid) : hashPart('pane', activePane);
+      }
+      const panel = typeof openPanelId === 'function' ? openPanelId() : '';
+      if (panel === 'convView') return convViewId ? hashPart('conv', convViewId) : '';
+      if (panel === 'webAgentView')
+        return webchatCurrent ? hashPart('web', webchatCurrent) : hashPart('webAgent');
+      if (panel === 'nlmView')
+        return nlmCurrent ? hashPart('notebook', nlmCurrent) : hashPart('notebooklm');
+      for (const name in HASH_PANELS) if (HASH_PANELS[name] === panel) return hashPart(name);
+      // The landing page. A section filter is a view rather than a preference — see sections.js —
+      // and a view is exactly the kind of thing a link is for.
+      return sectionFilter ? hashPart(sectionFilter) : '';
+    }
+
+    // Returns whether the link was dealt with. False means "not yet": the destination is one this
+    // app owns and the state needed to reach it has not arrived, which is what hashResume retries.
+    function hashOpen(raw) {
+      const at = String(raw || '').replace(/^#/, '');
+      if (!at) return true;
+      const cut = at.indexOf('/');
+      const kind = cut < 0 ? at : at.slice(0, cut);
+      let id = cut < 0 ? '' : at.slice(cut + 1);
+      try { id = decodeURIComponent(id); } catch (e) { /* hand-typed: take it as it stands */ }
+      hashLast = '#' + at;
+      if (HASH_PANELS[kind]) { openPanel(HASH_PANELS[kind]); return true; }
+      if (typeof SECTION_KEYS !== 'undefined' && SECTION_KEYS.includes(kind)) {
+        // Only once the section has something in it. At boot every list is still empty, and
+        // applySections drops a filter naming an empty section the moment it is set.
+        if (!sectionHasContent(kind)) return false;
+        landNow();
+        if (sectionFilter !== kind) toggleSectionFilter(kind);
+        return true;
+      }
+      if (kind === 'agent') {
+        const pane = (typeof agents === 'undefined' ? [] : agents || []).find(a => a.aid === id);
+        if (!pane) return false;
+        openTerminal(pane.pane_id, id);
+        return true;
+      }
+      if (kind === 'pane') {
+        if (!id || !paneOf(id)) return false;
+        openTerminal(id);
+        return true;
+      }
+      if (kind === 'conv') {
+        if (!loadConvIndex().some(c => c.id === id)) return false;
+        openConversation(id);
+        return true;
+      }
+      // A thread and a notebook are named rather than looked up: both views ask the relay what is
+      // in them on the way up, and neither list is something this browser can be behind on.
+      if (kind === 'web') { if (!id) return false; webchatOpen(id); return true; }
+      if (kind === 'notebook') { if (!id) return false; nlmOpen(id); return true; }
+      return true;   // a fragment this app does not own. Left alone, and so is the page.
+    }
+
+    // The link the document was loaded on, tried now and — if it named something not there yet —
+    // again on the snapshots that follow. Most destinations cannot be resolved before one:
+    // an agent id names a pane the relay has not reported, and every landing section is empty.
+    function hashBoot() {
+      const at = typeof location === 'object' && location ? location.hash : '';
+      hashLast = at;
+      if (at) hashArrive(at);
+    }
+
+    // Somebody arriving at a destination: the document loaded on one, or a link pasted into the
+    // page that is already open. Opened if it can be, held for the next snapshots if it cannot.
+    function hashArrive(at) {
+      hashTries = 0;
+      hashPending = hashOpen(at) ? '' : at;
+      hashHold(!!hashPending);
+    }
+
+    // A link that needs the relay to answer takes about as long as the socket does, and what was
+    // on screen for that second was the landing page — the one screen the reader explicitly did
+    // not ask for, followed by a jump off it. So the list is held back while the link is being
+    // resolved. Time-capped as well as event-capped: a page that never connects must end up
+    // somewhere, and the landing page is where.
+    const HASH_HOLD_MS = 4000;
+    let hashHoldTimer = 0;
+
+    function hashHold(on) {
+      if (typeof document !== 'object' || !document || !document.body) return;
+      document.body.classList.toggle('deeplink-pending', !!on);
+      clearTimeout(hashHoldTimer);
+      if (on) hashHoldTimer = setTimeout(() => hashHold(false), HASH_HOLD_MS);
+    }
+
+    // A few snapshots, not a standing watch. One was not enough: the first snapshot fills the
+    // lists in an order nothing promises, so a link naming a section can arrive one render before
+    // that section has anything in it. It is still bounded — a link to a pane that is not running
+    // is a dead link, and opening it ten minutes later would take the screen off whatever the
+    // reader had moved on to by then.
+    const HASH_TRIES = 5;
+    let hashTries = 0;
+
+    function hashResume() {
+      if (!hashPending) return;
+      if (hashOpen(hashPending)) { hashPending = ''; hashHold(false); return; }
+      if (++hashTries < HASH_TRIES) return;
+      hashPending = '';
+      hashHold(false);
+      if (typeof showToast === 'function') showToast('Nothing open matches that link');
+    }
+
+    function hashSync() {
+      if (typeof location !== 'object' || !location) return;
+      if (typeof history !== 'object' || !history || typeof history.replaceState !== 'function')
+        return;
+      // A link still being resolved owns the address bar until it lands or is given up on.
+      if (hashPending) return;
+      // A fragment this file did not write is somebody arriving, not the screen moving. This runs
+      // on every render, and `hashchange` is delivered a task later — so without this the link
+      // pasted into an open page was overwritten with wherever the reader already was, before its
+      // own event ever arrived to open it. Never during a traversal the walk asked for, which
+      // moves the address bar itself and has already decided what is on screen.
+      //
+      // Above the switch below, because following a link is what the switch leaves alone.
+      if (!hashWalking && hashLast !== null && location.hash !== hashLast) {
+        hashArrive(location.hash);
+        return;
+      }
+      // Switched off. Not merely "stop writing": a link followed while it is off leaves its own
+      // fragment sitting in the address bar, and a refresh would then come back to it — which is
+      // the half of this the switch exists to turn off. So the fragment comes off once the link
+      // that carried it has been acted on, and after that nothing is ever written.
+      if (!deepLinksOn()) {
+        hashLast = '';
+        if (location.hash) {
+          history.replaceState(history.state, '', location.pathname + location.search);
+        }
+        return;
+      }
+      const want = hashFor();
+      hashLast = want;
+      if (location.hash === want) return;
+      // The state object is carried over untouched: this says where the walk's current entry is,
+      // it is not a new place to come back to.
+      history.replaceState(history.state, '', location.pathname + location.search + want);
+    }
+
+    // history.js calls this immediately before it asks the browser to move its cursor. The
+    // traversal, the popstate it fires and the hashchange after it are all separate tasks, so the
+    // flag is held across them and dropped on the first of the two that arrives — with a short
+    // timer under it for the step between two entries whose fragments happen to match, which fires
+    // neither a hashchange nor anything else this file would hear.
+    function hashWalkStart() {
+      hashWalking = true;
+      clearTimeout(hashWalkTimer);
+      hashWalkTimer = setTimeout(() => { hashWalking = false; }, 250);
+    }
+
+    // The traversal landing is the end of the walk's claim on the address bar. Cleared here rather
+    // than left to the timer above: a quarter of a second is long enough to swallow a link that
+    // arrived just after a step — closing a panel is a step, and following a link is what people
+    // do next — and a swallowed link is one that opens nothing. history.js registers its own
+    // popstate handler first, so by the time this runs the destination is already open and the
+    // fragment already stamped.
+    if (typeof addEventListener === 'function') addEventListener('popstate', () => {
+      hashWalking = false;
+      clearTimeout(hashWalkTimer);
+    });
+
+    // Someone edited the address bar, or followed a link into the page that is already open.
+    if (typeof addEventListener === 'function') addEventListener('hashchange', () => {
+      // The tail of a step the walk made. It opened the destination itself; all that is left is
+      // to say so in the address bar.
+      if (hashWalking) { hashWalking = false; hashSync(); return; }
+      if (location.hash === hashLast) return;
+      hashArrive(location.hash);
+    });
 
   </script>
   <script>
@@ -40137,7 +41115,15 @@ function convPanelPaint(now) {
     loadTermShortcuts();
     loadTermHistory();
     syncPromptsBtn();  // no pane is open yet, so this labels the button for an agent
-  
+
+    // Last, so a link that opens a pane finds every preference this file applied already in
+    // place — the wrap mode, the fonts, the dock — rather than being re-laid-out under itself.
+    syncStudioSettings();  // the agent list fills in when start_options lands
+    hashBoot();
+    // After it, not before: this syncs the Settings row and then stamps the address bar, and with
+    // the switch off that stamp is a strip — which would take the link the page was loaded on with
+    // it if it ran first.
+    syncDeepLinks();
 
   </script>
 </body>
