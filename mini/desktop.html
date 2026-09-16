@@ -1701,6 +1701,48 @@
       line-height: 1;
       color: var(--blue);
     }
+    /* The copy, at the end of every header. Lifted from the mobile page's thread, because
+       conv_thread.js draws one bubble for both pages and the word is what it puts in the button. */
+    .conv-copy {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      margin-left: auto;
+      padding: 1px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: max(10px, 0.85em);
+      line-height: 1.5;
+      opacity: 0.75;
+      cursor: pointer;
+    }
+
+    .conv-copy:hover, .conv-copy:focus-visible {
+      color: var(--text);
+      border-color: var(--text);
+      opacity: 1;
+    }
+
+    /* The question's own copy, on the band the question is drawn in. Its own line and the
+       question's green, because it belongs to that half of the bubble and not to the header above
+       it -- a button floated into prose is a word the eye tries to read as part of the sentence. */
+    .conv-copy-ask {
+      display: flex;
+      width: fit-content;
+      margin: 6px 0 0 auto;
+      border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+      color: color-mix(in srgb, var(--green) 75%, var(--text));
+    }
+
+    .conv-copy-ask:hover, .conv-copy-ask:focus-visible {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
     /* Lowercased against the header's uppercase, so a clock reads as a clock and not as a label,
        and tabular figures so a column of them does not wobble. */
     .conv-time {
@@ -13079,13 +13121,18 @@ function convWebModeOf(conv) {
         + `aria-expanded="${open ? 'true' : 'false'}">${convIco(open ? 'fold' : 'unfold')}</button>`;
     }
 
-    // The copy, in every bubble's header. One per bubble rather than one per band: in the
-    // paragraph and grouped views the question and the answer are one bubble, and what a reader
-    // wants out of a pair is the pair.
-    function convCopyBtnHtml() {
-      return '<button class="conv-copy" onclick="convCopyMsg(this)" '
-        + 'title="Copy this message" aria-label="Copy this message">'
-        + `${convIco('copy')}</button>`;
+    // The copy, as the word rather than as a glyph. Two of them in a bubble that holds a pair:
+    // one on the question's band and one in the header, over the answer. It used to be a single
+    // icon copying the pair, which is the one thing a reader can already do by copying twice --
+    // and the half they usually want is one half.
+    //
+    // `what` is which half this button is for: `ask` for the question band, anything else for the
+    // message the header names.
+    function convCopyBtnHtml(what) {
+      const ask = what === 'ask';
+      const say = `Copy this ${ask ? 'question' : 'message'}`;
+      return `<button class="conv-copy${ask ? ' conv-copy-ask' : ''}" data-copy="${ask ? 'ask' : 'said'}" `
+        + `onclick="convCopyMsg(this)" title="${say}" aria-label="${say}">Copy</button>`;
     }
 
     // What was said, as the Markdown it was said in. A provider answers in Markdown and the thread
@@ -13100,7 +13147,10 @@ function convWebModeOf(conv) {
       const shown = msg.querySelector('.conv-body:not([hidden])');
       const said = (shown && shown.dataset.text) || msg.dataset.text || '';
       const ask = msg.dataset.ask || '';
-      const text = ask && said ? `${ask}\n\n${said}` : (ask || said);
+      // Which half this button is for. The question's own, when there is a question to take; the
+      // header's takes the message under it and falls back to the question in a bubble that is
+      // nothing else -- a user's own bubble in a plain thread is a question and has no answer.
+      const text = (btn.dataset && btn.dataset.copy) === 'ask' ? ask : (said || ask);
       if (!text || typeof writeClipboard !== 'function') return;
       writeClipboard(text, () => {
         if (typeof showToast === 'function') showToast('Copied');
@@ -13215,10 +13265,12 @@ function convWebModeOf(conv) {
           `${escapeHtml(e.label || e.agent || 'an answer')}\u2026</span>`;
       }
       const text = escapeHtml(e.text || '');
-      // A prompt this app delivered is never drawn as Markdown: what was typed into the composer
-      // is what was sent, and a question with a `#` in it is not a heading. Same rule the
-      // paragraph view's `conv-ask` follows.
-      const md = e.foreign || (convMdAgents && e.who !== 'user');
+      // Drawn as Markdown wherever the answers are, questions included. A question to a provider
+      // is written in the same language as the answer it is fishing for -- a table to reformat, a
+      // fenced block to review, a list of things to compare -- and drawing one half of that
+      // exchange as source and the other as prose made the reader's own words the least legible
+      // thing in the thread.
+      const md = e.foreign || convMdAgents;
       return md && e.text && typeof markdownHtml === 'function'
         && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
         ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
@@ -13467,7 +13519,7 @@ function convWebModeOf(conv) {
         // The header is drawn on every bubble now, because the copy is on every bubble: a message
         // with no name, no clock and no fold still has words in it somebody may want.
         const head = `<span class="conv-who">${bar}${time}${mark}${fold}`
-          + `${convCopyBtnHtml()}</span>`;
+          + `${convCopyBtnHtml('said')}</span>`;
         // The pane being read is always the right side. Stored member order is conversation
         // history, not a reading preference, and can change when a pair is created or reopened.
         const side = paired && key === me.key ? ' conv-right' : '';
@@ -13489,12 +13541,12 @@ function convWebModeOf(conv) {
         // The question that produced it, above the answer and inside the same bubble. Its own
         // colour is the user's green, which is the colour it wore as a bubble of its own, and the
         // rule under it is what makes the pair read as a question and an answer rather than as one
-        // message that changes voice halfway down. Escaped and never drawn as Markdown: what was
-        // typed into the composer is what was sent, and a question with a `#` in it is not a
-        // heading.
+        // message that changes voice halfway down. Drawn the way the answer under it is drawn: the
+        // Markdown switch is about the thread and not about who is speaking, and a question pasted
+        // out of a document arrives with the same fences and tables in it as the answer does.
         const asked = para.ask.get(i);
         const ask = asked
-          ? `<span class="conv-ask">${escapeHtml(asked.text || '')}</span>` : '';
+          ? `<span class="conv-ask">${convSaidHtml(asked)}${convCopyBtnHtml('ask')}</span>` : '';
         const pills = group ? '<span class="conv-pills">' + group.map(m => {
           const g = entries[m];
           const id = escapeHtml(g.agent || '');

@@ -6733,31 +6733,59 @@
       opacity: 1;
     }
 
-    /* The copy, at the end of every header. Same shape as the fold, and beside it when there is
-       one -- the fold is what takes the free space, so this follows rather than competes for it. */
-    .conv-who .conv-copy {
+    /* The copy, at the end of every header, and the word rather than a glyph: it is pressed by
+       somebody who has decided they want this text somewhere else, and at that moment a 14px
+       outline of two rectangles is a guess. Sized off the thread's own font so it grows with it,
+       with a border so it reads as a button in a header that is otherwise all labels. */
+    .conv-copy {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 1.6em;
-      height: 1.6em;
-      padding: 0;
-      margin-left: auto;
       flex: 0 0 auto;
-      border: 0;
+      padding: 1px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
       background: none;
       color: var(--muted);
-      opacity: 0.55;
+      font: inherit;
+      font-size: max(10px, 0.85em);
+      line-height: 1.5;
+      opacity: 0.75;
       cursor: pointer;
+    }
+
+    .conv-who .conv-copy {
+      margin-left: auto;
     }
 
     .conv-who .conv-fold + .conv-copy {
       margin-left: 2px;
     }
 
-    .conv-who .conv-copy:hover {
+    .conv-copy:hover, .conv-copy:focus-visible {
       color: var(--text);
+      border-color: var(--text);
       opacity: 1;
+    }
+
+    /* The question's own copy, on the band the question is drawn in. Pushed to the right-hand end
+       of it and set in the question's green, because it belongs to that half of the bubble and not
+       to the header above it. Its own line: a question is prose and a button floated into it is a
+       word the eye tries to read as part of the sentence. */
+    .conv-copy-ask {
+      display: flex;
+      /* A flex box is block-level and fills the band, which would leave `margin-left: auto` with
+         nothing to push against. */
+      width: fit-content;
+      margin: 6px 0 0 auto;
+      border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+      color: color-mix(in srgb, var(--green) 75%, var(--text));
+    }
+
+    .conv-copy-ask:hover,
+    .conv-copy-ask:focus-visible {
+      border-color: var(--green);
+      color: var(--green);
     }
 
     /* Everything in the header is measured in its own ems, so the row scales as one piece. */
@@ -10115,22 +10143,8 @@
 
       .conv-msg .md-img { border-radius: 6px; margin: 2px 0; }
 
-      /* The copy that takes the whole message, in the header where the speaker is named. The block
-         button copies one fence; this one copies the answer as the provider wrote it — Markdown
-         source, not the rendering, which is the form it is worth pasting anywhere else. */
-      .conv-copy {
-        margin-left: auto;
-        padding: 0 4px;
-        border: 0;
-        background: none;
-        color: var(--muted);
-        font: inherit;
-        font-size: 0.85em;
-        cursor: pointer;
-        opacity: 0.6;
-      }
-
-      .conv-copy:hover, .conv-copy:focus-visible { opacity: 1; color: var(--text); }
+      /* The copy that takes the whole message wears the conversation thread's own button -- one
+         rule for both, since a chat here and a bubble there are the same pair drawn twice. */
 
       /* The bubble a provider's answer sits in. Grey rather than the thread's blue wash: a colour
          on the bubble is a claim about who is speaking, which is worth making in a pair, where two
@@ -23879,13 +23893,18 @@ function convWebModeOf(conv) {
         + `aria-expanded="${open ? 'true' : 'false'}">${convIco(open ? 'fold' : 'unfold')}</button>`;
     }
 
-    // The copy, in every bubble's header. One per bubble rather than one per band: in the
-    // paragraph and grouped views the question and the answer are one bubble, and what a reader
-    // wants out of a pair is the pair.
-    function convCopyBtnHtml() {
-      return '<button class="conv-copy" onclick="convCopyMsg(this)" '
-        + 'title="Copy this message" aria-label="Copy this message">'
-        + `${convIco('copy')}</button>`;
+    // The copy, as the word rather than as a glyph. Two of them in a bubble that holds a pair:
+    // one on the question's band and one in the header, over the answer. It used to be a single
+    // icon copying the pair, which is the one thing a reader can already do by copying twice --
+    // and the half they usually want is one half.
+    //
+    // `what` is which half this button is for: `ask` for the question band, anything else for the
+    // message the header names.
+    function convCopyBtnHtml(what) {
+      const ask = what === 'ask';
+      const say = `Copy this ${ask ? 'question' : 'message'}`;
+      return `<button class="conv-copy${ask ? ' conv-copy-ask' : ''}" data-copy="${ask ? 'ask' : 'said'}" `
+        + `onclick="convCopyMsg(this)" title="${say}" aria-label="${say}">Copy</button>`;
     }
 
     // What was said, as the Markdown it was said in. A provider answers in Markdown and the thread
@@ -23900,7 +23919,10 @@ function convWebModeOf(conv) {
       const shown = msg.querySelector('.conv-body:not([hidden])');
       const said = (shown && shown.dataset.text) || msg.dataset.text || '';
       const ask = msg.dataset.ask || '';
-      const text = ask && said ? `${ask}\n\n${said}` : (ask || said);
+      // Which half this button is for. The question's own, when there is a question to take; the
+      // header's takes the message under it and falls back to the question in a bubble that is
+      // nothing else -- a user's own bubble in a plain thread is a question and has no answer.
+      const text = (btn.dataset && btn.dataset.copy) === 'ask' ? ask : (said || ask);
       if (!text || typeof writeClipboard !== 'function') return;
       writeClipboard(text, () => {
         if (typeof showToast === 'function') showToast('Copied');
@@ -24015,10 +24037,12 @@ function convWebModeOf(conv) {
           `${escapeHtml(e.label || e.agent || 'an answer')}\u2026</span>`;
       }
       const text = escapeHtml(e.text || '');
-      // A prompt this app delivered is never drawn as Markdown: what was typed into the composer
-      // is what was sent, and a question with a `#` in it is not a heading. Same rule the
-      // paragraph view's `conv-ask` follows.
-      const md = e.foreign || (convMdAgents && e.who !== 'user');
+      // Drawn as Markdown wherever the answers are, questions included. A question to a provider
+      // is written in the same language as the answer it is fishing for -- a table to reformat, a
+      // fenced block to review, a list of things to compare -- and drawing one half of that
+      // exchange as source and the other as prose made the reader's own words the least legible
+      // thing in the thread.
+      const md = e.foreign || convMdAgents;
       return md && e.text && typeof markdownHtml === 'function'
         && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
         ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
@@ -24267,7 +24291,7 @@ function convWebModeOf(conv) {
         // The header is drawn on every bubble now, because the copy is on every bubble: a message
         // with no name, no clock and no fold still has words in it somebody may want.
         const head = `<span class="conv-who">${bar}${time}${mark}${fold}`
-          + `${convCopyBtnHtml()}</span>`;
+          + `${convCopyBtnHtml('said')}</span>`;
         // The pane being read is always the right side. Stored member order is conversation
         // history, not a reading preference, and can change when a pair is created or reopened.
         const side = paired && key === me.key ? ' conv-right' : '';
@@ -24289,12 +24313,12 @@ function convWebModeOf(conv) {
         // The question that produced it, above the answer and inside the same bubble. Its own
         // colour is the user's green, which is the colour it wore as a bubble of its own, and the
         // rule under it is what makes the pair read as a question and an answer rather than as one
-        // message that changes voice halfway down. Escaped and never drawn as Markdown: what was
-        // typed into the composer is what was sent, and a question with a `#` in it is not a
-        // heading.
+        // message that changes voice halfway down. Drawn the way the answer under it is drawn: the
+        // Markdown switch is about the thread and not about who is speaking, and a question pasted
+        // out of a document arrives with the same fences and tables in it as the answer does.
         const asked = para.ask.get(i);
         const ask = asked
-          ? `<span class="conv-ask">${escapeHtml(asked.text || '')}</span>` : '';
+          ? `<span class="conv-ask">${convSaidHtml(asked)}${convCopyBtnHtml('ask')}</span>` : '';
         const pills = group ? '<span class="conv-pills">' + group.map(m => {
           const g = entries[m];
           const id = escapeHtml(g.agent || '');
@@ -25603,6 +25627,10 @@ function webchatReceiveState(msg) {
     }
   }
   webchatCheckTurn();
+  // The same reconciliation for the rooms that hold several turns at once. Their events go to
+  // convPanelTurn rather than to webchatTurn, and until this ran nothing there was ever told that
+  // a turn it never saw end had ended.
+  if (typeof convPanelCheckTurns === 'function') convPanelCheckTurns();
   // Before the render, so a room that has just earned its name is drawn under it rather than under
   // the placeholder for one more poll.
   if (webchatAutoName() && typeof renderConversations === 'function') renderConversations();
@@ -27014,7 +27042,7 @@ function webchatWaitHtml() {
 // question would silently become emphasis in the record of what was asked.
 function webchatBodyHtml(message, user) {
   const text = user ? (message.content || '') : (message.markdown || message.content || '');
-  if (user || !webchatMarkdownOn()) return escapeHtml(text);
+  if (!webchatMarkdownOn()) return escapeHtml(text);
   return `<div class="md">${markdownHtml(text)}</div>`;
 }
 
@@ -27062,12 +27090,15 @@ function webchatParaPairs(messages) {
 function webchatMessageHtml(message, index, asked) {
   const user = message.role === 'user';
   const when = webchatWhen(message);
-  // The question that produced this answer, above it and inside the same bubble. Escaped and never
-  // drawn as Markdown: what was typed into the composer is what was sent, and a question with a
-  // `#` in it is not a heading. Same class and same rules as the conversation window's, because it
-  // is the same pair read in a different place.
+  // The question that produced this answer, above it and inside the same bubble. Drawn the way the
+  // answer under it is drawn -- the Markdown switch is about the thread and not about who is
+  // speaking, and a question pasted out of a document arrives with the same fences and tables in
+  // it as the answer does. Same class and same rules as the conversation window's, because it is
+  // the same pair read in a different place.
+  const asks = asked ? webchatMessages.indexOf(asked) : -1;
   const ask = asked
-    ? `<span class="conv-ask">${escapeHtml(asked.markdown || asked.content || '')}</span>` : '';
+    ? `<span class="conv-ask">${webchatBodyHtml(asked, true)}`
+      + `${asks >= 0 ? webchatCopyBtnHtml(asks, 'question') : ''}</span>` : '';
   // The adapter's own id for this message, carried so a search result can name the bubble it
   // matched. It is what `/recall` answers with as `qMsgId` and `aMsgId`, and the only thing on
   // this page that survives a re-render — an index does not, since a thread grows at the end.
@@ -27082,12 +27113,20 @@ function webchatMessageHtml(message, index, asked) {
     + `${when ? `<span class="conv-time" title="${escapeHtml(when.at.toLocaleString())} · `
       + `${escapeHtml(when.src || 'unknown')}">${when.sure ? '' : '~'}`
       + `${escapeHtml(fmtAgo(when.at))}</span>` : ''}`
-    // Copies what the provider wrote rather than what is on screen: the source is the form worth
-    // pasting anywhere else, and it is the only form that survives the Markdown toggle either way.
-    + `${typeof index === 'number' ? `<button type="button" class="conv-copy" data-at="${index}"`
-      + ` onclick="webchatCopyMessage(this)" aria-label="Copy this message">⧉</button>` : ''}</div>`
+    + `${typeof index === 'number' ? webchatCopyBtnHtml(index, 'message') : ''}</div>`
     + ask
     + webchatBodyHtml(message, user) + '</div>';
+}
+
+// Copies what was written rather than what is on screen: the source is the form worth pasting
+// anywhere else, and it is the only form that survives the Markdown toggle either way. The word
+// rather than a glyph, because it is pressed by somebody who has already decided they want this
+// text elsewhere, and at that moment an outline of two rectangles is a guess.
+function webchatCopyBtnHtml(index, what) {
+  const say = `Copy this ${what}`;
+  return `<button type="button" class="conv-copy${what === 'question' ? ' conv-copy-ask' : ''}"`
+    + ` data-at="${index}" onclick="webchatCopyMessage(this)" title="${say}"`
+    + ` aria-label="${say}">Copy</button>`;
 }
 
 function webchatCopyMessage(button) {
@@ -35615,6 +35654,9 @@ function convPanelAimAgent(convId) {
 // lands the element the first one hit is gone, and with it any chance of reading the provider off
 // the event. The member chips keep `dockLastPick` for exactly this.
 let convPanelLastPick = {provider: '', at: 0};
+// The last narrowing, so the two paths that can read one gesture -- the press counted in
+// convPanelToggle and a `dblclick` the browser did manage to fire -- do not undo each other.
+let convPanelLastSolo = {provider: '', at: 0};
 const CONV_PANEL_DOUBLE_MS = 500;
 
 // A single tap switches: this one, and not the others. That is what a tap on a member's chip
@@ -35623,6 +35665,18 @@ const CONV_PANEL_DOUBLE_MS = 500;
 function convPanelToggle(provider) {
   const conv = convWebOf(convViewId);
   if (!conv) return;
+  // The second of two quick presses on the same pill is the narrowing, read here rather than left
+  // to `dblclick`. A mouse never produced one on this row: the row is rebuilt between the two
+  // presses, so the element the first hit is detached by the time the second lands and the browser
+  // abandons the sequence instead of firing at the container. The touch path has always read the
+  // gesture itself, for the same reason; this is the pointer's half of it.
+  const now = Date.now();
+  const again = convPanelLastPick.provider === provider
+    && now - convPanelLastPick.at <= CONV_PANEL_DOUBLE_MS;
+  convPanelLastPick = {provider: provider, at: now};
+  // The press that narrows does not also change who is being written to: the first of the two
+  // already aimed the composer, and this one is about what is being read.
+  if (again) { convPanelSoloPick(); return; }
   const picked = convPanelPicked(conv);
   // Talking to somebody the thread is not showing is not a state anybody asked for. Reading one
   // provider alone and then addressing another is the reader moving on, so the narrowing goes with
@@ -35632,10 +35686,6 @@ function convPanelToggle(provider) {
   else if (convPanelSoloOf(conv.id) && convPanelSoloOf(conv.id) !== provider) {
     convPanelSolo.delete(conv.id);
   }
-  const now = Date.now();
-  if (now - convPanelLastPick.at > CONV_PANEL_DOUBLE_MS) {
-    convPanelLastPick = {provider: provider, at: now};
-  } else convPanelLastPick.at = now;
   if (convPanelMulti.has(conv.id)) {
     if (picked.has(provider)) picked.delete(provider);
     else picked.add(provider);
@@ -35643,8 +35693,11 @@ function convPanelToggle(provider) {
     // An agent room has somewhere else for the message to go, so the lit pill is a toggle: tapping
     // it again aims the composer back at the agent. A panel has nowhere else, which is why the
     // same tap there leaves the provider lit rather than emptying the row.
+    //
+    // The narrowing is left where it is. It is a statement about what is being *read*, and this
+    // press is about who is being written to -- and it is also the first of the two that narrow,
+    // so dropping it here would leave the gesture setting a solo it had just cleared.
     picked.clear();
-    convPanelSolo.delete(conv.id);
   } else {
     // Tapping the one already alone in the row leaves it there rather than emptying it: a
     // composer addressed to nobody is one that can only fail.
@@ -35694,6 +35747,12 @@ function convPanelSoloPick(event) {
   if (!conv || !provider) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
+  // A row that does survive between two presses fires `dblclick` as well, and the second press
+  // has already been read as the gesture by then. Without this the narrowing is set and unset in
+  // the same breath, which reads as a double press that did nothing at all.
+  if (convPanelLastSolo.provider === provider
+      && Date.now() - convPanelLastSolo.at < CONV_PANEL_DOUBLE_MS) return;
+  convPanelLastSolo = {provider: provider, at: Date.now()};
   const on = convPanelSoloOf(conv.id) === provider;
   if (on) convPanelSolo.delete(conv.id);
   else convPanelSolo.set(conv.id, provider);
@@ -35957,6 +36016,40 @@ function convPanelRetry(session) {
   showToast(`Asking ${webchatProvider(held.provider)?.label || held.provider} again…`, 'info');
 }
 
+// A turn this page never saw end: the socket dropped, the relay was restarted under it, the
+// adapter aborted the turn while the reader was somewhere else. Nothing arrives to clear the
+// entry, so the provider's pill blinks for ever and the composer keeps drawing a question with no
+// answer under it — through a reconnect, which brings a fresh socket and none of the events that
+// were missed on the old one.
+//
+// The chat view reconciles the same way in webchatCheckTurn, against the same witness: the
+// adapter's own answer about that conversation, which arrives with every webchat_state. Only when
+// it says so directly — an adapter too old to carry `running` says nothing about this thread, and
+// a provider busy with somebody else's is the wrong scope by one level.
+//
+// Marked as failed rather than dropped, for the reason a failed turn is kept: the question stays
+// on screen to be read, copied or asked again, and what streamed before the events stopped is
+// still most of an answer.
+function convPanelCheckTurns() {
+  let moved = false;
+  for (const [session, held] of convPanelRunning) {
+    if (held.failed || !held.started) continue;
+    const row = typeof webchatSession === 'function' ? webchatSession(session) : null;
+    if (!row || row.running !== false) continue;
+    held.failed = held.reply
+      ? 'The rest of the reply did not arrive here. Sync to read it.'
+      : 'The reply did not arrive here. Sync to read it.';
+    held.status = '';
+    moved = true;
+    // The answer is on the provider's page and in the adapter's record; this page holds neither.
+    if (typeof webchatThreadInvalidate === 'function') webchatThreadInvalidate(session);
+    webchatAsk({type: 'webchat_open', session: session});
+  }
+  if (!moved) return;
+  renderConvDock();
+  convPanelPaint(true);
+}
+
 // A turn event for one of a panel's threads. Answers true when it owned the event, which is what
 // keeps it out of the chat view's single-turn bookkeeping.
 function convPanelTurn(msg) {
@@ -35965,11 +36058,15 @@ function convPanelTurn(msg) {
   if (msg.event === 'delta') {
     held.reply += msg.delta || '';
     held.status = 'Replying…';
+    held.started = true;
     convPanelPaint();
     return true;
   }
   if (msg.event === 'queued' || msg.event === 'start') {
     held.status = msg.event === 'start' ? `Waiting for ${held.provider}` : 'Queued';
+    // From here the adapter is holding that provider's lane for this thread, which is what makes
+    // its answer about the thread evidence about this turn. See convPanelCheckTurns.
+    if (msg.event === 'start') held.started = true;
     convPanelPaint();
     return true;
   }
