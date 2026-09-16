@@ -18183,7 +18183,12 @@ function convWebModeOf(conv) {
     function arbSyncOpenButton() {
       const here = arbSessionHere();
       const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
-      arbMarkButton('convArbitrator', arbOn && !!conv, (here || {}).arbitrator,
+      // Never over a Studio room. Arbitration is a third agent deciding which of two members is
+      // written to next, and a Studio room has one agent and no pane management at all — the
+      // button could only ever open a form with nobody to put in it.
+      const studio = typeof convWebModeOf === 'function' && typeof loadConvIndex === 'function'
+        && convWebModeOf(loadConvIndex().find(c => c.id === conv)) === 'studio';
+      arbMarkButton('convArbitrator', arbOn && !!conv && !studio, (here || {}).arbitrator,
                     'Start arbitrating this conversation');
       const mine = arbSessionForPane(activePane);
       arbMarkButton('paneArbitrator', arbOn && !!mine, (mine || {}).arbitrator, '');

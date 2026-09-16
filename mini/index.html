@@ -8037,6 +8037,98 @@
       grid-column: 1 / -1;
     }
 
+    /* --- A Studio room's composer -------------------------------------------------------------
+       The other way up from an agent room's: one line of buttons across the top, and the targets
+       under them as icons. What a pill says is which mark it wears -- the name was two thirds of
+       its width and repeated what the mark already said, and the status dot beside it was a third
+       thing to read in a row of eight. */
+    .xfer-row .studio-row {
+      display: block;
+    }
+
+    /* One line, scrolled rather than wrapped. The buttons are what is *done* to the room, so a
+       second line of them growing under the pills would read as more targets. */
+    .xfer-row .studio-row .xfer-who-acts {
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      align-self: auto;
+      margin-bottom: 6px;
+    }
+
+    .xfer-row .studio-row .xfer-who-acts::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Two lines of icons, and the rest scrolls. A grant is capped at eight, so two lines is the
+       whole of it on any phone wider than a thumb -- the cap is there so the row stays this size
+       rather than the other way round. */
+    .xfer-row .studio-picks {
+      max-height: 70px;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .xfer-row .studio-picks::-webkit-scrollbar {
+      display: none;
+    }
+
+    .xfer-row .xfer-who.studio-pick {
+      justify-content: center;
+      gap: 0;
+      padding: 0;
+      width: 36px;
+      height: 32px;
+    }
+
+    .xfer-row .xfer-who.studio-pick svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Lit is a filled pill rather than a coloured border. At this size a 1px border is most of
+       what there is to see, and a border that only changed colour was not an answer from arm's
+       length. */
+    .xfer-row .xfer-who.studio-pick.on {
+      background: color-mix(in srgb, var(--who-accent, var(--text)) 18%, var(--bg));
+      border-color: var(--who-accent, var(--text));
+    }
+
+    /* Working, said by the pill itself. It replaced the dot, which was the only thing in here
+       still carrying live state and cost every pill the width of a second glyph. */
+    .xfer-row .xfer-who.studio-pick.busy {
+      animation: studio-busy 1.6s ease-in-out infinite;
+    }
+
+    @keyframes studio-busy {
+      50% { background: color-mix(in srgb, var(--dot-live) 32%, var(--bg)); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .xfer-row .xfer-who.studio-pick.busy {
+        animation: none;
+        background: color-mix(in srgb, var(--dot-live) 32%, var(--bg));
+      }
+    }
+
+    .xfer-row .xfer-who.studio-add {
+      border-style: dashed;
+      font-size: 1rem;
+      font-weight: 400;
+    }
+
+    /* The drawer behind that `+`: the agent on its own line as the way back, then the providers. */
+    .studio-pick-agent {
+      width: 100%;
+    }
+
+    .studio-pick-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
     /* The conversation's agents. The one that will receive it is lit; the rest are dimmed rather
        than hidden, because which agents are in this conversation is information and a row showing
        only the chosen one would answer a different question. */
@@ -11345,6 +11437,20 @@
           with fresh provider threads. Everything said under the old topic stays where it is and
           keeps its own card in the list.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Who the next message goes to. The composer's own row is the answer; this is where the
+       answer is changed, and the one place several providers can be lit at once. -->
+  <div id="studioPicksSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeStudioPicks()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Send to</span>
+        <button onclick="closeStudioPicks()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="studioPicksBody" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
     </div>
   </div>
 
@@ -27352,6 +27458,7 @@ function webchatNewAgent() {
   const any = document.getElementById('webchatNewAny')?.checked;
   const providers = any ? ['*'] : Array.from(webchatNewPicked);
   if (!providers.length) return;
+  if (!webchatGrantFits(providers)) return;
   if (typeof convNewId !== 'function' || typeof saveConvIndex !== 'function') return;
   const items = loadConvIndex();
   const id = convNewId(items);
@@ -27422,12 +27529,31 @@ function webchatEditProviders(convId) {
 }
 
 // Save, for the sheet opened on a conversation that already exists.
+// What a binding may grant. The relay refuses a longer one — it is the adapter's own ceiling on a
+// consultation — and it refuses it at the moment the session is started, which is several screens
+// after the choice was made. Said here, where the choice is, and as a number rather than by
+// silently keeping the first eight: dropping five providers somebody picked is worse than saying
+// no to the pick.
+const WEBCHAT_GRANT_MAX = 8;
+
+function webchatGrantFits(providers) {
+  const wanted = providers.filter(id => id !== '*');
+  if (wanted.length <= WEBCHAT_GRANT_MAX) return true;
+  if (typeof showToast === 'function') {
+    showToast(`An agent can be given at most ${WEBCHAT_GRANT_MAX} providers`);
+  }
+  return false;
+}
+
 function webchatSaveProviders() {
   const conv = loadConvIndex().find(c => c.id === webchatEditing);
   if (!conv) { closeWebchatNew(); return; }
   const any = webchatNewIs === 'agent' && document.getElementById('webchatNewAny')?.checked;
   const providers = any ? ['*'] : Array.from(webchatNewPicked);
   if (!providers.length) return;
+  // A panel binds nobody, so it may grant as many as it likes; anything with an agent in it is
+  // held to what the relay will write.
+  if (convWebModeOf(conv) !== 'panel' && !webchatGrantFits(providers)) return;
   saveConvIndex(loadConvIndex().map(c => (c.id === conv.id
     ? {...c, webchat: {...c.webchat, providers}} : c)));
   closeWebchatNew();
@@ -34216,7 +34342,11 @@ function nlmSourceDelete(source) {
       // message goes to is one question with one answer and it was being asked on two lines.
       const web = typeof convWebOf === 'function' ? convWebOf(convViewId) : null;
       const aimed = !panel && typeof convWebAimed === 'function' && !!convWebAimed(convViewId);
-      const merged = !panel && web && all.length;
+      // A Studio room is merged whether or not anything is running in it. Its agent is one of a
+      // series and Stop is a button in that very row, so a composer that fell back to the pill row
+      // the moment the agent ended would take Spawn and New away with it.
+      const studio = typeof convWebModeOf === 'function' && convWebModeOf(web) === 'studio';
+      const merged = !panel && web && (all.length || studio);
       // Always the whole membership. A pick decides what is being sent, never who is in the
       // conversation or who may have it.
       const html = merged ? dockAgentRowHtml(web, all)
@@ -34423,13 +34553,19 @@ function nlmSourceDelete(source) {
       // replaced by the harness picker -- and a button that opened its terminal would be the first
       // control in that row about a pane rather than about the conversation.
       const studio = typeof convWebModeOf === 'function' && convWebModeOf(conv) === 'studio';
-      return `<div class="xfer-act xfer-providers xfer-merged">`
-        + `<div class="xfer-who-row wrap" ondblclick="soloDockTarget(event)">`
-        + dockWhoChips(list, target, aimed ? '' : target)
-        + convPanelPillsHtml(conv)
-        + `</div>`
-        + convPanelActsHtml(conv, studio ? dockSendBtnHtml(target)
-            : dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target))
+      // A Studio room is drawn the other way up: its buttons are one line across the top and the
+      // pills are the two lines under them. The room addresses one agent and a handful of
+      // providers, so the pills are the row -- the buttons are what is done to it, and a line of
+      // them wrapping under the pills read as a second row of targets.
+      const picks = studio && typeof studioPicksHtml === 'function'
+        ? studioPicksHtml(conv) : dockWhoChips(list, target, aimed ? '' : target)
+            + convPanelPillsHtml(conv);
+      const acts = convPanelActsHtml(conv, studio ? dockSendBtnHtml(target)
+        : dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target));
+      const row = `<div class="xfer-who-row wrap${studio ? ' studio-picks' : ''}"`
+        + ` ondblclick="soloDockTarget(event)">${picks}</div>`;
+      return `<div class="xfer-act xfer-providers xfer-merged${studio ? ' studio-row' : ''}">`
+        + (studio ? acts + row : row + acts)
         + `</div>`;
     }
 
@@ -34943,25 +35079,26 @@ function convPanelOf(convId) {
   return convWebModeOf(conv) === 'panel' ? conv : null;
 }
 
-// This conversation, if it has providers a person can aim a message at — either mode. Everything
-// in this file below the send is about the pill row, and the pill row belongs to both: an agent
-// room folds five providers' bubbles into its thread and used to offer no way to see which
-// providers those were, which was mid-turn, or to read one of them alone. The controls existed and
-// the room they were needed in could not reach them.
+// This conversation, if it has providers a person can aim a message at — a panel or a Studio room.
+// Everything in this file below the send is about the pill row, and the pill row belongs to the
+// two rooms a person writes to a provider from. A room of panes is not one of them: its grant is
+// the agent's to spend, and the pills there were a composer asking a question that room does not
+// ask.
 //
-// A grant of `*` draws nothing: it is the agent choosing for itself, and there is no list to make
-// pills out of. A panel is returned even with nothing drawable, because its row is the one that
-// has to explain the emptiness — it is the only composer that room has.
+// Both are returned even with nothing drawable, because the row is the one thing that can explain
+// the emptiness — it is the only composer either room has.
 function convWebOf(convId) {
   if (!convId || typeof loadConvIndex !== 'function') return null;
   const conv = loadConvIndex().find(c => c.id === convId);
   const mode = convWebModeOf(conv);
   // A panel and a Studio room are both rooms that exist for their providers, so the row is drawn
-  // even with nothing in the grant — it is the only thing there to explain the emptiness. An agent
-  // room's providers are an extra it can do without, so an empty grant there draws no row at all.
-  if (mode === 'panel' || mode === 'studio') return conv;
-  if (mode !== 'agent') return null;
-  return convPanelProviders(conv).length ? conv : null;
+  // even with nothing in the grant — it is the only thing there to explain the emptiness.
+  //
+  // An agent room is not one of them. Its members are panes and its composer is the member row it
+  // has always been: the providers there are the agent's to spend, and a second row of pills over
+  // a conversation of panes was a composer asking a question that room does not ask. Studio is
+  // where a person writes to a provider, and it is the only place that does.
+  return mode === 'panel' || mode === 'studio' ? conv : null;
 }
 
 // Where the composer's next send goes, or null for "to the members, the ordinary way".
@@ -35725,13 +35862,21 @@ function studioIsStudio(convId) {
   return !!convId && studioRooms().some(conv => conv.id === convId);
 }
 
-// Every provider this relay offers, in the order the app names them everywhere else. The grant is
-// written down at mint rather than left as `*`: `*` is the agent choosing for itself, and this row
-// is a list a person edits in the providers sheet.
+// The relay's own ceiling on a binding, which is the adapter's ceiling on a consultation: every
+// provider in one is a paid account being spent. Named here because a Studio room grants every
+// provider it can, so it is the one mode that reaches the ceiling by doing nothing — and a grant
+// over it is refused by the relay outright, which is a room with no binding and a message in a
+// toast rather than a room with seven providers in it.
+const STUDIO_GRANT_MAX = 8;
+
+// Every provider this relay offers, in the order the app names them everywhere else, up to the
+// ceiling. The grant is written down at mint rather than left as `*`: `*` is the agent choosing
+// for itself, and this row is a list a person edits in the drawer.
 function studioProviders() {
   if (typeof webchatProviders === 'undefined') return [];
   const ids = webchatProviders.map(provider => provider.id);
-  return typeof webchatInOrder === 'function' ? webchatInOrder(ids, id => id) : ids;
+  const ordered = typeof webchatInOrder === 'function' ? webchatInOrder(ids, id => id) : ids;
+  return ordered.slice(0, STUDIO_GRANT_MAX);
 }
 
 // What an unnamed topic is called. Numbered rather than dated: two rooms made in one afternoon are
@@ -35891,6 +36036,153 @@ function studioActsHtml(conv) {
     + `<button class="xfer-who-more studio-new" onclick="openStudioTopic()"`
     + ` title="New topic — ends this agent and opens the next room"`
     + ` aria-label="New topic">+ New</button>`;
+}
+
+// --- Who the message goes to ---------------------------------------------------------------------
+//
+// The agent, every provider, and a `+`, as icons over two short lines. Names and status dots were
+// two thirds of each pill's width and neither is what a thumb is aiming at: a provider is picked
+// out by its mark, and a mark is what the thread's own bubbles are labelled with anyway. What is
+// running blinks rather than carrying a dot — the pill itself is the indicator, so a row of eight
+// has eight fewer things drawn in it.
+//
+// The agent is always the first pill. It is the default target and the way back from a provider,
+// so it is the one position in the row that must not move when the grant does.
+//
+// The picks themselves are conv_panel.js's, untouched: the same Set the pills wrote, so the send,
+// the dimming and the aim all read the state they already read.
+
+function studioPicksHtml(conv) {
+  const picked = convPanelPicked(conv);
+  const live = studioAgentOf(conv);
+  const name = escapeHtml(live ? (paneLabel(live) || live.agent) : 'Agent');
+  // Lit when nothing else is: a Studio room's send goes to the agent unless a provider has taken
+  // it, which is the same fact `convWebAimed` answers with for the send itself.
+  const agent = `<button class="xfer-who studio-pick${picked.size ? '' : ' on'}"`
+    + (live ? ` data-pane="${escapeHtml(live.pane_id)}"` : '')
+    + ` onclick="studioAimAgent()" aria-pressed="${!picked.size}"`
+    + ` title="Talk to ${name}" aria-label="Talk to ${name}">`
+    + (typeof agentGlyph === 'function' ? agentGlyph() : '◆')
+    + '</button>';
+  return agent + convPanelProviders(conv).map(id => {
+    const provider = webchatProvider(id) || {};
+    const label = escapeHtml(provider.label || id);
+    const on = picked.has(id);
+    const busy = convPanelBusy(convPanelSession(conv.id, id));
+    // The same element the pill row drew, so a tap still switches and a double tap still narrows:
+    // the row-level handlers in conv_dock.js find it by `data-provider`.
+    return `<button class="xfer-who studio-pick${on ? ' on' : ''}${busy ? ' busy' : ''}"`
+      + ` data-provider="${escapeHtml(id)}"`
+      + ` onclick="convPanelToggle(this.dataset.provider)" aria-pressed="${on}"`
+      + ` title="${on ? `Writing to ${label} — press to go back to the agent`
+        : `Write to ${label}`}"`
+      + ` aria-label="${on ? `Writing to ${label}. Press to go back to the agent`
+        : `Write to ${label}`}">${webchatMark(id, 16)}</button>`;
+  }).join('')
+    + `<button class="xfer-who studio-pick studio-add" onclick="openStudioPicks()"`
+    + ` title="Choose who this goes to" aria-label="Choose who this message goes to">+</button>`;
+}
+
+// The agent pill's tap. `setDockTarget` is the member row's and does this plus a repaint, but a
+// Studio room has no member row and its agent may not be running at all — the pill is still the
+// way back from a provider either way.
+function studioAimAgent() {
+  const conv = studioRoom();
+  if (!conv) return;
+  const moved = convPanelAimAgent(conv.id);
+  if (typeof renderConvDock === 'function') renderConvDock();
+  if (moved && typeof convPanelPaint === 'function') convPanelPaint(true);
+  if (window.cue) cue('tick');
+}
+
+// The drawer. Every provider this room grants, the ones being written to lit, and the agent at the
+// top as the way back — it is a row here rather than a state nobody can see, because "talk to the
+// agent again" is the commonest thing to want and it had no control of its own.
+function studioPicksSheetHtml() {
+  const conv = studioRoom();
+  if (!conv) return '';
+  const ids = convPanelProviders(conv);
+  if (!ids.length) {
+    return '<p class="pair-empty">None of this room\'s providers are switched on.</p>';
+  }
+  const picked = convPanelPicked(conv);
+  const live = studioAgentOf(conv);
+  const all = picked.size === ids.length;
+  const agentOn = !picked.size;
+  const rows = ids.map(id => {
+    const provider = webchatProvider(id) || {};
+    const on = picked.has(id);
+    return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}"`
+      + ` data-provider="${escapeHtml(id)}" aria-pressed="${on}"`
+      + ` onclick="studioPickToggle(this.dataset.provider)">`
+      + webchatMark(id)
+      + `<span class="webchat-pill-name">${escapeHtml(provider.label || id)}</span></button>`;
+  }).join('');
+  // The agent is never part of All: lighting every provider is a statement about the providers,
+  // and an agent swept up in it would be sent the same message on top of five paid accounts.
+  return `<button type="button" class="webchat-pick-row studio-pick-agent${agentOn ? ' on' : ''}"`
+    + ` aria-pressed="${agentOn}" onclick="studioPickAgent()">`
+    + `<span class="dot" style="background:${live ? 'var(--dot-live)' : 'var(--dot-cold)'}"`
+    + ' aria-hidden="true"></span>'
+    + `<span class="webchat-pill-name">${escapeHtml(live ? (paneLabel(live) || live.agent)
+      : 'Agent')}</span>`
+    + `<span class="webchat-pill-n">${live ? 'running' : 'not running'}</span></button>`
+    + `<div class="studio-pick-rows">${rows}</div>`
+    + `<button type="button" class="ql-secondary" onclick="studioPickAll()">`
+    + `${all ? 'None of them' : 'All of them'}</button>`;
+}
+
+function openStudioPicks() {
+  const sheet = document.getElementById('studioPicksSheet');
+  if (!sheet) return;
+  studioPicksDraw();
+  sheet.style.display = 'block';
+}
+
+function closeStudioPicks() {
+  const sheet = document.getElementById('studioPicksSheet');
+  if (sheet) sheet.style.display = 'none';
+}
+
+// The drawer and the row it is opened from say the same thing, so both are redrawn on every tap:
+// a drawer that stayed still while the row behind it changed is two answers to one question.
+function studioPicksDraw() {
+  const body = document.getElementById('studioPicksBody');
+  if (body) body.innerHTML = studioPicksSheetHtml();
+  if (typeof renderConvDock === 'function') renderConvDock();
+  if (typeof convPanelPaint === 'function') convPanelPaint(true);
+}
+
+// A tap adds or removes rather than switching. The drawer is where several are chosen — the row
+// behind it is where one is — so this is the multi-select and the row's own tap is the single.
+function studioPickToggle(provider) {
+  const conv = studioRoom();
+  if (!conv || !provider) return;
+  const picked = convPanelPicked(conv);
+  if (picked.has(provider)) picked.delete(provider);
+  else picked.add(provider);
+  // Reading one provider alone while writing to another is a filter nobody can find the control
+  // for, so the narrowing goes when the row it was set on stops being what is addressed.
+  if (typeof convPanelSoloOf === 'function' && convPanelSoloOf(conv.id)
+      && !picked.has(convPanelSoloOf(conv.id))) convPanelSolo.delete(conv.id);
+  studioPicksDraw();
+  if (window.cue) cue('tick');
+}
+
+function studioPickAgent() {
+  const conv = studioRoom();
+  if (!conv) return;
+  convPanelAimAgent(conv.id);
+  studioPicksDraw();
+  closeStudioPicks();
+  if (window.cue) cue('tick');
+}
+
+function studioPickAll() {
+  const conv = studioRoom();
+  if (!conv) return;
+  convPanelAll();
+  studioPicksDraw();
 }
 
 // --- The topic sheet ---------------------------------------------------------------------------
@@ -37433,7 +37725,12 @@ function studioCardHtml() {
     function arbSyncOpenButton() {
       const here = arbSessionHere();
       const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
-      arbMarkButton('convArbitrator', arbOn && !!conv, (here || {}).arbitrator,
+      // Never over a Studio room. Arbitration is a third agent deciding which of two members is
+      // written to next, and a Studio room has one agent and no pane management at all — the
+      // button could only ever open a form with nobody to put in it.
+      const studio = typeof convWebModeOf === 'function' && typeof loadConvIndex === 'function'
+        && convWebModeOf(loadConvIndex().find(c => c.id === conv)) === 'studio';
+      arbMarkButton('convArbitrator', arbOn && !!conv && !studio, (here || {}).arbitrator,
                     'Start arbitrating this conversation');
       const mine = arbSessionForPane(activePane);
       arbMarkButton('paneArbitrator', arbOn && !!mine, (mine || {}).arbitrator, '');
