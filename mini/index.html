@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-15">
+  <meta name="app-built" content="2026-09-16">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -8129,6 +8129,15 @@
       gap: 6px;
     }
 
+    /* Signed in as nobody. The stripes are the tell: an `-anon` row wears the same mark and nearly
+       the same name as the account above it, and which of the two a question went to is not a
+       thing anybody wants to work out from the answer. */
+    .webchat-pick-row.studio-anon {
+      background-image: repeating-linear-gradient(135deg,
+        transparent 0 6px,
+        color-mix(in srgb, var(--muted) 22%, transparent) 6px 8px);
+    }
+
     /* The conversation's agents. The one that will receive it is lit; the rest are dimmed rather
        than hidden, because which agents are in this conversation is information and a row showing
        only the chosen one would answer a different question. */
@@ -9488,6 +9497,11 @@
       .seg button[aria-selected="true"] { background: var(--blue); color: var(--bg); font-weight: 600; }
 
       .webchat-picker .pair-empty { grid-column: 1 / -1; }
+
+      /* The fold, on the line that divides the accounts from what is under them -- the same control
+         the pills wear, which is why it is the same markup. Across both columns, because what it
+         opens is both of the columns below it. */
+      .webchat-picker .webchat-sep { grid-column: 1 / -1; padding: 2px 0 0; }
 
 
       /* The way in. One card, above the pills and the search, wearing the accent rather than the
@@ -25487,6 +25501,9 @@ function webchatToggleAnon() {
   try { localStorage.setItem(WEBCHAT_ANON_KEY, webchatAnonOpen() ? 'off' : 'on'); }
   catch (_error) { /* private mode: this render only */ }
   renderWebAgents();
+  // One preference, two surfaces. The pills and the + New picker fold the same providers away for
+  // the same reason, so the toggle in either one is a statement about both.
+  if (document.getElementById('webchatNewSheet')?.style.display === 'block') webchatNewRender();
   if (window.cue) cue('tick');
 }
 
@@ -27412,10 +27429,26 @@ function webchatNewRender() {
   // the browser" -- which is what it meant while those two sat in that column.
   const others = webchatInOrder(webchatProviders.filter(provider => other(provider) && !anon(provider)));
   const cols = signedIn.length + guests.length + others.length;
+  // The same fold the pills have, on the same stored preference: the accounts are the line anybody
+  // reads, and the guest tabs and the variants together are about as long again. Forced open when
+  // something under it is picked -- a set with a provider in it the sheet is not drawing is the one
+  // thing a picker must never be.
+  const under = guests.concat(others);
+  const open = webchatAnonOpen() || under.some(provider => webchatNewPicked.has(provider.id));
+  const fold = under.length
+    ? '<div class="webchat-sep"><span class="webchat-sep-rule" aria-hidden="true"></span>'
+      + '<button type="button" class="webchat-pill webchat-anon-toggle"'
+      + ` onclick="webchatToggleAnon()" aria-expanded="${open}"`
+      + ' title="Providers that need no account, and the coder modes">Anonymous'
+      + `<span class="webchat-pill-n">${under.length}</span>`
+      + `<span class="webchat-anon-caret" aria-hidden="true">${open ? '\u25b4' : '\u25be'}</span>`
+      + '</button></div>'
+    : '';
   document.getElementById('webchatNewCols').innerHTML =
     (signedIn.length ? column('Signed in', signedIn) : '')
-    + (guests.length ? column('No login', guests) : '')
-    + (others.length ? column('Other', others) : '')
+    + fold
+    + (open && guests.length ? column('No login', guests) : '')
+    + (open && others.length ? column('Other', others) : '')
     + (cols ? '' : '<p class="pair-empty">No providers are enabled.</p>');
   document.getElementById('webchatNewModeChat')
     .setAttribute('aria-selected', String(webchatNewIs === 'chat'));
@@ -35872,11 +35905,17 @@ const STUDIO_GRANT_MAX = 8;
 // Every provider this relay offers, in the order the app names them everywhere else, up to the
 // ceiling. The grant is written down at mint rather than left as `*`: `*` is the agent choosing
 // for itself, and this row is a list a person edits in the drawer.
+//
+// Accounts first. The `-anon` drivers are the same sites reached without a login and there are
+// about as many of them as there are of the others, so a plain eight off the top could spend the
+// whole grant on second copies of the first four providers.
 function studioProviders() {
   if (typeof webchatProviders === 'undefined') return [];
   const ids = webchatProviders.map(provider => provider.id);
   const ordered = typeof webchatInOrder === 'function' ? webchatInOrder(ids, id => id) : ids;
-  return ordered.slice(0, STUDIO_GRANT_MAX);
+  const folded = typeof webchatFolded === 'function' ? webchatFolded : () => false;
+  return ordered.filter(id => !folded(id)).concat(ordered.filter(folded))
+    .slice(0, STUDIO_GRANT_MAX);
 }
 
 // What an unnamed topic is called. Numbered rather than dated: two rooms made in one afternoon are
@@ -36064,7 +36103,14 @@ function studioPicksHtml(conv) {
     + ` title="Talk to ${name}" aria-label="Talk to ${name}">`
     + (typeof agentGlyph === 'function' ? agentGlyph() : '◆')
     + '</button>';
-  return agent + convPanelProviders(conv).map(id => {
+  // Under the fold rather than in the row: the `-anon` drivers and the variants, which are picked
+  // deliberately or not at all. They are still in the grant and still selectable — the drawer is
+  // where they are selected — but never pills: a phone has room for two lines of them, and second
+  // copies of the first four providers are not what that room is for.
+  const folded = typeof webchatFolded === 'function' ? webchatFolded : () => false;
+  const ids = convPanelProviders(conv);
+  const hidden = ids.filter(id => folded(id) && picked.has(id)).length;
+  return agent + ids.filter(id => !folded(id)).map(id => {
     const provider = webchatProvider(id) || {};
     const label = escapeHtml(provider.label || id);
     const on = picked.has(id);
@@ -36079,8 +36125,13 @@ function studioPicksHtml(conv) {
       + ` aria-label="${on ? `Writing to ${label}. Press to go back to the agent`
         : `Write to ${label}`}">${webchatMark(id, 16)}</button>`;
   }).join('')
-    + `<button class="xfer-who studio-pick studio-add" onclick="openStudioPicks()"`
-    + ` title="Choose who this goes to" aria-label="Choose who this message goes to">+</button>`;
+    // Counted when something under the fold is lit. The pill it would otherwise have is what was
+    // given up for the width, and a message going somewhere the row does not mention is the one
+    // thing that must not follow from that.
+    + `<button class="xfer-who studio-pick studio-add${hidden ? ' on' : ''}"`
+    + ` onclick="openStudioPicks()" title="Choose who this goes to"`
+    + ` aria-label="${hidden ? `Writing to ${hidden} more. Choose who this message goes to`
+      : 'Choose who this message goes to'}">+${hidden || ''}</button>`;
 }
 
 // The agent pill's tap. `setDockTarget` is the member row's and does this plus a repaint, but a
@@ -36112,7 +36163,13 @@ function studioPicksSheetHtml() {
   const rows = ids.map(id => {
     const provider = webchatProvider(id) || {};
     const on = picked.has(id);
-    return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}"`
+    // An `-anon` driver is the same site reached without a login, and it is the one row in here
+    // where what is picked changes who is answering rather than only which provider. Striped, so
+    // it is told from its signed-in twin at a glance -- the names differ by one word and the mark
+    // is the same mark.
+    const anon = /-anon$/.test(id);
+    return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}`
+      + `${anon ? ' studio-anon' : ''}"`
       + ` data-provider="${escapeHtml(id)}" aria-pressed="${on}"`
       + ` onclick="studioPickToggle(this.dataset.provider)">`
       + webchatMark(id)
