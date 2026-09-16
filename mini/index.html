@@ -8061,13 +8061,19 @@
       display: none;
     }
 
-    /* Two lines of icons, and the rest scrolls. A grant is capped at eight, so two lines is the
-       whole of it on any phone wider than a thumb -- the cap is there so the row stays this size
-       rather than the other way round. */
+    /* Two lines of icons, and the rest scrolls. Two rather than as many as it takes: the row sits
+       over the thread and a composer that grew to five lines when a room held twenty providers
+       would push the thing being read off the screen.
+
+       Tighter than the rows of named chips this gap was set for: at 36px a pill is mostly icon,
+       so six between them was a third of a pill of nothing and the row ran out of width before it
+       ran out of providers. */
     .xfer-row .studio-picks {
       max-height: 70px;
       overflow-y: auto;
       scrollbar-width: none;
+      gap: 3px;
+      row-gap: 3px;
     }
 
     .xfer-row .studio-picks::-webkit-scrollbar {
@@ -8127,6 +8133,43 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+
+    /* A row and the ✕ that takes it out of the room. Two buttons rather than one with a corner
+       that means something else: a tap on a row is what it looks like, everywhere in this app. */
+    .studio-pick-line {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+    }
+
+    .studio-pick-line .webchat-pick-row {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .studio-grant-off {
+      flex: 0 0 auto;
+      width: 34px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .studio-grant-off:hover { border-color: var(--muted); color: var(--text); }
+
+    /* Offered by the relay and not in this room yet. Dimmed, because it is a thing to add rather
+       than a thing to write to -- and the cap is why there is a difference at all. */
+    .webchat-pick-row.studio-ungranted {
+      opacity: 0.6;
+      border-style: dashed;
+    }
+
+    .studio-pick-more {
+      margin: 4px 0 0;
     }
 
     /* Signed in as nobody. The stripes are the tell: an `-anon` row wears the same mark and nearly
@@ -27567,7 +27610,7 @@ function webchatEditProviders(convId) {
 // after the choice was made. Said here, where the choice is, and as a number rather than by
 // silently keeping the first eight: dropping five providers somebody picked is worse than saying
 // no to the pick.
-const WEBCHAT_GRANT_MAX = 8;
+const WEBCHAT_GRANT_MAX = 20;
 
 function webchatGrantFits(providers) {
   const wanted = providers.filter(id => id !== '*');
@@ -35895,12 +35938,13 @@ function studioIsStudio(convId) {
   return !!convId && studioRooms().some(conv => conv.id === convId);
 }
 
-// The relay's own ceiling on a binding, which is the adapter's ceiling on a consultation: every
-// provider in one is a paid account being spent. Named here because a Studio room grants every
-// provider it can, so it is the one mode that reaches the ceiling by doing nothing — and a grant
-// over it is refused by the relay outright, which is a room with no binding and a message in a
-// toast rather than a room with seven providers in it.
-const STUDIO_GRANT_MAX = 8;
+// The relay's own ceiling on a binding: every provider in one is a paid account being spent, so
+// there is a number rather than no number. Named here because a Studio room grants every provider
+// it can, so it is the one mode that reaches the ceiling by doing nothing — and a grant over it is
+// refused by the relay outright, which is a room with no binding and a message in a toast rather
+// than a room with nineteen providers in it. Kept in step with `CONSULT_MAX` in
+// relay/webchat_handler.py, which is what actually refuses one.
+const STUDIO_GRANT_MAX = 20;
 
 // Every provider this relay offers, in the order the app names them everywhere else, up to the
 // ceiling. The grant is written down at mint rather than left as `*`: `*` is the agent choosing
@@ -36146,35 +36190,56 @@ function studioAimAgent() {
   if (window.cue) cue('tick');
 }
 
-// The drawer. Every provider this room grants, the ones being written to lit, and the agent at the
-// top as the way back — it is a row here rather than a state nobody can see, because "talk to the
-// agent again" is the commonest thing to want and it had no control of its own.
+// The drawer. **Every** provider this relay offers, not only the ones this room already grants:
+// the grant is capped at what a binding may hold, so a relay offering more than that leaves one
+// out — and a provider a room cannot reach from the screen that lists who a message goes to is one
+// nobody can find at all. The ones in the grant are rows that pick; the rest are rows that join,
+// and the ✕ beside a granted one is how room is made when the cap is reached.
+//
+// The agent is at the top as the way back — a row here rather than a state nobody can see, because
+// "talk to the agent again" is the commonest thing to want and it had no control of its own.
 function studioPicksSheetHtml() {
   const conv = studioRoom();
   if (!conv) return '';
   const ids = convPanelProviders(conv);
-  if (!ids.length) {
-    return '<p class="pair-empty">None of this room\'s providers are switched on.</p>';
+  const rest = studioOffered().filter(id => !ids.includes(id));
+  if (!ids.length && !rest.length) {
+    return '<p class="pair-empty">This relay is offering no web providers.</p>';
   }
   const picked = convPanelPicked(conv);
   const live = studioAgentOf(conv);
-  const all = picked.size === ids.length;
+  const all = ids.length > 0 && picked.size === ids.length;
   const agentOn = !picked.size;
-  const rows = ids.map(id => {
+  const line = (id, inGrant) => {
     const provider = webchatProvider(id) || {};
-    const on = picked.has(id);
+    const on = inGrant && picked.has(id);
     // An `-anon` driver is the same site reached without a login, and it is the one row in here
     // where what is picked changes who is answering rather than only which provider. Striped, so
     // it is told from its signed-in twin at a glance -- the names differ by one word and the mark
     // is the same mark.
     const anon = /-anon$/.test(id);
-    return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}`
-      + `${anon ? ' studio-anon' : ''}"`
+    const name = escapeHtml(provider.label || id);
+    return '<div class="studio-pick-line">'
+      + `<button type="button" class="webchat-pick-row${on ? ' on' : ''}`
+      + `${anon ? ' studio-anon' : ''}${inGrant ? '' : ' studio-ungranted'}"`
       + ` data-provider="${escapeHtml(id)}" aria-pressed="${on}"`
-      + ` onclick="studioPickToggle(this.dataset.provider)">`
+      + ` onclick="${inGrant ? 'studioPickToggle' : 'studioGrantAdd'}(this.dataset.provider)"`
+      + ` aria-label="${inGrant ? name : `Add ${name} to this room`}">`
       + webchatMark(id)
-      + `<span class="webchat-pill-name">${escapeHtml(provider.label || id)}</span></button>`;
-  }).join('');
+      + `<span class="webchat-pill-name">${name}</span>`
+      + (inGrant ? '' : '<span class="webchat-pill-n">add</span>')
+      + '</button>'
+      // Taking one out is what makes room for the next: the cap is the relay's, and a drawer that
+      // could only add would refuse the ninth with nothing to do about it.
+      + (inGrant ? `<button type="button" class="studio-grant-off"`
+        + ` data-provider="${escapeHtml(id)}" onclick="studioGrantDrop(this.dataset.provider)"`
+        + ` title="Take ${name} out of this room"`
+        + ` aria-label="Take ${name} out of this room">✕</button>` : '')
+      + '</div>';
+  };
+  const rows = ids.map(id => line(id, true)).join('')
+    + (rest.length ? '<p class="hint studio-pick-more">Not in this room</p>' : '')
+    + rest.map(id => line(id, false)).join('');
   // The agent is never part of All: lighting every provider is a statement about the providers,
   // and an agent swept up in it would be sent the same message on top of five paid accounts.
   return `<button type="button" class="webchat-pick-row studio-pick-agent${agentOn ? ' on' : ''}"`
@@ -36224,6 +36289,53 @@ function studioPickToggle(provider) {
       && !picked.has(convPanelSoloOf(conv.id))) convPanelSolo.delete(conv.id);
   studioPicksDraw();
   if (window.cue) cue('tick');
+}
+
+// Every provider this relay offers, accounts first — the same order the grant is cut from, so the
+// drawer reads as the grant followed by what did not fit rather than as two unrelated lists.
+function studioOffered() {
+  if (typeof webchatProviders === 'undefined') return [];
+  const ids = webchatProviders.map(provider => provider.id);
+  const ordered = typeof webchatInOrder === 'function' ? webchatInOrder(ids, id => id) : ids;
+  const folded = typeof webchatFolded === 'function' ? webchatFolded : () => false;
+  return ordered.filter(id => !folded(id)).concat(ordered.filter(folded));
+}
+
+// Both halves of an edit to the grant. It is written to the conversation and nowhere else:
+// webchat_bind.js reconciles the binding against every snapshot, so the relay learns about it the
+// same way it learns about an edit made in the Providers sheet.
+function studioGrantSet(conv, providers) {
+  saveConvIndex(loadConvIndex().map(row => (row.id === conv.id
+    ? {...row, webchat: {...row.webchat, providers}} : row)));
+  studioPicksDraw();
+  if (typeof renderWebAgents === 'function') renderWebAgents();
+  if (window.cue) cue('tick');
+}
+
+function studioGrantAdd(provider) {
+  const conv = studioRoom();
+  if (!conv || !provider) return;
+  const grant = convGrantOf(conv);
+  if (grant.includes(provider)) return;
+  if (grant.length >= STUDIO_GRANT_MAX) {
+    if (typeof showToast === 'function') {
+      showToast(`This room holds ${STUDIO_GRANT_MAX} providers — take one out first`);
+    }
+    return;
+  }
+  studioGrantSet(conv, grant.concat([provider]));
+  // Lit as well as joined. Somebody who went looking for a provider in here wants to write to it,
+  // and a row that joined silently would need a second tap that looks exactly like the first.
+  convPanelPicked(conv).add(provider);
+  studioPicksDraw();
+}
+
+function studioGrantDrop(provider) {
+  const conv = studioRoom();
+  if (!conv || !provider) return;
+  const grant = convGrantOf(conv);
+  if (!grant.includes(provider)) return;
+  studioGrantSet(conv, grant.filter(id => id !== provider));
 }
 
 function studioPickAgent() {
