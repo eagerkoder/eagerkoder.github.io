@@ -36359,6 +36359,15 @@ function studioSpawn(conv) {
   };
   const config = studioAgentConfig();
   if (config) msg.config = config;
+  // Started with its own approval prompts off, where the harness has a flag for it. A Studio agent
+  // is spawned into the background by pressing New — nobody is sitting at the pane it comes up in,
+  // so the first tool call it makes would block on a prompt no one is there to answer, and the room
+  // would look like an agent that had simply stopped. Guarded on what this relay says it will
+  // accept: a swap can put a harness here that has no such flag, and the start is refused rather
+  // than ignored when one is asked for.
+  if (typeof startUnattendedOffered === 'function' && startUnattendedOffered(msg.name)) {
+    msg.unattended = true;
+  }
   // Bound before its first frame rather than reconciled a poll later: the relay writes the binding
   // file and sources it at the pane's shell in the one moment there is a shell there, so every
   // tool call the harness makes inherits it. webchat_bind.js still reconciles afterwards and finds
