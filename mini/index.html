@@ -481,7 +481,14 @@
       flex: 0 1 auto;
       min-width: 0;
       margin-left: 4px;
+      /* Below the floor the buttons shrink to, the row scrolls rather than pushing the header out
+         of shape. Eight sections at 30px each is more than a 320px phone has once the title and
+         the two nav icons have taken theirs, and a target smaller than 30 is not one. */
+      overflow-x: auto;
+      scrollbar-width: none;
     }
+
+    .sect-tabs::-webkit-scrollbar { display: none; }
 
     .sect-tabs[hidden] {
       display: none;
@@ -497,6 +504,14 @@
       width: 42px;
       min-width: 30px;
       flex-shrink: 1;
+    }
+
+    /* A section that has nothing in it yet. Drawn, because the strip must not change shape while
+       the relay is still answering — a button arriving under a thumb already on its way down is a
+       press that lands on whatever took its place. */
+    .header .sect-tab.empty {
+      opacity: 0.35;
+      cursor: default;
     }
 
     .header .sect-tab[aria-pressed="true"] {
@@ -720,9 +735,14 @@
       transition: color 0.15s, background 0.15s;
     }
 
-    .header button:hover {
-      color: var(--text);
-      background: var(--border);
+    /* Only where there is a pointer that can hover. On a touchscreen this rule is applied on the
+       first tap and stays applied, which is what makes a button look answered and then take a
+       second press to actually fire. */
+    @media (hover: hover) {
+      .header button:hover {
+        color: var(--text);
+        background: var(--border);
+      }
     }
 
     .dot {
@@ -2445,6 +2465,28 @@
       cursor: pointer;
       margin-left: auto;
     }
+
+    /* Which topic the Studio card opens. `◆` is that card's own mark, so the control says where
+       pressing it is felt; filled when this room is the one it points at. */
+    .conversation-title .studio-current {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.65rem;
+      line-height: 1;
+      padding: 4px 6px;
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    .conversation-title .studio-current.on {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .conversation-title .studio-current + .archive-btn { margin-left: 0; }
 
     .conversation-title .archive-btn + .end-btn,
     .conversation-title .archive-btn + .conv-purge {
@@ -9617,10 +9659,25 @@
 
       .webchat-pills::-webkit-scrollbar { display: none; }
 
-      /* The line between the two rows, and the control that opens the lower one standing on it.
-         A rule running out to the left is what says the button is about what is below rather than
-         one more provider on the row above — which is how it read when it hung off the end of the
-         accounts strip. */
+      /* The providers and the Anonymous toggle on one line: the accounts scroll sideways on the
+         left, the toggle is pinned at the right and they scroll underneath it. Two rows of
+         provider chrome over a list of chats was most of a phone's first screen. */
+      .webchat-pill-line {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .webchat-pill-line .webchat-pills {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .webchat-pill-line .webchat-anon-toggle { margin-top: 0; }
+
+      /* The rule above the providers line. What it divides is the search from the row of filters, and the Anonymous toggle at the right-hand end of that row is below it
+         like everything else on the line — which is what says the toggle is about the providers
+         rather than one more of them. */
       .webchat-sep {
         display: flex;
         align-items: center;
@@ -9632,15 +9689,6 @@
         flex: 1;
         height: 1px;
         background: var(--border);
-      }
-
-      /* Offered under the pills once one of them is chosen, standing on that same rule: it is a
-         control about the list below it rather than one more provider in the row above. Dashed,
-         because every solid pill on this page is a filter and this one starts something. */
-      .webchat-new-here {
-        gap: 6px;
-        border-style: dashed;
-        color: var(--text);
       }
 
       /* The second line: the same site reached with no account. Held back from the first line,
@@ -9851,6 +9899,26 @@
         cursor: pointer;
       }
 
+      /* The same row, unwashed and dashed: Studio's card is the one that needs no answers, and this
+         one opens a picker. A <button>, so it needs the text alignment a div did not. */
+      .webchat-new-card {
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        border-style: dashed;
+        border-color: var(--border);
+        background: var(--surface);
+        margin: 6px 0 8px;
+      }
+
+      .webchat-new-card:hover { border-color: var(--blue); }
+
+      .webchat-new-card .studio-card-mark { color: var(--muted); }
+
+      /* With a provider chosen the card wears that provider's mark where the `+` was, at the size
+         the Studio card's own mark takes. */
+      .webchat-new-card .webchat-mark { flex: 0 0 auto; }
+
       .studio-card:hover {
         border-color: var(--blue);
         background: color-mix(in srgb, var(--blue) 16%, var(--surface));
@@ -9910,11 +9978,13 @@
          above it. */
       .webchat-search {
         display: flex;
-        gap: 6px;
+        gap: 8px;
         /* stretch, so the button is exactly the pill's height without either of them being told
            what that height is — the field's own padding and font decide it. */
         align-items: stretch;
-        margin: 6px 0 4px;
+        /* Clear of the filter pills below it: they are a row of small targets, and a field sitting
+           against them is one more thing in a strip of things to hit. */
+        margin: 6px 0 12px;
       }
 
       /* Under the card that makes a room, so the two ways of reaching one are together — but not
@@ -9945,15 +10015,18 @@
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
       }
 
+      /* 44px of height between the padding and the line box, which is the smallest target a thumb
+         reliably lands on. It was 30, which is what a row of filter pills is — and this is the one
+         control on the page somebody reaches for while holding the phone in one hand. */
       .webchat-search-input {
         flex: 1 1 auto;
         min-width: 0;
-        padding: 7px 0;
+        padding: 12px 0;
         border: 0;
         background: none;
         color: var(--text);
         font: inherit;
-        font-size: 0.8rem;
+        font-size: 0.9rem;
       }
 
       .webchat-search-input:focus { outline: none; }
@@ -9988,13 +10061,13 @@
          the eleven themes: a hard-coded tint is one theme's answer written down. */
       .webchat-search .section-action {
         flex: 0 0 auto;
-        padding: 0 14px;
+        padding: 0 18px;
         border: 1px solid color-mix(in srgb, var(--blue) 40%, var(--border));
         border-radius: 999px;
         background: color-mix(in srgb, var(--blue) 10%, var(--bg));
         color: var(--blue);
         font: inherit;
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         cursor: pointer;
       }
 
@@ -15343,14 +15416,22 @@
       // panels and with an open pane, and there the strip is not a control, it is a lie.
       const list = document.getElementById('agentListView');
       const landing = !!list && list.style.display !== 'none';
-      // Buttons for what is actually there. Fewer than two lists is nothing to choose between —
-      // except while a filter is on, where the one button left is the way to switch it off.
-      const keys = SECTION_TABS.filter(sectionHasContent);
-      // The markup says which buttons there are and nothing about which one is held down. Pressing
-      // a filter must not rewrite the strip: replacing the node under the finger re-parses five
-      // SVGs and drops the tap highlight mid-press, which is a phone's whole answer to "did that
-      // register" — and it reads as a delay the mouse never sees, because a mouse had :hover.
-      const html = !landing || (keys.length < 2 && !sectionFilter) ? '' : keys.map(key =>
+      // A button per section the reader has switched on, whether or not it has anything in it yet.
+      // Drawn from what is *there*, the strip arrived a section at a time as the relay answered —
+      // five buttons appearing under a thumb already on its way down, each arrival replacing every
+      // other button with a fresh node. A tab that is not ready yet is disabled rather than
+      // missing: it says the section exists and is on its way, and it cannot be pressed to a page
+      // that would have nothing on it.
+      // Switched on, or holding something either way: a section Settings has switched off still has
+      // a shortcut, which is how the page is visited without changing the setting.
+      const keys = SECTION_TABS.filter(key => sectionOrder.includes(key) || sectionHasContent(key));
+      // The markup says which buttons there are and nothing about which one is held down or which
+      // one is ready. Pressing a filter must not rewrite the strip: replacing the node under the
+      // finger re-parses five SVGs and drops the tap highlight mid-press, which is a phone's whole
+      // answer to "did that register" — and it reads as a delay the mouse never sees, because a
+      // mouse had :hover. For the same reason nothing about a section's content is in here: it
+      // moves on every broadcast, and the strip would be rebuilt under the finger all day.
+      const html = !landing || keys.length < 2 ? '' : keys.map(key =>
         `<button class="sect-tab" data-section="${key}"`
         + ` onclick="toggleSectionFilter('${key}')" title="${SECTION_NAMES[key]}"`
         + `>${sectionIcon(key)}</button>`).join('');
@@ -15362,9 +15443,13 @@
         const btn = bar.querySelector(`[data-section="${key}"]`);
         if (!btn) return;
         const on = sectionFilter === key;
+        const ready = on || sectionHasContent(key);
         btn.setAttribute('aria-pressed', String(on));
+        btn.disabled = !ready;
+        btn.classList.toggle('empty', !ready);
         btn.setAttribute('aria-label', on ? 'Show every section again'
-          : 'Show only ' + SECTION_NAMES[key]);
+          : ready ? 'Show only ' + SECTION_NAMES[key]
+          : SECTION_NAMES[key] + ' — nothing in it yet');
       });
     }
 
@@ -26067,32 +26152,25 @@ function webchatPillsHtml() {
   const folded = webchatInOrder(webchatProviders.filter(provider => webchatFolded(provider.id)));
   const named = webchatInOrder(webchatProviders.filter(provider => !webchatFolded(provider.id)));
   const open = webchatAnonOpen();
-  // On the line that divides the two rows rather than floating over the first one. It is a control
-  // about what is *below* it, and a rule to its left is what says so — where hanging it off the
-  // end of the accounts row made it look like one more provider.
+  // Pinned at the right-hand end of the providers line rather than given a line of its own, with
+  // the accounts scrolling sideways underneath it: what it opens is a second row of providers, and
+  // two full-width rows of chrome over a list of chats is most of a phone's first screen. The rule
+  // runs above the pair, so the line still reads as being below the divider — it is about what is
+  // under it either way, which is what a control hanging off the end of a row of providers did not
+  // say when it wore no rule at all.
   const fold = folded.length
-    ? '<div class="webchat-sep"><span class="webchat-sep-rule" aria-hidden="true"></span>'
-      + `<button type="button" class="webchat-pill webchat-anon-toggle" id="webchatAnonToggle"`
+    ? `<button type="button" class="webchat-pill webchat-anon-toggle" id="webchatAnonToggle"`
       + ` onclick="webchatToggleAnon()" aria-expanded="${open}" aria-controls="webchatAnonPills"`
       + ` title="Providers that need no account, and the coder modes">Anonymous`
       + `<span class="webchat-pill-n">${folded.length}</span>`
       + `<span class="webchat-anon-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>`
-      + '</div>'
     : '';
-  // With a provider chosen, the list is that provider's chats -- and the commonest next move is
-  // one more of them. It used to mean clearing the filter, pressing + New and finding the same
-  // provider again in a picker.
-  const start = webchatFilter && webchatProvider(webchatFilter)
-    ? `<div class="webchat-sep webchat-start"><span class="webchat-sep-rule" aria-hidden="true">`
-      + `</span><button type="button" class="webchat-pill webchat-new-here"`
-      + ` onclick="webchatStart('${escapeHtml(webchatFilter)}')"`
-      + ` title="New chat with ${escapeHtml(webchatProvider(webchatFilter).label)}"`
-      + ` aria-label="New chat with ${escapeHtml(webchatProvider(webchatFilter).label)}">`
-      + `+ New ${webchatMark(webchatFilter, 14)}</button></div>`
-    : '';
-  return webchatPillRowHtml(named, 'Filter chats by provider')
-    + start
+  return (fold ? '<div class="webchat-sep"><span class="webchat-sep-rule" aria-hidden="true">'
+    + '</span></div>' : '')
+    + `<div class="webchat-pill-line">`
+    + webchatPillRowHtml(named, 'Filter chats by provider')
     + fold
+    + '</div>'
     + (folded.length && open
       ? webchatPillRowHtml(folded, 'Filter chats by a provider that needs no login',
         'webchatAnonPills')
@@ -26351,12 +26429,14 @@ function webchatRoomCard(conv, sessions, compact) {
     + `</div></div>`;
 }
 
-// Archive, and Delete once archived. Guarded by `typeof` like every other call out of this module
-// into the conversation one: the vm slices that test this file load neither.
+// Which topic the Studio card opens, then Archive, and Delete once archived. Guarded by `typeof`
+// like every other call out of this module into the conversation one: the vm slices that test this
+// file load neither.
 function webchatRoomActions(conv) {
   const archived = !!conv.archived;
   const name = conv.name || conv.id;
-  return (typeof archiveBtnHtml === 'function' ? archiveBtnHtml(conv.id, archived, name) : '')
+  return (typeof studioPickBtnHtml === 'function' ? studioPickBtnHtml(conv) : '')
+    + (typeof archiveBtnHtml === 'function' ? archiveBtnHtml(conv.id, archived, name) : '')
     + (archived && typeof purgeConversation === 'function'
       ? `<button class="conv-purge arm-btn" data-conv-id="${escapeHtml(conv.id)}"`
         + ` onclick="event.stopPropagation(); armButton(this, 'Delete for good?',`
@@ -26468,15 +26548,15 @@ function renderWebAgents(error = '') {
   // The server pill first, beside the name: it is a fact about the section rather than an action
   // on it, and it is drawn whether or not the adapter is answering — the page you land on when
   // every chat has gone quiet is this one, and until now it said so and offered nothing.
-  // Then + New, compact, refresh. The one that makes something stands ahead of the ones that
-  // rearrange what is already there: it is what the header is reached for, and putting it between
-  // two view controls read as a third view control.
+  // Then compact and refresh, which are the two view controls. The one that makes something is no
+  // longer among them: + New is a card at the head of the list, beside the Studio card, because
+  // the two ways of starting something belong together and a 0.65rem control in a header is not
+  // where a phone reaches for the commonest action on the screen.
   // The archive control is the one part of this header that cannot be written yet: how many rooms
   // are in it is not known until the list below has been narrowed, and a count that disagreed with
   // what the mode draws is the whole bug this section did not have.
   const headerWith = extra => '<div class="section-header"><span class="section-name">Web Agents</span>'
     + webchatServerPillHtml()
-    + '<button class="section-action" onclick="webchatNew()" aria-label="New Web Agent chat">+ New</button>'
     + extra
     + compactButton(WEBCHAT_COMPACT_KEY, 'renderWebAgents', 'Compact Web Agent chats')
     + '<button class="section-action" onclick="webchatRefresh()" aria-label="Refresh Web Agents">↻</button></div>';
@@ -26577,13 +26657,42 @@ function renderWebAgents(error = '') {
         ? '<button class="section-action" onclick="toggleWebchatArchive()" aria-pressed="false"'
           + ` title="Rooms you put away">Archive (${archivedRooms.length})</button>`
         : '';
+    // Under the pills and directly over the cards, so the row that makes a chat stands at the head
+    // of the ones that open the chats already made. Not over a search: what is below then is hits
+    // inside threads, and a control that makes a new one has nothing to do with them.
+    const make = searching || archiveOn ? '' : webchatNewCardHtml();
     paintList(el, headerWith(archiveControl) + studio
       + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '')
-      + webchatPillsHtml() + body);
+      + webchatPillsHtml() + make + body);
   };
   if (typeof webchatSearchKeep === 'function') webchatSearchKeep(draw);
   else draw();
   applySections();
+}
+
+// The way in for the other three modes, in the same shape the Studio card has: a row rather than a
+// control, at the head of the list of rooms. Dashed and unwashed, because Studio's card is the one
+// that needs no answers and this one opens a picker.
+//
+// With a provider chosen the list is that provider's chats, and the commonest next move is one
+// more of them -- so the card wears that provider's mark and starts one, rather than opening a
+// picker to be told again which provider this is. It is the same row in the same place either
+// way: what changes is the one answer it already has.
+function webchatNewCardHtml() {
+  const provider = webchatFilter ? webchatProvider(webchatFilter) : null;
+  const name = provider ? `New ${provider.label} chat` : 'New chat';
+  const mark = provider ? webchatMark(provider.id, 20)
+    : '<span class="studio-card-mark" aria-hidden="true">+</span>';
+  return `<button type="button" class="studio-card webchat-new-card" `
+    + (provider ? `onclick="webchatStart('${escapeHtml(provider.id)}')"`
+      : 'onclick="webchatNew()"')
+    + ` aria-label="${escapeHtml(name)}">`
+    + mark
+    + `<span class="studio-card-body"><span class="studio-card-name">${escapeHtml(name)}</span>`
+    + `<span class="studio-card-meta">`
+    + (provider ? 'One more thread on this provider'
+      : 'One provider, a panel of them, or an agent driving several')
+    + `</span></span></button>`;
 }
 
 // The one place a chat is started on a provider that has none yet. It used to be a card per
@@ -36742,6 +36851,12 @@ const STUDIO_MODE = 'studio';
 const STUDIO_AGENT_KEY = 'herdr_studio_agent';
 const STUDIO_SPAWN_KEY = 'herdr_studio_spawn';
 const STUDIO_HIDE_KEY = 'herdr_studio_hide';
+// Which topic the landing card opens. Ordinarily the newest, which is what a series means — but a
+// topic somebody is still working through stops being the newest the moment they open a second
+// one, and the card is the whole entry to this mode. This browser's own, like the other three
+// Studio settings: it says which room *this* reader is in the middle of, which is not a fact about
+// the work the way a room's name or its grant is.
+const STUDIO_CURRENT_KEY = 'herdr_studio_current';
 
 // The alias a Studio room is started under until somebody picks another. Derived from stock claude
 // — it names no endpoint and no secret, so it is a model choice and nothing more — and seeded into
@@ -36857,9 +36972,44 @@ function studioRooms() {
     .sort((a, b) => (b.created || 0) - (a.created || 0));
 }
 
-// The newest, which is the one the card points at. There is no "current" stored anywhere: a topic
-// is a room and the newest room is the topic, so a second browser agrees without being told.
-function studioLatest() { return studioRooms()[0] || null; }
+// Which topic the card opens: the one this reader pinned, and otherwise the newest — a topic is a
+// room and the newest room is the topic, which is still the answer for a browser that has pinned
+// nothing. A pinned id that no longer names a Studio room falls back the same way, so deleting the
+// current topic needs no cleanup and a pin made in another browser is simply not this one's.
+function studioLatest() {
+  const rooms = studioRooms();
+  const held = studioPref(STUDIO_CURRENT_KEY, '');
+  return rooms.find(conv => conv.id === held) || rooms[0] || null;
+}
+
+function studioCurrentId() {
+  const room = studioLatest();
+  return room ? room.id : '';
+}
+
+// Pin a topic, or unpin back to the newest by naming the one already pinned. Both from the same
+// control: what it toggles is whether the card follows this room or follows the series.
+function setStudioCurrent(convId) {
+  const held = studioPref(STUDIO_CURRENT_KEY, '');
+  studioSetPref(STUDIO_CURRENT_KEY, held === convId ? '' : String(convId || ''));
+  if (typeof renderWebAgents === 'function') renderWebAgents();
+}
+
+// The control, on a Studio room's card in the landing list. Drawn only on a Studio room: every
+// other kind of room is one of many and has no card standing for it elsewhere to point anywhere
+// else. `◆` is the Studio card's own mark, which is what says where pressing this is felt.
+function studioPickBtnHtml(conv) {
+  if (!conv || typeof convWebModeOf !== 'function' || convWebModeOf(conv) !== STUDIO_MODE) return '';
+  const on = studioCurrentId() === conv.id;
+  const name = (conv.name || conv.id);
+  return `<button class="studio-current${on ? ' on' : ''}" data-conv-id="${escapeHtml(conv.id)}"`
+    + ` onclick="event.stopPropagation(); setStudioCurrent(this.dataset.convId)"`
+    + ` aria-pressed="${on}"`
+    + ` title="${on ? 'The topic the Studio card opens — press to follow the newest instead'
+      : `Open ${escapeHtml(name)} from the Studio card`}"`
+    + ` aria-label="${on ? 'Follow the newest topic instead'
+      : `Make ${escapeHtml(name)} the current topic`}">◆</button>`;
+}
 
 function studioIsStudio(convId) {
   return !!convId && studioRooms().some(conv => conv.id === convId);
@@ -36924,6 +37074,9 @@ function studioStart(topic) {
     webchat: {providers: studioProviders(), mode: STUDIO_MODE, topic: name, from: prior?.id || ''},
   };
   saveConvIndex([conv].concat(items));
+  // The topic just made is the one the card opens. A pin held from before would point the way in
+  // at the room this one was minted to replace.
+  studioSetPref(STUDIO_CURRENT_KEY, '');
   if (typeof openConversation === 'function') openConversation(id);
   if (studioSpawnOn()) studioSpawn(conv);
   if (typeof renderWebAgents === 'function') renderWebAgents();
@@ -37580,7 +37733,10 @@ function studioCardHtml() {
   const name = room ? (room.name || 'Studio') : 'Studio';
   const agent = live ? (live.agent || 'agent')
     : (studioSpawnOn() ? `${studioAgentKind()} on open` : 'no agent');
-  return `<div class="studio-card" role="button" tabindex="0" onclick="studioEnter()"`
+  // Identified, because the shape is shared: + New wears the same card, and a page with two of
+  // them is where a selector that says "the studio card" starts meaning either.
+  return `<div class="studio-card" id="studioCard" role="button" tabindex="0"`
+    + ` onclick="studioEnter()"`
     + ` onkeydown="if(event.key==='Enter'||event.key===' ')`
     + `{event.preventDefault();studioEnter()}"`
     + ` aria-label="Open ${escapeHtml(name)}">`
