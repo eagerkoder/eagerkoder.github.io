@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-16">
+  <meta name="app-built" content="2026-09-18">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -6373,9 +6373,13 @@
       border-radius: 12px;
       border-bottom-left-radius: 4px;
       padding: 8px 10px;
-      /* The agent's own tint, mixed in by the renderer. A wash rather than a fill: the text on it
-         is --text in both themes and has to keep its contrast. */
-      background: color-mix(in srgb, var(--conv-agent, var(--text)) 10%, var(--surface));
+      /* Nearly the page's own ground, a shade off it. An agent's own tint is carried by the
+         border and by the name row, which is where it says something: a wash behind the whole
+         bubble says it again at fifty times the area, and down a thread of one agent's answers it
+         is the same colour over and over saying nothing at all. Turn it back on with Use agent
+         colours in the composer's controls.
+         A bubble from outside keeps its wash either way -- see below. */
+      background: color-mix(in srgb, var(--surface) 40%, var(--bg));
       font-size: var(--conv-font, 13px);
       line-height: 1.45;
       /* Agent output is monospace on the pane and stays monospace here — a plan or a diff loses
@@ -6383,6 +6387,24 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+    }
+
+    /* A bubble somebody outside this relay filled: a provider's answer in a room, a provider's
+       answer in its own chat, a notebook's. Those keep the wash whatever the setting says, because
+       there it is the answer to a question the thread genuinely asks -- a panel fans one question
+       out to five providers and the ground is what says which one came back. Down a thread of one
+       agent the same question has one answer and the colour is decoration.
+
+       Three states rather than two, the same shape the paragraph switch in the same row has:
+       outside bubbles only, which is the default; every bubble, which is what this app drew before
+       any of this was a setting and is still the fastest way to tell two panes apart; and none at
+       all, for a reader who wants the thread to be text on one ground. */
+    body.conv-tint-1 .conv-msg.foreign,
+    body.conv-tint-1 #webAgentThread .conv-msg:not(.user),
+    body.conv-tint-1 #nlmThread .conv-msg:not(.user),
+    body.conv-tint-2 .conv-msg,
+    body.conv-tint-2 .conv-slot {
+      background: color-mix(in srgb, var(--conv-agent, var(--text)) 10%, var(--surface));
     }
 
     /* One speaker in the thread — "show this pane only", or a conversation with a single member.
@@ -7669,7 +7691,8 @@
        Paired is the orange of the Markdown switch beside it -- both are about how one answer is
        drawn -- and grouped is filled, because a fan-out folded into one bubble is the bigger claim
        of the two and the one a reader needs to recognise before wondering where four answers went. */
-    .hang-para.grouped {
+    .hang-para.grouped,
+    .hang-tint.grouped {
       color: var(--bg);
       background: var(--orange);
       border-color: var(--orange);
@@ -10026,12 +10049,17 @@
         background: color-mix(in srgb, var(--muted) 16%, transparent);
       }
       /* Scrolls inside itself. A line of code wider than the phone must not widen the thread --
-         a bubble that overflows takes the whole column with it and every other message with that. */
+         a bubble that overflows takes the whole column with it and every other message with that.
+         Its ground is lighter than an inline span's and carries its own token: a span of inline
+         code is a few characters wide and the tint is the only thing marking it, while a block is
+         already marked by its shape, its font and the button over its corner. At a block's size
+         the same tint stops reading as a mark and starts reading as a panel -- which is most of
+         what made a table drawn in box characters look like something gone wrong. */
       .conv-msg .md pre {
         margin: 0 0 6px;
         padding: 8px 10px;
         border-radius: 8px;
-        background: color-mix(in srgb, var(--muted) 14%, transparent);
+        background: color-mix(in srgb, var(--muted) 6%, transparent);
         overflow-x: auto;
       }
       .conv-msg .md pre code {
@@ -10187,7 +10215,7 @@
       .conv-msg .md hr { border-top-color: var(--md-rule, var(--border)); }
 
       .conv-msg .md code { background: var(--md-code, color-mix(in srgb, var(--muted) 16%, transparent)); }
-      .conv-msg .md pre { background: var(--md-code, color-mix(in srgb, var(--muted) 14%, transparent)); }
+      .conv-msg .md pre { background: var(--md-block, color-mix(in srgb, var(--muted) 6%, transparent)); }
       .conv-msg .md strong { color: var(--md-strong, inherit); }
 
       /* Accent: the app's own three, in the order a document uses them -- the heading in blue, the
@@ -10217,6 +10245,7 @@
         --md-strong: var(--orange);
         --md-quote: color-mix(in srgb, var(--muted) 80%, transparent);
         --md-code: color-mix(in srgb, var(--orange) 12%, transparent);
+        --md-block: color-mix(in srgb, var(--orange) 6%, transparent);
         --md-link: var(--orange);
       }
 
@@ -10230,6 +10259,9 @@
         --md-rule: var(--text);
         --md-strong: var(--text);
         --md-code: color-mix(in srgb, var(--muted) 24%, transparent);
+        /* Half the inline tint rather than the quarter the other themes take: this is the theme
+           somebody chose because the others were too faint for the light they are reading in. */
+        --md-block: color-mix(in srgb, var(--muted) 12%, transparent);
       }
 
       #webAgentThread.md-contrast .md h1,
@@ -10795,6 +10827,12 @@
             <path d="M3 11.5h18" />
             <path d="M5 15.5h14M5 19h9" />
           </svg></button>
+        <button class="hang-btn on hang-tint" id="webAgentTint" onclick="convToggleTint()"
+          aria-pressed="false" aria-label="Use agent colours behind each bubble">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />
+          </svg></button>
         <button class="hang-btn on" id="webAgentMarkdown" onclick="webchatToggleMarkdown()"
           aria-pressed="true" aria-label="Show the reply as formatted Markdown">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
@@ -10991,6 +11029,16 @@
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
           <path d="M6 15.5v-7l3 3.5 3-3.5v7M16 8.5v7M16 15.5l-2-2.5M16 15.5l2-2.5" />
+        </svg></button>
+      <!-- Whether a bubble carries its agent's colour as a wash behind it. Beside the Markdown
+           switch because it is the same kind of decision -- how a thread is drawn rather than what
+           is in it -- and off by default: see the bubble rule for what the wash was claiming in a
+           room of providers. The icon is a drop. -->
+      <button class="hang-btn hang-md hang-tint" id="convTint" onclick="convToggleTint()"
+        aria-pressed="false" aria-label="Use agent colours behind each bubble">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />
         </svg></button>
       <button class="hang-btn hang-live" id="convLive" onclick="toggleConvLive()"
         aria-pressed="false" aria-label="Read the relay’s record">
@@ -25313,6 +25361,10 @@ function mdInline(line) {
 
 // Blocks, in one pass over the lines. `list` holds the tag of the list currently open, so a run of
 // bullets is one `<ul>` rather than one per line, and anything that is not a bullet closes it.
+// The characters a box-drawn table is made of. `│` alone is deliberately included: a content row
+// of a table carries only those, and it is the rows rather than the rules that hold the numbers.
+const MD_ART = /[─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬]/;
+
 function renderMarkdown(source) {
   const lines = String(source == null ? '' : source).replace(/\r\n?/g, '\n').split('\n');
   const out = [];
@@ -25359,6 +25411,27 @@ function renderMarkdown(source) {
       continue;
     }
     if (!line.trim()) { closeParagraph(); closeList(); continue; }
+
+    // A table drawn in box characters, which is what a terminal harness answers with and what a
+    // provider asked to compare four things often answers with too. It is not Markdown and no rule
+    // below recognises it, so it was falling through to a paragraph -- set in the body font, with
+    // every column out by a fraction of a character and the long rows wrapped in half. The columns
+    // are the whole content of a table, so it is shown the way a fenced block is shown: monospace,
+    // its own horizontal scroll, and the copy button that comes with one.
+    //
+    // Two lines at least. A single rule of box characters is a divider somebody drew in prose, and
+    // putting one line in a code block is worse than leaving it where it was.
+    if (MD_ART.test(line)) {
+      let at = index;
+      while (at + 1 < lines.length && MD_ART.test(lines[at + 1])) at += 1;
+      if (at > index) {
+        closeParagraph();
+        closeList();
+        out.push(mdBlock('', lines.slice(index, at + 1).join('\n') + '\n'));
+        index = at;
+        continue;
+      }
+    }
 
     // An SVG a provider wrote without fencing it. Most of them fence their code, but "here is the
     // chart:" followed by bare markup is common enough, and this file escapes the whole input --
@@ -25632,8 +25705,13 @@ function webchatReceiveState(msg) {
   // a turn it never saw end had ended.
   if (typeof convPanelCheckTurns === 'function') convPanelCheckTurns();
   // Before the render, so a room that has just earned its name is drawn under it rather than under
-  // the placeholder for one more poll.
-  if (webchatAutoName() && typeof renderConversations === 'function') renderConversations();
+  // the placeholder for one more poll -- and now unconditionally, because a name is no longer the
+  // only thing here a conversation row draws from. Its dot blinks while a provider thread of it is
+  // mid-answer, and that state arrives in this message and in no other. Both redraws bail on an
+  // unchanged signature, so a state that moved nothing costs a comparison.
+  webchatAutoName();
+  if (typeof renderConversations === 'function') renderConversations();
+  if (typeof renderConvStrip === 'function') renderConvStrip();
   renderWebAgents(msg.error || '');
   if (webchatAwaitingServer) {
     const what = webchatAwaitingServer;
@@ -26656,6 +26734,53 @@ function webchatToggleMarkdown() {
   if (typeof hangSync === 'function') hangSync();
 }
 
+// Which bubbles carry their agent's colour as a wash behind them. Three states, the same shape
+// as the paragraph switch beside it:
+//
+//   1  outside only -- a provider's answer, a notebook's. The default.
+//   2  every bubble, which is what this app drew before any of this was a setting.
+//   0  none, for a thread read as text on one ground.
+//
+// The default moved off "every bubble" because the ground is the largest surface a bubble has and
+// down a thread of one agent's answers it spends all of it saying the same thing. Where it does
+// say something is where the answers come from somewhere else: a panel fans one question out to
+// five providers and the ground is what tells them apart. So that is the case it is kept for, and
+// the other two are there for the readers the middle setting is the wrong guess for.
+//
+// A body class rather than a re-render: nothing about the markup changes, only which rule wins.
+const CONV_TINT_KEY = 'herdr_conv_tint';
+const CONV_TINT_STATES = ['1', '2', '0'];
+
+function convTintState() {
+  try {
+    const held = localStorage.getItem(CONV_TINT_KEY);
+    return CONV_TINT_STATES.indexOf(held) >= 0 ? held : '1';
+  } catch (_error) { return '1'; }
+}
+
+function convApplyTint() {
+  if (!document.body) return;
+  const state = convTintState();
+  CONV_TINT_STATES.forEach(id => document.body.classList.toggle(`conv-tint-${id}`, id === state));
+}
+
+function convTintTitle(state) {
+  return state === '2' ? 'Every bubble carries its agent\u2019s colour \u2014 tap for none'
+    : state === '0' ? 'No bubble carries a colour \u2014 tap for outside answers only'
+    : 'Outside answers carry their colour \u2014 tap for every bubble';
+}
+
+function convToggleTint() {
+  const at = CONV_TINT_STATES.indexOf(convTintState());
+  try { localStorage.setItem(CONV_TINT_KEY, CONV_TINT_STATES[(at + 1) % CONV_TINT_STATES.length]); }
+  catch (_error) { /* private mode: this page only */ }
+  convApplyTint();
+  if (typeof hangSync === 'function') hangSync();
+  if (typeof renderWebchatView === 'function') renderWebchatView();
+}
+
+convApplyTint();
+
 // How a rendered answer is coloured, and nothing else — every theme is a set of custom properties
 // the one stylesheet reads, so there is one set of Markdown rules rather than four to keep in step.
 // `plain` is what the thread looked like before this existed and stays the default: a theme that
@@ -27223,6 +27348,15 @@ function renderWebchatView() {
     md.setAttribute('aria-pressed', String(on));
     md.title = on ? 'Showing formatted Markdown — tap for the text the provider sent'
       : 'Showing the text the provider sent — tap to format it';
+  }
+  const tint = document.getElementById('webAgentTint');
+  if (tint) {
+    const state = convTintState();
+    tint.classList.add('on');
+    tint.classList.toggle('live', state !== '0');
+    tint.classList.toggle('grouped', state === '2');
+    tint.setAttribute('aria-pressed', String(state !== '0'));
+    tint.title = convTintTitle(state);
   }
   // The same three-state switch the conversation window carries, on the same stored preference:
   // one decision about how an exchange is drawn, wherever it is being read. A single-provider chat
@@ -28191,6 +28325,23 @@ function webchatThreadSessions(convId) {
   if (!convId || !webchatAvailable) return [];
   const prefix = `${convId}:`;
   return webchatSessions.filter(session => String(session.name || '').startsWith(prefix));
+}
+
+// Whether anything is being written in this conversation's provider threads right now. Two
+// sources, because they answer for different moments: `running` is what this relay says about a
+// turn it is carrying, and a provider's `busy` naming one of these threads is what the adapter
+// says about the tab. A browser that has just reconnected holds no memory of having sent anything
+// and has only the second.
+//
+// The room card on the Web Agents list has asked this since it was written. Everywhere else a
+// conversation is drawn -- its row in the list, its tab in the strip, the badge of the agent
+// standing in it -- asked the panes instead, and a room whose whole activity is five providers
+// answering has no pane doing anything: the dot sat still through the one minute it had something
+// to report.
+function webchatConvBusy(convId) {
+  return webchatThreadSessions(convId).some(session => session.running
+    || (typeof webchatProvider === 'function'
+      && webchatProvider(session.provider)?.busy === session.name));
 }
 
 // Ask for anything not held, or held from before the provider last said something. `updatedAt` is
@@ -32605,7 +32756,10 @@ function nlmSourceDelete(source) {
           webMarks: !web || typeof webchatMark !== 'function' ? ''
             : web.providers.map(provider => webchatMark(provider, 14)).join(''),
           dot: lead ? statusColor(lead) : 'var(--dot-cold)',
-          pulse: lead && lead.status === 'working' ? ' pulse' : '',
+          // A pane of this conversation working, or a provider thread of it mid-answer. The
+          // second is the whole of what a panel does, and it had no way of reaching this dot.
+          pulse: (lead && lead.status === 'working')
+            || (typeof webchatConvBusy === 'function' && webchatConvBusy(c.id)) ? ' pulse' : '',
           // A conversation with live panes keeps the filled dot its lead pane's status paints —
           // grey included, because an idle agent is still an agent. With none, there is no status
           // to paint and the dot is drawn hollow: ended is not a state, it is the absence of one.
@@ -33512,7 +33666,8 @@ function nlmSourceDelete(source) {
         const lead = on.find(a => a.status === 'blocked') || on.find(a => a.status === 'working')
           || on.find(a => attentionKind(a) === 'done') || on[0];
         return { c: c, dot: lead ? statusColor(lead) : 'var(--dot-cold)',
-          pulse: lead && lead.status === 'working' ? ' pulse' : '' };
+          pulse: (lead && lead.status === 'working')
+            || (typeof webchatConvBusy === 'function' && webchatConvBusy(c.id)) ? ' pulse' : '' };
       });
       const now = convCurrentId();
       const sig = rows.map(r => `${r.c.id}|${r.c.name}|${r.c.auto ? 'a' : '-'}|${r.dot}|${r.pulse}`)
@@ -36142,13 +36297,16 @@ const STUDIO_MODE = 'studio';
 const STUDIO_AGENT_KEY = 'herdr_studio_agent';
 const STUDIO_SPAWN_KEY = 'herdr_studio_spawn';
 const STUDIO_HIDE_KEY = 'herdr_studio_hide';
-const STUDIO_PROJECT_KEY = 'herdr_studio_project';
 
 // The alias a Studio room is started under until somebody picks another. Derived from stock claude
 // — it names no endpoint and no secret, so it is a model choice and nothing more — and seeded into
 // the shared agent-configs document rather than sent as argv: a config id is what `start_agent`
 // takes, and the relay refuses one it has not been told about.
 const STUDIO_DEFAULT_AGENT = 'claude-haiku';
+// The Project a Studio agent comes up in when the reader has not picked one. A plain directory
+// rather than a checkout — see studioProjectId. Nothing breaks when the relay has no such project:
+// the first ordinary one is used, which is what happened before this existed.
+const STUDIO_WORKSPACE = 'webagents';
 const STUDIO_DEFAULT_ALIAS = {
   id: STUDIO_DEFAULT_AGENT, label: 'Claude Haiku', provider: 'stock-claude',
   model: 'claude-haiku-4-5', model_option: '', key: '',
@@ -36327,13 +36485,22 @@ function studioStart(topic) {
   return conv;
 }
 
-// Which Project a Studio agent comes up in. Remembered from the last one, because a room made with
-// no questions asked cannot ask this one either — and otherwise the first Project this relay
+// Which Project a Studio agent comes up in. Not remembered from the last one: a room made with no
+// questions asked cannot ask this one either, so there was never a reader's answer to remember —
+// the value written back was whatever the previous spawn had defaulted to, which made the first
+// landing permanent and left the workspace below unreachable for anyone who had run Studio before
+// it existed. So the default is computed every time, and otherwise the first Project this relay
 // offers that is somewhere to work.
 function studioProjectId() {
-  const held = studioPref(STUDIO_PROJECT_KEY, '');
   const list = typeof projects !== 'undefined' && Array.isArray(projects) ? projects : [];
-  if (held && list.some(p => p.id === held)) return held;
+  // A Studio agent's job is this room's subject, and it is not working on whatever repository it
+  // happens to be standing in. Started in one, it inherits that project's CLAUDE.md, its hooks and
+  // its index, and reads all of it as a description of what it is for: the first agent started this
+  // way opened by announcing which coding modes it had loaded and which branch rules it would
+  // follow, and never mentioned the providers it was bound to. So the default is a project with
+  // nothing in it to inherit, where this relay offers one.
+  const bare = list.find(p => p.id === STUDIO_WORKSPACE && !p.container);
+  if (bare) return bare.id;
   const first = list.find(p => !p.container && !p.root) || list.find(p => !p.container);
   return first ? first.id : '';
 }
@@ -36368,6 +36535,12 @@ function studioSpawn(conv) {
   if (typeof startUnattendedOffered === 'function' && startUnattendedOffered(msg.name)) {
     msg.unattended = true;
   }
+  // And with none of this machine's own hooks, plugins, skills or MCP servers loaded. What reaches
+  // a pane at spawn under an operator's own configuration was measured at about 54 KB here against
+  // a 6 KB brief, most of it ahead of the brief and two of the three largest pieces being
+  // declarations of a different role entirely. A Studio agent read them as its job description.
+  // Guarded on what the relay says it will accept, like the flag above.
+  if (((startOptions || {}).bare || []).indexOf(msg.name) >= 0) msg.bare = true;
   // Bound before its first frame rather than reconciled a poll later: the relay writes the binding
   // file and sources it at the pane's shell in the one moment there is a shell there, so every
   // tool call the harness makes inherits it. webchat_bind.js still reconciles afterwards and finds
@@ -36379,7 +36552,6 @@ function studioSpawn(conv) {
   // typed at every new topic would be the one line in the thread nobody wrote.
   startPrompt = '';
   startStarter = typeof NO_STARTER !== 'undefined' ? NO_STARTER : '';
-  studioSetPref(STUDIO_PROJECT_KEY, project);
   if (typeof showSpawnStatus === 'function') showSpawnStatus('Starting the Studio agent…', 'busy');
   sendStart(msg);
   return true;
@@ -36563,6 +36735,10 @@ function studioAgentPillHtml(conv) {
     : (studioAgentLabel() || 'Agent'));
   const on = !picked.size;
   const colour = live && typeof statusColor === 'function' ? statusColor(live) : 'var(--dot-cold)';
+  // Working, or waiting on a provider it asked. The second is most of what an agent in this room
+  // spends its time doing, and the badge was still through all of it.
+  const busy = (live && live.status === 'working')
+    || (typeof webchatConvBusy === 'function' && webchatConvBusy(conv && conv.id));
   const accent = live && typeof agentColor === 'function'
     ? (agentColor(live.agent) || 'var(--text)') : 'var(--muted)';
   return `<button class="xfer-who studio-agent${on ? ' on' : ''}${live ? '' : ' off'}"`
@@ -36571,7 +36747,7 @@ function studioAgentPillHtml(conv) {
     + ` onclick="studioAimAgent()" aria-pressed="${on}"`
     + ` title="${live ? `Talk to ${name}` : 'No agent is running in this room'}"`
     + ` aria-label="${live ? `Talk to ${name}` : 'No agent is running in this room'}">`
-    + `<span class="dot" style="background:${colour}" aria-hidden="true"></span>`
+    + `<span class="dot${busy ? ' pulse' : ''}" style="background:${colour}" aria-hidden="true"></span>`
     + (typeof agentGlyph === 'function' ? agentGlyph() : '')
     + `${name}${live && typeof paneBadge === 'function' ? paneBadge(live) : ''}</button>`;
 }
@@ -40775,6 +40951,9 @@ function studioCardHtml() {
       // with the turn it produced. A conversation of panes has exchanges in it too, and the switch
       // that folds them was missing from the only view that could show them.
       hangSyncPara(document.getElementById('convPara'), !!convViewId);
+      // Offered over every thread, like the paragraph view and unlike the Markdown switch: the
+      // ground behind a bubble is drawn whether or not there is a provider in the room.
+      hangSyncTint(document.getElementById('convTint'), !!convViewId);
       hangSyncPara(document.getElementById('panePara'), !!thread && !thread.hidden);
     }
 
@@ -40824,6 +41003,16 @@ function studioCardHtml() {
         : state === '1'
         ? 'Showing each answer under its question — tap to fold one question’s answers into one bubble'
         : 'Showing one bubble per question, with a pill per provider — tap for one bubble each';
+    }
+
+    function hangSyncTint(btn, offered) {
+      if (!btn) return;
+      const state = typeof convTintState === 'function' ? convTintState() : '1';
+      btn.classList.toggle('on', offered);
+      btn.classList.toggle('live', state !== '0');
+      btn.classList.toggle('grouped', state === '2');
+      btn.setAttribute('aria-pressed', String(state !== '0'));
+      btn.title = typeof convTintTitle === 'function' ? convTintTitle(state) : '';
     }
 
     function hangSyncPill(el, on) {
