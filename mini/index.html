@@ -6369,7 +6369,11 @@
       width: 86%;
       box-sizing: border-box;
       align-self: flex-start;
-      border: 1px solid color-mix(in srgb, var(--conv-agent, var(--border)) 45%, var(--border));
+      /* Named, because the no-wash modes below swap it out and then have to put it back on the two
+         threads that keep their wash — and a second copy of this expression is a second place for
+         it to drift. */
+      --conv-border: color-mix(in srgb, var(--conv-agent, var(--border)) 45%, var(--border));
+      border: 1px solid var(--conv-border);
       border-radius: 12px;
       border-bottom-left-radius: 4px;
       padding: 8px 10px;
@@ -6395,16 +6399,44 @@
        out to five providers and the ground is what says which one came back. Down a thread of one
        agent the same question has one answer and the colour is decoration.
 
-       Three states rather than two, the same shape the paragraph switch in the same row has:
-       outside bubbles only, which is the default; every bubble, which is what this app drew before
-       any of this was a setting and is still the fastest way to tell two panes apart; and none at
-       all, for a reader who wants the thread to be text on one ground. */
-    body.conv-tint-1 .conv-msg.foreign,
-    body.conv-tint-1 #webAgentThread .conv-msg:not(.user),
-    body.conv-tint-1 #nlmThread .conv-msg:not(.user),
-    body.conv-tint-2 .conv-msg,
-    body.conv-tint-2 .conv-slot {
+       Three states rather than two, the same shape the paragraph switch in the same row has, and
+       named for what a reader sees rather than for how much wash is applied: `normal`, every bubble
+       carrying its agent's colour, which is what this app drew before any of this was a setting and
+       is still the fastest way to tell two panes apart; `agent`, where the agent's own bubbles go
+       dark and only the answers from outside keep their colour; and `all`, where every bubble is
+       dark, for a reader who wants the thread to be text on one ground. `all` is the absence of
+       both rules and so has no selector here. */
+    body.conv-tint-agent .conv-msg.foreign,
+    body.conv-tint-agent #webAgentThread .conv-msg:not(.user),
+    body.conv-tint-agent #nlmThread .conv-msg:not(.user),
+    body.conv-tint-normal .conv-msg,
+    body.conv-tint-normal .conv-slot {
       background: color-mix(in srgb, var(--conv-agent, var(--text)) 10%, var(--surface));
+    }
+
+    /* Wherever an agent's bubble has lost its wash, the border is all it has left -- and it is
+       mixed 45% into the page's own border, which against a ground that is now the same everywhere
+       is very nearly nothing. Those bubbles take a plain one, so the thread still reads as bubbles
+       rather than as a wall of text with rounded corners. Both modes that take the wash off them,
+       which is both of the ones that are not the default: `agent`, where the answers from outside
+       keep theirs, and `all`, where nothing does.
+
+       A bubble from outside is left alone: where it still carries a wash the border has nothing to
+       stand in for, and where it does not, its agent colour is the one thing left saying which
+       provider answered. */
+    body.conv-tint-agent .conv-msg:not(.foreign):not(.user),
+    body.conv-tint-agent .conv-slot,
+    body.conv-tint-all .conv-msg:not(.foreign):not(.user),
+    body.conv-tint-all .conv-slot {
+      border-color: var(--text);
+    }
+
+    /* A provider's own chat and a notebook's are washed in `agent` by the rule above, and their
+       bubbles are not marked `foreign` -- the wash is applied by where they are rather than by what
+       they carry. So the rule above reaches them, and this puts their border back. */
+    body.conv-tint-agent #webAgentThread .conv-msg:not(.user),
+    body.conv-tint-agent #nlmThread .conv-msg:not(.user) {
+      border-color: var(--conv-border);
     }
 
     /* One speaker in the thread — "show this pane only", or a conversation with a single member.
@@ -7331,6 +7363,16 @@
       gap: 4px;
     }
 
+    /* The same row on the other edge, for the switches that say how the thread is *drawn* rather
+       than what is done to it. Same `top`, so the two sit on one line and read as one bar split in
+       two; the same inset, so neither corner is nearer its edge than the other. The ruler owns the
+       right-hand edge in a pane, which is why that side carries an inset at all — mirroring it
+       here costs a few pixels and keeps the pair level. */
+    .hang-float.left {
+      right: auto;
+      left: var(--hang-right, 36px);
+    }
+
     /* In the conversation window there is no ruler to leave room for, and the row hangs off the
        bottom edge of the sticky header instead of off the top of a pane — which is what keeps it
        over the thread at every scroll position without measuring the header. Inset past the
@@ -7691,11 +7733,28 @@
        Paired is the orange of the Markdown switch beside it -- both are about how one answer is
        drawn -- and grouped is filled, because a fan-out folded into one bubble is the bigger claim
        of the two and the one a reader needs to recognise before wondering where four answers went. */
-    .hang-para.grouped,
-    .hang-tint.grouped {
+    .hang-para.grouped {
       color: var(--bg);
       background: var(--orange);
       border-color: var(--orange);
+    }
+
+    /* The colour switch's second state. Its own rule rather than the .hang-md one beside it,
+       because the Web Agents chat view's copy of this button is not a Markdown button and was
+       therefore the one place the outline never appeared. */
+    .hang-tint.live {
+      color: var(--orange);
+      border-color: var(--orange);
+    }
+
+    /* Its third, which is the one that takes every wash off the thread. Filled, and in the one
+       colour nothing else in this row uses: the states either side of it are the ordinary ones,
+       and a reader who cannot find the colour they were looking at needs the button that turned
+       it off to be the thing their eye lands on. */
+    .hang-tint.grouped {
+      color: var(--bg);
+      background: var(--pink);
+      border-color: var(--pink);
     }
 
     /* Lit in the branch colour rather than the record's green: two buttons side by side in the
@@ -8162,15 +8221,49 @@
       display: block;
     }
 
+    /* The head line: the agent at one end, the two controls that are not about this room's targets
+       at all at the other — the way into the agent's own screen and the way into the composer's
+       settings — and everything that is done to the room scrolling between them. Three fixed
+       points and one scrolling middle: a control that answers "where is the actual work" is not
+       one to go looking for sideways, and nor is the gear. */
+    .xfer-row .studio-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    /* The agent gives way before the buttons do — it is the one item here with a name in it, and a
+       long one would otherwise push what is done to the room off its own line. */
+    .xfer-row .studio-head .xfer-who.studio-agent {
+      flex: 0 1 auto;
+      min-width: 0;
+      /* The `auto` it carries elsewhere pushed everything after it to the right-hand end. What
+         does that here is the scrolling block between them, which has the line's spare width. */
+      margin-right: 0;
+    }
+
+    .xfer-row .studio-head > .xfer-who-more {
+      flex: 0 0 auto;
+    }
+
     /* One line, scrolled rather than wrapped. The buttons are what is *done* to the room, so a
-       second line of them growing under the pills would read as more targets. */
+       second line of them growing under the pills would read as more targets — and they take
+       whatever the line has left after the agent and the two pinned controls. */
     .xfer-row .studio-row .xfer-who-acts {
       display: flex;
       flex-wrap: nowrap;
       overflow-x: auto;
       scrollbar-width: none;
       align-self: auto;
-      margin-bottom: 6px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    /* Nothing in that line may be squeezed either: a button shrinking to fit is one whose icon
+       stops being centred in it, and the line is meant to overflow instead. */
+    .xfer-row .studio-row .xfer-who-acts > * {
+      flex: 0 0 auto;
     }
 
     .xfer-row .studio-row .xfer-who-acts::-webkit-scrollbar {
@@ -8243,28 +8336,6 @@
     /* Pinned to the right-hand end while the providers scroll under it. It is the way to the ones
        the line does not reach, so it is the one thing in the line that must never be the thing
        scrolled past -- and it carries the count of what is lit out of sight. */
-    /* A glyph in a line of words. At the label size beside it, it read as punctuation rather than
-       as the way into what the next topic comes up as. */
-    .xfer-row .xfer-who-more.studio-gear {
-      font-size: 1.15rem;
-      line-height: 1;
-      padding-left: 8px;
-      padding-right: 8px;
-    }
-
-    /* A setting rather than a target: the label carries its own one-line hint under it, so the row
-       is two lines and reads left-aligned. */
-    .studio-set-row {
-      align-items: flex-start;
-      text-align: left;
-    }
-
-    .studio-set-hint {
-      display: block;
-      margin-top: 2px;
-      white-space: normal;
-    }
-
     .xfer-row .xfer-who.studio-add {
       border-style: dashed;
       font-size: 1rem;
@@ -8431,6 +8502,17 @@
        than only in the thread: the thread is showing one provider and this says which control
        did it. */
     .xfer-row .xfer-who.solo {
+      border-style: dashed;
+      border-color: var(--blue);
+      color: var(--blue);
+      opacity: 1;
+    }
+
+    /* The same over a Studio room's agent badge, which is the one target of that gesture that is
+       not a pill. It wears `off` while nothing is running, and that rule is more specific than the
+       one above -- so without this a narrowed room drew a grey badge with no dash on it, which
+       says the double press did nothing. */
+    .xfer-row .xfer-who.studio-agent.solo {
       border-style: dashed;
       border-color: var(--blue);
       color: var(--blue);
@@ -8604,6 +8686,34 @@
       display: inline-block;
       width: 1.2em;
       color: var(--blue);
+    }
+
+    /* The drawer's section heading, for a list long enough to be in two parts. Same shape as the
+       pane menu's, which is the other list in this app that needs one. */
+    .chip-menu .menu-label {
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      padding: 8px 10px 4px;
+    }
+
+    /* A setting that cycles rather than toggles says what it is on, where the tick would be if it
+       were a switch — at the far end of the row, so a list mixing the two reads as one column of
+       names with one column of states. Flex on this row alone: the items around it are laid out
+       inline and have been since they were written, and making the whole list flex to push one
+       label right is a change to every row to fix one. */
+    .chip-menu .menu-item.val {
+      display: flex;
+      align-items: center;
+    }
+
+    .menu-val {
+      margin-left: auto;
+      padding-left: 10px;
+      color: var(--muted);
+      font-weight: 400;
     }
 
     /* The same live dot the pills and the pane header carry, so a name in the list and a name in
@@ -9724,9 +9834,9 @@
       .webchat-picker .webchat-sep { grid-column: 1 / -1; padding: 2px 0 0; }
 
 
-      /* The way in. One card, above the pills and the search, wearing the accent rather than the
-         surface every other card wears: it is the only row in this section that makes something
-         rather than opening something that is already there. */
+      /* The way in. One card at the top of the section, with the search directly under it,
+         wearing the accent rather than the surface every other card wears: it is the only row in
+         this section that makes something rather than opening something that is already there. */
       .studio-card {
         display: flex;
         align-items: center;
@@ -9806,6 +9916,10 @@
         align-items: stretch;
         margin: 6px 0 4px;
       }
+
+      /* Under the card that makes a room, so the two ways of reaching one are together — but not
+         flush against it: the card is a button and a field touching its edge reads as part of it. */
+      .studio-card + .webchat-search { margin-top: 10px; }
 
       /* The same shape as the search bar at the foot of the landing page: a pill, the glyph
          first, the field bare inside it. Flat rather than glass — that one floats over the list it
@@ -10814,7 +10928,11 @@
     <!-- Inside the wrap rather than under the head: .hang-float is absolute, and .conv-wrap is
          the positioned box the conversation window hangs its own corner controls off. -->
     <div class="conv-wrap">
-      <div class="hang-float">
+      <!-- How the thread is *drawn*, on the opposite corner from what is done to it. Two decisions
+           about shape rather than about the record, and a row of five at one end had the reader
+           hunting along it for the two they use. Same line, so the pair read as one bar split in
+           two rather than as two bars that happened to be stacked. -->
+      <div class="hang-float left">
         <!-- The same three-state switch the conversation window carries, on the same stored
              preference: one decision about how an exchange is drawn, wherever it is being read.
              A single-provider chat has nothing to fan out, so its third state draws the paragraph
@@ -10833,6 +10951,8 @@
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />
           </svg></button>
+      </div>
+      <div class="hang-float">
         <button class="hang-btn on" id="webAgentMarkdown" onclick="webchatToggleMarkdown()"
           aria-pressed="true" aria-label="Show the reply as formatted Markdown">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
@@ -10989,6 +11109,35 @@
          answers a bounded window and reports no total, so "synced" is not a claim this app can
          back. See convLiveSyncing. -->
     <div class="hang-pill" id="convViewSyncing" role="status" hidden>Syncing…</div>
+    <!-- How the thread is *drawn*, in the opposite corner from what is done to it. The shape of
+         an answer is a different question from refreshing, arbitrating or reading the record, and
+         six buttons in one corner had the reader hunting along the row for the two they use. Same
+         line as that row, so the two read as one bar split in two rather than as two bars that
+         happened to be stacked. -->
+    <div class="hang-float left">
+      <!-- The paragraph view: a provider's answer under the question that produced it, in one
+           bubble. Offered wherever the Markdown switch is, because it is the same kind of
+           decision about the same kind of answer. The icon is the pair itself — a short line
+           over a rule over two long ones. -->
+      <button class="hang-btn hang-md hang-para" id="convPara" onclick="convParaToggle()"
+        aria-pressed="false" aria-label="Show each answer under the question that produced it">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 7h9" />
+          <path d="M3 11.5h18" />
+          <path d="M5 15.5h14M5 19h9" />
+        </svg></button>
+      <!-- Whether a bubble carries its agent's colour as a wash behind it. Beside the Markdown
+           switch because it is the same kind of decision -- how a thread is drawn rather than what
+           is in it -- and off by default: see the bubble rule for what the wash was claiming in a
+           room of providers. The icon is a drop. -->
+      <button class="hang-btn hang-md hang-tint" id="convTint" onclick="convToggleTint()"
+        aria-pressed="false" aria-label="Use agent colours behind each bubble">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />
+        </svg></button>
+    </div>
     <div class="hang-float">
       <!-- Two states and no third: this conversation has an arbitrator and this goes to its
            pane, or it has none and this opens the form that gives it one. Hidden when neither is
@@ -11011,34 +11160,12 @@
       <!-- How a provider's answer is drawn, for a conversation that has provider threads in it.
            The same switch the Web Agents chat view carries and the same stored preference: it is
            one decision about one kind of answer, wherever that answer is being read. -->
-      <!-- The paragraph view: a provider's answer under the question that produced it, in one
-           bubble. Offered wherever the Markdown switch is, because it is the same kind of
-           decision about the same kind of answer. The icon is the pair itself — a short line
-           over a rule over two long ones. -->
-      <button class="hang-btn hang-md hang-para" id="convPara" onclick="convParaToggle()"
-        aria-pressed="false" aria-label="Show each answer under the question that produced it">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M5 7h9" />
-          <path d="M3 11.5h18" />
-          <path d="M5 15.5h14M5 19h9" />
-        </svg></button>
       <button class="hang-btn hang-md" id="convMarkdown" onclick="webchatToggleMarkdown()"
         aria-pressed="true" aria-label="Show provider replies as formatted Markdown">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
           <path d="M6 15.5v-7l3 3.5 3-3.5v7M16 8.5v7M16 15.5l-2-2.5M16 15.5l2-2.5" />
-        </svg></button>
-      <!-- Whether a bubble carries its agent's colour as a wash behind it. Beside the Markdown
-           switch because it is the same kind of decision -- how a thread is drawn rather than what
-           is in it -- and off by default: see the bubble rule for what the wash was claiming in a
-           room of providers. The icon is a drop. -->
-      <button class="hang-btn hang-md hang-tint" id="convTint" onclick="convToggleTint()"
-        aria-pressed="false" aria-label="Use agent colours behind each bubble">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />
         </svg></button>
       <button class="hang-btn hang-live" id="convLive" onclick="toggleConvLive()"
         aria-pressed="false" aria-label="Read the relay’s record">
@@ -11701,15 +11828,19 @@
 
   <!-- What the next topic comes up as. The same three keys the Settings screen holds, in front of
        the button that spends them. -->
-  <div id="studioSetupSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closeStudioSetup()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+  <!-- The providers a web conversation stands in front of, and the repair for each. It used to be
+       a block inside the roster panel, in rows drawn exactly like the members' — and a provider is
+       not a member: a Studio room manages no panes at all. The panel keeps one line that opens
+       this. See openWebRoster. -->
+  <div id="webRosterSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeWebRoster()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div class="sheet">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">Studio defaults</span>
-        <button onclick="closeStudioSetup()" aria-label="Close"
+        <span style="font-size:0.8rem;font-weight:600;flex:1">Providers</span>
+        <button onclick="closeWebRoster()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
-      <div id="studioSetupBody" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+      <div id="webRosterBody" class="conv-roster" style="padding:12px 16px"></div>
     </div>
   </div>
 
@@ -13033,7 +13164,26 @@
       if (!el || el._painted === html) return false;
       el._painted = html;
       el.innerHTML = html;
+      paintKeepPulse(el);
       return true;
+    }
+
+    // How long one breath of `.dot.pulse` takes. Here as well as in the stylesheet because the
+    // phase below has to be an offset into that cycle, and a delay measured against the wrong
+    // period would put a dot back somewhere it never was.
+    const PULSE_MS = 1400;
+
+    // A repaint builds new nodes, and a CSS animation on a new node starts from zero. So a list
+    // redrawn because one row's timestamp moved -- which these lists are, on every poll -- put
+    // every pulsing dot in it back to the start at the same instant, and a column of dots
+    // restarting together reads as the whole list blinking. Anchored to the clock instead: a
+    // negative delay starts the animation where it would have been, so a dot that was breathing
+    // before the paint goes on breathing through it. One clock for the whole list, so the dots in
+    // it stay together rather than drifting apart by whenever each row happened to be built.
+    function paintKeepPulse(el) {
+      if (!el || !el.querySelectorAll) return;
+      const phase = `${-(Date.now() % PULSE_MS)}ms`;
+      for (const dot of el.querySelectorAll('.dot.pulse')) dot.style.animationDelay = phase;
     }
 
   </script>
@@ -16675,6 +16825,11 @@
       // then need a second pass to undo it.
       renderLauncher();
       renderConversations();
+      // The Web Agents section too, now that a room's dot is about the room rather than about its
+      // provider threads alone: the agent's status arrives in this snapshot and in nothing the
+      // adapter sends, so a section drawn only from `webchat_state` sat cold through every turn its
+      // harness took. Skipped when the markup has not moved, like every other list here.
+      if (typeof renderWebAgents === 'function') renderWebAgents();
       // Live-ness is the one thing on the standalone view that this snapshot can change.
       renderConvStandalone(false);
       // "Waiting for agents…" is true of the agents and false of the box: a machine with
@@ -23913,6 +24068,11 @@ function convWebModeOf(conv) {
         + '<circle cx="7" cy="7" r="1.7"/><path d="M2.2 11.8 11.8 2.2"/>',
       copy: '<rect x="5" y="5" width="7.2" height="7.2" rx="1.6"/>'
         + '<path d="M9.4 2.8H3.4a1.6 1.6 0 0 0-1.6 1.6v6"/>',
+      // One out, one back: replacing the thing that is there with another of its kind. Studio's
+      // "start a different agent here", which was the word "Agent…" in a row where every other
+      // control had become an icon.
+      swap: '<path d="M2.2 4.6h7.6"/><path d="M7.6 2.4 9.8 4.6 7.6 6.8"/>'
+        + '<path d="M11.8 9.4H4.2"/><path d="M6.4 7.2 4.2 9.4 6.4 11.6"/>',
     };
 
     function convIco(name) {
@@ -24893,8 +25053,13 @@ function convWebModeOf(conv) {
       // provider bubbles where they are built, and it has to reach the rest of the thread too --
       // a room whose agent is the loudest thing in it would otherwise answer a double tap on a
       // provider with a screen that is mostly still the agent.
+      // And the same the other way up: the agent is a target of the gesture too, and reading it
+      // alone in a room where four providers answered every question is the half nobody could ask
+      // for. `webchatThreadEntries` keeps nothing under this name, so the providers drop out there
+      // and what is left here is what the record holds.
       const soloWeb = typeof convPanelSoloOf === 'function' ? convPanelSoloOf(conv && conv.id) : '';
-      if (soloWeb) withWeb = withWeb.filter(e => e.foreign);
+      if (soloWeb === CONV_PANEL_AGENT) withWeb = withWeb.filter(e => !e.foreign);
+      else if (soloWeb) withWeb = withWeb.filter(e => e.foreign);
       // `all` and `entries` both, because "nothing recorded" and "everything recorded is
       // provisional" are different empty states and the view says so differently.
       return { recs: recs, joint: joint, all: withWeb,
@@ -25713,6 +25878,9 @@ function webchatReceiveState(msg) {
   if (typeof renderConversations === 'function') renderConversations();
   if (typeof renderConvStrip === 'function') renderConvStrip();
   renderWebAgents(msg.error || '');
+  // Open, this dialog is watching a browser go down and come back — which is the whole reason
+  // anybody opens it — so it is redrawn with everything else rather than only when it is opened.
+  webRosterDraw();
   if (webchatAwaitingServer) {
     const what = webchatAwaitingServer;
     webchatAwaitingServer = '';
@@ -26069,6 +26237,24 @@ function webchatAutoName() {
   return moved;
 }
 
+// Whether this section is showing the rooms somebody put away rather than the ones they did not.
+// Its own key and not the Conversations section's: the two lists are browsed separately, and a
+// reader who went into the archive over there has not asked to land in this one's. What is stored
+// on the conversation — `archived` — is shared, because that is a fact about the room rather than
+// about which section drew it: a room put away here is away there too.
+const WEBCHAT_ARCHIVE_KEY = 'herdr_webchat_archive';
+
+function webchatArchiveOn() {
+  try { return localStorage.getItem(WEBCHAT_ARCHIVE_KEY) === 'on'; }
+  catch (_error) { return false; }
+}
+
+function toggleWebchatArchive() {
+  try { localStorage.setItem(WEBCHAT_ARCHIVE_KEY, webchatArchiveOn() ? 'off' : 'on'); }
+  catch (_error) { /* private mode: this page only */ }
+  renderWebAgents();
+}
+
 // One card standing for a conversation's whole panel of threads, in place of the several loose
 // cards they would otherwise be. Which is the difference the list has to show: five rows called
 // `c_ab12ef:chatgpt` are five providers being asked one question, and drawn flat they read as five
@@ -26076,10 +26262,34 @@ function webchatAutoName() {
 function webchatRoomCard(conv, sessions, compact) {
   const busy = sessions.some(session => webchatProvider(session.provider)?.busy === session.name);
   const running = sessions.some(session => session.running);
-  const live = busy || running;
+  // And the room's own agent, which was the half this card could not see: a Studio room's agent is
+  // what is working for most of the time anybody is watching it, and the dot stayed cold through
+  // all of it because the only liveness asked about was a provider thread's. The same lead the
+  // Conversations card picks -- one member speaks for the card, and it is the one whose state the
+  // reader would have gone looking for.
+  const panes = typeof agents === 'undefined' ? [] : (agents || []);
+  const here = ((conv && conv.members) || [])
+    .map(member => panes.find(a => typeof convMemberKey === 'function'
+      && convMemberKey(a) === member.aid))
+    .filter(Boolean);
+  const lead = here.find(a => a.status === 'blocked') || here.find(a => a.status === 'working')
+    || here[0];
+  const live = busy || running || (lead && lead.status === 'working');
+  // A room with a live pane keeps that pane's own status colour, grey included -- an idle agent is
+  // still an agent, and a room drawn cold while its harness is sitting there is the same lie the
+  // pulse was telling. With no pane and no thread running there is no status to paint.
+  const colour = lead && typeof statusColor === 'function' ? statusColor(lead)
+    : live ? 'var(--dot-live)' : 'var(--dot-cold)';
+  // Hollow only for a room that had a pane and has none now. A panel never has one -- nobody drives
+  // it -- so drawing it as ended would say something happened to an agent it never held.
+  const ended = ((conv && conv.members) || []).length && !here.length ? ' ended' : '';
   const count = sessions.reduce((n, session) => n + Number(session.messages || 0), 0);
   const newest = sessions[0] || {};
-  const when = newest.updatedAt ? fmtAgo(new Date(newest.updatedAt)) : '';
+  // The same clock the list is ordered by, so a card standing near the top does not say it was last
+  // touched yesterday: what the room's agent was told moves the room as much as what a provider
+  // answered, and only the second of those is a thread with a timestamp on it.
+  const at = webchatRoomAt(conv, sessions);
+  const when = at ? fmtAgo(new Date(at)) : '';
   // Every provider in the thread, in the order it was last spoken to, which is the order the rows
   // are in. Not the granted list: what the card is about is what has been said, and a provider
   // that has been granted and never used has nothing on this card to stand for.
@@ -26120,10 +26330,16 @@ function webchatRoomCard(conv, sessions, compact) {
     // room of five providers had five logos and a kind chip competing with its name for the width
     // of a phone. Who is in it and what kind of thing it is are a second question, so they are on
     // a second line where they have the room to be read.
-    + `<div class="conversation-title"><span class="dot${live ? ' pulse' : ''}"`
-    + ` style="background:${live ? 'var(--dot-live)' : 'var(--dot-cold)'}" aria-hidden="true"></span>`
+    + `<div class="conversation-title"><span class="dot${live ? ' pulse' : ''}${ended}"`
+    + ` style="background:${colour}" aria-hidden="true"></span>`
     + `<span class="conv-kind">${typeof convGlyph === 'function' ? convGlyph(conv) : ''}</span>`
     + `<span class="name">${escapeHtml(conv.name || newest.title || `Untitled ${kind.toLowerCase()}`)}</span>`
+    // The same two steps a conversation card carries, for the same reason and in the same order:
+    // Archive is "not now" about a room somebody means to keep, and Delete is offered only once it
+    // has been put away — the archive is the safeguard rather than a second dialog. A room of five
+    // provider threads is exactly the kind of thing that piles up in this list, and until now the
+    // only way out of it was to open the room and find the roster.
+    + webchatRoomActions(conv)
     + `</div>`
     + `<div class="webchat-sub">`
     + `<span class="webchat-providers" title="${escapeHtml(kind)}">${marks}</span>`
@@ -26133,6 +26349,21 @@ function webchatRoomCard(conv, sessions, compact) {
     + `<div class="conversation-meta names">`
     + `<span class="webchat-id">${escapeHtml(conv.id)}</span> · ${said}`
     + `</div></div>`;
+}
+
+// Archive, and Delete once archived. Guarded by `typeof` like every other call out of this module
+// into the conversation one: the vm slices that test this file load neither.
+function webchatRoomActions(conv) {
+  const archived = !!conv.archived;
+  const name = conv.name || conv.id;
+  return (typeof archiveBtnHtml === 'function' ? archiveBtnHtml(conv.id, archived, name) : '')
+    + (archived && typeof purgeConversation === 'function'
+      ? `<button class="conv-purge arm-btn" data-conv-id="${escapeHtml(conv.id)}"`
+        + ` onclick="event.stopPropagation(); armButton(this, 'Delete for good?',`
+        + ` () => purgeConversation(this.dataset.convId))"`
+        + ` aria-label="Delete ${escapeHtml(name)}, its sessions and everything it recorded">`
+        + `Delete</button>`
+      : '');
 }
 
 // The harnesses and Projects of a room's members, each named once: a conversation of four claudes
@@ -26215,6 +26446,17 @@ function webchatByRecent(list) {
   return [...list].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
 }
 
+// Where a room stands in a list ordered by recency, in milliseconds. Its provider threads are only
+// half of what happens in it: the agent in a Studio or an agent room is spoken to in the room
+// itself, and none of that moves the adapter's `updatedAt`. Ordered by the threads alone, the topic
+// somebody worked in all morning sank below topics nobody had opened since the hour they were made.
+// `created` is the floor, so a room nothing has happened in yet still has a place.
+function webchatRoomAt(conv, sessions) {
+  const thread = Math.max(0, ...(sessions || []).map(s => Date.parse(s.updatedAt || '') || 0));
+  const said = typeof convSeenAt === 'function' ? convSeenAt(conv) : 0;
+  return Math.max(thread, said, Number(conv && conv.created) || 0);
+}
+
 function renderWebAgents(error = '') {
   const el = document.getElementById('webAgents');
   if (!el) return;
@@ -26229,11 +26471,16 @@ function renderWebAgents(error = '') {
   // Then + New, compact, refresh. The one that makes something stands ahead of the ones that
   // rearrange what is already there: it is what the header is reached for, and putting it between
   // two view controls read as a third view control.
-  const header = '<div class="section-header"><span class="section-name">Web Agents</span>'
+  // The archive control is the one part of this header that cannot be written yet: how many rooms
+  // are in it is not known until the list below has been narrowed, and a count that disagreed with
+  // what the mode draws is the whole bug this section did not have.
+  const headerWith = extra => '<div class="section-header"><span class="section-name">Web Agents</span>'
     + webchatServerPillHtml()
     + '<button class="section-action" onclick="webchatNew()" aria-label="New Web Agent chat">+ New</button>'
+    + extra
     + compactButton(WEBCHAT_COMPACT_KEY, 'renderWebAgents', 'Compact Web Agent chats')
     + '<button class="section-action" onclick="webchatRefresh()" aria-label="Refresh Web Agents">↻</button></div>';
+  const header = headerWith('');
   if (!webchatAvailable) {
     el.innerHTML = header + `<p class="pair-empty">${escapeHtml(error || 'Web Agent is unavailable.')}</p>`;
     applySections();
@@ -26277,18 +26524,32 @@ function renderWebAgents(error = '') {
     if (webchatFilter && !grant.includes('*') && !grant.includes(webchatFilter)) continue;
     empty.push(conv);
   }
-  const rows = loose.map(session => ({
-    at: session.updatedAt || '',
+  // Rooms somebody put away, counted off the same map the cards are drawn from -- a Studio topic
+  // the hide-old setting has taken out of this list is not in the archive either, and a count that
+  // named it would lead to an empty screen.
+  const archivedRooms = Array.from(rooms.values())
+    .filter(conv => conv.archived && convGrantOf(conv).length);
+  // Unarchiving the last one drops the mode rather than leaving the reader in an empty archive with
+  // the way out labelled Back. Same guard the Conversations section's archive has.
+  const archiveOn = webchatArchiveOn() && archivedRooms.length > 0;
+  // In the archive the list is the rooms that were put away and nothing else. A loose chat is a
+  // provider's own thread rather than a room, so it has no flag to be on either side of and is
+  // simply not what this mode is showing.
+  const showing = conv => !!conv.archived === archiveOn;
+  const rows = (archiveOn ? [] : loose).map(session => ({
+    at: Date.parse(session.updatedAt || '') || 0,
     html: webchatCard(session, webchatProvider(session.provider), compact),
-  })).concat(Array.from(grouped, ([id, list]) => {
-    const sorted = webchatByRecent(list);
-    return {at: sorted[0]?.updatedAt || '', html: webchatRoomCard(rooms.get(id), sorted, compact)};
-  })).concat(empty.map(conv => ({
-    at: conv.created ? new Date(conv.created).toISOString() : '',
+  })).concat(Array.from(grouped, ([id, list]) => ({id, list}))
+    .filter(({id}) => showing(rooms.get(id)))
+    .map(({id, list}) => {
+      const sorted = webchatByRecent(list);
+      return {at: webchatRoomAt(rooms.get(id), sorted),
+              html: webchatRoomCard(rooms.get(id), sorted, compact)};
+    })).concat(empty.filter(showing).map(conv => ({
+    at: webchatRoomAt(conv, []),
     html: webchatRoomCard(conv, [], compact),
   })));
-  const cards = rows
-    .sort((a, b) => String(b.at).localeCompare(String(a.at))).map(row => row.html);
+  const cards = rows.sort((a, b) => b.at - a.at).map(row => row.html);
   // A search replaces the list rather than filtering it: what it answers with is a hit inside a
   // thread, which is a different row from the thread card and cannot be drawn as one.
   const searching = typeof webchatSearchResultsHtml === 'function' ? webchatSearchResultsHtml() : '';
@@ -26296,14 +26557,29 @@ function renderWebAgents(error = '') {
     || `<div class="webchat-list${compact ? ' compact' : ''}">${cards.join('')}</div>`
       + (cards.length ? '' : webchatEmptyHtml());
   // The box keeps what is in it across the re-render this section does on every broadcast.
-  // Above the pills and the search: it is the way *in* rather than a way of narrowing what is
-  // already there, and it is the same card whether or not anything has been searched for.
+  // The Studio card is above both: it is the way *in* rather than a way of narrowing what is
+  // already there, and it is the same card whether or not anything has been searched for. The
+  // search sits directly under it and above the pills, because the two of them are the whole of
+  // how a room is reached — one to make a new one, one to find an old one — and a row of provider
+  // filters standing between them separated the pair by the one control that is about neither.
   const studio = typeof studioCardHtml === 'function' ? studioCardHtml() : '';
   const draw = () => {
     // Skipped when nothing moved: this section is redrawn on every broadcast, and a rewrite
     // between a finger going down and coming up swallows the tap. See paintList.
-    paintList(el, header + studio + webchatPillsHtml()
-      + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '') + body);
+    // The same swap the Conversations section makes: the archive replaces the list rather than
+    // hanging under it, because drawing it underneath puts back on screen exactly what filing a
+    // room away was for. The way out is the arrow, in the place the count was.
+    const archiveControl = archiveOn
+      ? '<button class="section-action conv-back" onclick="toggleWebchatArchive()"'
+        + ' title="Back to the rooms you kept" aria-label="Back to the rooms you kept">'
+        + '\u2190 Back</button>'
+      : archivedRooms.length
+        ? '<button class="section-action" onclick="toggleWebchatArchive()" aria-pressed="false"'
+          + ` title="Rooms you put away">Archive (${archivedRooms.length})</button>`
+        : '';
+    paintList(el, headerWith(archiveControl) + studio
+      + (typeof webchatSearchBoxHtml === 'function' ? webchatSearchBoxHtml() : '')
+      + webchatPillsHtml() + body);
   };
   if (typeof webchatSearchKeep === 'function') webchatSearchKeep(draw);
   else draw();
@@ -26734,28 +27010,28 @@ function webchatToggleMarkdown() {
   if (typeof hangSync === 'function') hangSync();
 }
 
-// Which bubbles carry their agent's colour as a wash behind them. Three states, the same shape
-// as the paragraph switch beside it:
+// How dark a bubble's ground is. Three modes, the same shape as the paragraph switch beside it:
 //
-//   1  outside only -- a provider's answer, a notebook's. The default.
-//   2  every bubble, which is what this app drew before any of this was a setting.
-//   0  none, for a thread read as text on one ground.
-//
-// The default moved off "every bubble" because the ground is the largest surface a bubble has and
-// down a thread of one agent's answers it spends all of it saying the same thing. Where it does
-// say something is where the answers come from somewhere else: a panel fans one question out to
-// five providers and the ground is what tells them apart. So that is the case it is kept for, and
-// the other two are there for the readers the middle setting is the wrong guess for.
+//   normal  every bubble carries its agent's colour as a wash. What this app drew before any of
+//           this was a setting, and the default -- a change of appearance on upgrade is a change
+//           nobody asked for.
+//   agent   the agent's own bubbles go dark and the answers from outside keep their colour. Down
+//           a thread of one agent's replies the wash spends the largest surface a bubble has
+//           saying the same thing; where it says something is where the answers came from
+//           somewhere else.
+//   all     every bubble dark, for a thread read as text on one ground.
 //
 // A body class rather than a re-render: nothing about the markup changes, only which rule wins.
+// `all` is the absence of both classes, because one ground for everything is what the bubble rule
+// already draws before either is added.
 const CONV_TINT_KEY = 'herdr_conv_tint';
-const CONV_TINT_STATES = ['1', '2', '0'];
+const CONV_TINT_STATES = ['normal', 'agent', 'all'];
 
 function convTintState() {
   try {
     const held = localStorage.getItem(CONV_TINT_KEY);
-    return CONV_TINT_STATES.indexOf(held) >= 0 ? held : '1';
-  } catch (_error) { return '1'; }
+    return CONV_TINT_STATES.indexOf(held) >= 0 ? held : 'normal';
+  } catch (_error) { return 'normal'; }
 }
 
 function convApplyTint() {
@@ -26764,10 +27040,34 @@ function convApplyTint() {
   CONV_TINT_STATES.forEach(id => document.body.classList.toggle(`conv-tint-${id}`, id === state));
 }
 
+// What the mode is called where it is shown as a value rather than as a floating button.
+function convTintLabel(state) {
+  return state === 'agent' ? 'Agent bubbles dark'
+    : state === 'all' ? 'Every bubble dark' : 'Normal';
+}
+
+// The colour setting as one row of a composer's settings drawer. One builder and not one per
+// drawer: it is a single stored preference read in every room, and the drawers that offer it —
+// the conversation composer's, which every web room now draws, and the Web Agents chat
+// composer's — would otherwise be two descriptions of it drifting apart. A press cycles, so it
+// carries its value on the right rather than a tick on the left. `after` is what the caller does
+// to redraw itself, since the drawer stays open: a list that closed on every press would make
+// setting this a matter of opening it three times.
+function convTintMenuItem(after) {
+  const state = convTintState();
+  return `<button class="menu-item val" role="menuitem" `
+    + `onclick="convToggleTint();${after || ''}" `
+    + `title="${escapeHtml(convTintTitle(state))}">`
+    + `<span class="tick"></span>Bubble colour`
+    + `<span class="menu-val">${escapeHtml(convTintLabel(state))}</span></button>`;
+}
+
 function convTintTitle(state) {
-  return state === '2' ? 'Every bubble carries its agent\u2019s colour \u2014 tap for none'
-    : state === '0' ? 'No bubble carries a colour \u2014 tap for outside answers only'
-    : 'Outside answers carry their colour \u2014 tap for every bubble';
+  return state === 'agent'
+      ? 'The agent\u2019s bubbles are dark, the answers from outside keep their colour '
+        + '\u2014 tap to darken every one'
+    : state === 'all' ? 'Every bubble is dark \u2014 tap to put the colours back'
+    : 'Every bubble carries its agent\u2019s colour \u2014 tap to darken the agent\u2019s';
 }
 
 function convToggleTint() {
@@ -26816,6 +27116,7 @@ function webchatDrawComposerMenu() {
     `onclick="webchatToggleAutocorrect()" title="Let the keyboard correct what you type. ` +
     `The same setting both other composers use">` +
     `<span class="tick">${on ? '✓' : ''}</span>Autocorrect</button>` +
+    convTintMenuItem('webchatDrawComposerMenu()') +
     `<button class="menu-item" role="menuitem" onclick="webchatMenu('')">Done</button>`;
 }
 
@@ -27353,9 +27654,11 @@ function renderWebchatView() {
   if (tint) {
     const state = convTintState();
     tint.classList.add('on');
-    tint.classList.toggle('live', state !== '0');
-    tint.classList.toggle('grouped', state === '2');
-    tint.setAttribute('aria-pressed', String(state !== '0'));
+    // Resting, outlined, filled — the escalation hangSyncTint explains, in the copy of the button
+    // this view carries.
+    tint.classList.toggle('live', state === 'agent');
+    tint.classList.toggle('grouped', state === 'all');
+    tint.setAttribute('aria-pressed', String(state !== 'normal'));
     tint.title = convTintTitle(state);
   }
   // The same three-state switch the conversation window carries, on the same stored preference:
@@ -27509,6 +27812,10 @@ function webchatRosterProviders(conv) {
   return ids.map(id => webchatProvider(id)).filter(Boolean);
 }
 
+// The providers a conversation stands in front of, with the repair for each. Not in the roster
+// panel any more -- they are not members and were drawn in rows identical to the members' -- but
+// still a list somebody needs: the panel carries one line that opens this as a dialog of its own.
+// See openWebRoster.
 function webchatRosterHtml(conv) {
   const providers = webchatRosterProviders(conv);
   if (!providers.length) return '';
@@ -27544,6 +27851,45 @@ function webchatRosterHtml(conv) {
     : '';
   return `<div class="menu-label conv-roster-label">Providers${server
     ? `<span class="conv-roster-acts">${server}</span>` : ''}</div>${rows}`;
+}
+
+// The dialog that list is drawn into, opened from the one line the roster panel keeps for it.
+// A dialog rather than a section of the panel because what it holds is not membership: a Studio
+// room manages no panes at all, and a reader who opened "who is in this conversation" was being
+// answered with twenty browser tabs.
+function openWebRoster(convId) {
+  const sheet = document.getElementById('webRosterSheet');
+  if (!sheet) return;
+  webRosterConv = convId || (typeof convViewId === 'string' ? convViewId : '');
+  webRosterDraw();
+  sheet.style.display = 'block';
+}
+
+function closeWebRoster() {
+  const sheet = document.getElementById('webRosterSheet');
+  if (sheet) sheet.style.display = 'none';
+  webRosterConv = '';
+}
+
+// Which conversation it is open on, held rather than read off convViewId each time: the repairs
+// take a moment and the reader can have moved on by the time one lands.
+let webRosterConv = '';
+
+// Redrawn on every broadcast while it is open, which is the whole reason it is worth opening: a
+// browser going down and coming back is exactly the state somebody is watching for in here.
+function webRosterDraw() {
+  const body = document.getElementById('webRosterBody');
+  const sheet = document.getElementById('webRosterSheet');
+  if (!body || !sheet || sheet.style.display !== 'block') return;
+  const conv = typeof loadConvIndex === 'function'
+    ? loadConvIndex().find(c => c.id === webRosterConv) : null;
+  body.innerHTML = conv ? webchatRosterHtml(conv)
+    : '<p class="pair-empty">This conversation is gone.</p>';
+}
+
+// How many providers that line should say, and whether to draw it at all.
+function webRosterCount(conv) {
+  return webchatRosterProviders(conv).length;
 }
 
 // That ladder's status, in the header of the conversation it is about. The same pill the chat view
@@ -27617,7 +27963,6 @@ function convBrowserHtml(conv) {
     ['browser', 'BrowserStop', 'Stop browser', 'browser_stop',
       'Stop the browser? Every tab on this profile closes.'],
   ].filter(([can]) => webchatCan(can));
-  if (!rungs.length) return '';
   // A profile somebody else's Chrome is holding is the one state where restarting is the wrong
   // advice, and a browser that is down is not a fault -- the next message brings it up. Said in
   // words, the way the chat's own line says them.
@@ -27626,7 +27971,20 @@ function convBrowserHtml(conv) {
   const why = foreign ? 'This profile is held by another Chrome. Close it there, not here'
     : down ? 'The browser is down. The next message brings it up, or Restart browser does'
       : 'The browser is up. No tab open for this chat — the next message opens one';
-  return '<div class="menu-sep"></div>'
+  // One Reconnect per provider, above the two that end a process. Per-provider because that is the
+  // scope of the repair — it closes one driver's tab and opens nothing — and here because the
+  // roster rows it used to hang off are gone: a provider is not a member of the conversation, but
+  // its wedged tab is still the thing stopping the thread, and this drawer is where the pill that
+  // reports it already leads. Unarmed, for the reason the relay does not gate it: it ends nothing.
+  const tabs = webchatCan('reconnect')
+    ? '<div class="menu-sep"></div>' + providers.map(provider =>
+      `<button class="menu-item" onclick="webchatRecoverProvider(`
+      + `'${escapeHtml(provider.id)}', 'reconnect')" `
+      + `aria-label="Reopen ${escapeHtml(provider.label || provider.id)}'s tab">`
+      + `Reconnect ${escapeHtml(provider.label || provider.id)}</button>`).join('')
+    : '';
+  if (!rungs.length) return tabs;
+  return tabs + '<div class="menu-sep"></div>'
     + `<div class="webchat-link ${down ? 'stale' : 'hot'}" role="status">`
     + `<span class="dot" style="background:${down ? 'var(--red)' : 'var(--muted)'}"></span>`
     + `${escapeHtml(why)}</div>`
@@ -30543,11 +30901,19 @@ function nlmSourceDelete(source) {
       // Never over a web conversation. What a room of providers produces is threads, not commits,
       // and the badge there named whatever checkout its agent's pane happened to be started in --
       // a fact about the harness's shell and about nothing anybody in that room is doing.
+      syncBranchBadge('convBranch', convViewIsWeb()
+        ? null : of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+    }
+
+    // Whether the conversation on screen exists for its providers, in any of the shapes that takes.
+    // Asked by everything that draws where the work landed: the badge over the composer and the
+    // rules between the messages are the same claim made twice, and both were wrong in the same
+    // way -- they named the checkout the room's harness was started in, which is a fact about that
+    // shell and about nothing anybody in the room is doing.
+    function convViewIsWeb() {
       const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
         ? loadConvIndex().find(row => row.id === convViewId) : null;
-      const web = typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
-      syncBranchBadge('convBranch',
-        web ? null : of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+      return typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
     }
 
     const convGitRule = (cls, body) => `<div class="conv-rule git ${cls}">${body}</div>`;
@@ -30579,6 +30945,10 @@ function nlmSourceDelete(source) {
     function convGitRules(e, seen) {
       const none = {before: '', after: ''};
       if (!e || (!e.branch && !e.commit)) return none;
+      // Not in a room of providers, for the reason the badge is not drawn there either: the branch
+      // these turns carry is whatever checkout the room's harness came up in, and a rule across the
+      // thread saying so is a claim about the work that room is not doing.
+      if (convViewIsWeb()) return none;
       const key = e.key || '';
       const was = seen.get(key) || {};
       // One map, two kinds of key. A member key is an agent id and a checkout key is `host|cwd`,
@@ -32641,6 +33011,9 @@ function nlmSourceDelete(source) {
       });
       saveConvIndex(items);
       renderConversations();
+      // The Web Agents section draws its own cards from the same index, so a room put away from
+      // either list has to leave both of them at once.
+      if (typeof renderWebAgents === 'function') renderWebAgents();
     }
 
     function archiveConversation(id) { setConversationArchived(id, true); }
@@ -33147,10 +33520,24 @@ function nlmSourceDelete(source) {
       const tier = conv.auto
         ? '<p class="conv-tier-note">Filed automatically, and dropped first when space runs out. ' +
           'Rename it to keep it for good.</p>' : '';
-      // The providers this conversation stands in front of, and the repairs for each. Under the
-      // members because they are not members — nothing here joins the roster — and guarded by
-      // `typeof` like the arbitrator's row, for the slices that never load the web-agent module.
-      const web = typeof webchatRosterHtml === 'function' ? webchatRosterHtml(conv) : '';
+      // The providers a web conversation stands in front of used to be listed here, under the
+      // members, in rows drawn exactly like theirs. They are not members and never were — a Studio
+      // room manages no panes at all, and an agent room's providers are the agent's to spend rather
+      // than seats in the roster — so a panel of "who is in this conversation" that answered with
+      // twenty logos was answering a different question. The list itself is still worth having, so
+      // what is left here is one line that opens it as a dialog of its own.
+      const webCount = typeof webRosterCount === 'function' ? webRosterCount(conv) : 0;
+      const web = webCount
+        ? `<div class="conv-roster-row">` +
+          `<span class="conv-eye reading" aria-hidden="true">◍</span>` +
+          `<span class="who">Providers</span>` +
+          `<span class="tag">${webCount}</span>` +
+          `<span class="conv-roster-acts">` +
+          `<button class="conv-open" data-conv-id="${escapeHtml(conv.id)}"` +
+          ` onclick="openWebRoster(this.dataset.convId)"` +
+          ` aria-label="The providers this conversation talks to, and the repairs for each">` +
+          `Open</button></span></div>`
+        : '';
       return `<div class="conv-roster">${rows}${arb}${web}<div class="conv-roster-actions">` +
         // Destructive action first, followed by the two ways to preserve the grouping, then edits.
         `<button class="conv-del arm-btn" onclick="armButton(this, 'Delete?', deleteConversation)"` +
@@ -33627,6 +34014,7 @@ function nlmSourceDelete(source) {
       await convForget(keys.filter(k => !kept.has(k)));
       convStandaloneHtml = '';
       renderConversations();
+      if (typeof renderWebAgents === 'function') renderWebAgents();
       showToast(`Deleted "${conv.name}" and everything it recorded.`, 'ok');
     }
 
@@ -34462,9 +34850,13 @@ function nlmSourceDelete(source) {
     // preference about this box — and a row of lone toggles says nothing about what each one is.
     function openOptMenu() {
       const box = document.getElementById('optMenu');
+      // The instruction chips are drawn in the member row and in no web room's, so what a chip does
+      // is a setting with nothing to act on there. Withheld rather than drawn and ignored: a switch
+      // that governs a row this composer does not have is a switch nobody can check.
+      const chipped = !(typeof convWebOf === 'function' && convWebOf(convViewId));
       const opts = [
-        ['Show inline prompt', dockFill(), 'toggleDockFill()',
-          'Write an instruction into the message box instead of attaching it at the send'],
+        ...(chipped ? [['Show inline prompt', dockFill(), 'toggleDockFill()',
+          'Write an instruction into the message box instead of attaching it at the send']] : []),
         ['Autocorrect', autocorrectOn(), 'toggleDockAutocorrect()',
           "Let the keyboard correct what you type. Off by default — this box types filenames and flags"],
       ];
@@ -34479,6 +34871,17 @@ function nlmSourceDelete(source) {
         `<button class="menu-item" role="menuitemcheckbox" aria-checked="${on}" ` +
         `onclick="${call}" title="${escapeHtml(why)}">` +
         `<span class="tick">${on ? '✓' : ''}</span>${escapeHtml(label)}</button>`).join('') +
+        // How a bubble is coloured. A press cycles rather than toggles, so it is drawn as a value
+        // rather than as a tick — and it is the same row the Web Agents chat composer carries,
+        // built by the same function, because it is one preference and it is read in every room.
+        (typeof convTintMenuItem === 'function' ? convTintMenuItem('openOptMenu()') : '') +
+        // A Studio room's own defaults, under the two every composer has. They are about the next
+        // topic rather than about this box, which is why they are last -- but they are settings
+        // somebody reaches for in the same moment, and Studio had them behind a second gear
+        // opening a sheet over the whole page.
+        (typeof convWebModeOf === 'function' && typeof convWebOf === 'function'
+          && convWebModeOf(convWebOf(convViewId)) === 'studio'
+          && typeof studioOptItems === 'function' ? studioOptItems('openOptMenu()') : '') +
         dockPairItems() +
         `<button class="menu-item" role="menuitem" onclick="closeDockMenu('optMenu')">Done</button>`;
       closeDockMenu('chipMenu');
@@ -35049,17 +35452,18 @@ function nlmSourceDelete(source) {
       const picks = studio && typeof studioPicksHtml === 'function'
         ? studioPicksHtml(conv) : dockWhoChips(list, target, aimed ? '' : target)
             + convPanelPillsHtml(conv);
-      // The agent leads the button line. It is the one target that is always there and always
-      // means the same thing, so it is the one that must not move -- and the line of provider
-      // icons below it is the one that grows, wraps and scrolls.
+      // The agent leads, on a line of its own. It is the one target that is always there and
+      // always means the same thing, so it is the one that must not move -- and both the buttons
+      // and the provider icons under it are lines that grow, wrap and scroll.
       const acts = convPanelActsHtml(conv,
         studio ? dockSendBtnHtml(target)
-          : dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target),
-        studio && typeof studioAgentPillHtml === 'function' ? studioAgentPillHtml(conv) : '');
+          : dockOpenBtnHtml(target, 'xfer-who-more open') + dockSendBtnHtml(target));
+      const head = studio && typeof studioHeadHtml === 'function'
+        ? studioHeadHtml(conv, acts) : '';
       const row = `<div class="xfer-who-row wrap${studio ? ' studio-picks' : ''}"`
         + ` ondblclick="soloDockTarget(event)">${picks}</div>`;
       return `<div class="xfer-act xfer-providers xfer-merged${studio ? ' studio-row' : ''}">`
-        + (studio ? acts + row : row + acts)
+        + (studio ? head + row : row + acts)
         + `</div>`;
     }
 
@@ -35438,7 +35842,10 @@ function nlmSourceDelete(source) {
         if (!e.target.closest) return;
         if (dockMenuOpen() && !e.target.closest('#chipMenu, .xfer-chip')) closeDockMenu('chipMenu');
         if (whoMenuOpen() && !e.target.closest('#whoMenu, .xfer-who-more')) closeDockMenu('whoMenu');
-        if (optMenuOpen() && !e.target.closest('#optMenu, .xfer-chip.opts')) closeDockMenu('optMenu');
+        // `.opts` and not `.xfer-chip.opts`: a web room's composer has no chips, so its own gear
+        // is a `.xfer-who-more` — and left out of this it was closed here in the capture phase
+        // and reopened by its own handler, which is a button that never closes what it opened.
+        if (optMenuOpen() && !e.target.closest('#optMenu, .opts')) closeDockMenu('optMenu');
         // The New agent dialog's own list, by the same rule — including a tap on the badge row it
         // covers, which is a choice being made rather than the list being dismissed.
         const projMenu = document.getElementById('newAgentProjMenu');
@@ -35487,6 +35894,13 @@ function nlmSourceDelete(source) {
           // the last tap named when the target has none — which on a member chip is the wrong
           // gesture answered with the right provider.
           const who = e.target.closest && e.target.closest('.xfer-who');
+          // A Studio room's agent badge is a target of this gesture like any pill, and the only one
+          // that is not a provider: it carries a pane, so without this it fell into the guard below
+          // and the double press did nothing at all.
+          if (who && who.dataset.solo === 'agent') {
+            if (typeof studioSoloAgent === 'function') { e.preventDefault(); studioSoloAgent(); }
+            return;
+          }
           if (who && who.dataset.pane) return;
           convPanelSoloPick(e);
         });
@@ -35498,13 +35912,17 @@ function nlmSourceDelete(source) {
           // pane. Same gesture, same reason it has to be read here, and a different thing to be
           // alone with -- so the identity the two taps are matched on is whichever the pill has.
           const provider = who.dataset.provider || '';
-          const id = who.dataset.pane || provider;
+          // A Studio room's agent badge has neither while nothing is running, and an empty id
+          // matches every other chip with one -- so it is identified by what it is instead.
+          const id = who.dataset.pane || provider || who.dataset.solo || '';
           const now = Date.now();
           if (now - whoTap < 350 && whoPane === id) {
             // Before the browser's own click, which would address the chip a second time and, in
             // solo, address whichever chip the redraw put under the finger.
             e.preventDefault();
-            if (provider) {
+            if (who.dataset.solo === 'agent') {
+              if (typeof studioSoloAgent === 'function') studioSoloAgent();
+            } else if (provider) {
               convPanelSoloPick(e);
             } else {
               // Named from the gesture rather than from the tap-to-address that normally records
@@ -35742,6 +36160,12 @@ const convPanelMulti = new Set();
 // have. Not stored: it is a way of looking at what is on screen, the same as the member solo.
 const convPanelSolo = new Map();
 
+// The agent, as something the narrowing can name. A room's thread is its providers' answers and
+// its agent's turns folded together, so "read only this one" has one more answer in it than the
+// pill row has pills -- and the agent was the one target the gesture could not reach. Not a
+// provider id: it is matched against the entries' own `foreign`, and no provider can be called it.
+const CONV_PANEL_AGENT = '@agent';
+
 function convPanelSoloOf(convId) {
   return convPanelSolo.get(convId) || '';
 }
@@ -35795,12 +36219,17 @@ function convPanelAimAgent(convId) {
   const conv = convWebOf(convId);
   if (!conv || convWebModeOf(conv) === 'panel') return false;
   const picked = convPanelPicked(conv);
-  const narrowed = !!convPanelSoloOf(conv.id);
-  if (!picked.size && !narrowed) return false;
+  const narrowed = convPanelSoloOf(conv.id);
+  // Reading the agent alone is not a narrowing this aim contradicts -- it is the same target, and
+  // dropping it here made the first press of the gesture that sets it undo the state the second
+  // press had just been used to reach.
+  const kept = narrowed === CONV_PANEL_AGENT;
+  if (!picked.size && (!narrowed || kept)) return false;
   picked.clear();
-  // The narrowing goes with the aim, the same as it does when a lit pill is tapped off: reading
-  // one provider alone while writing to the agent is a filter nobody can find the control for.
-  convPanelSolo.delete(conv.id);
+  // Otherwise the narrowing goes with the aim, the same as it does when a lit pill is tapped off:
+  // reading one provider alone while writing to the agent is a filter nobody can find the control
+  // for.
+  if (!kept) convPanelSolo.delete(conv.id);
   return true;
 }
 
@@ -35964,7 +36393,7 @@ function convPanelPillsHtml(conv) {
 // once, whether the thread narrows to whoever is being written to, and how long a bubble is.
 // `extra` is whatever the row they are drawn in adds after them — an agent room puts its own
 // controls here rather than growing a second block of buttons for them.
-function convPanelActsHtml(conv, extra, lead) {
+function convPanelActsHtml(conv, extra) {
   const ids = convPanelProviders(conv);
   const picked = convPanelPicked(conv);
   const multi = convPanelMulti.has(conv.id);
@@ -35987,7 +36416,7 @@ function convPanelActsHtml(conv, extra, lead) {
       + `aria-label="Replying in ${escapeHtml(aimed)}. Press to go back to this room's own thread">`
       + `↩ ${escapeHtml(convPanelThreadLabel(conv.id, aimed))}</button>`
     : '';
-  return `<div class="xfer-who-acts">${lead || ''}${reply}`
+  return `<div class="xfer-who-acts">${reply}`
     + `<button class="xfer-who-more list" onclick="convPanelAll()" aria-pressed="${all}" `
     + `title="${all ? 'Send to none of them' : 'Send to all of them'}" `
     + `aria-label="${all ? 'Send to none of them' : 'Send to all of them'}">`
@@ -36016,6 +36445,22 @@ function convPanelActsHtml(conv, extra, lead) {
     // The agent's three, and New. Only a Studio room has them: it is the mode with one agent and
     // no pane management, so what can be done to that agent fits in the row it is addressed from.
     + (lean && typeof studioActsHtml === 'function' ? studioActsHtml(conv) : '')
+    // How this box behaves, in the drawer over the composer the ordinary conversation composer
+    // puts it in — the same gear, the same drawer, the same settings. Every web room is built from
+    // this row and none of them drew one, so the standing preferences about the composer were
+    // reachable from an ordinary conversation and from nowhere in a panel, an agent room or
+    // Studio. The one thing this app draws a gear for is "how does this behave", and that is what
+    // this is.
+    // A Studio room draws it on the head line instead, pinned beside the way into the agent's
+    // terminal: the buttons below that line scroll, and the two controls that are not about who a
+    // message goes to are the two that must still be there when they have scrolled.
+    + (!lean && typeof toggleOptMenu === 'function'
+      ? `<button class="xfer-who-more opts gear-btn" onclick="toggleOptMenu()" `
+        + `aria-expanded="${typeof optMenuOpen === 'function' && optMenuOpen()}" `
+        + `title="How the composer behaves" aria-label="How the composer behaves">`
+        + `<svg class="gear-ico" aria-hidden="true" focusable="false"><use href="#icoGear" /></svg>`
+        + `</button>`
+      : '')
     + (extra || '')
     + `</div>`;
 }
@@ -36619,8 +37064,32 @@ function studioActsHtml(conv) {
     : `<button class="xfer-who-more" onclick="studioSpawnAgent()"`
       + ` title="Start an agent in this room" aria-label="Start an agent in this room">Spawn</button>`;
   return agent
+    // An icon, like everything else that is done to this room. The word was the last one in a line
+    // that had become marks, and at a word's width it read as the row's heading rather than as one
+    // more button in it.
     + `<button class="xfer-who-more" onclick="studioSwapAgent()"`
-    + ` title="Start a different agent here" aria-label="Start a different agent here">Agent…</button>`
+    + ` title="Start a different agent here" aria-label="Start a different agent here">`
+    + `${typeof convIco === 'function' ? convIco('swap') : '\u21c4'}</button>`
+    // The defaults the next Spawn will use are in the composer's own settings drawer now, with
+    // Autocorrect and the colour setting, reached from the one gear the head line draws -- see
+    // studioOptItems. They used to have a ⚙ of their own opening a modal over the whole page,
+    // which made Studio the one web room whose settings were not where every other composer's are.
+    + `<button class="xfer-who-more studio-new" onclick="openStudioTopic()"`
+    + ` title="New topic — ends this agent and opens the next room"`
+    + ` aria-label="New topic">+ New</button>`;
+}
+
+// The one line above the targets: who this room is, what is done to it, and the two controls that
+// are not about the room at all. The middle is what scrolls -- the buttons are as many as the room
+// has things that can be done to it -- and the three fixed points are the agent at the left-hand
+// end and, at the right, the way into the agent's own screen and the way into the composer's
+// settings. One is where the work actually is and the other is how this box behaves, and neither
+// is a thing to go looking for sideways.
+function studioHeadHtml(conv, acts) {
+  const live = studioAgentOf(conv);
+  return `<div class="studio-head">`
+    + (typeof studioAgentPillHtml === 'function' ? studioAgentPillHtml(conv) : '')
+    + (acts || '')
     // Where the agent is, when there is one. A Studio room manages no panes -- its agent is one of
     // a series -- but the pane is still where the harness's own screen is, and a room that could
     // start one and never look at it was hiding the only place its work is visible.
@@ -36629,14 +37098,14 @@ function studioActsHtml(conv) {
         + ` title="Open this agent's terminal" aria-label="Open this agent's terminal">`
         + `${shellGlyph()}</button>`
       : '')
-    // The defaults the next Spawn will use, in a drawer over the composer. Bigger than the words
-    // beside it: it is a glyph among labels, and at their size it read as punctuation.
-    + `<button class="xfer-who-more studio-gear" onclick="openStudioSetup()"`
-    + ` title="Studio settings — which agent a room starts, and whether it starts one"`
-    + ` aria-label="Studio settings">⚙</button>`
-    + `<button class="xfer-who-more studio-new" onclick="openStudioTopic()"`
-    + ` title="New topic — ends this agent and opens the next room"`
-    + ` aria-label="New topic">+ New</button>`;
+    + (typeof toggleOptMenu === 'function'
+      ? `<button class="xfer-who-more opts gear-btn" onclick="toggleOptMenu()"`
+        + ` aria-expanded="${typeof optMenuOpen === 'function' && optMenuOpen()}"`
+        + ` title="How the composer behaves" aria-label="How the composer behaves">`
+        + `<svg class="gear-ico" aria-hidden="true" focusable="false"><use href="#icoGear" /></svg>`
+        + `</button>`
+      : '')
+    + `</div>`;
 }
 
 // Into the agent's own terminal, on the conversation it was reached from — which is what every
@@ -36741,11 +37210,20 @@ function studioAgentPillHtml(conv) {
     || (typeof webchatConvBusy === 'function' && webchatConvBusy(conv && conv.id));
   const accent = live && typeof agentColor === 'function'
     ? (agentColor(live.agent) || 'var(--text)') : 'var(--muted)';
-  return `<button class="xfer-who studio-agent${on ? ' on' : ''}${live ? '' : ' off'}"`
+  // The narrowing the provider pills carry, over the one target that is not a pill. `data-solo`
+  // rather than `data-provider`: the row's readers switch on that attribute to decide which
+  // gesture a double press is, and an agent wearing a provider's attribute would be lit and
+  // written to as one.
+  const solo = typeof convPanelSoloOf === 'function'
+    && convPanelSoloOf(conv.id) === CONV_PANEL_AGENT;
+  return `<button class="xfer-who studio-agent${on ? ' on' : ''}${live ? '' : ' off'}`
+    + `${solo ? ' solo' : ''}"`
     + ` style="--who-accent:${accent}"`
+    + ` data-solo="agent"`
     + (live ? ` data-pane="${escapeHtml(live.pane_id)}"` : '')
     + ` onclick="studioAimAgent()" aria-pressed="${on}"`
-    + ` title="${live ? `Talk to ${name}` : 'No agent is running in this room'}"`
+    + ` title="${live ? `Talk to ${name}. Double-press to read only ${name}`
+      : 'No agent is running in this room'}"`
     + ` aria-label="${live ? `Talk to ${name}` : 'No agent is running in this room'}">`
     + `<span class="dot${busy ? ' pulse' : ''}" style="background:${colour}" aria-hidden="true"></span>`
     + (typeof agentGlyph === 'function' ? agentGlyph() : '')
@@ -36761,60 +37239,44 @@ function studioAgentLabel() {
   return (row && (row.label || row.id)) || '';
 }
 
-// The defaults a Spawn will use, in a drawer over the composer that opened it. They are this
+// The defaults a Spawn will use, as rows of the composer's settings drawer. They are this
 // browser's and they apply to every Studio room, which is why they are also three rows on the
 // Settings screen — but the moment anybody wants them is the moment before pressing New, and a
-// setting two screens away from the button it governs is one nobody finds. Both write the same
-// three keys and both redraw the other, so neither is a second copy of the answer.
-function openStudioSetup() {
-  const sheet = document.getElementById('studioSetupSheet');
-  if (!sheet) return;
-  studioSetupDraw();
-  sheet.style.display = 'block';
-}
-
-function closeStudioSetup() {
-  const sheet = document.getElementById('studioSetupSheet');
-  if (sheet) sheet.style.display = 'none';
-}
-
-function studioSetupDraw() {
-  const body = document.getElementById('studioSetupBody');
-  if (body) body.innerHTML = studioSetupSheetHtml();
-}
-
-// A toggle, and the agent. The toggles stay open when pressed — the drawer is where these are set
-// and somebody setting two of them should not have to open it twice — and the agent closes it,
-// because choosing one is the answer to the question the drawer asked.
-function studioSetupSheetHtml() {
+// setting two screens away from the button it governs is one nobody finds.
+//
+// In that drawer rather than in a modal of their own: every other composer in this app puts what
+// is standing about itself in one list above the box, and Studio having a second gear opening a
+// sheet over the whole page made its settings the one set nobody could guess the location of. The
+// list stays open when a row is pressed — somebody setting two of them should not have to open it
+// twice — which is what `after` carries.
+function studioOptItems(after) {
+  const redraw = after || '';
   const row = (on, call, label, hint) =>
-    `<button type="button" class="webchat-pick-row studio-set-row${on ? ' on' : ''}"`
-    + ` aria-pressed="${on}" onclick="${call}">`
-    + `<span class="webchat-pill-name">${escapeHtml(label)}`
-    + `<span class="hint studio-set-hint">${escapeHtml(hint)}</span></span>`
-    + `<span class="webchat-pill-n">${on ? 'On' : 'Off'}</span></button>`;
+    `<button class="menu-item" role="menuitemcheckbox" aria-checked="${on}"`
+    + ` onclick="${call}" title="${escapeHtml(hint)}">`
+    + `<span class="tick">${on ? '\u2713' : ''}</span>${escapeHtml(label)}</button>`;
   const offered = typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
   const held = studioAgentId();
   // The held one is listed even when the relay is no longer offering it: a drawer that silently
   // left it out would say this browser starts something it does not.
   const rows = offered.some(cfg => cfg.id === held)
     ? offered : offered.concat([{id: held, label: held, kind: ''}]);
-  return row(studioSpawnOn(), 'setStudioSpawn(!studioSpawnOn());studioSetupDraw()',
+  return row(studioSpawnOn(), `setStudioSpawn(!studioSpawnOn());${redraw}`,
     'Start an agent with a new topic',
     'Off, the room comes up with its providers and Spawn is what starts one')
-    + row(studioHideOn(), 'setStudioHide(!studioHideOn());studioSetupDraw()',
+    + row(studioHideOn(), `setStudioHide(!studioHideOn());${redraw}`,
       'List only the newest topic',
       'Nothing is deleted — the earlier rooms come back when this goes off')
-    + '<p class="hint studio-pick-more">Agent a new topic starts</p>'
+    + '<div class="menu-label">Agent a new topic starts</div>'
     + rows.map(cfg => {
       const on = cfg.id === held;
       const name = escapeHtml(cfg.label || cfg.id);
-      return `<button type="button" class="webchat-pick-row${on ? ' on' : ''}"`
-        + ` data-config="${escapeHtml(cfg.id)}" aria-pressed="${on}"`
-        + ` onclick="setStudioAgent(this.dataset.config);closeStudioSetup()"`
+      return `<button class="menu-item${cfg.kind ? ' val' : ''}" role="menuitemradio" aria-checked="${on}"`
+        + ` data-config="${escapeHtml(cfg.id)}"`
+        + ` onclick="setStudioAgent(this.dataset.config);${redraw}"`
         + ` aria-label="Start new topics with ${name}">`
-        + `<span class="webchat-pill-name">${name}</span>`
-        + (cfg.kind ? `<span class="webchat-pill-n">${escapeHtml(cfg.kind)}</span>` : '')
+        + `<span class="tick">${on ? '\u2713' : ''}</span>${name}`
+        + (cfg.kind ? `<span class="menu-val">${escapeHtml(cfg.kind)}</span>` : '')
         + '</button>';
     }).join('');
 }
@@ -36838,9 +37300,56 @@ function openStudioSettings() {
 function studioAimAgent() {
   const conv = studioRoom();
   if (!conv) return;
+  // The second of two quick presses narrows the thread to the agent, which is what the second
+  // press on a provider pill does for that provider. Counted here rather than left to `dblclick`
+  // for the reason the pills count theirs: the row is rebuilt between the two presses, so the
+  // element the first hit is detached by the time the second lands.
+  const now = Date.now();
+  const again = now - studioAgentTap <= CONV_PANEL_DOUBLE_MS;
+  studioAgentTap = now;
+  if (again) { studioSoloAgent(); return; }
   const moved = convPanelAimAgent(conv.id);
   if (typeof renderConvDock === 'function') renderConvDock();
   if (moved && typeof convPanelPaint === 'function') convPanelPaint(true);
+  if (window.cue) cue('tick');
+}
+
+let studioAgentTap = 0;
+
+// Read the agent and nobody else. The way back out is the same gesture, as it is on a pill: in
+// this state the row still holds every provider, so there is somewhere else to press, but pressing
+// one of them means writing to it as well -- and a reader who narrowed to the agent to follow what
+// it is doing should not have to send a message to stop.
+let studioSoloTap = 0;
+
+function studioSoloAgent() {
+  const conv = studioRoom();
+  if (!conv) return;
+  // A row that does survive between two presses fires `dblclick` as well, and the second press has
+  // already been read as the gesture by then. Without this the narrowing is set and unset in the
+  // same breath, which reads as a double press that did nothing at all. The same guard
+  // `convPanelSoloPick` keeps for the pills.
+  const now = Date.now();
+  if (now - studioSoloTap < CONV_PANEL_DOUBLE_MS) return;
+  studioSoloTap = now;
+  const on = typeof convPanelSoloOf === 'function'
+    && convPanelSoloOf(conv.id) === CONV_PANEL_AGENT;
+  if (on) convPanelSolo.delete(conv.id);
+  else {
+    // Reading the agent alone while writing to a provider is the contradiction the pills already
+    // avoid, so the aim comes back with the narrowing -- and before it, because aiming at the
+    // agent drops whatever narrowing was in force, this one included.
+    if (typeof convPanelAimAgent === 'function') convPanelAimAgent(conv.id);
+    convPanelSolo.set(conv.id, CONV_PANEL_AGENT);
+  }
+  const sel = window.getSelection && window.getSelection();
+  if (sel && sel.removeAllRanges) sel.removeAllRanges();
+  const live = studioAgentOf(conv);
+  const name = (live && typeof paneLabel === 'function' && paneLabel(live))
+    || studioAgentLabel() || 'the agent';
+  showToast(on ? 'Showing every provider' : `Reading only ${name}`);
+  if (typeof renderConvDock === 'function') renderConvDock();
+  if (typeof convPanelPaint === 'function') convPanelPaint(true);
   if (window.cue) cue('tick');
 }
 
@@ -41005,13 +41514,18 @@ function studioCardHtml() {
         : 'Showing one bubble per question, with a pill per provider — tap for one bubble each';
     }
 
+    // The button escalates with the press rather than with the amount of colour on screen: resting
+    // in the state it comes up in, outlined in the second, filled in the third. The alternative was
+    // to light it wherever any bubble carries a wash, which made the default look like a setting
+    // somebody had switched on and left the one state that is genuinely unusual — no colour
+    // anywhere — the one drawn as off.
     function hangSyncTint(btn, offered) {
       if (!btn) return;
-      const state = typeof convTintState === 'function' ? convTintState() : '1';
+      const state = typeof convTintState === 'function' ? convTintState() : 'normal';
       btn.classList.toggle('on', offered);
-      btn.classList.toggle('live', state !== '0');
-      btn.classList.toggle('grouped', state === '2');
-      btn.setAttribute('aria-pressed', String(state !== '0'));
+      btn.classList.toggle('live', state === 'agent');
+      btn.classList.toggle('grouped', state === 'all');
+      btn.setAttribute('aria-pressed', String(state !== 'normal'));
       btn.title = typeof convTintTitle === 'function' ? convTintTitle(state) : '';
     }
 

@@ -7525,7 +7525,26 @@
       if (!el || el._painted === html) return false;
       el._painted = html;
       el.innerHTML = html;
+      paintKeepPulse(el);
       return true;
+    }
+
+    // How long one breath of `.dot.pulse` takes. Here as well as in the stylesheet because the
+    // phase below has to be an offset into that cycle, and a delay measured against the wrong
+    // period would put a dot back somewhere it never was.
+    const PULSE_MS = 1400;
+
+    // A repaint builds new nodes, and a CSS animation on a new node starts from zero. So a list
+    // redrawn because one row's timestamp moved -- which these lists are, on every poll -- put
+    // every pulsing dot in it back to the start at the same instant, and a column of dots
+    // restarting together reads as the whole list blinking. Anchored to the clock instead: a
+    // negative delay starts the animation where it would have been, so a dot that was breathing
+    // before the paint goes on breathing through it. One clock for the whole list, so the dots in
+    // it stay together rather than drifting apart by whenever each row happened to be built.
+    function paintKeepPulse(el) {
+      if (!el || !el.querySelectorAll) return;
+      const phase = `${-(Date.now() % PULSE_MS)}ms`;
+      for (const dot of el.querySelectorAll('.dot.pulse')) dot.style.animationDelay = phase;
     }
 
   </script>
@@ -13093,6 +13112,11 @@ function convWebModeOf(conv) {
         + '<circle cx="7" cy="7" r="1.7"/><path d="M2.2 11.8 11.8 2.2"/>',
       copy: '<rect x="5" y="5" width="7.2" height="7.2" rx="1.6"/>'
         + '<path d="M9.4 2.8H3.4a1.6 1.6 0 0 0-1.6 1.6v6"/>',
+      // One out, one back: replacing the thing that is there with another of its kind. Studio's
+      // "start a different agent here", which was the word "Agent…" in a row where every other
+      // control had become an icon.
+      swap: '<path d="M2.2 4.6h7.6"/><path d="M7.6 2.4 9.8 4.6 7.6 6.8"/>'
+        + '<path d="M11.8 9.4H4.2"/><path d="M6.4 7.2 4.2 9.4 6.4 11.6"/>',
     };
 
     function convIco(name) {
@@ -14645,11 +14669,19 @@ function convWebModeOf(conv) {
       // Never over a web conversation. What a room of providers produces is threads, not commits,
       // and the badge there named whatever checkout its agent's pane happened to be started in --
       // a fact about the harness's shell and about nothing anybody in that room is doing.
+      syncBranchBadge('convBranch', convViewIsWeb()
+        ? null : of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+    }
+
+    // Whether the conversation on screen exists for its providers, in any of the shapes that takes.
+    // Asked by everything that draws where the work landed: the badge over the composer and the
+    // rules between the messages are the same claim made twice, and both were wrong in the same
+    // way -- they named the checkout the room's harness was started in, which is a fact about that
+    // shell and about nothing anybody in the room is doing.
+    function convViewIsWeb() {
       const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
         ? loadConvIndex().find(row => row.id === convViewId) : null;
-      const web = typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
-      syncBranchBadge('convBranch',
-        web ? null : of(typeof dockAddressed === 'function' ? dockAddressed() : ''));
+      return typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
     }
 
     const convGitRule = (cls, body) => `<div class="conv-rule git ${cls}">${body}</div>`;
@@ -14681,6 +14713,10 @@ function convWebModeOf(conv) {
     function convGitRules(e, seen) {
       const none = {before: '', after: ''};
       if (!e || (!e.branch && !e.commit)) return none;
+      // Not in a room of providers, for the reason the badge is not drawn there either: the branch
+      // these turns carry is whatever checkout the room's harness came up in, and a rule across the
+      // thread saying so is a claim about the work that room is not doing.
+      if (convViewIsWeb()) return none;
       const key = e.key || '';
       const was = seen.get(key) || {};
       // One map, two kinds of key. A member key is an agent id and a checkout key is `host|cwd`,
