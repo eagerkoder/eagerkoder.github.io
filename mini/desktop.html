@@ -17545,13 +17545,29 @@ function markdownHtml(source) {
     //
     // Read by both of the ways a session is begun again: Restart, which makes a new pane, and
     // Reset, which keeps the pane and says the same opening words into it.
-    function respawnStarter(spawn) {
+    function respawnStarter(spawn, key) {
+      if (key && respawnWebRoom(key)) return null;
       const was = canonAt((spawn || {}).starter);
       return (spawn || {}).starter === NO_STARTER ? null
         : startRoleOf(was)
           || (was && roleStarter({at: was}) ? {at: was} : null)
           || startRoleFromLabel((spawn || {}).label)
           || startRoleOf(START_DEFAULT_AT);
+    }
+
+    // Is this member's room one of the two that grant a harness web providers? Such a session was
+    // started with no opening prompt at all and bound to the room's providers, and neither fact
+    // survives in the record: the starter a browser writes down is held in memory, so a browser
+    // that never watched the start reads none — and respawnStarter then falls back to the
+    // Architect the Start dialog would have opened on, which is the one thing this session is not.
+    //
+    // Asked of the room rather than of the record, because the room is the durable copy: the grant
+    // is in the conversation, every browser has it, and a start reproduced from it is the start
+    // that was made whoever is pressing.
+    function respawnWebRoom(key) {
+      if (typeof convWebModeOf !== 'function' || typeof convLifeConvId !== 'function') return null;
+      const conv = loadConvIndex().find(c => c.id === convLifeConvId(key));
+      return conv && ['agent', 'studio'].includes(convWebModeOf(conv)) ? conv : null;
     }
 
     // A pane does not carry the role it was started with, and neither does a record that predates
@@ -17742,11 +17758,27 @@ function markdownHtml(source) {
       // session was in. New tab only where that workspace is live on that host right now.
       const tab = !!spawn.workspace_id && agents.some(x => x.workspace_id === spawn.workspace_id
         && (x.host || 'local') === (spawn.host || 'local'));
-      const starter = respawnStarter(spawn);
+      const starter = respawnStarter(spawn, key);
+      // A web-provider room's agent is started again the way its Spawn button starts one: as an
+      // `agent` rather than as whatever role the pane's name reads back as, in the background
+      // because nobody is sitting at the pane it comes up in, unattended and bare where this relay
+      // takes those, and bound to the room before its first frame. Everything else about a restart
+      // is unchanged — same name, same member row, same thread across the seam.
+      const room = respawnWebRoom(key);
       const msg = Object.assign({
         type: 'start_agent', name: spawn.agent, project_id: spawn.project_id,
         placement: tab ? 'new_tab' : 'new_workspace', slot: slotFor(),
-      }, starter ? startRoleFields(starter, '') : {role: respawnRole(spawn)});
+      }, starter ? startRoleFields(starter, '')
+        : {role: room ? 'agent' : respawnRole(spawn)});
+      if (room) {
+        msg.background = true;
+        const grant = typeof convGrantOf === 'function' ? convGrantOf(room) : [];
+        if (grant.length) msg.webchat = {ns: room.id, providers: grant};
+        if (typeof startUnattendedOffered === 'function' && startUnattendedOffered(msg.name)) {
+          msg.unattended = true;
+        }
+        if (((startOptions || {}).bare || []).indexOf(msg.name) >= 0) msg.bare = true;
+      }
       // The alias is carried by id and resolved here, not at the time it was recorded: a config
       // whose provider or model has been edited since restarts on what it says now.
       //
@@ -17825,7 +17857,7 @@ function markdownHtml(source) {
       if (!sendTextTo(live.pane_id, cmd, 'system')) return false;
       // Second, and into the same pane, so the relay's per-pane lane keeps the order: the opening
       // words must arrive at a cleared session and not before it is cleared.
-      const prompt = roleStarter(respawnStarter(spawn), live.agent);
+      const prompt = roleStarter(respawnStarter(spawn, key), live.agent);
       if (prompt) sendTextTo(live.pane_id, agentSlash(prompt, live.agent), 'system');
       return true;
     }
