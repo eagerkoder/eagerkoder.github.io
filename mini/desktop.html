@@ -25471,6 +25471,12 @@ function markdownHtml(source) {
     // previous room's go with it — a pin is how a tab is kept across the move, which is the whole
     // reason pinning exists.
     function deskSelectConv(id) {
+      // The same visit log the phone writes, so the floating recents puck holds the last five
+      // rooms whichever page this reader was in when they were in them. Written before the guard
+      // below: a room already selected is a room being looked at, and the log is an order of
+      // visits rather than a list of changes — the room restored at boot is the one the reader is
+      // standing in, and clicking its row is not a no-op to the question "where was I".
+      if (typeof noteConvVisit === 'function') noteConvVisit(id);
       if (deskSelectedConv === id) return;
       deskSelectedConv = id;
       deskComputeTabs();
@@ -27905,6 +27911,268 @@ function markdownHtml(source) {
         deskCmdPick = i;
         deskCmdDraw();
       });
+    }
+
+  </script>
+  <script>
+// --- The floating recents puck ---------------------------------------------------------------
+//
+// One small draggable button over every screen, holding the last five conversations this browser
+// visited. Tap it and they are a list; tap one and you are in it.
+//
+// The recents *log* lives here too, because this is the one file both pages load. recents.js is
+// the phone's landing section, its status-bar switcher and the pane half of the log, and the
+// desktop page loads none of it — so a log declared there is a log the desktop can neither read
+// nor write, and "the last five conversations" would mean something different on each page. The
+// key and the shape are unchanged; what moved is where they are declared.
+//
+// It builds its own markup and carries its own style. Everything else in this app is drawn into
+// markup the page already holds, which is right for a view that belongs to a page — but this one
+// belongs to neither, and a second copy of both in desktop.html is a second copy to keep in step.
+//
+// Nothing is drawn until this browser has visited a conversation. A control that is always on
+// screen has to earn the pixels, and before there is a second room to switch to there is nothing
+// for it to switch between.
+
+    const RECENTS_KEY = 'herdr_recents';
+    // What is stored, against what is drawn. The puck shows five; the phone's switcher orders
+    // everything running, and a five-entry log would have it forgetting the pane before last.
+    const RECENT_LOG = 24;
+
+    function loadRecents() {
+      try {
+        const v = JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]');
+        // Version-one recents stored bare pane IDs. Drop them: herdr can reuse an ID for a
+        // different session, and this is a convenience list, not data worth migrating unsafely.
+        // Conversations are in the same log, because "where was I" has one answer and it is in the
+        // order things were visited, not one order per kind of thing.
+        return Array.isArray(v) ? v.filter(x => x && typeof x === 'object'
+          && (x.conv || (x.pane_id && (x.agent || x.terminal)))) : [];
+      } catch (e) { return []; }
+    }
+
+    // A conversation window opened is a visit, in the same log and the same order. Stored by id
+    // alone: a conversation is this browser's own record, so there is no session to fingerprint
+    // against and nothing another machine could reuse the id for.
+    function noteConvVisit(id) {
+      if (!id) return;
+      const next = [{conv: id}, ...loadRecents().filter(r => r.conv !== id)].slice(0, RECENT_LOG);
+      try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); }
+      catch (e) { /* private mode: this session only */ }
+      recentFloatDraw();
+    }
+
+    const RECENT_FLOAT_KEY = 'herdr_recent_float';
+    const RECENT_FLOAT_MAX = 5;
+
+    // Where the puck sits, as a fraction of the room it has to sit in rather than as pixels: a
+    // phone rotated, a window resized and a second device reading the same localStorage all give
+    // a different viewport, and a stored 900px is off the side of every one of them.
+    function recentFloatPos() {
+      try {
+        const v = JSON.parse(localStorage.getItem(RECENT_FLOAT_KEY) || 'null');
+        if (v && typeof v.fx === 'number' && typeof v.fy === 'number') return v;
+      } catch (e) { /* fall through to the default corner */ }
+      return {fx: 1, fy: 0.72};
+    }
+
+    function setRecentFloatPos(fx, fy) {
+      try { localStorage.setItem(RECENT_FLOAT_KEY, JSON.stringify({fx: fx, fy: fy})); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
+    // A fraction and the room it is a fraction of, as pixels inside it. Clamped here rather than
+    // at the write, so a position stored on a tablet still lands on screen on a phone.
+    function recentFloatXY(pos, room, size) {
+      const max = {x: Math.max(0, room.w - size.w), y: Math.max(0, room.h - size.h)};
+      const at = v => (typeof v === 'number' && isFinite(v) ? Math.min(1, Math.max(0, v)) : 1);
+      return {x: Math.round(at(pos.fx) * max.x), y: Math.round(at(pos.fy) * max.y)};
+    }
+
+    // The conversations, newest visit first. Resolved against the index every time rather than
+    // stored with a name: a room renamed, archived or deleted since the visit is a row that would
+    // otherwise say what it used to be called, or open nothing at all.
+    function recentFloatItems(log, convs) {
+      const out = [];
+      for (const r of log || []) {
+        if (!r || !r.conv) continue;
+        const conv = (convs || []).find(c => c.id === r.conv);
+        if (conv && !conv.archived) out.push(conv);
+        if (out.length >= RECENT_FLOAT_MAX) break;
+      }
+      return out;
+    }
+
+    // Which room is on screen, so the list can say so. Two pages, two answers: the phone has one
+    // conversation window open at a time, the desktop page has a selected room in its sidebar.
+    function recentFloatHere() {
+      if (typeof deskSelectedConv !== 'undefined' && deskSelectedConv) return deskSelectedConv;
+      if (typeof convViewId !== 'undefined' && convViewId) return convViewId;
+      return '';
+    }
+
+    // And how each page switches. `openConversation` opens the phone's conversation window;
+    // `deskSelectConv` loads the room into the desktop sidebar and its strip of tabs. Neither page
+    // has both, which is what makes this two lines rather than a mode.
+    function recentFloatGo(id) {
+      recentFloatSet(false);
+      if (typeof openConversation === 'function') { openConversation(id); return; }
+      if (typeof deskSelectConv === 'function') deskSelectConv(id);
+    }
+
+    let recentFloatOpen = false;
+
+    function recentFloatSet(on) {
+      recentFloatOpen = !!on;
+      recentFloatDraw();
+    }
+
+    function recentFloatToggle() {
+      recentFloatSet(!recentFloatOpen);
+    }
+
+    const RECENT_FLOAT_CSS = `
+      .recent-float { position: fixed; z-index: 90; display: none;
+        font: inherit; touch-action: none; }
+      .recent-float.on { display: block; }
+      .recent-float-btn { width: 44px; height: 44px; border-radius: 50%;
+        border: 1px solid var(--border); background: var(--surface); color: var(--text);
+        font-size: 18px; line-height: 1; cursor: grab; opacity: .82;
+        box-shadow: 0 2px 10px rgba(0,0,0,.35); display: flex; align-items: center;
+        justify-content: center; }
+      .recent-float-btn:hover, .recent-float.open .recent-float-btn { opacity: 1; }
+      .recent-float.dragging .recent-float-btn { cursor: grabbing; opacity: 1; }
+      .recent-float-panel { display: none; position: absolute; bottom: 52px; right: 0;
+        width: 232px; max-width: 78vw; padding: 6px; border: 1px solid var(--border);
+        border-radius: 10px; background: var(--surface); color: var(--text);
+        box-shadow: 0 6px 22px rgba(0,0,0,.45); }
+      .recent-float.open .recent-float-panel { display: block; }
+      /* Below the halfway line the panel would open off the bottom of the screen, so it opens
+         upward from there and downward above it — the puck is draggable anywhere, and a menu that
+         is only reachable in one half of the screen is a menu that is sometimes not reachable. */
+      .recent-float.down .recent-float-panel { bottom: auto; top: 52px; }
+      .recent-float.left .recent-float-panel { right: auto; left: 0; }
+      .recent-float-head { padding: 4px 8px 6px; font-size: 11px; letter-spacing: .04em;
+        text-transform: uppercase; color: var(--muted); }
+      .recent-float-row { display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--text);
+        font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+      .recent-float-row:hover { background: var(--bg); }
+      .recent-float-row.on { color: var(--blue); }
+      .recent-float-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; }
+      .recent-float-row .conv-glyph { flex: none; opacity: .8; }`;
+
+    function recentFloatMount() {
+      if (typeof document === 'undefined' || document.getElementById('recentFloat')) return;
+      const style = document.createElement('style');
+      style.textContent = RECENT_FLOAT_CSS;
+      document.head.appendChild(style);
+      const el = document.createElement('div');
+      el.id = 'recentFloat';
+      el.className = 'recent-float';
+      el.innerHTML = '<div class="recent-float-panel" id="recentFloatPanel"></div>'
+        + '<button type="button" class="recent-float-btn" id="recentFloatBtn"'
+        + ' aria-label="Recent conversations">⇄</button>';
+      document.body.appendChild(el);
+      recentFloatBind(el);
+      recentFloatDraw();
+      window.addEventListener('resize', () => recentFloatPlace(el));
+      // A tap anywhere else closes it. The puck is over the whole app, so a panel left open is a
+      // panel over whatever the reader went back to reading.
+      document.addEventListener('click', e => {
+        if (!recentFloatOpen) return;
+        if (e.target && e.target.closest && e.target.closest('#recentFloat')) return;
+        recentFloatSet(false);
+      }, true);
+    }
+
+    // Dragged by the puck and by nothing else, in pointer events so one path covers mouse, touch
+    // and pen. The threshold is what tells a drag from a tap: a finger never presses a button
+    // without moving a pixel or two, and treating that as a drag would mean the panel never opened.
+    const RECENT_FLOAT_SLOP = 6;
+
+    function recentFloatBind(el) {
+      const btn = el.querySelector('#recentFloatBtn');
+      let from = null;
+      btn.addEventListener('pointerdown', e => {
+        const rect = el.getBoundingClientRect();
+        from = {x: e.clientX, y: e.clientY, left: rect.left, top: rect.top, moved: false};
+        btn.setPointerCapture(e.pointerId);
+      });
+      btn.addEventListener('pointermove', e => {
+        if (!from) return;
+        const dx = e.clientX - from.x, dy = e.clientY - from.y;
+        if (!from.moved && Math.abs(dx) + Math.abs(dy) < RECENT_FLOAT_SLOP) return;
+        from.moved = true;
+        el.classList.add('dragging');
+        const size = {w: el.offsetWidth, h: el.offsetHeight};
+        const room = {w: window.innerWidth, h: window.innerHeight};
+        const max = {x: Math.max(1, room.w - size.w), y: Math.max(1, room.h - size.h)};
+        const x = Math.min(max.x, Math.max(0, from.left + dx));
+        const y = Math.min(max.y, Math.max(0, from.top + dy));
+        setRecentFloatPos(x / max.x, y / max.y);
+        recentFloatPlace(el);
+      });
+      btn.addEventListener('pointerup', e => {
+        const dragged = !!(from && from.moved);
+        from = null;
+        el.classList.remove('dragging');
+        try { btn.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+        // A drag that ends is a drag and not a press. Without this every move of the puck opened
+        // the panel under the finger that had just let go of it.
+        if (!dragged) recentFloatToggle();
+      });
+      btn.addEventListener('pointercancel', () => { from = null; el.classList.remove('dragging'); });
+    }
+
+    // Where the puck is, and which way its panel opens from there.
+    function recentFloatPlace(el) {
+      const size = {w: el.offsetWidth || 44, h: el.offsetHeight || 44};
+      const room = {w: window.innerWidth, h: window.innerHeight};
+      const at = recentFloatXY(recentFloatPos(), room, size);
+      el.style.left = at.x + 'px';
+      el.style.top = at.y + 'px';
+      el.classList.toggle('down', at.y < room.h / 2);
+      el.classList.toggle('left', at.x < room.w / 2);
+    }
+
+    function recentFloatRowHtml(conv, here) {
+      const glyph = typeof convGlyph === 'function' ? convGlyph(conv) : '';
+      const name = typeof escapeHtml === 'function' ? escapeHtml(conv.name || 'Conversation')
+        : String(conv.name || 'Conversation');
+      return `<button type="button" class="recent-float-row${conv.id === here ? ' on' : ''}"`
+        + ` onclick="recentFloatGo('${conv.id}')">${glyph}`
+        + `<span class="name">${name}</span></button>`;
+    }
+
+    function recentFloatDraw() {
+      const el = typeof document !== 'undefined' ? document.getElementById('recentFloat') : null;
+      if (!el) return;
+      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const items = recentFloatItems(loadRecents(), convs);
+      // One room visited is no switch to make. The puck appears with the second one and goes away
+      // again if the record is cleared.
+      const show = items.length > 1;
+      if (!show) recentFloatOpen = false;
+      el.classList.toggle('on', show);
+      el.classList.toggle('open', recentFloatOpen);
+      if (!show) return;
+      if (recentFloatOpen) {
+        const here = recentFloatHere();
+        document.getElementById('recentFloatPanel').innerHTML =
+          '<div class="recent-float-head">Recent</div>'
+          + items.map(c => recentFloatRowHtml(c, here)).join('');
+      }
+      recentFloatPlace(el);
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', recentFloatMount);
+      } else {
+        recentFloatMount();
+      }
     }
 
   </script>

@@ -9590,6 +9590,21 @@
         min-width: 0;
       }
 
+      /* A compact room card's one line under the name: the key, what kind of room it is, and the
+         harnesses in it. The row of provider marks is not on it -- see webchatRoomCard -- so this
+         is the line that has to carry "which room is this" on its own, and it is laid out to be
+         read left to right rather than to fill the width. */
+      .webchat-compact {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .webchat-compact .badge,
+      .webchat-compact .webchat-providers { flex: 0 0 auto; }
+
       /* When a thread was started, beside what it is called. Small, muted and never wrapping: it
          is how two chats with the same provider-given title are told apart, which is a thing you
          read only when you are already looking for it. */
@@ -18191,23 +18206,28 @@
 
   </script>
   <script>
-    // Recents: the log, the switcher and the landing section.
-    //
-    // Split out of start_dialog.js, which never read any of it — the two shared a file because the
-    // landing page needed both, and a second page that wants the Start dialog does not want a
-    // section, a sheet and a status-bar switcher along with it.
-    //
-    // Browser-local, like pairs: the relay has no notion of which panes this device visited.
-
-    // --- Recents ---
-    // Most-recently-opened panes, for one-tap access without hunting the list. Browser-local, like
-    // pairs: the relay has no notion of which panes this device visited.
+// --- The floating recents puck ---------------------------------------------------------------
+//
+// One small draggable button over every screen, holding the last five conversations this browser
+// visited. Tap it and they are a list; tap one and you are in it.
+//
+// The recents *log* lives here too, because this is the one file both pages load. recents.js is
+// the phone's landing section, its status-bar switcher and the pane half of the log, and the
+// desktop page loads none of it — so a log declared there is a log the desktop can neither read
+// nor write, and "the last five conversations" would mean something different on each page. The
+// key and the shape are unchanged; what moved is where they are declared.
+//
+// It builds its own markup and carries its own style. Everything else in this app is drawn into
+// markup the page already holds, which is right for a view that belongs to a page — but this one
+// belongs to neither, and a second copy of both in desktop.html is a second copy to keep in step.
+//
+// Nothing is drawn until this browser has visited a conversation. A control that is always on
+// screen has to earn the pixels, and before there is a second room to switch to there is nothing
+// for it to switch between.
 
     const RECENTS_KEY = 'herdr_recents';
-    const MAX_RECENTS = 5;
-    // What is stored, against what the landing section draws. The section shows five panes; the
-    // switcher in the status bar orders everything that is running, and a five-entry log would have
-    // it forgetting the pane before last. Storing more costs nothing and the section still slices.
+    // What is stored, against what is drawn. The puck shows five; the phone's switcher orders
+    // everything running, and a five-entry log would have it forgetting the pane before last.
     const RECENT_LOG = 24;
 
     function loadRecents() {
@@ -18221,6 +18241,249 @@
           && (x.conv || (x.pane_id && (x.agent || x.terminal)))) : [];
       } catch (e) { return []; }
     }
+
+    // A conversation window opened is a visit, in the same log and the same order. Stored by id
+    // alone: a conversation is this browser's own record, so there is no session to fingerprint
+    // against and nothing another machine could reuse the id for.
+    function noteConvVisit(id) {
+      if (!id) return;
+      const next = [{conv: id}, ...loadRecents().filter(r => r.conv !== id)].slice(0, RECENT_LOG);
+      try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); }
+      catch (e) { /* private mode: this session only */ }
+      recentFloatDraw();
+    }
+
+    const RECENT_FLOAT_KEY = 'herdr_recent_float';
+    const RECENT_FLOAT_MAX = 5;
+
+    // Where the puck sits, as a fraction of the room it has to sit in rather than as pixels: a
+    // phone rotated, a window resized and a second device reading the same localStorage all give
+    // a different viewport, and a stored 900px is off the side of every one of them.
+    function recentFloatPos() {
+      try {
+        const v = JSON.parse(localStorage.getItem(RECENT_FLOAT_KEY) || 'null');
+        if (v && typeof v.fx === 'number' && typeof v.fy === 'number') return v;
+      } catch (e) { /* fall through to the default corner */ }
+      return {fx: 1, fy: 0.72};
+    }
+
+    function setRecentFloatPos(fx, fy) {
+      try { localStorage.setItem(RECENT_FLOAT_KEY, JSON.stringify({fx: fx, fy: fy})); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
+    // A fraction and the room it is a fraction of, as pixels inside it. Clamped here rather than
+    // at the write, so a position stored on a tablet still lands on screen on a phone.
+    function recentFloatXY(pos, room, size) {
+      const max = {x: Math.max(0, room.w - size.w), y: Math.max(0, room.h - size.h)};
+      const at = v => (typeof v === 'number' && isFinite(v) ? Math.min(1, Math.max(0, v)) : 1);
+      return {x: Math.round(at(pos.fx) * max.x), y: Math.round(at(pos.fy) * max.y)};
+    }
+
+    // The conversations, newest visit first. Resolved against the index every time rather than
+    // stored with a name: a room renamed, archived or deleted since the visit is a row that would
+    // otherwise say what it used to be called, or open nothing at all.
+    function recentFloatItems(log, convs) {
+      const out = [];
+      for (const r of log || []) {
+        if (!r || !r.conv) continue;
+        const conv = (convs || []).find(c => c.id === r.conv);
+        if (conv && !conv.archived) out.push(conv);
+        if (out.length >= RECENT_FLOAT_MAX) break;
+      }
+      return out;
+    }
+
+    // Which room is on screen, so the list can say so. Two pages, two answers: the phone has one
+    // conversation window open at a time, the desktop page has a selected room in its sidebar.
+    function recentFloatHere() {
+      if (typeof deskSelectedConv !== 'undefined' && deskSelectedConv) return deskSelectedConv;
+      if (typeof convViewId !== 'undefined' && convViewId) return convViewId;
+      return '';
+    }
+
+    // And how each page switches. `openConversation` opens the phone's conversation window;
+    // `deskSelectConv` loads the room into the desktop sidebar and its strip of tabs. Neither page
+    // has both, which is what makes this two lines rather than a mode.
+    function recentFloatGo(id) {
+      recentFloatSet(false);
+      if (typeof openConversation === 'function') { openConversation(id); return; }
+      if (typeof deskSelectConv === 'function') deskSelectConv(id);
+    }
+
+    let recentFloatOpen = false;
+
+    function recentFloatSet(on) {
+      recentFloatOpen = !!on;
+      recentFloatDraw();
+    }
+
+    function recentFloatToggle() {
+      recentFloatSet(!recentFloatOpen);
+    }
+
+    const RECENT_FLOAT_CSS = `
+      .recent-float { position: fixed; z-index: 90; display: none;
+        font: inherit; touch-action: none; }
+      .recent-float.on { display: block; }
+      .recent-float-btn { width: 44px; height: 44px; border-radius: 50%;
+        border: 1px solid var(--border); background: var(--surface); color: var(--text);
+        font-size: 18px; line-height: 1; cursor: grab; opacity: .82;
+        box-shadow: 0 2px 10px rgba(0,0,0,.35); display: flex; align-items: center;
+        justify-content: center; }
+      .recent-float-btn:hover, .recent-float.open .recent-float-btn { opacity: 1; }
+      .recent-float.dragging .recent-float-btn { cursor: grabbing; opacity: 1; }
+      .recent-float-panel { display: none; position: absolute; bottom: 52px; right: 0;
+        width: 232px; max-width: 78vw; padding: 6px; border: 1px solid var(--border);
+        border-radius: 10px; background: var(--surface); color: var(--text);
+        box-shadow: 0 6px 22px rgba(0,0,0,.45); }
+      .recent-float.open .recent-float-panel { display: block; }
+      /* Below the halfway line the panel would open off the bottom of the screen, so it opens
+         upward from there and downward above it — the puck is draggable anywhere, and a menu that
+         is only reachable in one half of the screen is a menu that is sometimes not reachable. */
+      .recent-float.down .recent-float-panel { bottom: auto; top: 52px; }
+      .recent-float.left .recent-float-panel { right: auto; left: 0; }
+      .recent-float-head { padding: 4px 8px 6px; font-size: 11px; letter-spacing: .04em;
+        text-transform: uppercase; color: var(--muted); }
+      .recent-float-row { display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--text);
+        font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+      .recent-float-row:hover { background: var(--bg); }
+      .recent-float-row.on { color: var(--blue); }
+      .recent-float-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; }
+      .recent-float-row .conv-glyph { flex: none; opacity: .8; }`;
+
+    function recentFloatMount() {
+      if (typeof document === 'undefined' || document.getElementById('recentFloat')) return;
+      const style = document.createElement('style');
+      style.textContent = RECENT_FLOAT_CSS;
+      document.head.appendChild(style);
+      const el = document.createElement('div');
+      el.id = 'recentFloat';
+      el.className = 'recent-float';
+      el.innerHTML = '<div class="recent-float-panel" id="recentFloatPanel"></div>'
+        + '<button type="button" class="recent-float-btn" id="recentFloatBtn"'
+        + ' aria-label="Recent conversations">⇄</button>';
+      document.body.appendChild(el);
+      recentFloatBind(el);
+      recentFloatDraw();
+      window.addEventListener('resize', () => recentFloatPlace(el));
+      // A tap anywhere else closes it. The puck is over the whole app, so a panel left open is a
+      // panel over whatever the reader went back to reading.
+      document.addEventListener('click', e => {
+        if (!recentFloatOpen) return;
+        if (e.target && e.target.closest && e.target.closest('#recentFloat')) return;
+        recentFloatSet(false);
+      }, true);
+    }
+
+    // Dragged by the puck and by nothing else, in pointer events so one path covers mouse, touch
+    // and pen. The threshold is what tells a drag from a tap: a finger never presses a button
+    // without moving a pixel or two, and treating that as a drag would mean the panel never opened.
+    const RECENT_FLOAT_SLOP = 6;
+
+    function recentFloatBind(el) {
+      const btn = el.querySelector('#recentFloatBtn');
+      let from = null;
+      btn.addEventListener('pointerdown', e => {
+        const rect = el.getBoundingClientRect();
+        from = {x: e.clientX, y: e.clientY, left: rect.left, top: rect.top, moved: false};
+        btn.setPointerCapture(e.pointerId);
+      });
+      btn.addEventListener('pointermove', e => {
+        if (!from) return;
+        const dx = e.clientX - from.x, dy = e.clientY - from.y;
+        if (!from.moved && Math.abs(dx) + Math.abs(dy) < RECENT_FLOAT_SLOP) return;
+        from.moved = true;
+        el.classList.add('dragging');
+        const size = {w: el.offsetWidth, h: el.offsetHeight};
+        const room = {w: window.innerWidth, h: window.innerHeight};
+        const max = {x: Math.max(1, room.w - size.w), y: Math.max(1, room.h - size.h)};
+        const x = Math.min(max.x, Math.max(0, from.left + dx));
+        const y = Math.min(max.y, Math.max(0, from.top + dy));
+        setRecentFloatPos(x / max.x, y / max.y);
+        recentFloatPlace(el);
+      });
+      btn.addEventListener('pointerup', e => {
+        const dragged = !!(from && from.moved);
+        from = null;
+        el.classList.remove('dragging');
+        try { btn.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+        // A drag that ends is a drag and not a press. Without this every move of the puck opened
+        // the panel under the finger that had just let go of it.
+        if (!dragged) recentFloatToggle();
+      });
+      btn.addEventListener('pointercancel', () => { from = null; el.classList.remove('dragging'); });
+    }
+
+    // Where the puck is, and which way its panel opens from there.
+    function recentFloatPlace(el) {
+      const size = {w: el.offsetWidth || 44, h: el.offsetHeight || 44};
+      const room = {w: window.innerWidth, h: window.innerHeight};
+      const at = recentFloatXY(recentFloatPos(), room, size);
+      el.style.left = at.x + 'px';
+      el.style.top = at.y + 'px';
+      el.classList.toggle('down', at.y < room.h / 2);
+      el.classList.toggle('left', at.x < room.w / 2);
+    }
+
+    function recentFloatRowHtml(conv, here) {
+      const glyph = typeof convGlyph === 'function' ? convGlyph(conv) : '';
+      const name = typeof escapeHtml === 'function' ? escapeHtml(conv.name || 'Conversation')
+        : String(conv.name || 'Conversation');
+      return `<button type="button" class="recent-float-row${conv.id === here ? ' on' : ''}"`
+        + ` onclick="recentFloatGo('${conv.id}')">${glyph}`
+        + `<span class="name">${name}</span></button>`;
+    }
+
+    function recentFloatDraw() {
+      const el = typeof document !== 'undefined' ? document.getElementById('recentFloat') : null;
+      if (!el) return;
+      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const items = recentFloatItems(loadRecents(), convs);
+      // One room visited is no switch to make. The puck appears with the second one and goes away
+      // again if the record is cleared.
+      const show = items.length > 1;
+      if (!show) recentFloatOpen = false;
+      el.classList.toggle('on', show);
+      el.classList.toggle('open', recentFloatOpen);
+      if (!show) return;
+      if (recentFloatOpen) {
+        const here = recentFloatHere();
+        document.getElementById('recentFloatPanel').innerHTML =
+          '<div class="recent-float-head">Recent</div>'
+          + items.map(c => recentFloatRowHtml(c, here)).join('');
+      }
+      recentFloatPlace(el);
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', recentFloatMount);
+      } else {
+        recentFloatMount();
+      }
+    }
+
+  </script>
+  <script>
+    // Recents: the pane log, the switcher and the landing section.
+    //
+    // Split out of start_dialog.js, which never read any of it — the two shared a file because the
+    // landing page needed both, and a second page that wants the Start dialog does not want a
+    // section, a sheet and a status-bar switcher along with it.
+    //
+    // Browser-local, like pairs: the relay has no notion of which panes this device visited.
+
+    // --- Recents ---
+    // Most-recently-opened panes, for one-tap access without hunting the list.
+
+    // The log itself — its key, its cap, `loadRecents` and `noteConvVisit` — is in
+    // recent_float.js, which both pages load. This file is the phone's: the landing
+    // section, the status-bar switcher, and the pane half of the log below.
+
+    const MAX_RECENTS = 5;
 
     // A terminal has no `agent` to fingerprint on, so it is matched on cwd and host instead and
     // flagged. The flag is what stops a bare pane_id matching across kinds — herdr reuses IDs, and
@@ -18243,16 +18506,6 @@
         : recentFingerprint(live[0]);
       const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, RECENT_LOG);
       localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
-    }
-
-    // A conversation window opened is a visit, in the same log and the same order. Stored by id
-    // alone: a conversation is this browser's own record, so there is no session to fingerprint
-    // against and nothing another machine could reuse the id for.
-    function noteConvVisit(id) {
-      if (!id) return;
-      const next = [{conv: id}, ...loadRecents().filter(r => r.conv !== id)].slice(0, RECENT_LOG);
-      try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); }
-      catch (e) { /* private mode: this session only */ }
     }
 
     // --- The recent switcher ---
@@ -26449,15 +26702,15 @@ function webchatRoomCard(conv, sessions, compact) {
   // asked anything in says only that the relay has twenty drivers. It draws what has been spoken
   // to and, before that, nothing.
   const dynamic = typeof convWebModeOf === 'function' && convWebModeOf(conv) === 'studio';
-  const marks = (spoken.length ? spoken : dynamic ? [] : granted)
-    .map(provider => webchatMark(provider, 18)).join('');
+  const drawn = spoken.length ? spoken : dynamic ? [] : granted;
+  const marks = drawn.map(provider => webchatMark(provider, 18)).join('');
   const snippet = !compact && newest.snippet
     ? `<div class="webchat-snippet">${escapeHtml(newest.snippet)}</div>` : '';
   // What is in it, in the shape the Conversations section says it: which harnesses, and which
   // Projects they are working in. An agent room holds a pane like any other conversation, and the
   // card that stands for it was the one card in the app that did not say which. A panel has no
   // members and draws nothing, which is the true statement about a panel.
-  const badges = webchatRoomBadges(conv);
+  const badges = webchatRoomBadges(conv, compact);
   const kind = convWebLabelOf(conv);
   // A room whose grant is `*` has no list to draw marks from and never will: the agent picks per
   // question. The badge carries that where the marks would have been, so the second line says what
@@ -26488,14 +26741,28 @@ function webchatRoomCard(conv, sessions, compact) {
     // only way out of it was to open the room and find the roster.
     + webchatRoomActions(conv)
     + `</div>`
-    + `<div class="webchat-sub">`
-    + `<span class="webchat-providers" title="${escapeHtml(kind)}">${marks}</span>`
-    + `<span class="webchat-since">${kind}${any ? ' · Any' : ''}</span></div>`
-    + (badges ? `<div class="conversation-meta kinds">${badges}</div>` : '')
-    + snippet
-    + `<div class="conversation-meta names">`
-    + `<span class="webchat-id">${escapeHtml(conv.id)}</span> · ${said}`
-    + `</div></div>`;
+    // Compact is two lines and no more. What goes is the row of provider marks: it is the widest
+    // thing on the card and the least of what tells two rooms apart -- and the kind says in one
+    // word what six logos say in six, which is the fact somebody scanning this list is reading for.
+    // A room that has only ever reached one provider keeps its mark instead, because there the
+    // logo *is* the answer and "Chat" would be the less specific of the two.
+    + (compact
+      ? `<div class="conversation-meta names webchat-compact">`
+        + `<span class="webchat-id">${escapeHtml(conv.id)}</span>`
+        + (drawn.length === 1
+          ? `<span class="webchat-providers">${webchatMark(drawn[0], 14)}</span>` : '')
+        + `<span class="webchat-since">${kind}${any ? ' · Any' : ''}</span>`
+        + (badges ? `<span class="kinds">${badges}</span>` : '')
+        + `</div>`
+      : `<div class="webchat-sub">`
+        + `<span class="webchat-providers" title="${escapeHtml(kind)}">${marks}</span>`
+        + `<span class="webchat-since">${kind}${any ? ' · Any' : ''}</span></div>`
+        + (badges ? `<div class="conversation-meta kinds">${badges}</div>` : '')
+        + snippet
+        + `<div class="conversation-meta names">`
+        + `<span class="webchat-id">${escapeHtml(conv.id)}</span> · ${said}`
+        + `</div>`)
+    + `</div>`;
 }
 
 // Which topic the Studio card opens, then Archive, and Delete once archived. Guarded by `typeof`
@@ -26524,7 +26791,10 @@ function webchatRoomActions(conv) {
 // in one Project is one badge and one Project, because the card says what is in it rather than how
 // many. The member record first and the live pane second, which is the order the Conversations
 // section reads them in and is right for a member that has come back under a new name.
-function webchatRoomBadges(conv) {
+// `kindsOnly` is the compact row asking for the harnesses and not the Projects: a compact card is
+// one line under the name, and the Project is the half of this that a reader scanning a list of
+// rooms is not scanning for.
+function webchatRoomBadges(conv, kindsOnly) {
   const members = (conv && conv.members) || [];
   if (!members.length || typeof agentBadge !== 'function') return '';
   const live = typeof agents === 'undefined' ? [] : (agents || []);
@@ -26535,7 +26805,8 @@ function webchatRoomBadges(conv) {
   });
   const unique = field => Array.from(new Set(found.map(one => one[field]).filter(Boolean)));
   return unique('agent').map(kind => agentBadge(kind)).join('')
-    + unique('project').map(name => ` <span class="badge proj">@${escapeHtml(name)}</span>`).join('');
+    + (kindsOnly ? ''
+      : unique('project').map(name => ` <span class="badge proj">@${escapeHtml(name)}</span>`).join(''));
 }
 
 function webchatCard(session, provider, compact) {
