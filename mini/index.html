@@ -10026,7 +10026,9 @@
         background: none;
         color: var(--text);
         font: inherit;
-        font-size: 0.9rem;
+        /* 13px rather than an em: the box is a fixed-height target and the text in it is a query
+           somebody is reading back, not body copy that should scale with the section around it. */
+        font-size: 13px;
       }
 
       .webchat-search-input:focus { outline: none; }
@@ -10242,14 +10244,19 @@
          already marked by its shape, its font and the button over its corner. At a block's size
          the same tint stops reading as a mark and starts reading as a panel -- which is most of
          what made a table drawn in box characters look like something gone wrong. */
-      .conv-msg .md pre {
+      /* `.md-code` is named beside `.md` because a bubble that is not drawing Markdown still has
+         these blocks in it: a pane's turn is terminal output, and the one part of it lifted out is
+         a table, which is put in exactly this box. */
+      .conv-msg .md pre,
+      .conv-msg .md-code pre {
         margin: 0 0 6px;
         padding: 8px 10px;
         border-radius: 8px;
         background: color-mix(in srgb, var(--muted) 6%, transparent);
         overflow-x: auto;
       }
-      .conv-msg .md pre code {
+      .conv-msg .md pre code,
+      .conv-msg .md-code pre code {
         padding: 0;
         background: none;
         white-space: pre;
@@ -10402,7 +10409,8 @@
       .conv-msg .md hr { border-top-color: var(--md-rule, var(--border)); }
 
       .conv-msg .md code { background: var(--md-code, color-mix(in srgb, var(--muted) 16%, transparent)); }
-      .conv-msg .md pre { background: var(--md-block, color-mix(in srgb, var(--muted) 6%, transparent)); }
+      .conv-msg .md pre,
+      .conv-msg .md-code pre { background: var(--md-block, color-mix(in srgb, var(--muted) 6%, transparent)); }
       .conv-msg .md strong { color: var(--md-strong, inherit); }
 
       /* Accent: the app's own three, in the order a document uses them -- the heading in blue, the
@@ -24336,9 +24344,15 @@ function convWebModeOf(conv) {
       // exchange as source and the other as prose made the reader's own words the least legible
       // thing in the thread.
       const md = e.foreign || convMdAgents;
-      return md && e.text && typeof markdownHtml === 'function'
-        && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()
-        ? `<div class="md conv-md">${markdownHtml(e.text)}</div>` : text;
+      if (md && e.text && typeof markdownHtml === 'function'
+          && typeof webchatMarkdownOn === 'function' && webchatMarkdownOn()) {
+        return `<div class="md conv-md">${markdownHtml(e.text)}</div>`;
+      }
+      // Terminal output, drawn as terminal output — with the one exception that cannot survive it.
+      // The bubble wraps at its own width, and a table drawn in box characters or in ASCII folds in
+      // half at every row when it does. Those runs go into a block that scrolls; nothing else in
+      // the text is touched. See mdArtOnly.
+      return e.text && typeof mdArtOnly === 'function' ? mdArtOnly(text) : text;
     }
 
     function convSpan(ms) {
@@ -25615,6 +25629,67 @@ function mdInline(line) {
 // of a table carries only those, and it is the rows rather than the rules that hold the numbers.
 const MD_ART = /[─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬]/;
 
+// The same table drawn in ASCII: `+------+-----+` rules with `|` rows between them, which is what
+// a harness writing for a terminal that has no box characters answers with, and what a provider
+// asked for a comparison answers with about as often as it answers in Markdown. It is not a
+// Markdown table — the separator is `+---+` where Markdown's is `| --- |` — so the pipe rule below
+// never saw it and it fell through to a paragraph, which is the one shape a table cannot survive:
+// proportional font, every column out by a fraction of a character.
+//
+// A run is only a table when a rule line is in it. That is what tells one apart from a Markdown
+// table, whose rows have pipes too and whose delimiter row is not one of these.
+const MD_ASCII_RULE = /^\s*\+[-=+]{2,}\+\s*$/;
+const MD_ASCII_ROW = /^\s*\|.*\|\s*$/;
+
+// Where a table drawn in characters ends, or -1 for a line that does not open one. Two lines at
+// least: a single rule is a divider somebody drew in prose, and putting one line in a code block
+// is worse than leaving it where it was.
+function mdArtEnd(lines, index) {
+  const line = lines[index];
+  if (MD_ART.test(line)) {
+    let at = index;
+    while (at + 1 < lines.length && MD_ART.test(lines[at + 1])) at += 1;
+    return at > index ? at : -1;
+  }
+  const part = (one) => MD_ASCII_RULE.test(one) || MD_ASCII_ROW.test(one);
+  if (!part(line)) return -1;
+  let at = index;
+  let ruled = MD_ASCII_RULE.test(line);
+  while (at + 1 < lines.length && part(lines[at + 1])) {
+    at += 1;
+    if (MD_ASCII_RULE.test(lines[at])) ruled = true;
+  }
+  return at > index && ruled ? at : -1;
+}
+
+// The character-table rule on its own, for a thread that is *not* drawing Markdown. A pane's turn
+// is terminal output and stays terminal output — an asterisk in a log is an asterisk, and nothing
+// else here runs over it. But a table is the one form that does not survive being wrapped at the
+// width of a bubble, and a bubble is `pre-wrap` rather than a scrolling box: a hundred-character
+// table folds in half at every row. So the runs are lifted into the same scrolling block a fenced
+// answer gets and every other line is passed through exactly as it arrived.
+//
+// Takes text that is **already escaped** — the caller has it that way, and escaping twice would
+// put `&amp;lt;` in a log. Everything it emits around the blocks is that same text unchanged.
+function mdArtOnly(escaped) {
+  const lines = String(escaped == null ? '' : escaped).replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let plain = [];
+  const flush = () => { if (plain.length) { out.push(plain.join('\n')); plain = []; } };
+  for (let index = 0; index < lines.length; index += 1) {
+    const end = mdArtEnd(lines, index);
+    if (end > index) {
+      flush();
+      out.push(mdBlock('', lines.slice(index, end + 1).join('\n') + '\n'));
+      index = end;
+      continue;
+    }
+    plain.push(lines[index]);
+  }
+  flush();
+  return out.join('');
+}
+
 function renderMarkdown(source) {
   const lines = String(source == null ? '' : source).replace(/\r\n?/g, '\n').split('\n');
   const out = [];
@@ -25662,25 +25737,19 @@ function renderMarkdown(source) {
     }
     if (!line.trim()) { closeParagraph(); closeList(); continue; }
 
-    // A table drawn in box characters, which is what a terminal harness answers with and what a
-    // provider asked to compare four things often answers with too. It is not Markdown and no rule
-    // below recognises it, so it was falling through to a paragraph -- set in the body font, with
-    // every column out by a fraction of a character and the long rows wrapped in half. The columns
-    // are the whole content of a table, so it is shown the way a fenced block is shown: monospace,
-    // its own horizontal scroll, and the copy button that comes with one.
-    //
-    // Two lines at least. A single rule of box characters is a divider somebody drew in prose, and
-    // putting one line in a code block is worse than leaving it where it was.
-    if (MD_ART.test(line)) {
-      let at = index;
-      while (at + 1 < lines.length && MD_ART.test(lines[at + 1])) at += 1;
-      if (at > index) {
-        closeParagraph();
-        closeList();
-        out.push(mdBlock('', lines.slice(index, at + 1).join('\n') + '\n'));
-        index = at;
-        continue;
-      }
+    // A table drawn in characters rather than in Markdown -- in box drawings or in ASCII, which is
+    // what a terminal harness answers with and what a provider asked to compare four things often
+    // answers with too. No rule below recognises either, so both fell through to a paragraph: body
+    // font, every column out by a fraction of a character, the long rows wrapped in half. The
+    // columns are the whole content of a table, so it is shown the way a fenced block is shown --
+    // monospace, its own horizontal scroll, and the copy button that comes with one.
+    const art = mdArtEnd(lines, index);
+    if (art > index) {
+      closeParagraph();
+      closeList();
+      out.push(mdBlock('', lines.slice(index, art + 1).join('\n') + '\n'));
+      index = art;
+      continue;
     }
 
     // An SVG a provider wrote without fencing it. Most of them fence their code, but "here is the
@@ -26435,9 +26504,14 @@ function webchatRoomCard(conv, sessions, compact) {
 function webchatRoomActions(conv) {
   const archived = !!conv.archived;
   const name = conv.name || conv.id;
+  // A Studio topic is deleted from the card without being put away first. The archive is the
+  // safeguard in front of Delete for a room somebody made and means to keep; a topic is one of a
+  // series that the next New replaces, so making it a two-step is asking twice about something
+  // that was never meant to last. The arm is still there.
+  const studio = typeof convWebModeOf === 'function' && convWebModeOf(conv) === 'studio';
   return (typeof studioPickBtnHtml === 'function' ? studioPickBtnHtml(conv) : '')
     + (typeof archiveBtnHtml === 'function' ? archiveBtnHtml(conv.id, archived, name) : '')
-    + (archived && typeof purgeConversation === 'function'
+    + ((archived || studio) && typeof purgeConversation === 'function'
       ? `<button class="conv-purge arm-btn" data-conv-id="${escapeHtml(conv.id)}"`
         + ` onclick="event.stopPropagation(); armButton(this, 'Delete for good?',`
         + ` () => purgeConversation(this.dataset.convId))"`
@@ -27019,6 +27093,9 @@ function webchatReceiveError(msg) {
     else webchatModelRequests.clear();
   }
   if (msg.action === 'create') webchatPendingProvider = '';
+  if (msg.action === 'recall' && typeof webchatSearchFailed === 'function') {
+    webchatSearchFailed(msg);
+  }
   if (msg.request_id && webchatTurn?.requestId === msg.request_id) {
     webchatTurn.error = msg.message || 'Send failed';
     webchatTurn.running = false;
@@ -29099,6 +29176,15 @@ function webchatReceiveRecall(msg) {
   if ((msg.query || '') !== webchatSearchQuery) return;
   webchatSearchBusy = false;
   webchatSearchResult = msg;
+  renderWebAgents();
+}
+
+// A refused or unavailable search must give the box back. The generic Web Agent error path owns
+// the toast; this owns only the state it started. Query matching matters because recall requests
+// have their own lane, so an older failure can arrive after its replacement was sent.
+function webchatSearchFailed(msg) {
+  if ((msg.query || '') !== webchatSearchQuery) return;
+  webchatSearchBusy = false;
   renderWebAgents();
 }
 
@@ -34110,7 +34196,12 @@ function nlmSourceDelete(source) {
     // gone.
     async function purgeConversation(id) {
       const conv = loadConvIndex().find(c => c.id === id);
-      if (!conv || !conv.archived) return;
+      // Archived, or a Studio topic: a topic is one of a series and the next New replaces it, so
+      // requiring it to be put away first asks twice about something nobody meant to keep. The arm
+      // on the button is the safeguard there.
+      if (!conv) return;
+      const studio = typeof convWebModeOf === 'function' && convWebModeOf(conv) === 'studio';
+      if (!conv.archived && !studio) return;
       const keys = (conv.members || []).map(m => m.aid);
       // The sessions first. A pane still running is the one part of "it never happened" that no
       // record can erase on its own.
@@ -36508,9 +36599,11 @@ function convPanelActsHtml(conv, extra) {
   const multi = convPanelMulti.has(conv.id);
   const follows = convPanelSwitchOn(conv.id);
   const all = picked.size === ids.length;
-  // A Studio room's row is the lean one. Select and the eye are both second ways to say what the
-  // gestures already say — All is the many, and the double tap is the filter — and this row has
-  // three agent controls and a New in it that the other two modes do not.
+  // A Studio room's row is the lean one: the eye is a second way to say what the double tap already
+  // says, and this row has three agent controls and a New in it that the other two modes do not.
+  // Select is not one of the things it gives up. Without it the row is one provider at a time and
+  // the drawer is the only place several can be lit — which is a mode the row cannot say it is in,
+  // so a reader who had lit three in the drawer lost all three to the next tap on a pill.
   const lean = convWebModeOf(conv) === 'studio';
   // Two by two rather than four across. The pills wrap now, so the row is as tall as it needs to
   // be and a single line of four buttons was taking a third of a phone's width off them -- and
@@ -36532,7 +36625,7 @@ function convPanelActsHtml(conv, extra) {
     + `${all ? 'None' : 'All'}</button>`
     // Whether a tap adds or switches. A switch is the ordinary thing and the default; this is how
     // a message is put to several of them at once without four taps that each undid the last.
-    + (lean ? '' : `<button class="xfer-who-more pick${multi ? ' on' : ''}" onclick="convPanelSelect()" `
+    + (`<button class="xfer-who-more pick${multi ? ' on' : ''}" onclick="convPanelSelect()" `
     + `aria-pressed="${multi}" `
     + `title="${multi ? 'One at a time' : 'Pick several'}" `
     + `aria-label="${multi ? 'Go back to one provider at a time' : 'Pick several providers'}">`
@@ -37061,7 +37154,12 @@ function studioEnter() {
 // and a harness still working on the last question is not what the next one should arrive to.
 function studioStart(topic) {
   if (typeof convNewId !== 'function' || typeof saveConvIndex !== 'function') return null;
-  const prior = studioLatest();
+  // From the composer, continue the room actually on screen. `studioLatest` is what the landing
+  // card opens, and can be a different topic when an older one is pinned; ending that agent while
+  // the reader presses New in another room is the opposite of "the room being left".
+  const viewed = typeof openPanelId !== 'function' || openPanelId() === 'convView'
+    ? studioRoom() : null;
+  const prior = viewed || studioLatest();
   if (prior) studioEndAgent(prior);
   const items = loadConvIndex();
   const id = convNewId(items);
@@ -37121,6 +37219,11 @@ function studioSpawn(conv) {
   const msg = {
     type: 'start_agent', name: studioAgentKind(), role: 'agent', project_id: project,
     placement: 'new_workspace', ref: ref, label: 'Studio',
+    // Nobody is sitting in front of what this makes: the reader is in the room, and what the agent
+    // produces lands in the thread they are already reading. The relay takes it as the reason not
+    // to push a notification when a turn here ends — and as nothing else. A relay too old to know
+    // the field ignores it and notifies as it always did.
+    background: true,
   };
   const config = studioAgentConfig();
   if (config) msg.config = config;
@@ -37599,6 +37702,10 @@ function studioPickToggle(provider) {
   const picked = convPanelPicked(conv);
   if (picked.has(provider)) picked.delete(provider);
   else picked.add(provider);
+  // Lighting a second one in here is a statement that the row is addressing several, so the row is
+  // put in that mode rather than left in the one where the next tap on a pill clears the lot. The
+  // switch is in the row itself, so this is visible rather than a hidden state.
+  if (picked.size > 1 && typeof convPanelMulti !== 'undefined') convPanelMulti.add(conv.id);
   // Reading one provider alone while writing to another is a filter nobody can find the control
   // for, so the narrowing goes when the row it was set on stops being what is addressed.
   if (typeof convPanelSoloOf === 'function' && convPanelSoloOf(conv.id)
