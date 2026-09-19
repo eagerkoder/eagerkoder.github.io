@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-18">
+  <meta name="app-built" content="2026-09-19">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -1726,45 +1726,69 @@
       line-height: 1;
       color: var(--blue);
     }
-    /* The copy, at the end of every header. Lifted from the mobile page's thread, because
-       conv_thread.js draws one bubble for both pages and the word is what it puts in the button. */
+    /* The copy, frosted into the first line of the half it copies rather than sitting at the end
+       of the header: it belongs to the words it takes, and in a paragraph or grouped bubble the
+       header names the bubble and not the answer. Lifted from the mobile page's thread, because
+       conv_thread.js draws one bubble for both pages -- the word is what it puts in the button,
+       and neither copy costs the bubble a line. */
     .conv-copy {
+      position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 2;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      margin-left: auto;
       padding: 1px 7px;
-      border: 1px solid var(--border);
+      border: 0;
       border-radius: 999px;
-      background: none;
+      background: color-mix(in srgb, var(--surface) 62%, transparent);
+      backdrop-filter: blur(6px) saturate(140%);
+      -webkit-backdrop-filter: blur(6px) saturate(140%);
       color: var(--muted);
       font: inherit;
       font-size: max(10px, 0.85em);
       line-height: 1.5;
-      opacity: 0.75;
+      opacity: 0.78;
       cursor: pointer;
     }
 
     .conv-copy:hover, .conv-copy:focus-visible {
       color: var(--text);
-      border-color: var(--text);
+      background: color-mix(in srgb, var(--surface) 88%, transparent);
       opacity: 1;
     }
 
-    /* The question's own copy, on the band the question is drawn in. Its own line and the
-       question's green, because it belongs to that half of the bubble and not to the header above
-       it -- a button floated into prose is a word the eye tries to read as part of the sentence. */
+    /* The question's own copy, on the first line of the band the question is drawn in and set in
+       the question's green, because it belongs to that half of the bubble and not to the header
+       above it. The band and the answer box are each the containing block of their own copy, so
+       the two are in two corners and not one. */
+    .conv-ask {
+      position: relative;
+    }
+
+    .conv-answer {
+      display: block;
+      position: relative;
+    }
+
+    /* A notch in the first line for the button, rather than a padding that would indent every
+       line of a long answer against a button that is nowhere near them. */
+    .conv-answer::before,
+    .conv-ask::before {
+      content: '';
+      float: right;
+      width: 3.6em;
+      height: 1.3em;
+    }
+
     .conv-copy-ask {
-      display: flex;
-      width: fit-content;
-      margin: 6px 0 0 auto;
-      border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+      top: 4px;
       color: color-mix(in srgb, var(--green) 75%, var(--text));
     }
 
     .conv-copy-ask:hover, .conv-copy-ask:focus-visible {
-      border-color: var(--green);
       color: var(--green);
     }
 
@@ -13992,10 +14016,19 @@ function markdownHtml(source) {
         const okey = gkey || `${key}|${at}`;
         const open = convOpened.has(okey);
         const fold = convFoldBtnHtml(streaming, foreign, open);
-        // The header is drawn on every bubble now, because the copy is on every bubble: a message
-        // with no name, no clock and no fold still has words in it somebody may want.
-        const head = `<span class="conv-who">${bar}${time}${mark}${fold}`
-          + `${convCopyBtnHtml('said')}</span>`;
+        // The question that produced this bubble's answer, above the answer and inside the same
+        // bubble. Its own colour is the user's green, which is the colour it wore as a bubble of
+        // its own, and the rule under it is what makes the pair read as a question and an answer
+        // rather than as one message that changes voice halfway down. Drawn the way the answer
+        // under it is drawn: the Markdown switch is about the thread and not about who is
+        // speaking, and a question pasted out of a document arrives with the same fences and
+        // tables in it as the answer does.
+        // Read before the header, because whether there is a question decides where the answer's
+        // own copy goes.
+        const asked = para.ask.get(i);
+        const ask = asked
+          ? `<span class="conv-ask">${convSaidHtml(asked)}${convCopyBtnHtml('ask')}</span>` : '';
+        const head = `<span class="conv-who">${bar}${time}${mark}${fold}</span>`;
         // The pane being read is always the right side. Stored member order is conversation
         // history, not a reading preference, and can change when a pair is created or reopened.
         const side = paired && key === me.key ? ' conv-right' : '';
@@ -14014,15 +14047,6 @@ function markdownHtml(source) {
         // What was said, in a box of its own. The bubble cannot be the thing that is cut short:
         // three controls hang over its top edge and the clip that shortened it took them with it.
         // So the cut is here, around the words and nothing else.
-        // The question that produced it, above the answer and inside the same bubble. Its own
-        // colour is the user's green, which is the colour it wore as a bubble of its own, and the
-        // rule under it is what makes the pair read as a question and an answer rather than as one
-        // message that changes voice halfway down. Drawn the way the answer under it is drawn: the
-        // Markdown switch is about the thread and not about who is speaking, and a question pasted
-        // out of a document arrives with the same fences and tables in it as the answer does.
-        const asked = para.ask.get(i);
-        const ask = asked
-          ? `<span class="conv-ask">${convSaidHtml(asked)}${convCopyBtnHtml('ask')}</span>` : '';
         const pills = group ? '<span class="conv-pills">' + group.map(m => {
           const g = entries[m];
           const id = escapeHtml(g.agent || '');
@@ -14049,7 +14073,15 @@ function markdownHtml(source) {
               `${on ? '' : ' hidden'}>${convSaidHtml(g)}</span>`;
           }).join('')
           : `<span class="conv-body" data-text="${text}">${said}</span>`;
-        const body = `${ask}${pills}${bodies}`;
+        // What was said, in a box of its own, with the copy on its first line. The copy belongs to
+        // the words it takes rather than to the header above them: in a paragraph or grouped
+        // bubble the header names the bubble and not the answer, and in a plain one the answer is
+        // the whole bubble, so the same corner is the right corner either way. One box around all
+        // of a group's answers and not one each -- they are drawn together and all but one is
+        // hidden, and a copy per hidden answer would be a control the reader cannot see deciding
+        // what is copied.
+        const body = `${ask}${pills}<span class="conv-answer">`
+          + `${convCopyBtnHtml('said')}${bodies}</span>`;
         // Where the work landed, as lines between the messages rather than as a stamp on each of
         // them: the branch when it changes, and the commits that happened between this entry and
         // the last one from the same member. Built by conv_live, which owns the record's shape; a
@@ -27965,20 +27997,61 @@ function markdownHtml(source) {
     const RECENT_FLOAT_KEY = 'herdr_recent_float';
     const RECENT_FLOAT_MAX = 5;
 
+    // Everything the puck remembers, in one record: where it sits, whether it stays open, and
+    // which kind of thing it is listing. One key rather than three, because all three are answers
+    // about the same control and a reader who clears one has cleared the control.
+    function recentFloatPrefs() {
+      try {
+        const v = JSON.parse(localStorage.getItem(RECENT_FLOAT_KEY) || 'null');
+        if (v && typeof v === 'object') return v;
+      } catch (e) { /* fall through to the defaults */ }
+      return {};
+    }
+
+    function recentFloatSave(patch) {
+      try {
+        localStorage.setItem(RECENT_FLOAT_KEY,
+                             JSON.stringify(Object.assign(recentFloatPrefs(), patch)));
+      } catch (e) { /* private mode: this session only */ }
+    }
+
     // Where the puck sits, as a fraction of the room it has to sit in rather than as pixels: a
     // phone rotated, a window resized and a second device reading the same localStorage all give
     // a different viewport, and a stored 900px is off the side of every one of them.
     function recentFloatPos() {
-      try {
-        const v = JSON.parse(localStorage.getItem(RECENT_FLOAT_KEY) || 'null');
-        if (v && typeof v.fx === 'number' && typeof v.fy === 'number') return v;
-      } catch (e) { /* fall through to the default corner */ }
-      return {fx: 1, fy: 0.72};
+      const v = recentFloatPrefs();
+      return typeof v.fx === 'number' && typeof v.fy === 'number' ? v : {fx: 1, fy: 0.72};
     }
 
     function setRecentFloatPos(fx, fy) {
-      try { localStorage.setItem(RECENT_FLOAT_KEY, JSON.stringify({fx: fx, fy: fy})); }
-      catch (e) { /* private mode: this session only */ }
+      recentFloatSave({fx: fx, fy: fy});
+    }
+
+    // Frozen open. The panel closes on the next tap anywhere by default, which is right for
+    // somebody dipping into it — and wrong for somebody moving between four rooms, who has to
+    // reopen it between every one. Pinned, it stays open until it is closed or unpinned.
+    function recentFloatPinned() {
+      return recentFloatPrefs().pin === true;
+    }
+
+    function recentFloatTogglePin() {
+      recentFloatSave({pin: !recentFloatPinned()});
+      recentFloatDraw();
+    }
+
+    // Which kind of thing is listed: everything, or one of the three. The types are what the log
+    // already holds -- a conversation of panes, a conversation of web providers, and a terminal --
+    // and the filter is a second press on the same icon away from being off again.
+    const RECENT_FLOAT_TYPES = ['conv', 'web', 'term'];
+
+    function recentFloatType() {
+      const type = recentFloatPrefs().type;
+      return RECENT_FLOAT_TYPES.indexOf(type) >= 0 ? type : '';
+    }
+
+    function setRecentFloatType(type) {
+      recentFloatSave({type: recentFloatType() === type ? '' : type});
+      recentFloatDraw();
     }
 
     // A fraction and the room it is a fraction of, as pixels inside it. Clamped here rather than
@@ -27989,18 +28062,66 @@ function markdownHtml(source) {
       return {x: Math.round(at(pos.fx) * max.x), y: Math.round(at(pos.fy) * max.y)};
     }
 
-    // The conversations, newest visit first. Resolved against the index every time rather than
-    // stored with a name: a room renamed, archived or deleted since the visit is a row that would
-    // otherwise say what it used to be called, or open nothing at all.
-    function recentFloatItems(log, convs) {
+    // What the log holds, newest visit first, as rows this widget can draw and open. Resolved
+    // against the index and the live shells every time rather than stored with a name: a room
+    // renamed, archived or deleted since the visit is a row that would otherwise say what it used
+    // to be called, and a terminal that has exited is a row that would open a pane id herdr has
+    // since given to somebody else.
+    //
+    // Three kinds, which is what the header filters by. An agent pane is not one of them: it is a
+    // member of a room, the rooms are here, and a fourth kind that is really a part of the first
+    // would make the filter a question about the log rather than about the work.
+    function recentFloatItems(log, convs, shells, type) {
       const out = [];
       for (const r of log || []) {
-        if (!r || !r.conv) continue;
-        const conv = (convs || []).find(c => c.id === r.conv);
-        if (conv && !conv.archived) out.push(conv);
+        if (!r) continue;
+        const row = r.conv ? recentFloatConvRow(r.conv, convs)
+          : r.terminal ? recentFloatTermRow(r, shells) : null;
+        if (!row) continue;
+        if (type && row.type !== type) continue;
+        out.push(row);
         if (out.length >= RECENT_FLOAT_MAX) break;
       }
       return out;
+    }
+
+    function recentFloatConvRow(id, convs) {
+      const conv = (convs || []).find(c => c.id === id);
+      if (!conv || conv.archived) return null;
+      const web = typeof convKindOf === 'function' && convKindOf(conv) === 'providers';
+      return {type: web ? 'web' : 'conv', key: conv.id, name: conv.name || 'Conversation',
+              conv: conv, tint: recentFloatTint(conv, web)};
+    }
+
+    // A terminal is matched on where it is and not on its pane id alone: herdr recycles those, and
+    // a row that opened whichever pane inherited the id is the failure the log's fingerprint is
+    // for. The same three fields recents.js matches a shell on.
+    function recentFloatTermRow(r, shells) {
+      const live = (shells || []).find(sh => sh.pane_id === r.pane_id
+        && (sh.host || 'local') === (r.host || 'local') && (sh.cwd || '') === (r.cwd || ''));
+      if (!live) return null;
+      return {type: 'term', key: live.pane_id,
+              name: typeof paneLabel === 'function' ? paneLabel(live) : live.pane_id,
+              tint: 'var(--shell)'};
+    }
+
+    // The bubble's colour: the harness in the room, because that is what the reader recognises a
+    // row by everywhere else in this app. A room with no harness in it falls back to what kind of
+    // room it is -- amber for one made of web providers, the app's blue for one made of panes --
+    // and a terminal is the shell colour, which is the one thing here that is never an agent.
+    function recentFloatTint(conv, web) {
+      const members = (conv && conv.members) || [];
+      const live = typeof agents === 'undefined' ? [] : (agents || []);
+      for (const member of members) {
+        const pane = live.find(a => typeof convMemberKey === 'function'
+          && convMemberKey(a) === member.aid) || {};
+        const colour = typeof agentColor === 'function'
+          ? agentColor(member.agent || pane.agent || '') : '';
+        if (colour) return colour;
+      }
+      // No harness to take a colour from: the kind's own, which is what its filter icon in the
+      // header wears -- amber for a room of providers, green for a room of panes.
+      return web ? 'var(--orange)' : 'var(--green)';
     }
 
     // Which room is on screen, so the list can say so. Two pages, two answers: the phone has one
@@ -28011,13 +28132,26 @@ function markdownHtml(source) {
       return '';
     }
 
-    // And how each page switches. `openConversation` opens the phone's conversation window;
-    // `deskSelectConv` loads the room into the desktop sidebar and its strip of tabs. Neither page
-    // has both, which is what makes this two lines rather than a mode.
-    function recentFloatGo(id) {
-      recentFloatSet(false);
-      if (typeof openConversation === 'function') { openConversation(id); return; }
-      if (typeof deskSelectConv === 'function') deskSelectConv(id);
+    // And how each page opens one. `openConversation` and `jumpToPane` are the phone's;
+    // `deskSelectConv` loads the room into the desktop sidebar and `deskOpen` puts a terminal in
+    // the switchable column. Neither page has the other's, which is what makes this a pair of
+    // guarded calls rather than a mode.
+    //
+    // Pinned, the panel stays where it is: the reader who froze it open is moving between rooms,
+    // and closing it under them after every move is the behaviour they turned off.
+    function recentFloatGo(type, key) {
+      if (!recentFloatPinned()) recentFloatSet(false);
+      if (type === 'term') {
+        if (typeof jumpToPane === 'function') { jumpToPane(key); return; }
+        const shell = (typeof shells === 'undefined' ? [] : shells || [])
+          .find(sh => sh.pane_id === key);
+        if (shell && typeof deskOpen === 'function') {
+          deskOpen('terminal', key, typeof paneLabel === 'function' ? paneLabel(shell) : key);
+        }
+        return;
+      }
+      if (typeof openConversation === 'function') { openConversation(key); return; }
+      if (typeof deskSelectConv === 'function') deskSelectConv(key);
     }
 
     let recentFloatOpen = false;
@@ -28052,16 +28186,53 @@ function markdownHtml(source) {
          is only reachable in one half of the screen is a menu that is sometimes not reachable. */
       .recent-float.down .recent-float-panel { bottom: auto; top: 52px; }
       .recent-float.left .recent-float-panel { right: auto; left: 0; }
-      .recent-float-head { padding: 4px 8px 6px; font-size: 11px; letter-spacing: .04em;
-        text-transform: uppercase; color: var(--muted); }
+      /* The one row of controls: freeze open, then the three filters. Four icons and no words --
+         the panel is 232px wide, and each of these marks already means its kind everywhere else
+         in this app. */
+      .recent-float-head { display: flex; align-items: center; gap: 2px;
+        padding: 2px 2px 6px; }
+      .recent-float-ico { display: flex; align-items: center; justify-content: center;
+        width: 30px; height: 26px; padding: 0; border: 0; border-radius: 7px;
+        background: none; color: var(--muted); font: inherit; font-size: 13px;
+        line-height: 1; cursor: pointer; opacity: .72; }
+      .recent-float-ico:hover { opacity: 1; }
+      /* Each filter wears the colour the rows it selects wear, so the header says which kind is
+         which before anything is pressed: green for a room of panes, amber for a room of web
+         providers, the shell's blue for a terminal. The pin keeps the muted grey -- it is about
+         the panel rather than about a kind. */
+      .recent-float-ico.conv { --ico: var(--green); color: var(--ico); }
+      .recent-float-ico.web { --ico: var(--orange); color: var(--ico); }
+      .recent-float-ico.term { --ico: var(--shell); color: var(--ico); }
+      /* A filter that is on is the one thing in this widget with a border, and it is a ring
+         rather than a box: every row under it is borderless by design, so the pressed state
+         needed something that is not another edge. */
+      .recent-float-ico.on { opacity: 1;
+        background: color-mix(in srgb, var(--ico, var(--blue)) 22%, transparent);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ico, var(--blue)) 45%, transparent); }
+      .recent-float-ico.pin.on { color: var(--text); }
+      .recent-float-ico .conv-glyph, .recent-float-ico .shell-glyph { display: block; }
+      /* A row is a bubble and not a line in a list: no border, a dark wash of the colour the
+         thing already wears -- its harness where it has one, the shell blue for a terminal, the
+         amber for a room of web providers -- and the glyph in that colour at full strength. The
+         wash is mixed into the panel's own surface rather than laid over it with alpha, so it
+         stays dark under every theme instead of lightening towards the page behind it. */
       .recent-float-row { display: flex; align-items: center; gap: 8px; width: 100%;
-        padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--text);
-        font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
-      .recent-float-row:hover { background: var(--bg); }
-      .recent-float-row.on { color: var(--blue); }
+        margin-top: 3px; padding: 7px 9px; border: 0; border-radius: 9px;
+        background: color-mix(in srgb, var(--tint, var(--blue)) 14%, var(--surface));
+        color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+      .recent-float-row:first-of-type { margin-top: 0; }
+      .recent-float-row:hover {
+        background: color-mix(in srgb, var(--tint, var(--blue)) 24%, var(--surface)); }
+      /* What is on screen already. Marked by the wash going deeper rather than by a tick: the
+         reader is picking where to go next, and the row they are standing in is the one they are
+         not going to press. */
+      .recent-float-row.on {
+        background: color-mix(in srgb, var(--tint, var(--blue)) 34%, var(--surface)); }
       .recent-float-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis;
         white-space: nowrap; }
-      .recent-float-row .conv-glyph { flex: none; opacity: .8; }`;
+      .recent-float-row .conv-glyph, .recent-float-row .shell-glyph { flex: none;
+        color: var(--tint, var(--blue)); stroke: currentColor; }
+      .recent-float-empty { margin: 6px 4px 2px; font-size: 12px; color: var(--muted); }`;
 
     function recentFloatMount() {
       if (typeof document === 'undefined' || document.getElementById('recentFloat')) return;
@@ -28078,10 +28249,11 @@ function markdownHtml(source) {
       recentFloatBind(el);
       recentFloatDraw();
       window.addEventListener('resize', () => recentFloatPlace(el));
-      // A tap anywhere else closes it. The puck is over the whole app, so a panel left open is a
-      // panel over whatever the reader went back to reading.
+      // A tap anywhere else closes it, unless it has been frozen open. The puck is over the whole
+      // app, so a panel left open is a panel over whatever the reader went back to reading — which
+      // is a trade the pin is there to let them make.
       document.addEventListener('click', e => {
-        if (!recentFloatOpen) return;
+        if (!recentFloatOpen || recentFloatPinned()) return;
         if (e.target && e.target.closest && e.target.closest('#recentFloat')) return;
         recentFloatSet(false);
       }, true);
@@ -28137,32 +28309,80 @@ function markdownHtml(source) {
       el.classList.toggle('left', at.x < room.w / 2);
     }
 
-    function recentFloatRowHtml(conv, here) {
-      const glyph = typeof convGlyph === 'function' ? convGlyph(conv) : '';
-      const name = typeof escapeHtml === 'function' ? escapeHtml(conv.name || 'Conversation')
-        : String(conv.name || 'Conversation');
-      return `<button type="button" class="recent-float-row${conv.id === here ? ' on' : ''}"`
-        + ` onclick="recentFloatGo('${conv.id}')">${glyph}`
+    // The pin, drawn here rather than borrowed: this is the only control in the app that freezes a
+    // menu open, so there is no existing glyph that means it.
+    function recentFloatPinIco() {
+      return '<svg class="conv-ico" viewBox="0 0 14 14" fill="none" stroke="currentColor"'
+        + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + '<path d="M5 1.8h4l-.6 3.2 2 1.9H3.6l2-1.9z"/><path d="M7 6.9V12"/></svg>';
+    }
+
+    // The three kinds, each wearing the mark the rest of the app already draws it with: a room's
+    // own bubble, the amber bubble a room of web providers wears, and the shell's prompt. Passing
+    // convGlyph a stand-in conversation rather than a real one is deliberate — what is wanted is
+    // the mark for a *kind*, and the kinds are decided by conv_kind.js from the grant.
+    function recentFloatTypeIco(type) {
+      if (type === 'term') return typeof shellGlyph === 'function' ? shellGlyph() : '';
+      if (typeof convGlyph !== 'function') return '';
+      return convGlyph(type === 'web' ? {id: 'kind', webchat: {providers: ['x']}} : {id: 'kind'});
+    }
+
+    const RECENT_FLOAT_LABELS = {conv: 'conversations', web: 'web agent conversations',
+                                 term: 'terminals'};
+
+    // The one row at the top: freeze the panel open, then the three filters. Icons and no words —
+    // it is 232 pixels wide and every one of these marks is one the reader already reads elsewhere
+    // in the app as that kind of thing.
+    function recentFloatHeadHtml(type) {
+      const pinned = recentFloatPinned();
+      return `<div class="recent-float-head">`
+        + `<button type="button" class="recent-float-ico pin${pinned ? ' on' : ''}"`
+        + ` aria-pressed="${pinned ? 'true' : 'false'}"`
+        + ` onclick="recentFloatTogglePin()" title="Keep this open"`
+        + ` aria-label="Keep this list open">${recentFloatPinIco()}</button>`
+        + RECENT_FLOAT_TYPES.map(one => `<button type="button"`
+          + ` class="recent-float-ico ${one}${type === one ? ' on' : ''}"`
+          + ` aria-pressed="${type === one ? 'true' : 'false'}"`
+          + ` onclick="setRecentFloatType('${one}')" title="Only ${RECENT_FLOAT_LABELS[one]}"`
+          + ` aria-label="Show only ${RECENT_FLOAT_LABELS[one]}">`
+          + `${recentFloatTypeIco(one)}</button>`).join('')
+        + `</div>`;
+    }
+
+    function recentFloatRowHtml(row, here) {
+      const glyph = row.type === 'term' ? recentFloatTypeIco('term')
+        : (typeof convGlyph === 'function' ? convGlyph(row.conv) : '');
+      const name = typeof escapeHtml === 'function' ? escapeHtml(row.name) : String(row.name);
+      return `<button type="button" class="recent-float-row ${row.type}`
+        + `${row.key === here ? ' on' : ''}" style="--tint:${row.tint}"`
+        + ` onclick="recentFloatGo('${row.type}', '${row.key}')">${glyph}`
         + `<span class="name">${name}</span></button>`;
     }
 
     function recentFloatDraw() {
       const el = typeof document !== 'undefined' ? document.getElementById('recentFloat') : null;
       if (!el) return;
+      const log = loadRecents();
       const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
-      const items = recentFloatItems(loadRecents(), convs);
-      // One room visited is no switch to make. The puck appears with the second one and goes away
+      const live = typeof shells === 'undefined' ? [] : (shells || []);
+      // Whether the puck is worth drawing is asked of everything, and what is *listed* is asked of
+      // the filter: a filter that emptied the list would also take the control that set it off the
+      // screen, leaving no way back to the other kinds.
+      const all = recentFloatItems(log, convs, live, '');
+      const type = recentFloatType();
+      const items = type ? recentFloatItems(log, convs, live, type) : all;
+      // One thing visited is no switch to make. The puck appears with the second and goes away
       // again if the record is cleared.
-      const show = items.length > 1;
+      const show = all.length > 1;
       if (!show) recentFloatOpen = false;
       el.classList.toggle('on', show);
       el.classList.toggle('open', recentFloatOpen);
       if (!show) return;
       if (recentFloatOpen) {
         const here = recentFloatHere();
-        document.getElementById('recentFloatPanel').innerHTML =
-          '<div class="recent-float-head">Recent</div>'
-          + items.map(c => recentFloatRowHtml(c, here)).join('');
+        document.getElementById('recentFloatPanel').innerHTML = recentFloatHeadHtml(type)
+          + (items.length ? items.map(row => recentFloatRowHtml(row, here)).join('')
+            : `<p class="recent-float-empty">Nothing recent of that kind.</p>`);
       }
       recentFloatPlace(el);
     }
