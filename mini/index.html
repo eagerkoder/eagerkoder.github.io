@@ -1579,6 +1579,23 @@
       color: var(--blue);
     }
 
+    /* The Command Center is a place rather than a button — the same thing a bot is, so it wears
+       the same wash: what is on the other side of this press exists whether or not anybody
+       presses it. */
+    .launcher-tile[data-action="command"] {
+      background: color-mix(in srgb, var(--bot) 7%, var(--bg));
+      border-color: color-mix(in srgb, var(--bot) 38%, var(--border));
+    }
+
+    .launcher-tile[data-action="command"]:hover {
+      background: color-mix(in srgb, var(--bot) 12%, var(--bg));
+      border-color: color-mix(in srgb, var(--bot) 55%, var(--border));
+    }
+
+    .launcher-tile[data-action="command"] .launcher-kind {
+      color: var(--bot);
+    }
+
     .launcher-name {
       font-size: 0.8rem;
       font-weight: 600;
@@ -4642,6 +4659,221 @@
     /* Two rows, and the back button spans both — so the second line starts where the name does
        rather than at a hand-written indent. Row one is the name and the controls that act on the
        conversation; row two is what the record is, which nobody taps. */
+    /* --- The Command Center ---------------------------------------------------------------
+       One Project's sessions, the plan each is working from, and the three lists a plain roll
+       call cannot produce. Its own small vocabulary rather than the conversation card's: what a
+       row here has to say is where a session sits in a tree, which is not what any existing card
+       is shaped for. */
+    #cmdCenterView .conv-view-head {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        'back title new'
+        'back sub   sub';
+    }
+
+    /* The Project selector *is* the title. A dashboard is about one Project at a time and the
+       next thing anybody does on it is look at another one, so the name of the one on screen and
+       the way to the rest are one control rather than a heading with a picker beside it. */
+    #cmdCenterPick {
+      grid-area: title;
+      max-width: 100%;
+      padding: 2px 4px;
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: inherit;
+      background: none;
+      border: 0;
+    }
+
+    #cmdCenterNew { grid-area: new; }
+
+    .cc-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 10px 12px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cc-band {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .cc-band h3 {
+      margin: 4px 0 0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    /* A row is pressable and says so by moving, not by wearing a border: a tree of eight sessions
+       each in its own box is eight boxes and no shape. The indent is the shape. */
+    .cc-row {
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: var(--panel, rgba(127, 127, 127, 0.08));
+      cursor: pointer;
+    }
+
+    .cc-row.picked { outline: 1px solid var(--accent, #4a9eff); }
+
+    .cc-select {
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .cc-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .cc-sub { margin-top: 4px; }
+
+    .cc-tier {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .cc-tier.on { color: var(--ok, #3ddc84); border-color: currentColor; }
+    .cc-tier.warn { color: var(--warn, #ffb020); border-color: currentColor; }
+
+    .cc-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.82rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cc-state, .cc-budget, .cc-empty, .cc-scope {
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .cc-scope {
+      display: block;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cc-who, .cc-jump {
+      font-size: 0.66rem;
+      padding: 1px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel, transparent);
+      color: var(--fg);
+      cursor: pointer;
+    }
+
+    .cc-who.lead { border-style: dashed; }
+
+    /* Hollow, and the one thing on this screen that has to read at a glance: the seat is still
+       this session's and its agent is not up. */
+    .cc-who.away {
+      background: transparent;
+      color: var(--muted);
+      border-style: dotted;
+    }
+
+    .cc-who[disabled] { cursor: default; opacity: 0.6; }
+
+    .cc-step {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+    }
+
+    .cc-step-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.66rem;
+      color: var(--muted);
+    }
+
+    .cc-step-what { flex: 1; min-width: 0; }
+
+    .cc-step-link { font-size: 0.66rem; color: var(--muted); }
+    .cc-step-link.missing { color: var(--warn, #ffb020); }
+
+    .cc-raw {
+      margin: 0;
+      padding: 8px;
+      font-size: 0.66rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--panel, rgba(127, 127, 127, 0.08));
+      border-radius: 8px;
+    }
+
+    /* The way in, on the landing page: one card per Project with work in it. Sized like the
+       other landing cards rather than like a row of the tree it opens — what it is from here is a
+       place to go, and the tree's own density belongs to the screen that draws the tree. */
+    .cc-card {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      background: var(--panel, rgba(127, 127, 127, 0.08));
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .cc-card-name { font-size: 0.82rem; font-weight: 600; }
+    .cc-card-note { font-size: 0.68rem; color: var(--muted); }
+
+    /* Work handed down to the picked session. A textarea and one button, under the controls that
+       act on the session itself, because it is the one control here that is about the work rather
+       than about the session's lifecycle. */
+    .cc-task {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+      margin-top: 8px;
+    }
+
+    .cc-task textarea {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 8px;
+      font: inherit;
+      font-size: 0.72rem;
+      color: inherit;
+      background: var(--panel, rgba(127, 127, 127, 0.08));
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      resize: vertical;
+    }
+
     .conv-view-head {
       display: grid;
       grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
@@ -7777,6 +8009,16 @@
       border-color: var(--blue);
     }
 
+    /* The same two states one button along: this room has a Commander and the tap opens what it
+       is doing, or it has none and the tap offers one. A different hue from the arbitrator's blue
+       because the two sit side by side and both glyphs are small — and `--bot`'s purple rather
+       than a colour of its own, because every theme already defines it and it already means the
+       same thing here: a place that owns work, rather than a button that does one. */
+    .hang-commander.live {
+      color: var(--bot);
+      border-color: var(--bot);
+    }
+
     /* Mid-refresh: the same button, saying so. Not a spinner over the thread — the work is a read
        and a tidy, both of which finish in well under a second on a record this size. */
     .hang-tidy.busy {
@@ -10653,6 +10895,7 @@
     <div class="setting-group">
       <label>Main page sections</label>
       <label class="toggle-option"><input type="checkbox" id="sectionLauncher" onchange="toggleSection('launcher', this.checked)"> Launcher</label>
+      <label class="toggle-option"><input type="checkbox" id="sectionCommand" onchange="toggleSection('command', this.checked)"> Command</label>
       <label class="toggle-option" id="sectionNotebooklmRow" hidden><input type="checkbox" id="sectionNotebooklm" onchange="toggleSection('notebooklm', this.checked)"> NotebookLM</label>
       <label class="toggle-option" id="sectionWebAgentRow" hidden><input type="checkbox" id="sectionWebAgent" onchange="toggleSection('webAgent', this.checked)"> Web Agent</label>
       <label class="toggle-option"><input type="checkbox" id="sectionAgents" onchange="toggleSection('agents', this.checked)"> Agents</label>
@@ -10855,6 +11098,10 @@
     <!-- Tiles that create things, so it leads: a launcher under four lists of what is already
          running is a launcher nobody presses. -->
     <div class="launcher" id="launcher" style="display:none"></div>
+    <!-- One row per Project with work in it, each opening that Project's Command Center. The
+         entry point: a Command Center is about a Project, and every other way in was through a
+         session that was already open — which is no way in for somebody asking what is running. -->
+    <div class="command-centers" id="commandCenters" style="display:none"></div>
     <div class="web-agents" id="webAgents" style="display:none"></div>
     <div class="notebooklm" id="notebooklm" style="display:none"></div>
     <div class="agents" id="agents"></div>
@@ -11196,6 +11443,50 @@
     </section>
   </div>
 
+  <!-- The Command Center: one Project, the sessions under it and the plans they are working
+       from. Its own view rather than a section of the landing page, because it is about a
+       Project and every section there is about this browser's own lists. -->
+  <div class="view" id="cmdCenterView" style="display:none">
+    <div class="conv-view-head">
+      <button class="back" onclick="showLanding()" aria-label="Back to list"><svg width="20" height="20"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6" />
+        </svg></button>
+      <select id="cmdCenterPick" aria-label="Project"
+              onchange="ccSwitchProject(this.value)"></select>
+      <button type="button" class="badge pick proj" id="cmdCenterNew"
+              onclick="ccOpenFeature()">+ Feature</button>
+      <span class="sub">Command Center</span>
+    </div>
+    <div class="cc-body" id="cmdCenterBody"></div>
+  </div>
+
+  <!-- Starting a feature: a room for it, an agent in it, and optionally a Commander over that
+       agent. Its own modal rather than a branch of the Commander setup form, which is drawn from
+       a conversation that already exists and is exactly what this does not have yet. -->
+  <div id="ccFeatureSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="ccCloseFeature()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ccFeatureTitle">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span id="ccFeatureTitle" style="font-size:0.8rem;font-weight:600;flex:1">New feature</span>
+        <button onclick="ccCloseFeature()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+        <label class="start-field">What it is<textarea id="ccFeatureScope" rows="2" maxlength="4000"
+            placeholder="What is being built, and when it is done."></textarea></label>
+        <label class="toggle-option"><input type="checkbox" id="ccFeatureCommander">
+          <span id="ccFeatureCommanderLabel">Appoint it as a Commander</span></label>
+        <span class="arb-note" id="ccFeatureNote"></span>
+        <div class="arb-go">
+          <button type="button" class="badge pick on" onclick="ccStartFeature()">Start</button>
+          <button type="button" class="badge pick" onclick="ccCloseFeature()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- A conversation read as itself. Its own view and not the pane's thread panel, because the
        record outlives the panes that wrote it: a conversation whose members have all exited has
        no pane to hang a panel off, and it is still the thing worth reading. Read-only. -->
@@ -11299,6 +11590,13 @@
            true, because a button whose answer is "nothing" is one a person taps twice. -->
       <button class="hang-btn hang-arbitrator" id="convArbitrator" onclick="arbOpenFromConv()"
         aria-label="Arbitrate this conversation"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></button>
+      <!-- Two states and no third, like Arbitrate beside it: this conversation has a Commander
+           and this opens what it is and what can be done to it, or it has none and this opens the
+           form that gives it one. A Commander is not opened straight into its pane the way an
+           arbitrator is — an arbitrator *is* its transcript, and a Commander is a thing with a
+           state, a plan and a tree under it. -->
+      <button class="hang-btn hang-commander" id="convCommander" onclick="cmdOpenFromConv()"
+        aria-label="Give this conversation a Commander"><svg class="cmd-sign" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg></button>
       <button class="hang-btn hang-tidy" id="convTidy" onclick="hangRefreshConv()"
         title="Reload this conversation, then remove any duplicates its members picked up"
         aria-label="Refresh and tidy">
@@ -12240,7 +12538,7 @@
     <div role="dialog" aria-label="Arbitrate this conversation"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg> Arbitrate · <span id="arbSetupConvName"></span></span>
+        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><span id="arbSetupSign" style="display:flex"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></span> <span id="arbSetupKind">Arbitrate</span> · <span id="arbSetupConvName"></span></span>
         <button onclick="closeArbSetup()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
@@ -14026,6 +14324,14 @@
       // keeps them out of the composer until then — a chip that types nothing is a dead control.
       { at: 'architect-prompt', label: 'Architect prompt',
         text: '/ponytail\n/caveman\n\nRead Instructions here: @.agent/prompts/System_Prompt_2_Architect.md\nThen wait for tasks to work on.' },
+      // The opening instruction for a pane about to be appointed a Commander. By path like the
+      // architect's, and deliberately not a copy of the brief: the brief is the relay's, arrives
+      // when the appointment lands, and is re-read from `relay/prompts/commander.md` on every
+      // send — anything restated here would be the copy that goes stale. What the file says is
+      // the half the relay cannot: survey the work that is already there before planning it,
+      // which is the difference between a Project being started and a Project being adopted.
+      { at: 'commander-prompt', label: 'Commander prompt',
+        text: 'Read Instructions here: @.agent/prompts/System_Prompt_Commander.md\nThen wait for your brief.' },
       { at: 'reviewer-prompt', label: 'Reviewer prompt', text: '' },
       { at: 'implementer-prompt', label: 'Implementer prompt', text: '' },
       { at: 'arbitrator-prompt', label: 'Arbitrator prompt', text: '' },
@@ -14060,6 +14366,9 @@
     // actually has. A record still naming the old one resolves to no prompt, which is what it always
     // had.
     const START_ROLES = [
+      // First, because it is the one that decides what the others are for — and because the
+      // Command Center's + Feature opens this dialog with a Commander in mind.
+      { name: 'Commander', role: 'architect', at: 'commander-prompt' },
       { name: 'Architect', role: 'architect', at: 'architect-prompt' },
       { name: 'Reviewer', role: 'reviewer', at: 'reviewer-prompt' },
       { name: 'Implementer', role: 'agent', at: 'implementer-prompt' },
@@ -15370,7 +15679,7 @@
     // the terminals write rewrites each section's innerHTML on their own schedule, and a reorder
     // that moved DOM nodes would race all three.
     const SECTIONS_KEY = 'herdr_sections';
-    const SECTION_IDS = {launcher: 'launcher', webAgent: 'webAgents', notebooklm: 'notebooklm', agents: 'agents', terminals: 'terminals', pairs: 'pairs', recents: 'recents', conversations: 'conversations'};
+    const SECTION_IDS = {launcher: 'launcher', command: 'commandCenters', webAgent: 'webAgents', notebooklm: 'notebooklm', agents: 'agents', terminals: 'terminals', pairs: 'pairs', recents: 'recents', conversations: 'conversations'};
     const SECTION_KEYS = Object.keys(SECTION_IDS);
     // Today's layout, so an install that never opens Settings sees no change at all — except for
     // the launcher, which leads. That is the one deliberate departure: a section that defaults to
@@ -15378,7 +15687,7 @@
     // therefore opens on an empty launcher offering + New, which is how the first tile is made;
     // an existing one is unaffected, because its stored order does not name the launcher and
     // applySections takes a section outside the order off screen whatever it has drawn.
-    const SECTION_DEFAULT = ['launcher', 'webAgent', 'notebooklm', 'agents', 'terminals', 'pairs', 'recents', 'conversations'];
+    const SECTION_DEFAULT = ['launcher', 'command', 'webAgent', 'notebooklm', 'agents', 'terminals', 'pairs', 'recents', 'conversations'];
     let sectionOrder = SECTION_DEFAULT.slice();
 
     // Anything unrecognised, duplicated or empty falls back to the default. This is a display
@@ -15450,12 +15759,12 @@
     // scrolling the four above it. Header-side and not a row of its own: "page layout does not
     // change" is the point — the landing page leaves the tab strip's space empty anyway.
     const SECTION_NAMES = {
-      launcher: 'Launcher', webAgent: 'Web Agent', notebooklm: 'NotebookLM', agents: 'Agents', terminals: 'Terminals', pairs: 'Pairs',
+      launcher: 'Launcher', command: 'Command', webAgent: 'Web Agent', notebooklm: 'NotebookLM', agents: 'Agents', terminals: 'Terminals', pairs: 'Pairs',
       recents: 'Recents', conversations: 'Conversations',
     };
     // Its own order, not the sections' and not Settings': this row is fixed so a button stays under
     // the same thumb whatever the page below is doing, and it leads with what is read most.
-    const SECTION_TABS = ['conversations', 'webAgent', 'notebooklm', 'agents', 'terminals', 'pairs', 'recents', 'launcher'];
+    const SECTION_TABS = ['conversations', 'command', 'webAgent', 'notebooklm', 'agents', 'terminals', 'pairs', 'recents', 'launcher'];
     const SECTION_GLYPHS = {
       // Drawn to the same 18-unit span as the bubble and the terminal beside it: a 16-wide box
       // between two 18s reads as the odd one out even though all three are on an 18px canvas.
@@ -15470,6 +15779,10 @@
       recents: '<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/>'
         + '<polyline points="12 7 12 12 15 14"/>',
       conversations: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+      // One node with two under it: the section is a Project's session tree, and the tree is the
+      // only thing about it that is not already another section's job.
+      command: '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/>'
+        + '<rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M5 16v-2h14v2"/>',
       webAgent: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
       // A notebook: a spine on the left and a line on the page, drawn to the same 18-unit span
       // as the bubble beside it.
@@ -15583,6 +15896,7 @@
     const PANELS = { settingsView: 'block', timelineView: 'flex', convView: 'flex' };
     if (typeof document !== 'undefined' && document.getElementById('webAgentView')) PANELS.webAgentView = 'flex';
     if (typeof document !== 'undefined' && document.getElementById('nlmView')) PANELS.nlmView = 'flex';
+    if (typeof document !== 'undefined' && document.getElementById('cmdCenterView')) PANELS.cmdCenterView = 'flex';
 
     // A half-written message belongs to the conversation it was being written to, and leaving the
     // window is not sending it. openConversation files its own on the way to another conversation;
@@ -15987,6 +16301,10 @@
       // Same rule, same reason: arbitration is a capability of the relay on the other end of this
       // socket, and the next socket may be a different relay.
       if (typeof arbReset === 'function') arbReset();
+      // The other kind of session, reset for the same reason and on the same breath: whether this
+      // relay starts Commanders at all is something only this socket can say.
+      if (typeof cmdReset === 'function') cmdReset();
+      if (typeof ccReset === 'function') ccReset();
       if (typeof webchatReset === 'function') webchatReset();
       if (typeof nlmReset === 'function') nlmReset();
       if (typeof closeStart === 'function') closeStart();
@@ -16014,6 +16332,7 @@
         setStatus('connected');
         if (window.cue) cue('ready');
         if (typeof announceSubscription === 'function') announceSubscription();
+        if (typeof ccReconnect === 'function') ccReconnect();
         stateSyncOpen(socket);
       };
       socket.onclose = () => {
@@ -16099,6 +16418,22 @@
       // asked for it.
       else if (msg.type === 'arb_detail') {
         if (typeof arbReceiveDetail === 'function') arbReceiveDetail(msg);
+      }
+      // The Commander half of the same two messages. A separate family so a client is told about
+      // its own kind and no other; the presence of `cmd_sessions` is its feature gate.
+      else if (msg.type === 'cmd_sessions') {
+        if (typeof cmdSessionsReceive === 'function') cmdSessionsReceive(msg);
+      }
+      else if (msg.type === 'cmd_session') {
+        if (typeof cmdSessionReceive === 'function') cmdSessionReceive(msg);
+        // The Command Center is about a whole tree, and a session moving can change which lists
+        // it belongs to. Answered by asking again rather than by patching the row in place.
+        if (typeof ccSessionMoved === 'function') ccSessionMoved();
+      }
+      // One Project's tree and its plans. Answered to the client that asked and never broadcast,
+      // because it carries plan bodies — the rule `arb_detail` and `conv_log` follow.
+      else if (msg.type === 'cmd_project') {
+        if (typeof ccReceive === 'function') ccReceive(msg);
       }
       else if (msg.type === 'webchat_state') {
         if (typeof webchatReceiveState === 'function') webchatReceiveState(msg);
@@ -16965,6 +17300,14 @@
       renderPairStrip();  // pair health is recomputed from every snapshot, never cached
       renderBody();
       renderRecents();
+      // Drawn from the session lists rather than from this snapshot, but redrawn with it: a
+      // section whose rows say how many sessions are running must not be a poll behind the
+      // screens that say the same thing.
+      if (typeof ccRenderSection === 'function') ccRenderSection();
+      // The floating list resolves terminal rows against this snapshot. Redraw it here so an exited
+      // pane cannot stay clickable until the puck is next moved or opened — herdr may already have
+      // recycled that pane id by then.
+      if (typeof recentFloatDraw === 'function') recentFloatDraw();
       renderAgentTabs();
       syncBrowserTab();
     }
@@ -17623,6 +17966,14 @@
         // was missing from the thread would be a turn nobody could see the start of. After the
         // membership above, so the thread it is recorded into is the one it was started for.
         if (prompt) sendTextTo(a.pane_id, prompt);
+        // A start the Command Center asked to be a Commander. Appointed here rather than there
+        // because this is where the pane exists: a Commander is named by a live pane, and the
+        // screen that asked for one had nothing to name when it asked. The room is already this
+        // pane's by the line above, so the session is appointed over a conversation that holds
+        // it rather than over an empty one.
+        if (intent.commander && typeof ccAppointStarted === 'function') {
+          ccAppointStarted(a, Object.assign({conv: intent.conv}, intent.commander));
+        }
         // Not while the conversation window is up. A start made from a conversation is a request
         // for another colleague in it, not a request to stop reading it — and the member has just
         // appeared in the roster behind this.
@@ -18445,9 +18796,20 @@
     // Which room is on screen, so the list can say so. Two pages, two answers: the phone has one
     // conversation window open at a time, the desktop page has a selected room in its sidebar.
     function recentFloatHere() {
-      if (typeof deskSelectedConv !== 'undefined' && deskSelectedConv) return deskSelectedConv;
-      if (typeof convViewId !== 'undefined' && convViewId) return convViewId;
-      return '';
+      // A terminal outranks the room still selected behind it. On desktop the sidebar keeps its
+      // room while a terminal owns the focused column; on the phone the conversation id may also
+      // survive until the terminal view finishes opening. Returning the room there painted the
+      // row the reader had left as current and left the terminal they were looking at unmarked.
+      const pane = typeof activePane !== 'undefined' ? activePane : '';
+      const live = typeof shells === 'undefined' ? [] : (shells || []);
+      if (pane && live.some(sh => sh.pane_id === pane)) return {type: 'term', key: pane};
+      const id = typeof deskSelectedConv !== 'undefined' && deskSelectedConv
+        ? deskSelectedConv : typeof convViewId !== 'undefined' && convViewId ? convViewId : '';
+      if (!id) return null;
+      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const conv = convs.find(one => one.id === id);
+      const web = conv && typeof convKindOf === 'function' && convKindOf(conv) === 'providers';
+      return {type: web ? 'web' : 'conv', key: id};
     }
 
     // And how each page opens one. `openConversation` and `jumpToPane` are the phone's;
@@ -18672,7 +19034,8 @@
         : (typeof convGlyph === 'function' ? convGlyph(row.conv) : '');
       const name = typeof escapeHtml === 'function' ? escapeHtml(row.name) : String(row.name);
       return `<button type="button" class="recent-float-row ${row.type}`
-        + `${row.key === here ? ' on' : ''}" style="--tint:${row.tint}"`
+        + `${here && row.type === here.type && row.key === here.key ? ' on' : ''}"`
+        + ` style="--tint:${row.tint}"`
         + ` onclick="recentFloatGo('${row.type}', '${row.key}')">${glyph}`
         + `<span class="name">${name}</span></button>`;
     }
@@ -19636,6 +19999,11 @@
           : '')
         + '<button class="section-action" onclick="openLauncherNew()"'
         + ' title="Add a tile" aria-label="Add a launcher tile">+ New</button></div>'
+        // The Command Center, before the bands and outside them: every other tile here starts
+        // something, and this one opens what is already running. It belongs to no Project, which
+        // is what a band names, and it is not a tile of the document — nothing made it and
+        // nothing can edit or delete it.
+        + (typeof ccLauncherTileHtml === 'function' ? ccLauncherTileHtml() : '')
         // One band is every tile in it, so a heading over the lot says nothing. Two or more and the
         // heading is what tells a template from a tile that already knows where it runs.
         + (groups.length > 1
@@ -29237,10 +29605,11 @@ function webchatReconcileBindings() {
   const held = webchatAttached();
   const now = Date.now();
   const convs = loadConvIndex();
-  // An empty index is not "nothing is granted". The conversations document arrives in a `state`
-  // message that can land after the first snapshot, and a pass that read that as "every binding
-  // belongs to a conversation that is gone" would take all of them away.
-  if (!convs.length) return;
+  // An empty index while the shared document is still arriving is not "nothing is granted". Once
+  // that pull is over it is a real answer, though: deleting the last web room must take its bearer
+  // away just as deleting any other one does. Treating every empty index as provisional left every
+  // binding on disk forever after the last room was removed.
+  if (!convs.length && typeof stateSyncPending === 'function' && stateSyncPending()) return;
   const wanted = new Set();
   for (const conv of convs) {
     const grant = webchatGrantOf(conv);
@@ -33019,8 +33388,17 @@ function nlmSourceDelete(source) {
     // is in the conversation, every browser has it, and a start reproduced from it is the start
     // that was made whoever is pressing.
     function respawnWebRoom(key) {
-      if (typeof convWebModeOf !== 'function' || typeof convLifeConvId !== 'function') return null;
-      const conv = loadConvIndex().find(c => c.id === convLifeConvId(key));
+      if (typeof convLifeConvId !== 'function') return null;
+      return convWebRoomOf(convLifeConvId(key));
+    }
+
+    // The same question asked of the room rather than of one of its members, which is what the
+    // controls need: Reset is drawn once per member and once per room, and a room whose agents
+    // hold a binding refuses it in both places. Kept beside `respawnWebRoom` because the answer is
+    // the same fact, read from the same durable copy.
+    function convWebRoomOf(convId) {
+      if (typeof convWebModeOf !== 'function' || !convId) return null;
+      const conv = loadConvIndex().find(c => c.id === convId);
       return conv && ['agent', 'studio'].includes(convWebModeOf(conv)) ? conv : null;
     }
 
@@ -33225,7 +33603,10 @@ function nlmSourceDelete(source) {
       }, starter ? startRoleFields(starter, '')
         : {role: room ? 'agent' : respawnRole(spawn)});
       if (room) {
-        msg.background = true;
+        // Studio always starts its harness behind the room. An ordinary agent room starts through
+        // the Start sheet and does not make that claim, so restarting one must not silently change
+        // whether its completion reaches the Lock Screen.
+        if (convWebModeOf(room) === 'studio') msg.background = true;
         const grant = typeof convGrantOf === 'function' ? convGrantOf(room) : [];
         if (grant.length) msg.webchat = {ns: room.id, providers: grant};
         if (typeof startUnattendedOffered === 'function' && startUnattendedOffered(msg.name)) {
@@ -33300,6 +33681,15 @@ function nlmSourceDelete(source) {
     function convResetMember(key) {
       const live = agents.find(x => convMemberKey(x) === key);
       if (!live) return false;
+      // Clearing a bound agent also clears the one-time brief that tells it what room and grant it
+      // holds. The existing binding then makes reconciliation correctly stay silent, so there is
+      // no later path that restores those instructions. Restart writes the binding into the new
+      // harness and briefs it before use; until Reset can make that same ordered guarantee, refuse
+      // the destructive half instead of leaving a live but contextless agent behind.
+      if (respawnWebRoom(key)) {
+        showToast('Use Restart for a Web Agent — Reset would clear its room instructions.');
+        return false;
+      }
       const spawn = spawnOf(key) || {};
       // Not through agentSlash. That rewrites a leading `/` to `$` for codex because a *skill* is
       // invoked that way there — `$ponytail`, `$caveman`. This is a slash command, and codex spells
@@ -34266,7 +34656,13 @@ function nlmSourceDelete(source) {
           // Same pane, back at its first turn: the harness's own clear, then the words this
           // session was started with. Asked twice — what it throws away is the agent's context,
           // which nothing here can bring back.
-          (on ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
+          //
+          // Not drawn at all in a room that grants web providers. Clearing a bound agent throws
+          // away the one-time brief naming its room and grant, and nothing restores it; Restart is
+          // the control that does this safely. `convResetMember` refuses one anyway, but a button
+          // that is drawn and then refuses is a button somebody presses.
+          (on && !respawnWebRoom(m.aid)
+            ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
             ` onclick="armButton(this, 'Reset?', () => convResetMember(this.dataset.key))"` +
             ` aria-label="Clear this member's session and start it over in the same pane">` +
             `Reset</button>` : '') +
@@ -34330,10 +34726,13 @@ function nlmSourceDelete(source) {
           aria: 'Pause every session in this conversation, keeping the transcripts',
           fire: 'endConversation(convViewId)'}) +
         // Beside Pause all, because they are the same question asked of every member at once. Reset
-        // keeps the panes and clears what is in them; Restart replaces them.
-        `<button class="conv-reset arm-btn" onclick="armButton(this, 'Reset all?', () => convResetAll(convViewId))"` +
-        ` aria-label="Clear every session in this conversation and start each one over">` +
-        `Reset all</button>` +
+        // keeps the panes and clears what is in them; Restart replaces them. Absent in a room that
+        // grants web providers, for the reason the row's own Reset is: every member of one holds a
+        // binding brief that a clear would throw away.
+        (convWebRoomOf(convViewId) ? '' :
+          `<button class="conv-reset arm-btn" onclick="armButton(this, 'Reset all?', () => convResetAll(convViewId))"` +
+          ` aria-label="Clear every session in this conversation and start each one over">` +
+          `Reset all</button>`) +
         `<button class="conv-restart arm-btn" onclick="armButton(this, 'Restart all?', () => convRestartAll(convViewId))"` +
         ` aria-label="Pause every session in this conversation and start each one again">` +
         `Restart all</button>` +
@@ -39434,6 +39833,7 @@ function studioCardHtml() {
     //   #conv/<id>                              a conversation
     //   #web/<session>                          one provider thread
     //   #notebook/<id>                          a notebook
+    //   #command/<project id>                   one Project's Command Center
     //
     // An agent id is preferred over a pane id wherever the pane has one: herdr recycles pane ids,
     // so a link written with one opens somebody else's agent a day later.
@@ -39508,6 +39908,10 @@ function studioCardHtml() {
         return webchatCurrent ? hashPart('web', webchatCurrent) : hashPart('webAgent');
       if (panel === 'nlmView')
         return nlmCurrent ? hashPart('notebook', nlmCurrent) : hashPart('notebooklm');
+      // A Project id and never a session id: the screen is the Project, and which session is
+      // picked inside it is where the reader's eye is rather than where they are.
+      if (panel === 'cmdCenterView')
+        return typeof ccProject !== 'undefined' && ccProject ? hashPart('command', ccProject) : '';
       for (const name in HASH_PANELS) if (HASH_PANELS[name] === panel) return hashPart(name);
       // The landing page. A section filter is a view rather than a preference — see sections.js —
       // and a view is exactly the kind of thing a link is for.
@@ -39552,6 +39956,14 @@ function studioCardHtml() {
       // A thread and a notebook are named rather than looked up: both views ask the relay what is
       // in them on the way up, and neither list is something this browser can be behind on.
       if (kind === 'web') { if (!id) return false; webchatOpen(id); return true; }
+      // Named rather than looked up, like those two: the view asks the relay what is in the
+      // Project on the way up, so there is no list here this browser could be behind on. A
+      // Project with nothing in it draws as a Project with nothing in it, which is the truth.
+      if (kind === 'command') {
+        if (!id || typeof ccOpen !== 'function') return false;
+        ccOpen(id);
+        return true;
+      }
       if (kind === 'notebook') { if (!id) return false; nlmOpen(id); return true; }
       return true;   // a fragment this app does not own. Left alone, and so is the page.
     }
@@ -39763,6 +40175,9 @@ function studioCardHtml() {
       // the agent id of the arbitrator that ran it.
       arbPast = (msg.past || []).filter(s => s && s.id);
       arbSessions = (msg.sessions || []).filter(s => s && s.state !== 'ended');
+      if (typeof cmdMaterializeConversation === 'function') {
+        arbSessions.concat(arbPast).forEach(cmdMaterializeConversation);
+      }
       arbSession = arbSessions[0] || null;
       arbAskDetail(arbSession);
       arbRender();
@@ -39774,6 +40189,7 @@ function studioCardHtml() {
     function arbReceiveSession(msg) {
       const s = msg.session;
       if (!s) return;
+      if (typeof cmdMaterializeConversation === 'function') cmdMaterializeConversation(s);
       arbOn = true;
       // A session ending is where a past one comes from: the relay sends `past` on connect alone,
       // and a browser that stayed open through the end of a session would otherwise have to
@@ -40090,6 +40506,12 @@ function studioCardHtml() {
         if (arb) out.add(arb);
         (s.members || []).forEach(m => { if (m.pane_id) out.add(m.pane_id); });
       });
+      // Commander and arbitration are peer session kinds over one global pane claim. The relay is
+      // still the authority, but offering a pane the other client module already knows is held is
+      // a choice whose only outcome is `participant_in_session`.
+      if (typeof cmdTakenPanes === 'function') {
+        cmdTakenPanes(except).forEach(paneId => out.add(paneId));
+      }
       return out;
     }
 
@@ -40785,8 +41207,8 @@ function studioCardHtml() {
         '<button type="button" class="arb-btn arm-btn"' +
         ` onclick="armButton(this, 'Re-brief?', () => arbSessionAction('arb_reinit'))">` +
         'Re-brief the arbitrator</button>' +
-        '<button type="button" class="arb-btn arm-btn warn"' +
-        ` onclick="armButton(this, 'End session?', () => arbSessionAction('arb_cancel'))">` +
+        '<button type="button" class="arb-btn arm-btn warn" data-arm-key="end-session"' +
+        ` onclick="arbEndSession(this)">` +
         'End session</button>' +
         '<span class="arb-note">Re-briefing empties the arbitrator’s context and gives it its ' +
         'brief again — the session and its record are kept. Ending it is final.</span>' +
@@ -40800,13 +41222,60 @@ function studioCardHtml() {
       arbCommand(command);
     }
 
+    // Ending never cascades: a child session holds its own panes, and nobody has looked at them
+    // (C10.2). The relay refuses to end a parent unless the request says `leave_children`, and
+    // this client already holds the whole tree — so the choice is put in front of the person
+    // here, as a second arm, rather than arriving afterwards as a refusal they cannot answer.
+    function arbDescendantsRunning(id) {
+      const live = arbSessions.concat(typeof cmdSessions !== 'undefined' ? cmdSessions : []);
+      const known = {};
+      live.concat(arbPast, typeof cmdPast !== 'undefined' ? cmdPast : [])
+        .forEach(s => { if (s && s.id) known[s.id] = s; });
+      // Walked *up* from each live session rather than down from this one, because that is the
+      // shape `leave_children` creates: a session that was left running under a parent that has
+      // since ended is reached through a row that is no longer live.
+      return live.filter(s => {
+        const seen = {};
+        let up = s.id === id ? '' : s.parent_session;
+        while (up && !seen[up]) {
+          if (up === id) return true;
+          seen[up] = 1;
+          up = (known[up] || {}).parent_session || '';
+        }
+        return false;
+      }).map(s => s.id);
+    }
+
+    // One arm for a session with nothing under it; two for one with children, where the second
+    // says what ending it leaves behind. Shared with the Commander's End, which asks the same
+    // question about the same tree.
+    function armEndSession(btn, id, send) {
+      const running = arbDescendantsRunning(id);
+      // Keyed, because both dialogs this button lives in are rebuilt by the poll: a `cmd_session`
+      // or `arb_session` broadcast between the two taps replaces the element, and an arm held by
+      // element identity alone would be lost with it — the second tap would re-ask rather than
+      // end. `data-arm-key` on the markup is the other half, which is what lets the label be put
+      // back on whichever button is standing there when the arm expires.
+      armButton(btn, running.length ? `Leave ${running.length} running?` : 'End session?',
+        () => send(!!running.length), 'end-session');
+    }
+
+    function arbEndSession(btn) {
+      const session = arbSessionHere();
+      if (!session) return;
+      armEndSession(btn, session.id, leave => {
+        closeArbSetup();
+        arbCommand('arb_cancel', {leave_children: leave});
+      });
+    }
+
     // The pane, or a new one. A room is often assembled from nothing — two fresh agents and
     // something to decide between them — and leaving this dialog to start each one loses every
     // answer already in it. So each slot can start its own, and the new pane lands *here*: it is
     // chosen in the slot that asked for it and the page does not move.
-    function arbSlot(id, rows, selected, locked) {
+    function arbSlot(id, rows, selected, locked, canSpawn) {
       return '<div class="arb-slot">' + arbPaneSelect(id, rows, selected, locked) +
-        (arbCanSpawn() && !locked
+        (canSpawn !== false && arbCanSpawn() && !locked
           ? `<button type="button" class="badge pick proj" onclick="arbSpawnFor('${id}')"` +
             ' title="Start a new agent and put it in this slot">+ New</button>' : '') +
         '</div>';
@@ -40971,6 +41440,13 @@ function studioCardHtml() {
       if (el) el.innerHTML = arbSetupHtml(rows, free, at, !!mine, holding || arbHoldNote());
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
+      // Put back, because the Commander form borrows this head and swaps both. Set every time
+      // rather than only after a Commander has been drawn: one assignment is cheaper than the
+      // bookkeeping that would tell us whether it was needed.
+      const sign = document.getElementById('arbSetupSign');
+      if (sign) sign.innerHTML = arbSign(20);
+      const kind = document.getElementById('arbSetupKind');
+      if (kind) kind.textContent = 'Arbitrate';
       arbSetupConv = conv.id;
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'block';
@@ -41019,6 +41495,10 @@ function studioCardHtml() {
       arbAutoToken++;
       arbSetupConv = '';
       arbSetupSession = '';
+      // The Commander form is drawn into this same box, and its own close button is this one.
+      // Without this the module would still think it was open and redraw itself into a hidden
+      // dialog on the next `cmd_session`.
+      if (typeof cmdNoteClosed === 'function') cmdNoteClosed();
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
     }
@@ -41361,6 +41841,10 @@ function studioCardHtml() {
     // redraw on every poll would take a half-written sentence out from under the person writing it.
     function arbRender() {
       arbSyncOpenButton();
+      // The Commander button lives in the same float and answers the same question about the same
+      // conversation, so it is synced by the same render rather than by a second hook that could
+      // be called at a different time and disagree about which room is on screen.
+      if (typeof cmdSyncButton === 'function') cmdSyncButton();
       const el = document.getElementById('arbStrip');
       if (!el) return;
       const conv = typeof convCurrentId === 'function'
@@ -42221,6 +42705,1020 @@ function studioCardHtml() {
       if (!session) return;
       arbSend(Object.assign({ type: type, session: session.id }, extra || {}));
     }
+
+  </script>
+  <!-- After arbitration.js, whose pane pickers, candidate lists and project resolution a
+       Commander form asks the same questions of. -->
+  <script>
+    // --- Commander -------------------------------------------------------------------------
+    //
+    // A Commander owns a piece of work rather than one exchange: which Project it is in, what the
+    // steps are, and who does them. It is a session of the other `kind` — the same table, the same
+    // pane claim, the same lifecycle — so almost everything here is a thin layer over what
+    // arbitration.js already draws. What is genuinely different is three things: a Commander may
+    // hold no members at all, it sits somewhere in a Project (a tier, and a parent above it), and
+    // it runs no decision loop, so there is no strip of decisions to read.
+    //
+    // The feature gate is the arrival of `cmd_sessions`, exactly as `arb_sessions` gates
+    // arbitration. A relay too old to send it draws no Commander button, which is the only way a
+    // page deployed separately from its relay can be honest about what that relay will do (N10).
+    //
+    // This module deliberately owns no pane picker, no project resolution and no candidate lists:
+    // those are arbitration's and a Commander asks the same questions of them. What it must not
+    // borrow is the shape of the arbitration form — two members exactly, an arbitrator, gates and
+    // clocks — because none of that is true of a Commander.
+
+    let cmdOn = false;            // this relay sent cmd_sessions on this connection
+    let cmdSessions = [];         // unfinished Commanders, newest first
+    let cmdPast = [];             // the ended ones, read for the setup they ran with
+    // The conversation the dialog is open over, or '' when it is closed. Same rule as the
+    // arbitration form's: drawn once on open, because its pane lists move under a scope being
+    // typed into it.
+    let cmdSetupConv = '';
+
+    // The tiers a person may start by hand, in the order the Project contains them. `project` has
+    // no parent and there may be one unfinished one per Project; the other two require a parent,
+    // which is why the selector exists at all — without it those two choices would be refused
+    // every time with `parent_required`.
+    const CMD_TIERS = [
+      ['project', 'Project', 'Owns the whole Project. One at a time.'],
+      ['feature', 'Feature', 'A piece of work inside a Project.'],
+      ['branch', 'Branch', 'One branch of one feature.'],
+    ];
+    // The value a member slot carries when it is holding nobody. A Commander may run with an empty
+    // roster, so every slot has to be able to say so.
+    const CMD_NONE = 'cmd-nobody';
+    const CMD_MEMBER_SLOTS = 6;
+
+    // Per connection, never cached: what this relay will start is a fact about this relay.
+    function cmdReset() {
+      const had = cmdOn;
+      cmdOn = false;
+      cmdSessions = [];
+      cmdPast = [];
+      closeCmdSetup();
+      cmdSyncButton();
+      if (had && typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    function cmdSessionsReceive(msg) {
+      const had = cmdOn;
+      cmdOn = true;
+      cmdSessions = (msg && msg.sessions) || [];
+      cmdPast = (msg && msg.past) || [];
+      cmdSessions.concat(cmdPast).forEach(cmdMaterializeConversation);
+      cmdSyncButton();
+      // Whether this relay answers about Commanders at all is what gates the Command Center's
+      // tile, and that answer arrives after the launcher has already been drawn once.
+      if (!had && typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    // One session, merged in place. An ended one is moved rather than dropped: the form a person
+    // opens next is seeded from what the last one ran with.
+    function cmdSessionReceive(msg) {
+      const s = msg && msg.session;
+      if (!s || !s.id) return;
+      cmdOn = true;
+      cmdMaterializeConversation(s);
+      cmdSessions = cmdSessions.filter(x => x.id !== s.id);
+      cmdPast = cmdPast.filter(x => x.id !== s.id);
+      if (s.state === 'ended') cmdPast = [s].concat(cmdPast);
+      else cmdSessions = [s].concat(cmdSessions);
+      cmdSyncButton();
+      // The dialog redraws itself only while it is standing over the session that moved — a
+      // Commander pausing in another room must not take the form out from under somebody.
+      if (cmdSetupConv && s.conversation === cmdSetupConv) cmdOpenFromConv(true);
+    }
+
+    // A child session's room is a consequence of starting it. The relay mints the deterministic
+    // id but never writes the browser-owned conversations document, so the first client that sees
+    // complete session metadata materialises it once.
+    function cmdMaterializeConversation(s) {
+      if (!s || !s.id || s.conversation !== 'c_cmd_' + s.id ||
+          typeof loadConvIndex !== 'function' || typeof saveConvIndex !== 'function') return;
+      const items = loadConvIndex();
+      if (items.some(c => c.id === s.conversation)) return;
+      // A coordinator owns the session but is not enrolled in its conversation. Adding it here
+      // would record its coordination output as ordinary member turns as well as session events.
+      const people = (s.members || []).filter(Boolean);
+      if (people.some(p => !p.aid)) return;
+      const seen = new Set();
+      const members = [];
+      people.forEach(p => {
+        if (seen.has(p.aid)) return;
+        seen.add(p.aid);
+        members.push({key: p.aid, aid: p.aid, added: Date.now(),
+          label: p.label || p.pane_id || p.aid, agent: p.agent || '',
+          project: s.project_id || ''});
+      });
+      const name = String(s.scope || 'Commander child').trim().split('\n')[0].slice(0, 64);
+      saveConvIndex([{id: s.conversation, name: name || 'Commander child',
+        created: Date.now(), members: members}].concat(items));
+    }
+
+    // `find` and not `filter`: the relay refuses a second unfinished Commander on one
+    // conversation, so a room has one or none. An arbitration session in the same room is a
+    // different kind and is not in this list at all.
+    function cmdSessionForConversation(id) {
+      return cmdSessions.find(s => s.conversation === id) || null;
+    }
+
+    function cmdSessionHere() {
+      return typeof convCurrentId === 'function'
+        ? cmdSessionForConversation(convCurrentId()) : null;
+    }
+
+    // The Commander half of the one global claim set. Arbitration's picker unions this with its
+    // own sessions, and the Commander picker is built from that same union.
+    function cmdTakenPanes(except) {
+      const out = new Set();
+      cmdSessions.forEach(s => {
+        if (except && s.id === except) return;
+        const coordinator = (s.coordinator || {}).pane_id;
+        if (coordinator) out.add(coordinator);
+        (s.members || []).forEach(m => { if (m.pane_id) out.add(m.pane_id); });
+      });
+      return out;
+    }
+
+    // The mark. Two chevrons, which is what a commander wears — deliberately nothing like
+    // arbitration's three circles, because the two buttons sit beside each other.
+    function cmdSign(size) {
+      const n = size || 16;
+      return `<svg class="cmd-sign" viewBox="0 0 24 24" width="${n}" height="${n}"` +
+        ' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"' +
+        ' stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg>';
+    }
+
+    // The phone's floating button, if this page has one. Two states, like Arbitrate's: this room
+    // has a Commander, or it has none and this opens the form that gives it one.
+    function cmdSyncButton() {
+      const el = document.getElementById('convCommander');
+      const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
+      if (cmdSetupConv && cmdSetupConv !== conv) closeCmdSetup();
+      if (!el) return;
+      const live = cmdOn && !!cmdSessionHere();
+      el.classList.toggle('on', !!(cmdOn && conv));
+      el.classList.toggle('live', live);
+      const label = live ? 'Manage this conversation’s Commander' : 'Give this conversation a Commander';
+      el.title = label;
+      el.setAttribute('aria-label', label);
+    }
+
+    // Whether the button should be offered at all. Called by both pages.
+    function cmdCanOffer() {
+      return cmdOn;
+    }
+
+    // The one way in. A live Commander opens on what it is and what can be done to it; a room with
+    // none opens on the form. Unlike Arbitrate this does not jump straight to the pane: an
+    // arbitrator *is* its pane — everything it does is in the transcript — and a Commander is a
+    // thing with a state, a plan and a tree under it, so the panel is the honest landing.
+    function cmdOpenFromConv(keepOpen) {
+      if (!cmdOn) return;
+      const conv = typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === convCurrentId()) : null;
+      if (!conv) return;
+      const live = cmdSessionForConversation(conv.id);
+      cmdDraw(conv, live ? cmdManageHtml(live) : cmdSetupHtml(conv), live, keepOpen);
+    }
+
+    // Both views go into the arbitration dialog's box. Not laziness about the markup: it is the
+    // same dialog in the same place asking about the same room, and a second overlay would be a
+    // second thing to close and a second set of ids to keep unique. The head says which of the two
+    // it is.
+    function cmdDraw(conv, html, live, keepOpen) {
+      const body = document.getElementById('arbSetupBody');
+      if (body) body.innerHTML = html;
+      const sign = document.getElementById('arbSetupSign');
+      if (sign) sign.innerHTML = cmdSign(20);
+      const kind = document.getElementById('arbSetupKind');
+      if (kind) kind.textContent = live ? 'Commander' : 'New Commander';
+      const name = document.getElementById('arbSetupConvName');
+      if (name) name.textContent = conv.name || '';
+      cmdSetupConv = conv.id;
+      if (!keepOpen) {
+        const box = document.getElementById('arbModal');
+        if (box) box.style.display = 'block';
+      }
+    }
+
+    function closeCmdSetup() {
+      cmdSetupConv = '';
+      const box = document.getElementById('arbModal');
+      if (box) box.style.display = 'none';
+    }
+
+    // The dialog's own close button calls arbitration's. One box, so one close — which has to put
+    // both modules' idea of "open" back to shut.
+    function cmdNoteClosed() {
+      cmdSetupConv = '';
+    }
+
+    // --- the form ---------------------------------------------------------------------------
+
+    // A coordinator, a scope, where in the Project this sits, and — optionally — agents of its
+    // own. No gates, no clocks and no instruction style: those are arbitration's questions about a
+    // decision loop, and a Commander runs none.
+    function cmdSetupHtml(conv) {
+      const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null;
+      const free = arbArbiterRows(conv, project, '');
+      const rows = [{key: CMD_NONE, pane: null, label: 'Nobody'}]
+        .concat(arbMemberRows(conv, project, ''));
+      const parents = cmdSessions.filter(s => s.state !== 'ended');
+      return arbPart('Commander',
+          arbSlot('cmdWho', free, free[0] && arbPickValue(free[0]), false, false) +
+          '<span class="arb-note">The pane that plans. It is not one of the agents below.</span>',
+          cmdSign(16) + ' ') +
+        '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
+        ' placeholder="What this Commander owns, and when it is done."></textarea></label>' +
+        arbPart('Where it sits',
+          '<div class="arb-auto" id="cmdTiers">' +
+          CMD_TIERS.map(([v, label, why]) =>
+            badgeHtml(label, v === 'project', `cmdPickTier('${v}')`, {proj: true, title: why}))
+            .join('') +
+          '<input type="hidden" id="cmdTier" value="project">' +
+          '<span class="arb-note" id="cmdTierNote">' + escapeHtml(CMD_TIERS[0][2]) + '</span>' +
+          '</div>' +
+          // Required for the two lower tiers and meaningless for the top one, so it is drawn
+          // either way and disabled rather than appearing and disappearing under the thumb.
+          '<label id="cmdParentRow" style="display:none">Under<select id="cmdParent">' +
+          parents.map(s => `<option value="${escapeHtml(s.id)}">` +
+            escapeHtml(cmdName(s)) + '</option>').join('') +
+          '</select></label>' +
+          (parents.length ? '' :
+            '<span class="arb-note" id="cmdParentNote" style="display:none">' +
+            'Nothing to sit under yet — start a Project Commander first.</span>')) +
+        arbPart('Its own agents',
+          Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
+            arbSlot('cmdMember' + i, rows, CMD_NONE_VALUE(rows), false, false)).join('') +
+          '<span class="arb-note">Optional. A Commander that only manages child sessions has ' +
+          'none, and the ones it does have are its to write to directly.</span>') +
+        '<div class="arb-go">' +
+        `<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>` +
+        `<button type="button" class="badge pick on" onclick="cmdStart()">Start</button>` +
+        '</div>';
+    }
+
+    // The value of the "Nobody" row, which is whatever `arbPickValue` makes of a row with no pane.
+    // Asked of the row rather than rebuilt, so the two can never drift apart.
+    function CMD_NONE_VALUE(rows) {
+      return arbPickValue(rows[0]);
+    }
+
+    function cmdPickTier(tier) {
+      const at = document.getElementById('cmdTier');
+      if (at) at.value = tier;
+      const box = document.getElementById('cmdTiers');
+      if (box) {
+        const found = CMD_TIERS.find(t => t[0] === tier);
+        box.querySelectorAll('.badge.pick').forEach((b, i) => {
+          const on = CMD_TIERS[i][0] === tier;
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', String(on));
+        });
+        const note = document.getElementById('cmdTierNote');
+        if (note && found) note.textContent = found[2];
+      }
+      // The parent is required below the top tier and refused at it, so the row follows the
+      // choice rather than being a question asked of every start.
+      const row = document.getElementById('cmdParentRow');
+      const note = document.getElementById('cmdParentNote');
+      const has = !!document.querySelector('#cmdParent option');
+      if (row) row.style.display = (tier !== 'project' && has) ? '' : 'none';
+      if (note) note.style.display = (tier !== 'project' && !has) ? '' : 'none';
+    }
+
+    // A pane id and a scope, and never a fingerprint: the relay reads a participant's identity off
+    // its own pane list, exactly as `arb_start` does.
+    function cmdStart() {
+      const conv = loadConvIndex().find(c => c.id === convCurrentId());
+      if (!conv) return;
+      const scope = (document.getElementById('cmdScope') || {}).value || '';
+      if (!scope.trim()) { showToast('A Commander needs a scope — what it owns.'); return; }
+      const who = arbResolvePick((document.getElementById('cmdWho') || {}).value);
+      if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      const tier = (document.getElementById('cmdTier') || {}).value || 'project';
+      const parent = tier === 'project'
+        ? '' : ((document.getElementById('cmdParent') || {}).value || '');
+      if (tier !== 'project' && !parent) {
+        showToast('A ' + tier + ' Commander sits under another one — start a Project Commander first.');
+        return;
+      }
+      const members = Array.from({length: CMD_MEMBER_SLOTS}, (_, i) => i)
+        .map(i => arbResolvePick((document.getElementById('cmdMember' + i) || {}).value))
+        .filter(p => p && p.pane_id)
+        .map(p => ({pane_id: p.pane_id}));
+      // Two slots naming one pane is the mistake this form can make on its own, and the relay
+      // would refuse it after the press. Said here instead, where it can still be fixed.
+      const seen = new Set(members.map(m => m.pane_id).concat([who.pane_id]));
+      if (seen.size !== members.length + 1) {
+        showToast('Each slot needs a different pane.');
+        return;
+      }
+      arbSend({
+        type: 'cmd_start', conversation: conv.id, scope: scope,
+        coordinator: {pane_id: who.pane_id}, members: members,
+        tier: tier, parent_session: parent,
+      });
+      closeCmdSetup();
+    }
+
+    // --- managing one ------------------------------------------------------------------------
+
+    function cmdName(s) {
+      const conv = typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === s.conversation) : null;
+      const where = (conv && conv.name) || s.conversation || s.id;
+      return `${s.tier || 'project'} · ${where}`;
+    }
+
+    // What it is, where it sits, and the four things that can be done to it. No decisions and no
+    // resume plan: a Commander has neither, and the relay leaves both off its message.
+    function cmdManageHtml(s) {
+      const paused = s.state === 'paused';
+      const at = (s.coordinator || {}).pane_id || '';
+      const budget = s.budget || {};
+      return arbPart('Commander',
+          '<div class="arb-note">' +
+          escapeHtml(`${s.tier || 'project'} · ${s.project_id || 'no project'} · ${s.state}`) +
+          (s.pause_reason ? ' · ' + escapeHtml(String(s.pause_reason).replace(/_/g, ' ')) : '') +
+          '</div>' +
+          (s.scope ? `<div class="arb-note">${escapeHtml(s.scope)}</div>` : '') +
+          `<div class="arb-note">${budget.steps_left != null ? budget.steps_left : '—'} sends left` +
+          `, ${budget.minutes_left != null ? budget.minutes_left : '—'} minutes</div>` +
+          // The one visible sign the plan file is being read. A Commander that has written none
+          // says so rather than showing a revision of nothing: the file is the Commander's to
+          // write, so "no plan yet" is an ordinary state and not a fault.
+          '<div class="arb-note">' + (s.agenda_rev
+            ? `plan at revision ${s.agenda_rev}` + (s.agenda_at ? ', read ' + arbAgo(s.agenda_at) : '')
+            : 'no plan written yet') + '</div>',
+          cmdSign(16) + ' ') +
+        (s.members && s.members.length
+          ? arbPart('Its agents', '<div class="arb-note">' +
+              s.members.map(m => escapeHtml(m.label || m.pane_id)).join(', ') + '</div>')
+          : '') +
+        '<div class="arb-go">' +
+        (at ? `<button type="button" class="badge pick proj" onclick="cmdOpenPane('${escapeHtml(at)}')">` +
+              'Open its pane</button>' : '') +
+        // The way up from one session to the Project it is part of. This dialog is about the
+        // session in front of the reader; the Command Center is about everything under it, which
+        // is the question anybody holding a paused Commander asks next.
+        (typeof ccOpen === 'function' && s.project_id
+          ? `<button type="button" class="badge pick proj"` +
+            ` onclick="cmdOpenProject('${escapeHtml(s.project_id)}')">The whole Project</button>`
+          : '') +
+        `<button type="button" class="badge pick proj" onclick="cmdRebrief(this)">Re-brief</button>` +
+        (paused
+          ? `<button type="button" class="badge pick on" onclick="cmdResume()">Resume</button>`
+          : `<button type="button" class="badge pick proj" onclick="cmdPause()">Pause</button>`) +
+        `<button type="button" class="badge pick" data-arm-key="end-session"` +
+        ` onclick="cmdEnd(this)">End</button>` +
+        '</div>';
+    }
+
+    function cmdOpenProject(projectId) {
+      closeCmdSetup();
+      ccOpen(projectId);
+    }
+
+    function cmdOpenPane(paneId) {
+      closeCmdSetup();
+      if (typeof openTerminal === 'function') openTerminal(paneId);
+    }
+
+    function cmdPause() {
+      const s = cmdSessionHere();
+      if (s) arbSend({type: 'cmd_pause', session: s.id});
+    }
+
+    function cmdResume() {
+      const s = cmdSessionHere();
+      if (s) arbSend({type: 'cmd_resume', session: s.id});
+    }
+
+    // Both armed: one clears the pane a Commander's whole context is in, and the other ends it.
+    function cmdRebrief(btn) {
+      const s = cmdSessionHere();
+      if (!s) return;
+      armButton(btn, 'Re-brief?', () => arbSend({type: 'cmd_rebrief', session: s.id}), 'cmd-rebrief');
+    }
+
+    function cmdEnd(btn) {
+      const s = cmdSessionHere();
+      if (!s) return;
+      armEndSession(btn, s.id, leave => {
+        arbSend({type: 'cmd_cancel', session: s.id, leave_children: leave});
+        closeCmdSetup();
+      });
+    }
+
+  </script>
+  <!-- After commander.js: the Command Center is the Project-wide view of what that file manages
+       one session of, and it is reached from that file's own dialog. -->
+  <script>
+    // --- The Command Center ------------------------------------------------------------------
+    //
+    // One screen per Project, drawn from one message. `cmd_project` already answers everything on
+    // it — the sessions under that Project, each one's plan as its own Commander wrote it, and the
+    // three things a list alone cannot say — so this file is a projection and holds no model of
+    // its own. Nothing here is computed that the relay did not say, because "this session is in
+    // nobody's plan" is a claim about every plan in the tree, and a browser holding one page of it
+    // is exactly the reader that cannot make that claim.
+    //
+    // The tree groups by `parent_session` and prints `tier` as a label. A tier is descriptive: a
+    // Feature Commander persists across sequential branches, updating its own plan, so branch
+    // progress reads out of that plan and never out of the session list. Two rows at one level
+    // means two independent plans, which is the boundary a person is meant to be choosing
+    // deliberately — see `.workflow/02_architecture/decision_log/`.
+    //
+    // Read-only about plans. A plan is the Commander's to write; this says where the work is, and
+    // the screens the app already has are where it is read.
+
+    let ccProject = '';          // the Project on screen, '' when this view is closed
+    let ccTree = null;           // the last answer, with later pages appended to its sessions
+    let ccPick = '';             // the session whose plan is open under the tree
+    let ccAsked = 0;             // request id of the page in flight, 0 when there is none
+    let ccRequest = 0;           // local sequence; the relay only echoes it to this requester
+    let ccDirty = false;         // the tree moved while that page was in flight
+
+    // Every state a session row can be in, as the colour the rest of the app already uses for it.
+    const CC_STATE = {active: 'on', awaiting: 'on', paused: 'warn', ended: ''};
+
+    // --- which Project is on screen ------------------------------------------------------------
+    //
+    // The dashboard is about one Project at a time and the next thing anybody does on it is look
+    // at another one, so the selector *is* the title. Which one it opens on is this browser's
+    // last, then the Project this app is about, then whatever the relay offers first — a
+    // dashboard that opened on nothing would ask a question before it said anything.
+    const CC_PROJECT_KEY = 'herdr_cc_project';
+    const CC_HOME = 'herdr';
+
+    function ccPickable() {
+      if (typeof projectsForPicking === 'function') return projectsForPicking();
+      return (typeof projects === 'undefined' ? [] : projects || []).filter(p => p && !p.container);
+    }
+
+    function ccDefaultProject() {
+      const list = ccPickable();
+      let last = null;
+      try { last = localStorage.getItem(CC_PROJECT_KEY); } catch (e) { last = null; }
+      const known = id => list.some(p => p.id === id);
+      if (last && known(last)) return last;
+      const home = list.find(p => String(p.id).indexOf(CC_HOME) === 0
+        || String(p.label || '').toLowerCase().indexOf(CC_HOME) === 0);
+      return (home && home.id) || (list[0] && list[0].id) || '';
+    }
+
+    // The entry point, from the launcher tile. Not a second way in with its own memory: it opens
+    // the same screen `ccOpen` does, on the Project this browser was last standing in.
+    function ccOpenDefault() { ccOpen(ccDefaultProject()); }
+
+    function ccSwitchProject(id) { if (id && id !== ccProject) ccOpen(id); }
+
+    function ccRenderPick() {
+      const box = document.getElementById('cmdCenterPick');
+      if (!box) return;
+      const list = ccPickable();
+      // The Project on screen is in the list even when the relay does not offer it — a roster that
+      // has lost a Project must not silently retitle this page as a different one.
+      const rows = list.some(p => p.id === ccProject) || !ccProject
+        ? list : [{id: ccProject, label: ccProject}].concat(list);
+      box.innerHTML = rows.map(p =>
+        `<option value="${escapeHtml(p.id)}"${p.id === ccProject ? ' selected' : ''}>` +
+        escapeHtml(p.label || p.id) + '</option>').join('');
+      box.value = ccProject;
+    }
+
+    function ccOpen(projectId) {
+      const next = String(projectId || '');
+      if (next !== ccProject) ccAsked = 0; // any in-flight answer belongs to the old Project
+      ccProject = next;
+      try { if (next) localStorage.setItem(CC_PROJECT_KEY, next); }
+      catch (e) { /* private mode: this session only */ }
+      ccTree = null;
+      ccPick = '';
+      ccDirty = false;
+      openPanel('cmdCenterView');
+      ccRender();
+      ccAsk('');
+    }
+
+    // --- the way in ---------------------------------------------------------------------------
+    //
+    // One row per Project with work in it. A Command Center is about a Project, and every other
+    // way in was through a session somebody already had open — which is no way in at all for the
+    // reader asking what is running. Drawn from the two session lists this browser already holds
+    // rather than from the Project roster: a Project with nothing in it has nothing to command,
+    // and a section of empty rows is a section people learn to scroll past. Empty means the
+    // section draws nothing, and `applySections` takes an empty section off the page.
+    function ccProjectRows() {
+      const live = (typeof cmdSessions === 'undefined' ? [] : cmdSessions || [])
+        .concat(typeof arbSessions === 'undefined' ? [] : arbSessions || [])
+        .filter(s => s && s.state !== 'ended');
+      const byProject = {};
+      live.forEach(s => {
+        const id = s.project_id || '';
+        if (!id) return;          // a session in no configured Project has no Command Center
+        const row = byProject[id] || (byProject[id] = {id, sessions: 0, stopped: 0, root: null});
+        row.sessions += 1;
+        if (s.state === 'paused') row.stopped += 1;
+        if (s.kind === 'commander' && s.tier === 'project') row.root = s;
+      });
+      return Object.keys(byProject).sort().map(id => byProject[id]);
+    }
+
+    function ccLabelOf(projectId) {
+      const found = (typeof projects === 'undefined' ? [] : projects || [])
+        .find(p => p && p.id === projectId);
+      return (found && found.label) || projectId;
+    }
+
+    // A stored section order written before this section existed does not name it, and
+    // loadSections reads that absence as "switched off" — correctly, because it cannot tell the
+    // two apart. The launcher answered that with a causal moment (the user saved a tile); this
+    // has none, because the work it lists is started from panes and from other sessions rather
+    // than from here. So it is adopted once, the first time this browser sees a Project with
+    // work in it, and the fact that it has been adopted is written down — which is what lets a
+    // later switch-off stick instead of being undone on the next snapshot.
+    const CC_ADOPTED_KEY = 'herdr_command_section';
+
+    function ccAdoptSection(rows) {
+      if (!rows.length || typeof toggleSection !== 'function') return;
+      if (typeof sectionOrder === 'undefined') return;
+      try {
+        if (localStorage.getItem(CC_ADOPTED_KEY)) return;
+        localStorage.setItem(CC_ADOPTED_KEY, '1');
+      } catch (e) { return; }   // private mode: leave the order this browser cannot remember alone
+      if (!sectionOrder.includes('command')) toggleSection('command', true);
+    }
+
+    function ccRenderSection() {
+      const box = document.getElementById('commandCenters');
+      if (!box) return;
+      const rows = ccProjectRows();
+      ccAdoptSection(rows);
+      box.innerHTML = rows.length
+        ? '<div class="section-header">Command</div>' + rows.map(row =>
+            `<button type="button" class="cc-card" onclick="ccOpen('${escapeHtml(row.id)}')">` +
+            `<span class="cc-card-name">${escapeHtml(ccLabelOf(row.id))}</span>` +
+            `<span class="cc-card-note">${row.sessions} session` +
+            `${row.sessions === 1 ? '' : 's'}` +
+            (row.stopped ? ` · ${row.stopped} stopped` : '') +
+            (row.root ? '' : ' · nobody commanding') +
+            '</span></button>').join('')
+        : '';
+      if (typeof applySections === 'function') applySections();
+    }
+
+    function ccIsOpen() {
+      const view = document.getElementById('cmdCenterView');
+      return !!(view && view.style.display !== 'none' && ccProject);
+    }
+
+    function ccAsk(cursor) {
+      if (!ccProject || ccAsked) return;
+      ccAsked = ++ccRequest;
+      arbSend({type: 'cmd_project', project_id: ccProject, cursor: cursor || '',
+               request_id: ccAsked});
+    }
+
+    // Later pages are appended rather than replacing what is on screen: the ids are complete in
+    // every page and only the plan bodies are paged, so a second page is more of the same tree and
+    // never a different one. An answer about another Project is dropped — a slow page arriving
+    // after the reader has moved would redraw this screen with somebody else's work.
+    function ccReceive(msg) {
+      if (!msg || (msg.project_id || '') !== ccProject) return;
+      // New relays echo the request id. Missing stays compatible with an old relay; a present,
+      // older id cannot win an A → B → A navigation race.
+      if (msg.request_id != null && msg.request_id !== ccAsked) return;
+      ccAsked = 0;
+      if (ccDirty) {
+        ccDirty = false;
+        ccTree = null;
+        ccRender();
+        ccAsk('');
+        return;
+      }
+      if (ccTree && msg.sessions && ccTree.cursorSeen) {
+        ccTree = Object.assign({}, msg, {sessions: ccTree.sessions.concat(msg.sessions || [])});
+      } else {
+        ccTree = Object.assign({}, msg);
+      }
+      ccTree.cursorSeen = true;
+      ccRender();
+    }
+
+    function ccMore() {
+      if (ccTree && ccTree.cursor) ccAsk(ccTree.cursor);
+    }
+
+    // --- drawing -------------------------------------------------------------------------------
+
+    function ccSession(id) {
+      return ((ccTree && ccTree.sessions) || []).find(s => s.id === id) || null;
+    }
+
+    function ccDetachedSession(id) {
+      if (!ccTree || !(ccTree.detached || []).includes(id)) return null;
+      return (typeof cmdSessions === 'undefined' ? [] : cmdSessions || [])
+        .concat(typeof arbSessions === 'undefined' ? [] : arbSessions || [])
+        .find(s => s && s.id === id) || null;
+    }
+
+    function ccPickedSession() {
+      return ccSession(ccPick) || ccDetachedSession(ccPick);
+    }
+
+    // Depth by walking `parent_session` up to the root. The relay answers root-first in a stable
+    // order, so indenting by depth is enough to draw the shape — there is no second sort here,
+    // because re-ordering a tree a reader is looking at is how two sessions swap places between
+    // two pages.
+    function ccDepth(s, byId) {
+      let depth = 0;
+      let at = s;
+      while (at && at.parent_session && byId[at.parent_session] && depth < 12) {
+        at = byId[at.parent_session];
+        depth += 1;
+      }
+      return depth;
+    }
+
+    function ccName(s) {
+      const conv = typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === s.conversation) : null;
+      return (conv && conv.name) || s.scope || s.id;
+    }
+
+    function ccBudget(s) {
+      const b = s.budget || {};
+      if (b.steps == null) return '';
+      // A renewing session's window rolls, so "left" is left *in this window* and saying so is
+      // the difference between a session that is nearly over and one that is nearly due a refill.
+      // Read off `total_steps`, which the relay sends only for a renewing budget — that is the
+      // fact itself, where "is it a Commander" is the proxy that happens to agree today.
+      const window = b.total_steps != null ? ' in this window' : '';
+      return `${b.steps} sends left${window}`;
+    }
+
+    function ccRowHtml(s, depth) {
+      const kind = s.kind === 'commander' ? (s.tier || 'commander') : 'arbitration';
+      const tone = CC_STATE[s.state] || '';
+      const members = s.members || {};
+      const badges = Object.keys(members).map(id => {
+        const m = members[id];
+        const where = m.aid || m.pane_id || '';
+        const title = `${m.label || id}${m.role ? ' · ' + m.role : ''}` +
+          (m.away ? ' · away' : m.status ? ' · ' + m.status : '');
+        // An away member draws hollow. It is the one thing somebody looking at a stalled Project
+        // has to see in a glance: the seat is still this session's and its agent is not up.
+        return `<button type="button" class="cc-who${m.away ? ' away' : ''}"` +
+          ` title="${escapeHtml(title)}"` +
+          (where ? ` onclick="ccOpenAgent('${escapeHtml(where)}')"` : ' disabled') +
+          `>${escapeHtml(m.label || id)}</button>`;
+      }).join('');
+      const coordinator = s.coordinator || {};
+      const at = coordinator.aid || coordinator.pane_id || '';
+      return `<div class="cc-row${s.id === ccPick ? ' picked' : ''}"` +
+        ` style="margin-left:${depth * 14}px">` +
+        `<button type="button" class="cc-select" onclick="ccPickSession('${escapeHtml(s.id)}')">` +
+        `<span class="cc-line"><span class="cc-tier ${tone}">${escapeHtml(kind)}</span>` +
+        `<span class="cc-name">${escapeHtml(ccName(s))}</span>` +
+        `<span class="cc-state">${escapeHtml(s.state)}` +
+        (s.pause_reason ? ' · ' + escapeHtml(String(s.pause_reason).replace(/_/g, ' ')) : '') +
+        '</span></span>' +
+        (s.scope ? `<span class="cc-scope">${escapeHtml(s.scope)}</span>` : '') +
+        '</button>' +
+        '<div class="cc-line cc-sub">' +
+        (at ? `<button type="button" class="cc-who lead" onclick="event.stopPropagation();` +
+              `ccOpenAgent('${escapeHtml(at)}')">coordinator</button>` : '') +
+        badges +
+        `<span class="cc-budget">${escapeHtml(ccBudget(s))}</span></div></div>`;
+    }
+
+    // A plan as its own Commander wrote it. Parsed defensively and shown as its own text when it
+    // does not parse: the body is a file an agent writes, so a browser that refused to draw
+    // anything it could not read would hide exactly the plan somebody needs to go and fix.
+    function ccPlanHtml(s) {
+      const agenda = s.agenda || {};
+      if (!agenda.body) return '<div class="cc-empty">No plan written yet.</div>';
+      let plan = null;
+      try { plan = JSON.parse(agenda.body); } catch (e) { plan = null; }
+      // C14.14: the relay's own observation time beside whatever the Commander claims inside the
+      // body. They are two different facts — one is when the file was last read and parsed, the
+      // other is a line an agent wrote — and a plan that stopped being read says so only here.
+      const claimed = plan && (plan.updated || plan.at) ? String(plan.updated || plan.at) : '';
+      const head = `<div class="cc-empty">Revision ${agenda.rev || 0}` +
+        (agenda.at && typeof arbAgo === 'function' ? ', read ' + escapeHtml(arbAgo(agenda.at)) : '') +
+        (claimed ? ', says ' + escapeHtml(claimed) : '') +
+        '</div>';
+      if (!plan || !Array.isArray(plan.steps)) {
+        return head + `<pre class="cc-raw">${escapeHtml(agenda.body)}</pre>`;
+      }
+      return head + plan.steps.map(step => {
+        const linked = step.session ? ccSession(step.session) : null;
+        // Whoever the plan says is on it, under whichever of the two words that Commander used.
+        // The shape of a plan body is the Commander's, so this reads what is there and invents
+        // no field: a plan that names nobody draws no assignee rather than an empty one.
+        const who = step.to || step.assignee || '';
+        return '<div class="cc-step">' +
+          `<span class="cc-step-id">${escapeHtml(String(step.id || '?'))}</span>` +
+          `<span class="cc-step-what">${escapeHtml(String(step.what || step.title || ''))}</span>` +
+          (who ? `<span class="cc-step-link">${escapeHtml(String(who))}</span>` : '') +
+          (step.status ? `<span class="cc-state">${escapeHtml(String(step.status))}</span>` : '') +
+          (linked ? `<span class="cc-tier ${CC_STATE[linked.state] || ''}">` +
+                    escapeHtml(linked.state) + '</span>' : '') +
+          // A step naming a session is a *link* and never proof of ownership — ownership is
+          // `parent_session` and nothing else. So a link to something not in this tree says so
+          // here rather than being drawn as if it were part of it.
+          (step.session
+            ? `<span class="cc-step-link${linked ? '' : ' missing'}">` +
+              escapeHtml(linked ? ccName(linked) : String(step.session) + ' — not in this tree') +
+              '</span>'
+            : '') +
+          '</div>';
+      }).join('');
+    }
+
+    function ccListHtml(title, note, rows) {
+      if (!rows.length) return '';
+      return `<div class="cc-band"><h3>${escapeHtml(title)}</h3>` +
+        `<div class="cc-empty">${escapeHtml(note)}</div>` + rows.join('') + '</div>';
+    }
+
+    function ccExceptionsHtml() {
+      const jump = id => {
+        const s = ccSession(id) || ccDetachedSession(id);
+        return `<button type="button" class="cc-jump" onclick="ccPickSession('${escapeHtml(id)}')">` +
+          escapeHtml(s ? ccName(s) : id) + '</button>';
+      };
+      return ccListHtml('In nobody\'s plan',
+          'Running under this Project, named by no plan in it.',
+          (ccTree.unassigned || []).map(jump)) +
+        ccListHtml('Left behind',
+          'Still running under a root that was ended. Nothing is watching them.',
+          (ccTree.detached || []).map(jump)) +
+        ccListHtml('Named but not here',
+          'A plan row names a session that is not in this tree.',
+          (ccTree.unresolved || []).map(row =>
+            '<div class="cc-step">' +
+            `<span class="cc-step-id">${escapeHtml(String(row.step || ''))}</span>` +
+            `<span class="cc-step-what">${escapeHtml(Array.isArray(row.names)
+              ? row.names.join(', ') : String(row.names || ''))}</span>` +
+            `<span class="cc-step-link missing">${escapeHtml(String(row.session || ''))}</span>` +
+            '</div>'));
+    }
+
+    // Every session in the tree is commandable, and by the messages its own kind answers to: the
+    // `cmd_*` family for a Commander and the `arb_*` family for an arbitration session. They are
+    // two families rather than one because they mean different things — a resume can kick an
+    // arbitrator for a decision and there is no decision to ask a Commander for — so the buttons
+    // are the same four words over two wires, and never one wire guessing which it is talking to.
+    function ccActionsHtml() {
+      const s = ccPickedSession();
+      if (!s || s.state === 'ended') return '';
+      const paused = s.state === 'paused';
+      return '<div class="arb-go">' +
+        (s.conversation
+          ? `<button type="button" class="badge pick proj" onclick="ccOpenConv('${escapeHtml(s.conversation)}')">` +
+            'Open its room</button>' : '') +
+        `<button type="button" class="badge pick proj" onclick="ccRebrief(this)">Re-brief</button>` +
+        (paused
+          ? `<button type="button" class="badge pick on" onclick="ccResume()">Resume</button>`
+          : `<button type="button" class="badge pick proj" onclick="ccPause()">Pause</button>`) +
+        `<button type="button" class="badge pick" data-arm-key="end-session"` +
+        ` onclick="ccEnd(this)">End</button>` +
+        '</div>' +
+        // Work handed down by a person, through the same queue a parent's `child.task` uses. Not
+        // typed at the pane from here: a pane has one writer, and a session mid-decision has a
+        // question out whose answer would be read against a prompt that no longer describes what
+        // it was asked. The session takes it at its own next moment and says which that was.
+        '<div class="cc-task">' +
+        `<textarea id="ccTaskText" rows="2" placeholder="Work for ${escapeHtml(ccName(s))}…"` +
+        ' aria-label="Work for this session"></textarea>' +
+        '<button type="button" class="badge pick on" onclick="ccTask()">Hand it down</button>' +
+        '</div>';
+    }
+
+    function ccRender() {
+      const body = document.getElementById('cmdCenterBody');
+      ccRenderPick();
+      if (!body) return;
+      if (!ccTree) { body.innerHTML = '<div class="cc-empty">Reading the Project…</div>'; return; }
+      const sessions = ccTree.sessions || [];
+      const byId = {};
+      sessions.forEach(s => { byId[s.id] = s; });
+      // A Project with no unfinished root Commander is an ordinary state and says so: nothing has
+      // been appointed to own it yet. The rest of the tree is still drawn, because sessions can be
+      // running under a Project nobody is commanding — that is what "left behind" is about.
+      const head = ccTree.root
+        ? ''
+        : '<div class="cc-empty">No Commander owns this Project. Appoint one from a ' +
+          'conversation in it.</div>';
+      const tree = sessions.length
+        ? sessions.map(s => ccRowHtml(s, ccDepth(s, byId))).join('')
+        : '<div class="cc-empty">Nothing is running in this Project.</div>';
+      const more = ccTree.complete
+        ? ''
+        : '<button type="button" class="badge pick proj" onclick="ccMore()">Read on</button>';
+      const picked = ccPickedSession();
+      const pickedInTree = ccSession(ccPick);
+      body.innerHTML = head + '<div class="cc-band">' + tree + more + '</div>' +
+        (picked
+            ? '<div class="cc-band"><h3>' + escapeHtml(ccName(picked)) + '</h3>' +
+            ccActionsHtml() + (pickedInTree ? ccPlanHtml(picked)
+              : '<div class="cc-empty">This session is detached from the current tree.</div>') +
+            '</div>'
+          : '') +
+        ccExceptionsHtml();
+    }
+
+    function ccPickSession(id) {
+      ccPick = ccPick === id ? '' : id;
+      ccRender();
+    }
+
+    // An agent id wherever the pane has one, for the reason every link in this app prefers it:
+    // herdr recycles pane ids, and the agent is the thing that means something tomorrow.
+    function ccOpenAgent(who) {
+      const pane = (typeof agents === 'undefined' ? [] : agents || [])
+        .find(a => a.aid === who || a.pane_id === who);
+      if (!pane) { showToast('That agent is not up.'); return; }
+      openTerminal(pane.pane_id, pane.aid || '');
+    }
+
+    function ccOpenConv(id) {
+      if (typeof openConversation === 'function') openConversation(id);
+    }
+
+    // Which message the picked session answers to. The relay has one gate for both families and
+    // refuses a `cmd_*` naming an arbitration session outright, which is the right place for that
+    // check and the wrong place for a reader to discover it — so the kind is read here and the
+    // message named accordingly. Four of the five differ only in their prefix; re-briefing is
+    // `arb_reinit` on that side, because the two families were named before they turned out to be
+    // one function underneath.
+    const CC_WIRE = {
+      commander: {pause: 'cmd_pause', resume: 'cmd_resume', cancel: 'cmd_cancel',
+                  rebrief: 'cmd_rebrief', task: 'cmd_task'},
+      arbitration: {pause: 'arb_pause', resume: 'arb_resume', cancel: 'arb_cancel',
+                    rebrief: 'arb_reinit', task: 'arb_task'},
+    };
+
+    function ccWire(verb) {
+      const s = ccPickedSession();
+      return CC_WIRE[s && s.kind === 'commander' ? 'commander' : 'arbitration'][verb];
+    }
+
+    function ccPause() { if (ccPick) arbSend({type: ccWire('pause'), session: ccPick}); }
+    function ccResume() { if (ccPick) arbSend({type: ccWire('resume'), session: ccPick}); }
+
+    function ccRebrief(btn) {
+      const id = ccPick;
+      const type = ccWire('rebrief');
+      if (id) armButton(btn, 'Re-brief?', () => arbSend({type, session: id}), 'cc-rebrief');
+    }
+
+    function ccEnd(btn) {
+      const id = ccPick;
+      const type = ccWire('cancel');
+      if (id) armEndSession(btn, id, leave =>
+        arbSend({type, session: id, leave_children: leave}));
+    }
+
+    // One task into the picked session's queue. The box is cleared on the way out rather than on
+    // an answer: the relay says whether it went out now or is waiting, and neither is a reason to
+    // make somebody retype a paragraph — but a box still holding what was just sent is the one
+    // that gets sent twice.
+    function ccTask() {
+      const box = document.getElementById('ccTaskText');
+      const text = box ? String(box.value || '').trim() : '';
+      if (!ccPick || !text) return;
+      arbSend({type: ccWire('task'), session: ccPick, text});
+      if (box) box.value = '';
+    }
+
+    // A session moving is a reason to re-read: `cmd_session` carries one row, but this screen's
+    // classifications depend on the whole tree. Patching that row would leave the lists stale.
+    function ccSessionMoved() {
+      if (!ccIsOpen()) return;
+      ccTree = null;
+      if (ccAsked) { ccDirty = true; return; }
+      ccAsk('');
+    }
+
+    // --- starting a feature ----------------------------------------------------------------
+    //
+    // A feature begins as a room with somebody in it, and only sometimes as a Commander. That is
+    // the order the work actually happens in: an architect is asked what this should be, and a
+    // Commander is what writes the plan once there is one to write. So the sheet asks for the
+    // scope and one checkbox, and the harness itself is the Start dialog's question — it already
+    // knows this relay's kinds, its roles and its agent configs, and a second copy of that form
+    // would be a second thing to keep in step.
+    //
+    // The room is minted before the start rather than after it: `startIntent` is how a started
+    // pane joins a conversation, and it has to name one that exists.
+    function ccOpenFeature() {
+      const sheet = document.getElementById('ccFeatureSheet');
+      if (!sheet || !ccProject) return;
+      const box = document.getElementById('ccFeatureScope');
+      if (box) box.value = '';
+      const commander = document.getElementById('ccFeatureCommander');
+      if (commander) commander.checked = false;
+      const label = document.getElementById('ccFeatureCommanderLabel');
+      const note = document.getElementById('ccFeatureNote');
+      // Which tier this would be is not a question: a Project with nobody commanding it needs its
+      // Commander before it needs a feature one, and a Project that has one is where a feature
+      // sits. Asking would be asking the reader to restate what the tree already says.
+      const root = ccRootSession();
+      if (label) {
+        label.textContent = root ? 'Appoint it as a feature Commander'
+          : 'Appoint it as this Project’s Commander';
+      }
+      if (note) {
+        note.textContent = root
+          ? 'Leave it off to talk to it first. A Commander can be appointed from the room later.'
+          : 'Nobody commands this Project yet, so this one would own it.';
+      }
+      sheet.style.display = '';
+    }
+
+    function ccCloseFeature() {
+      const sheet = document.getElementById('ccFeatureSheet');
+      if (sheet) sheet.style.display = 'none';
+    }
+
+    // The unfinished root Commander of the Project on screen, as the tree answered it.
+    function ccRootSession() {
+      return (ccTree && ccTree.root && ccSession(ccTree.root)) || null;
+    }
+
+    // A room named after the work, so the tree and the conversation list agree about what this is.
+    function ccFeatureName(scope) {
+      const line = String(scope || '').split('\n')[0].trim();
+      return (line.length > 40 ? line.slice(0, 39).trimEnd() + '…' : line) || 'Feature';
+    }
+
+    function ccStartFeature() {
+      const scope = String((document.getElementById('ccFeatureScope') || {}).value || '').trim();
+      if (!scope) { showToast('Say what the feature is.'); return; }
+      if (typeof openStartDialog !== 'function' || typeof startOptions === 'undefined'
+          || !startOptions) {
+        showToast('This relay does not start sessions.');
+        return;
+      }
+      const items = loadConvIndex();
+      const conv = {id: convNewId(items), name: ccFeatureName(scope), created: Date.now(),
+                    members: []};
+      saveConvIndex([conv].concat(items));
+      const wants = !!(document.getElementById('ccFeatureCommander') || {}).checked;
+      const root = ccRootSession();
+      ccCloseFeature();
+      // openStartDialog clears the intent, so it is set after — the same order pair_dialog uses.
+      openStartDialog(ccProject);
+      startIntent = {conv: conv.id};
+      if (wants) {
+        startIntent.commander = {
+          scope: scope,
+          tier: root ? 'feature' : 'project',
+          parent: root ? root.id : '',
+        };
+      }
+    }
+
+    // What `landStart` calls once the pane is up and in the room. The coordinator is named by
+    // pane, exactly as the Commander setup form names it: the relay reads a participant's
+    // identity off its own pane list, and a pane that has just come up has no agent id yet.
+    function ccAppointStarted(pane, plan) {
+      if (!pane || !plan || typeof arbSend !== 'function') return;
+      arbSend({type: 'cmd_start', conversation: plan.conv || '', scope: plan.scope,
+               coordinator: {pane_id: pane.pane_id}, members: [],
+               tier: plan.tier, parent_session: plan.parent || ''});
+    }
+
+    // The way in. A tile rather than a row in a list, because a dashboard is a place you go back
+    // to — the same reason the launcher's bots are tiles — and the first one in the section,
+    // because everything else there starts something and this one opens what is already running.
+    // Drawn only where the relay answers about Commanders at all: `cmdOn` is that gate.
+    function ccLauncherTileHtml() {
+      if (typeof cmdOn === 'undefined' || !cmdOn) return '';
+      return '<div class="launcher-tile-wrap">' +
+        '<button class="launcher-tile" data-action="command" onclick="ccOpenDefault()"' +
+        ' title="The Project dashboard: what is running, and what is planned">' +
+        '<span class="launcher-kind">Dashboard</span>' +
+        '<span class="launcher-name">Command Center</span>' +
+        '</button></div>';
+    }
+
+    function ccReset() {
+      ccTree = null;
+      ccPick = '';
+      ccAsked = 0;
+      ccDirty = false;
+      if (ccIsOpen()) ccRender();
+    }
+
+    function ccReconnect() { if (ccIsOpen()) ccAsk(''); }
 
   </script>
   <!-- After history.js and shortcuts.js: it wires its listeners at load and calls scrollPaneToBottom

@@ -6442,7 +6442,7 @@
     <div role="dialog" aria-label="Arbitrate this conversation"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg> Arbitrate · <span id="arbSetupConvName"></span></span>
+        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><span id="arbSetupSign" style="display:flex"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></span> <span id="arbSetupKind">Arbitrate</span> · <span id="arbSetupConvName"></span></span>
         <button onclick="closeArbSetup()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
@@ -8281,6 +8281,14 @@
       // keeps them out of the composer until then — a chip that types nothing is a dead control.
       { at: 'architect-prompt', label: 'Architect prompt',
         text: '/ponytail\n/caveman\n\nRead Instructions here: @.agent/prompts/System_Prompt_2_Architect.md\nThen wait for tasks to work on.' },
+      // The opening instruction for a pane about to be appointed a Commander. By path like the
+      // architect's, and deliberately not a copy of the brief: the brief is the relay's, arrives
+      // when the appointment lands, and is re-read from `relay/prompts/commander.md` on every
+      // send — anything restated here would be the copy that goes stale. What the file says is
+      // the half the relay cannot: survey the work that is already there before planning it,
+      // which is the difference between a Project being started and a Project being adopted.
+      { at: 'commander-prompt', label: 'Commander prompt',
+        text: 'Read Instructions here: @.agent/prompts/System_Prompt_Commander.md\nThen wait for your brief.' },
       { at: 'reviewer-prompt', label: 'Reviewer prompt', text: '' },
       { at: 'implementer-prompt', label: 'Implementer prompt', text: '' },
       { at: 'arbitrator-prompt', label: 'Arbitrator prompt', text: '' },
@@ -8315,6 +8323,9 @@
     // actually has. A record still naming the old one resolves to no prompt, which is what it always
     // had.
     const START_ROLES = [
+      // First, because it is the one that decides what the others are for — and because the
+      // Command Center's + Feature opens this dialog with a Commander in mind.
+      { name: 'Commander', role: 'architect', at: 'commander-prompt' },
       { name: 'Architect', role: 'architect', at: 'architect-prompt' },
       { name: 'Reviewer', role: 'reviewer', at: 'reviewer-prompt' },
       { name: 'Implementer', role: 'agent', at: 'implementer-prompt' },
@@ -15344,6 +15355,10 @@ function markdownHtml(source) {
       // Same rule, same reason: arbitration is a capability of the relay on the other end of this
       // socket, and the next socket may be a different relay.
       if (typeof arbReset === 'function') arbReset();
+      // The other kind of session, reset for the same reason and on the same breath: whether this
+      // relay starts Commanders at all is something only this socket can say.
+      if (typeof cmdReset === 'function') cmdReset();
+      if (typeof ccReset === 'function') ccReset();
       if (typeof webchatReset === 'function') webchatReset();
       if (typeof nlmReset === 'function') nlmReset();
       if (typeof closeStart === 'function') closeStart();
@@ -15371,6 +15386,7 @@ function markdownHtml(source) {
         setStatus('connected');
         if (window.cue) cue('ready');
         if (typeof announceSubscription === 'function') announceSubscription();
+        if (typeof ccReconnect === 'function') ccReconnect();
         stateSyncOpen(socket);
       };
       socket.onclose = () => {
@@ -15456,6 +15472,22 @@ function markdownHtml(source) {
       // asked for it.
       else if (msg.type === 'arb_detail') {
         if (typeof arbReceiveDetail === 'function') arbReceiveDetail(msg);
+      }
+      // The Commander half of the same two messages. A separate family so a client is told about
+      // its own kind and no other; the presence of `cmd_sessions` is its feature gate.
+      else if (msg.type === 'cmd_sessions') {
+        if (typeof cmdSessionsReceive === 'function') cmdSessionsReceive(msg);
+      }
+      else if (msg.type === 'cmd_session') {
+        if (typeof cmdSessionReceive === 'function') cmdSessionReceive(msg);
+        // The Command Center is about a whole tree, and a session moving can change which lists
+        // it belongs to. Answered by asking again rather than by patching the row in place.
+        if (typeof ccSessionMoved === 'function') ccSessionMoved();
+      }
+      // One Project's tree and its plans. Answered to the client that asked and never broadcast,
+      // because it carries plan bodies — the rule `arb_detail` and `conv_log` follow.
+      else if (msg.type === 'cmd_project') {
+        if (typeof ccReceive === 'function') ccReceive(msg);
       }
       else if (msg.type === 'webchat_state') {
         if (typeof webchatReceiveState === 'function') webchatReceiveState(msg);
@@ -16562,6 +16594,14 @@ function markdownHtml(source) {
         // was missing from the thread would be a turn nobody could see the start of. After the
         // membership above, so the thread it is recorded into is the one it was started for.
         if (prompt) sendTextTo(a.pane_id, prompt);
+        // A start the Command Center asked to be a Commander. Appointed here rather than there
+        // because this is where the pane exists: a Commander is named by a live pane, and the
+        // screen that asked for one had nothing to name when it asked. The room is already this
+        // pane's by the line above, so the session is appointed over a conversation that holds
+        // it rather than over an empty one.
+        if (intent.commander && typeof ccAppointStarted === 'function') {
+          ccAppointStarted(a, Object.assign({conv: intent.conv}, intent.commander));
+        }
         // Not while the conversation window is up. A start made from a conversation is a request
         // for another colleague in it, not a request to stop reading it — and the member has just
         // appeared in the roster behind this.
@@ -17597,8 +17637,17 @@ function markdownHtml(source) {
     // is in the conversation, every browser has it, and a start reproduced from it is the start
     // that was made whoever is pressing.
     function respawnWebRoom(key) {
-      if (typeof convWebModeOf !== 'function' || typeof convLifeConvId !== 'function') return null;
-      const conv = loadConvIndex().find(c => c.id === convLifeConvId(key));
+      if (typeof convLifeConvId !== 'function') return null;
+      return convWebRoomOf(convLifeConvId(key));
+    }
+
+    // The same question asked of the room rather than of one of its members, which is what the
+    // controls need: Reset is drawn once per member and once per room, and a room whose agents
+    // hold a binding refuses it in both places. Kept beside `respawnWebRoom` because the answer is
+    // the same fact, read from the same durable copy.
+    function convWebRoomOf(convId) {
+      if (typeof convWebModeOf !== 'function' || !convId) return null;
+      const conv = loadConvIndex().find(c => c.id === convId);
       return conv && ['agent', 'studio'].includes(convWebModeOf(conv)) ? conv : null;
     }
 
@@ -17803,7 +17852,10 @@ function markdownHtml(source) {
       }, starter ? startRoleFields(starter, '')
         : {role: room ? 'agent' : respawnRole(spawn)});
       if (room) {
-        msg.background = true;
+        // Studio always starts its harness behind the room. An ordinary agent room starts through
+        // the Start sheet and does not make that claim, so restarting one must not silently change
+        // whether its completion reaches the Lock Screen.
+        if (convWebModeOf(room) === 'studio') msg.background = true;
         const grant = typeof convGrantOf === 'function' ? convGrantOf(room) : [];
         if (grant.length) msg.webchat = {ns: room.id, providers: grant};
         if (typeof startUnattendedOffered === 'function' && startUnattendedOffered(msg.name)) {
@@ -17878,6 +17930,15 @@ function markdownHtml(source) {
     function convResetMember(key) {
       const live = agents.find(x => convMemberKey(x) === key);
       if (!live) return false;
+      // Clearing a bound agent also clears the one-time brief that tells it what room and grant it
+      // holds. The existing binding then makes reconciliation correctly stay silent, so there is
+      // no later path that restores those instructions. Restart writes the binding into the new
+      // harness and briefs it before use; until Reset can make that same ordered guarantee, refuse
+      // the destructive half instead of leaving a live but contextless agent behind.
+      if (respawnWebRoom(key)) {
+        showToast('Use Restart for a Web Agent — Reset would clear its room instructions.');
+        return false;
+      }
       const spawn = spawnOf(key) || {};
       // Not through agentSlash. That rewrites a leading `/` to `$` for codex because a *skill* is
       // invoked that way there — `$ponytail`, `$caveman`. This is a slash command, and codex spells
@@ -18705,6 +18766,9 @@ function markdownHtml(source) {
       // the agent id of the arbitrator that ran it.
       arbPast = (msg.past || []).filter(s => s && s.id);
       arbSessions = (msg.sessions || []).filter(s => s && s.state !== 'ended');
+      if (typeof cmdMaterializeConversation === 'function') {
+        arbSessions.concat(arbPast).forEach(cmdMaterializeConversation);
+      }
       arbSession = arbSessions[0] || null;
       arbAskDetail(arbSession);
       arbRender();
@@ -18716,6 +18780,7 @@ function markdownHtml(source) {
     function arbReceiveSession(msg) {
       const s = msg.session;
       if (!s) return;
+      if (typeof cmdMaterializeConversation === 'function') cmdMaterializeConversation(s);
       arbOn = true;
       // A session ending is where a past one comes from: the relay sends `past` on connect alone,
       // and a browser that stayed open through the end of a session would otherwise have to
@@ -19032,6 +19097,12 @@ function markdownHtml(source) {
         if (arb) out.add(arb);
         (s.members || []).forEach(m => { if (m.pane_id) out.add(m.pane_id); });
       });
+      // Commander and arbitration are peer session kinds over one global pane claim. The relay is
+      // still the authority, but offering a pane the other client module already knows is held is
+      // a choice whose only outcome is `participant_in_session`.
+      if (typeof cmdTakenPanes === 'function') {
+        cmdTakenPanes(except).forEach(paneId => out.add(paneId));
+      }
       return out;
     }
 
@@ -19727,8 +19798,8 @@ function markdownHtml(source) {
         '<button type="button" class="arb-btn arm-btn"' +
         ` onclick="armButton(this, 'Re-brief?', () => arbSessionAction('arb_reinit'))">` +
         'Re-brief the arbitrator</button>' +
-        '<button type="button" class="arb-btn arm-btn warn"' +
-        ` onclick="armButton(this, 'End session?', () => arbSessionAction('arb_cancel'))">` +
+        '<button type="button" class="arb-btn arm-btn warn" data-arm-key="end-session"' +
+        ` onclick="arbEndSession(this)">` +
         'End session</button>' +
         '<span class="arb-note">Re-briefing empties the arbitrator’s context and gives it its ' +
         'brief again — the session and its record are kept. Ending it is final.</span>' +
@@ -19742,13 +19813,60 @@ function markdownHtml(source) {
       arbCommand(command);
     }
 
+    // Ending never cascades: a child session holds its own panes, and nobody has looked at them
+    // (C10.2). The relay refuses to end a parent unless the request says `leave_children`, and
+    // this client already holds the whole tree — so the choice is put in front of the person
+    // here, as a second arm, rather than arriving afterwards as a refusal they cannot answer.
+    function arbDescendantsRunning(id) {
+      const live = arbSessions.concat(typeof cmdSessions !== 'undefined' ? cmdSessions : []);
+      const known = {};
+      live.concat(arbPast, typeof cmdPast !== 'undefined' ? cmdPast : [])
+        .forEach(s => { if (s && s.id) known[s.id] = s; });
+      // Walked *up* from each live session rather than down from this one, because that is the
+      // shape `leave_children` creates: a session that was left running under a parent that has
+      // since ended is reached through a row that is no longer live.
+      return live.filter(s => {
+        const seen = {};
+        let up = s.id === id ? '' : s.parent_session;
+        while (up && !seen[up]) {
+          if (up === id) return true;
+          seen[up] = 1;
+          up = (known[up] || {}).parent_session || '';
+        }
+        return false;
+      }).map(s => s.id);
+    }
+
+    // One arm for a session with nothing under it; two for one with children, where the second
+    // says what ending it leaves behind. Shared with the Commander's End, which asks the same
+    // question about the same tree.
+    function armEndSession(btn, id, send) {
+      const running = arbDescendantsRunning(id);
+      // Keyed, because both dialogs this button lives in are rebuilt by the poll: a `cmd_session`
+      // or `arb_session` broadcast between the two taps replaces the element, and an arm held by
+      // element identity alone would be lost with it — the second tap would re-ask rather than
+      // end. `data-arm-key` on the markup is the other half, which is what lets the label be put
+      // back on whichever button is standing there when the arm expires.
+      armButton(btn, running.length ? `Leave ${running.length} running?` : 'End session?',
+        () => send(!!running.length), 'end-session');
+    }
+
+    function arbEndSession(btn) {
+      const session = arbSessionHere();
+      if (!session) return;
+      armEndSession(btn, session.id, leave => {
+        closeArbSetup();
+        arbCommand('arb_cancel', {leave_children: leave});
+      });
+    }
+
     // The pane, or a new one. A room is often assembled from nothing — two fresh agents and
     // something to decide between them — and leaving this dialog to start each one loses every
     // answer already in it. So each slot can start its own, and the new pane lands *here*: it is
     // chosen in the slot that asked for it and the page does not move.
-    function arbSlot(id, rows, selected, locked) {
+    function arbSlot(id, rows, selected, locked, canSpawn) {
       return '<div class="arb-slot">' + arbPaneSelect(id, rows, selected, locked) +
-        (arbCanSpawn() && !locked
+        (canSpawn !== false && arbCanSpawn() && !locked
           ? `<button type="button" class="badge pick proj" onclick="arbSpawnFor('${id}')"` +
             ' title="Start a new agent and put it in this slot">+ New</button>' : '') +
         '</div>';
@@ -19913,6 +20031,13 @@ function markdownHtml(source) {
       if (el) el.innerHTML = arbSetupHtml(rows, free, at, !!mine, holding || arbHoldNote());
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
+      // Put back, because the Commander form borrows this head and swaps both. Set every time
+      // rather than only after a Commander has been drawn: one assignment is cheaper than the
+      // bookkeeping that would tell us whether it was needed.
+      const sign = document.getElementById('arbSetupSign');
+      if (sign) sign.innerHTML = arbSign(20);
+      const kind = document.getElementById('arbSetupKind');
+      if (kind) kind.textContent = 'Arbitrate';
       arbSetupConv = conv.id;
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'block';
@@ -19961,6 +20086,10 @@ function markdownHtml(source) {
       arbAutoToken++;
       arbSetupConv = '';
       arbSetupSession = '';
+      // The Commander form is drawn into this same box, and its own close button is this one.
+      // Without this the module would still think it was open and redraw itself into a hidden
+      // dialog on the next `cmd_session`.
+      if (typeof cmdNoteClosed === 'function') cmdNoteClosed();
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
     }
@@ -20303,6 +20432,10 @@ function markdownHtml(source) {
     // redraw on every poll would take a half-written sentence out from under the person writing it.
     function arbRender() {
       arbSyncOpenButton();
+      // The Commander button lives in the same float and answers the same question about the same
+      // conversation, so it is synced by the same render rather than by a second hook that could
+      // be called at a different time and disagree about which room is on screen.
+      if (typeof cmdSyncButton === 'function') cmdSyncButton();
       const el = document.getElementById('arbStrip');
       if (!el) return;
       const conv = typeof convCurrentId === 'function'
@@ -21165,6 +21298,413 @@ function markdownHtml(source) {
     }
 
   </script>
+  <!-- After arbitration.js, for the same reason the phone loads it there. -->
+  <script>
+    // --- Commander -------------------------------------------------------------------------
+    //
+    // A Commander owns a piece of work rather than one exchange: which Project it is in, what the
+    // steps are, and who does them. It is a session of the other `kind` — the same table, the same
+    // pane claim, the same lifecycle — so almost everything here is a thin layer over what
+    // arbitration.js already draws. What is genuinely different is three things: a Commander may
+    // hold no members at all, it sits somewhere in a Project (a tier, and a parent above it), and
+    // it runs no decision loop, so there is no strip of decisions to read.
+    //
+    // The feature gate is the arrival of `cmd_sessions`, exactly as `arb_sessions` gates
+    // arbitration. A relay too old to send it draws no Commander button, which is the only way a
+    // page deployed separately from its relay can be honest about what that relay will do (N10).
+    //
+    // This module deliberately owns no pane picker, no project resolution and no candidate lists:
+    // those are arbitration's and a Commander asks the same questions of them. What it must not
+    // borrow is the shape of the arbitration form — two members exactly, an arbitrator, gates and
+    // clocks — because none of that is true of a Commander.
+
+    let cmdOn = false;            // this relay sent cmd_sessions on this connection
+    let cmdSessions = [];         // unfinished Commanders, newest first
+    let cmdPast = [];             // the ended ones, read for the setup they ran with
+    // The conversation the dialog is open over, or '' when it is closed. Same rule as the
+    // arbitration form's: drawn once on open, because its pane lists move under a scope being
+    // typed into it.
+    let cmdSetupConv = '';
+
+    // The tiers a person may start by hand, in the order the Project contains them. `project` has
+    // no parent and there may be one unfinished one per Project; the other two require a parent,
+    // which is why the selector exists at all — without it those two choices would be refused
+    // every time with `parent_required`.
+    const CMD_TIERS = [
+      ['project', 'Project', 'Owns the whole Project. One at a time.'],
+      ['feature', 'Feature', 'A piece of work inside a Project.'],
+      ['branch', 'Branch', 'One branch of one feature.'],
+    ];
+    // The value a member slot carries when it is holding nobody. A Commander may run with an empty
+    // roster, so every slot has to be able to say so.
+    const CMD_NONE = 'cmd-nobody';
+    const CMD_MEMBER_SLOTS = 6;
+
+    // Per connection, never cached: what this relay will start is a fact about this relay.
+    function cmdReset() {
+      const had = cmdOn;
+      cmdOn = false;
+      cmdSessions = [];
+      cmdPast = [];
+      closeCmdSetup();
+      cmdSyncButton();
+      if (had && typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    function cmdSessionsReceive(msg) {
+      const had = cmdOn;
+      cmdOn = true;
+      cmdSessions = (msg && msg.sessions) || [];
+      cmdPast = (msg && msg.past) || [];
+      cmdSessions.concat(cmdPast).forEach(cmdMaterializeConversation);
+      cmdSyncButton();
+      // Whether this relay answers about Commanders at all is what gates the Command Center's
+      // tile, and that answer arrives after the launcher has already been drawn once.
+      if (!had && typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    // One session, merged in place. An ended one is moved rather than dropped: the form a person
+    // opens next is seeded from what the last one ran with.
+    function cmdSessionReceive(msg) {
+      const s = msg && msg.session;
+      if (!s || !s.id) return;
+      cmdOn = true;
+      cmdMaterializeConversation(s);
+      cmdSessions = cmdSessions.filter(x => x.id !== s.id);
+      cmdPast = cmdPast.filter(x => x.id !== s.id);
+      if (s.state === 'ended') cmdPast = [s].concat(cmdPast);
+      else cmdSessions = [s].concat(cmdSessions);
+      cmdSyncButton();
+      // The dialog redraws itself only while it is standing over the session that moved — a
+      // Commander pausing in another room must not take the form out from under somebody.
+      if (cmdSetupConv && s.conversation === cmdSetupConv) cmdOpenFromConv(true);
+    }
+
+    // A child session's room is a consequence of starting it. The relay mints the deterministic
+    // id but never writes the browser-owned conversations document, so the first client that sees
+    // complete session metadata materialises it once.
+    function cmdMaterializeConversation(s) {
+      if (!s || !s.id || s.conversation !== 'c_cmd_' + s.id ||
+          typeof loadConvIndex !== 'function' || typeof saveConvIndex !== 'function') return;
+      const items = loadConvIndex();
+      if (items.some(c => c.id === s.conversation)) return;
+      // A coordinator owns the session but is not enrolled in its conversation. Adding it here
+      // would record its coordination output as ordinary member turns as well as session events.
+      const people = (s.members || []).filter(Boolean);
+      if (people.some(p => !p.aid)) return;
+      const seen = new Set();
+      const members = [];
+      people.forEach(p => {
+        if (seen.has(p.aid)) return;
+        seen.add(p.aid);
+        members.push({key: p.aid, aid: p.aid, added: Date.now(),
+          label: p.label || p.pane_id || p.aid, agent: p.agent || '',
+          project: s.project_id || ''});
+      });
+      const name = String(s.scope || 'Commander child').trim().split('\n')[0].slice(0, 64);
+      saveConvIndex([{id: s.conversation, name: name || 'Commander child',
+        created: Date.now(), members: members}].concat(items));
+    }
+
+    // `find` and not `filter`: the relay refuses a second unfinished Commander on one
+    // conversation, so a room has one or none. An arbitration session in the same room is a
+    // different kind and is not in this list at all.
+    function cmdSessionForConversation(id) {
+      return cmdSessions.find(s => s.conversation === id) || null;
+    }
+
+    function cmdSessionHere() {
+      return typeof convCurrentId === 'function'
+        ? cmdSessionForConversation(convCurrentId()) : null;
+    }
+
+    // The Commander half of the one global claim set. Arbitration's picker unions this with its
+    // own sessions, and the Commander picker is built from that same union.
+    function cmdTakenPanes(except) {
+      const out = new Set();
+      cmdSessions.forEach(s => {
+        if (except && s.id === except) return;
+        const coordinator = (s.coordinator || {}).pane_id;
+        if (coordinator) out.add(coordinator);
+        (s.members || []).forEach(m => { if (m.pane_id) out.add(m.pane_id); });
+      });
+      return out;
+    }
+
+    // The mark. Two chevrons, which is what a commander wears — deliberately nothing like
+    // arbitration's three circles, because the two buttons sit beside each other.
+    function cmdSign(size) {
+      const n = size || 16;
+      return `<svg class="cmd-sign" viewBox="0 0 24 24" width="${n}" height="${n}"` +
+        ' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"' +
+        ' stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg>';
+    }
+
+    // The phone's floating button, if this page has one. Two states, like Arbitrate's: this room
+    // has a Commander, or it has none and this opens the form that gives it one.
+    function cmdSyncButton() {
+      const el = document.getElementById('convCommander');
+      const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
+      if (cmdSetupConv && cmdSetupConv !== conv) closeCmdSetup();
+      if (!el) return;
+      const live = cmdOn && !!cmdSessionHere();
+      el.classList.toggle('on', !!(cmdOn && conv));
+      el.classList.toggle('live', live);
+      const label = live ? 'Manage this conversation’s Commander' : 'Give this conversation a Commander';
+      el.title = label;
+      el.setAttribute('aria-label', label);
+    }
+
+    // Whether the button should be offered at all. Called by both pages.
+    function cmdCanOffer() {
+      return cmdOn;
+    }
+
+    // The one way in. A live Commander opens on what it is and what can be done to it; a room with
+    // none opens on the form. Unlike Arbitrate this does not jump straight to the pane: an
+    // arbitrator *is* its pane — everything it does is in the transcript — and a Commander is a
+    // thing with a state, a plan and a tree under it, so the panel is the honest landing.
+    function cmdOpenFromConv(keepOpen) {
+      if (!cmdOn) return;
+      const conv = typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === convCurrentId()) : null;
+      if (!conv) return;
+      const live = cmdSessionForConversation(conv.id);
+      cmdDraw(conv, live ? cmdManageHtml(live) : cmdSetupHtml(conv), live, keepOpen);
+    }
+
+    // Both views go into the arbitration dialog's box. Not laziness about the markup: it is the
+    // same dialog in the same place asking about the same room, and a second overlay would be a
+    // second thing to close and a second set of ids to keep unique. The head says which of the two
+    // it is.
+    function cmdDraw(conv, html, live, keepOpen) {
+      const body = document.getElementById('arbSetupBody');
+      if (body) body.innerHTML = html;
+      const sign = document.getElementById('arbSetupSign');
+      if (sign) sign.innerHTML = cmdSign(20);
+      const kind = document.getElementById('arbSetupKind');
+      if (kind) kind.textContent = live ? 'Commander' : 'New Commander';
+      const name = document.getElementById('arbSetupConvName');
+      if (name) name.textContent = conv.name || '';
+      cmdSetupConv = conv.id;
+      if (!keepOpen) {
+        const box = document.getElementById('arbModal');
+        if (box) box.style.display = 'block';
+      }
+    }
+
+    function closeCmdSetup() {
+      cmdSetupConv = '';
+      const box = document.getElementById('arbModal');
+      if (box) box.style.display = 'none';
+    }
+
+    // The dialog's own close button calls arbitration's. One box, so one close — which has to put
+    // both modules' idea of "open" back to shut.
+    function cmdNoteClosed() {
+      cmdSetupConv = '';
+    }
+
+    // --- the form ---------------------------------------------------------------------------
+
+    // A coordinator, a scope, where in the Project this sits, and — optionally — agents of its
+    // own. No gates, no clocks and no instruction style: those are arbitration's questions about a
+    // decision loop, and a Commander runs none.
+    function cmdSetupHtml(conv) {
+      const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null;
+      const free = arbArbiterRows(conv, project, '');
+      const rows = [{key: CMD_NONE, pane: null, label: 'Nobody'}]
+        .concat(arbMemberRows(conv, project, ''));
+      const parents = cmdSessions.filter(s => s.state !== 'ended');
+      return arbPart('Commander',
+          arbSlot('cmdWho', free, free[0] && arbPickValue(free[0]), false, false) +
+          '<span class="arb-note">The pane that plans. It is not one of the agents below.</span>',
+          cmdSign(16) + ' ') +
+        '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
+        ' placeholder="What this Commander owns, and when it is done."></textarea></label>' +
+        arbPart('Where it sits',
+          '<div class="arb-auto" id="cmdTiers">' +
+          CMD_TIERS.map(([v, label, why]) =>
+            badgeHtml(label, v === 'project', `cmdPickTier('${v}')`, {proj: true, title: why}))
+            .join('') +
+          '<input type="hidden" id="cmdTier" value="project">' +
+          '<span class="arb-note" id="cmdTierNote">' + escapeHtml(CMD_TIERS[0][2]) + '</span>' +
+          '</div>' +
+          // Required for the two lower tiers and meaningless for the top one, so it is drawn
+          // either way and disabled rather than appearing and disappearing under the thumb.
+          '<label id="cmdParentRow" style="display:none">Under<select id="cmdParent">' +
+          parents.map(s => `<option value="${escapeHtml(s.id)}">` +
+            escapeHtml(cmdName(s)) + '</option>').join('') +
+          '</select></label>' +
+          (parents.length ? '' :
+            '<span class="arb-note" id="cmdParentNote" style="display:none">' +
+            'Nothing to sit under yet — start a Project Commander first.</span>')) +
+        arbPart('Its own agents',
+          Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
+            arbSlot('cmdMember' + i, rows, CMD_NONE_VALUE(rows), false, false)).join('') +
+          '<span class="arb-note">Optional. A Commander that only manages child sessions has ' +
+          'none, and the ones it does have are its to write to directly.</span>') +
+        '<div class="arb-go">' +
+        `<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>` +
+        `<button type="button" class="badge pick on" onclick="cmdStart()">Start</button>` +
+        '</div>';
+    }
+
+    // The value of the "Nobody" row, which is whatever `arbPickValue` makes of a row with no pane.
+    // Asked of the row rather than rebuilt, so the two can never drift apart.
+    function CMD_NONE_VALUE(rows) {
+      return arbPickValue(rows[0]);
+    }
+
+    function cmdPickTier(tier) {
+      const at = document.getElementById('cmdTier');
+      if (at) at.value = tier;
+      const box = document.getElementById('cmdTiers');
+      if (box) {
+        const found = CMD_TIERS.find(t => t[0] === tier);
+        box.querySelectorAll('.badge.pick').forEach((b, i) => {
+          const on = CMD_TIERS[i][0] === tier;
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', String(on));
+        });
+        const note = document.getElementById('cmdTierNote');
+        if (note && found) note.textContent = found[2];
+      }
+      // The parent is required below the top tier and refused at it, so the row follows the
+      // choice rather than being a question asked of every start.
+      const row = document.getElementById('cmdParentRow');
+      const note = document.getElementById('cmdParentNote');
+      const has = !!document.querySelector('#cmdParent option');
+      if (row) row.style.display = (tier !== 'project' && has) ? '' : 'none';
+      if (note) note.style.display = (tier !== 'project' && !has) ? '' : 'none';
+    }
+
+    // A pane id and a scope, and never a fingerprint: the relay reads a participant's identity off
+    // its own pane list, exactly as `arb_start` does.
+    function cmdStart() {
+      const conv = loadConvIndex().find(c => c.id === convCurrentId());
+      if (!conv) return;
+      const scope = (document.getElementById('cmdScope') || {}).value || '';
+      if (!scope.trim()) { showToast('A Commander needs a scope — what it owns.'); return; }
+      const who = arbResolvePick((document.getElementById('cmdWho') || {}).value);
+      if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      const tier = (document.getElementById('cmdTier') || {}).value || 'project';
+      const parent = tier === 'project'
+        ? '' : ((document.getElementById('cmdParent') || {}).value || '');
+      if (tier !== 'project' && !parent) {
+        showToast('A ' + tier + ' Commander sits under another one — start a Project Commander first.');
+        return;
+      }
+      const members = Array.from({length: CMD_MEMBER_SLOTS}, (_, i) => i)
+        .map(i => arbResolvePick((document.getElementById('cmdMember' + i) || {}).value))
+        .filter(p => p && p.pane_id)
+        .map(p => ({pane_id: p.pane_id}));
+      // Two slots naming one pane is the mistake this form can make on its own, and the relay
+      // would refuse it after the press. Said here instead, where it can still be fixed.
+      const seen = new Set(members.map(m => m.pane_id).concat([who.pane_id]));
+      if (seen.size !== members.length + 1) {
+        showToast('Each slot needs a different pane.');
+        return;
+      }
+      arbSend({
+        type: 'cmd_start', conversation: conv.id, scope: scope,
+        coordinator: {pane_id: who.pane_id}, members: members,
+        tier: tier, parent_session: parent,
+      });
+      closeCmdSetup();
+    }
+
+    // --- managing one ------------------------------------------------------------------------
+
+    function cmdName(s) {
+      const conv = typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === s.conversation) : null;
+      const where = (conv && conv.name) || s.conversation || s.id;
+      return `${s.tier || 'project'} · ${where}`;
+    }
+
+    // What it is, where it sits, and the four things that can be done to it. No decisions and no
+    // resume plan: a Commander has neither, and the relay leaves both off its message.
+    function cmdManageHtml(s) {
+      const paused = s.state === 'paused';
+      const at = (s.coordinator || {}).pane_id || '';
+      const budget = s.budget || {};
+      return arbPart('Commander',
+          '<div class="arb-note">' +
+          escapeHtml(`${s.tier || 'project'} · ${s.project_id || 'no project'} · ${s.state}`) +
+          (s.pause_reason ? ' · ' + escapeHtml(String(s.pause_reason).replace(/_/g, ' ')) : '') +
+          '</div>' +
+          (s.scope ? `<div class="arb-note">${escapeHtml(s.scope)}</div>` : '') +
+          `<div class="arb-note">${budget.steps_left != null ? budget.steps_left : '—'} sends left` +
+          `, ${budget.minutes_left != null ? budget.minutes_left : '—'} minutes</div>` +
+          // The one visible sign the plan file is being read. A Commander that has written none
+          // says so rather than showing a revision of nothing: the file is the Commander's to
+          // write, so "no plan yet" is an ordinary state and not a fault.
+          '<div class="arb-note">' + (s.agenda_rev
+            ? `plan at revision ${s.agenda_rev}` + (s.agenda_at ? ', read ' + arbAgo(s.agenda_at) : '')
+            : 'no plan written yet') + '</div>',
+          cmdSign(16) + ' ') +
+        (s.members && s.members.length
+          ? arbPart('Its agents', '<div class="arb-note">' +
+              s.members.map(m => escapeHtml(m.label || m.pane_id)).join(', ') + '</div>')
+          : '') +
+        '<div class="arb-go">' +
+        (at ? `<button type="button" class="badge pick proj" onclick="cmdOpenPane('${escapeHtml(at)}')">` +
+              'Open its pane</button>' : '') +
+        // The way up from one session to the Project it is part of. This dialog is about the
+        // session in front of the reader; the Command Center is about everything under it, which
+        // is the question anybody holding a paused Commander asks next.
+        (typeof ccOpen === 'function' && s.project_id
+          ? `<button type="button" class="badge pick proj"` +
+            ` onclick="cmdOpenProject('${escapeHtml(s.project_id)}')">The whole Project</button>`
+          : '') +
+        `<button type="button" class="badge pick proj" onclick="cmdRebrief(this)">Re-brief</button>` +
+        (paused
+          ? `<button type="button" class="badge pick on" onclick="cmdResume()">Resume</button>`
+          : `<button type="button" class="badge pick proj" onclick="cmdPause()">Pause</button>`) +
+        `<button type="button" class="badge pick" data-arm-key="end-session"` +
+        ` onclick="cmdEnd(this)">End</button>` +
+        '</div>';
+    }
+
+    function cmdOpenProject(projectId) {
+      closeCmdSetup();
+      ccOpen(projectId);
+    }
+
+    function cmdOpenPane(paneId) {
+      closeCmdSetup();
+      if (typeof openTerminal === 'function') openTerminal(paneId);
+    }
+
+    function cmdPause() {
+      const s = cmdSessionHere();
+      if (s) arbSend({type: 'cmd_pause', session: s.id});
+    }
+
+    function cmdResume() {
+      const s = cmdSessionHere();
+      if (s) arbSend({type: 'cmd_resume', session: s.id});
+    }
+
+    // Both armed: one clears the pane a Commander's whole context is in, and the other ends it.
+    function cmdRebrief(btn) {
+      const s = cmdSessionHere();
+      if (!s) return;
+      armButton(btn, 'Re-brief?', () => arbSend({type: 'cmd_rebrief', session: s.id}), 'cmd-rebrief');
+    }
+
+    function cmdEnd(btn) {
+      const s = cmdSessionHere();
+      if (!s) return;
+      armEndSession(btn, s.id, leave => {
+        arbSend({type: 'cmd_cancel', session: s.id, leave_children: leave});
+        closeCmdSetup();
+      });
+    }
+
+  </script>
   <!-- The launcher. Its tiles are the phone's, drawn into the sheet above rather than into a
        section of a landing page this one does not have — `renderLauncher` addresses `#launcher`
        and this page carries that id, so nothing here is a second copy of anything. exec is
@@ -21422,6 +21962,11 @@ function markdownHtml(source) {
           : '')
         + '<button class="section-action" onclick="openLauncherNew()"'
         + ' title="Add a tile" aria-label="Add a launcher tile">+ New</button></div>'
+        // The Command Center, before the bands and outside them: every other tile here starts
+        // something, and this one opens what is already running. It belongs to no Project, which
+        // is what a band names, and it is not a tile of the document — nothing made it and
+        // nothing can edit or delete it.
+        + (typeof ccLauncherTileHtml === 'function' ? ccLauncherTileHtml() : '')
         // One band is every tile in it, so a heading over the lot says nothing. Two or more and the
         // heading is what tells a template from a tile that already knows where it runs.
         + (groups.length > 1
@@ -23765,6 +24310,13 @@ function markdownHtml(source) {
          ' stroke-opacity="0.35" stroke-width="1.1" />' +
          '<circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor"' +
          ' stroke-opacity="0.35" stroke-width="1.1" /></svg>'],
+        // The other kind of session over the same room: a Commander, which owns the work rather
+        // than one exchange. Two states like Arbitrate, but it opens a panel rather than a pane —
+        // an arbitrator is its transcript and a Commander is a state, a plan and a tree.
+        ['cmd', 'This conversation\u2019s Commander',
+         '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"' +
+         ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+         '<path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg>'],
         // What was committed between the messages. Only ever true of the relay's record — this
         // browser's own transcript has no commits in it.
         ['commits', 'Show what was committed between messages',
@@ -23842,6 +24394,8 @@ function markdownHtml(source) {
       // off there is no session to reach and no form worth opening.
       on('arb', conv && typeof arbSessions !== 'undefined' && !!arbSessions &&
          typeof arbOpenFromConv === 'function');
+      // Same gate, the other family: `cmd_sessions` is what says this relay starts Commanders.
+      on('cmd', conv && typeof cmdCanOffer === 'function' && cmdCanOffer());
     }
 
     // Who is speaking right now, floating over the thread rather than in it — conv_thread.js's
@@ -23940,6 +24494,7 @@ function markdownHtml(source) {
       if (what === 'live') { toggleConvLive(); deskRenderAll(); return; }
       if (what === 'commits') { toggleConvCommits(); deskRenderAll(); return; }
       if (what === 'arb') { arbOpenFromConv(); return; }
+      if (what === 'cmd') { cmdOpenFromConv(); return; }
       // Refresh. Over a room it is one intention — "show me this properly" — so it throws away what
       // conv_live is holding and lets the next render ask again; nothing is fetched from here,
       // because which members the thread covers is the render's answer and not this button's. Over
@@ -24895,7 +25450,9 @@ function markdownHtml(source) {
         live && {label: 'Pause', arm: 'Pause?',
                  hint: 'keeps its seat and its thread',
                  run: () => endConvMember(aid)},
-        live && {label: 'Reset', arm: 'Reset?',
+        // Left out entirely in a room that grants web providers: a clear throws away the brief
+        // naming that agent's room and grant, and only Restart writes it again.
+        live && !respawnWebRoom(aid) && {label: 'Reset', arm: 'Reset?',
                  hint: 'clears the session and says its opening words again',
                  run: () => { if (convResetMember(aid) === false) showToast('Nothing was reset.'); }},
         {label: 'Restart', arm: 'Restart?', disabled: !again || !convId,
@@ -25072,6 +25629,8 @@ function markdownHtml(source) {
            run: () => { deskSelectConv(id); deskStartOpen('terminal'); }},
         typeof arbOpenFromConv === 'function' &&
           {label: 'Arbitrate…', run: () => { deskSelectConv(id); arbOpenFromConv(); }},
+        typeof cmdCanOffer === 'function' && cmdCanOffer() &&
+          {label: 'Commander…', run: () => { deskSelectConv(id); cmdOpenFromConv(); }},
         'sep',
         // The three the phone's roster puts under its rows, asked of the whole room at once. Pause
         // stops the sessions and keeps the thread, Reset keeps the panes and clears what is in
@@ -25079,7 +25638,7 @@ function markdownHtml(source) {
         {label: 'Pause all', arm: 'Pause all?',
          disabled: !live, hint: live ? 'keeps every seat and the thread' : 'nothing running',
          run: () => endConversation(id)},
-        {label: 'Reset all', arm: 'Reset all?',
+        !convWebRoomOf(id) && {label: 'Reset all', arm: 'Reset all?',
          disabled: !live,
          hint: live ? 'clears every session and says its opening words again' : 'nothing running',
          run: () => convResetAll(id)},
@@ -28127,9 +28686,20 @@ function markdownHtml(source) {
     // Which room is on screen, so the list can say so. Two pages, two answers: the phone has one
     // conversation window open at a time, the desktop page has a selected room in its sidebar.
     function recentFloatHere() {
-      if (typeof deskSelectedConv !== 'undefined' && deskSelectedConv) return deskSelectedConv;
-      if (typeof convViewId !== 'undefined' && convViewId) return convViewId;
-      return '';
+      // A terminal outranks the room still selected behind it. On desktop the sidebar keeps its
+      // room while a terminal owns the focused column; on the phone the conversation id may also
+      // survive until the terminal view finishes opening. Returning the room there painted the
+      // row the reader had left as current and left the terminal they were looking at unmarked.
+      const pane = typeof activePane !== 'undefined' ? activePane : '';
+      const live = typeof shells === 'undefined' ? [] : (shells || []);
+      if (pane && live.some(sh => sh.pane_id === pane)) return {type: 'term', key: pane};
+      const id = typeof deskSelectedConv !== 'undefined' && deskSelectedConv
+        ? deskSelectedConv : typeof convViewId !== 'undefined' && convViewId ? convViewId : '';
+      if (!id) return null;
+      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const conv = convs.find(one => one.id === id);
+      const web = conv && typeof convKindOf === 'function' && convKindOf(conv) === 'providers';
+      return {type: web ? 'web' : 'conv', key: id};
     }
 
     // And how each page opens one. `openConversation` and `jumpToPane` are the phone's;
@@ -28354,7 +28924,8 @@ function markdownHtml(source) {
         : (typeof convGlyph === 'function' ? convGlyph(row.conv) : '');
       const name = typeof escapeHtml === 'function' ? escapeHtml(row.name) : String(row.name);
       return `<button type="button" class="recent-float-row ${row.type}`
-        + `${row.key === here ? ' on' : ''}" style="--tint:${row.tint}"`
+        + `${here && row.type === here.type && row.key === here.key ? ' on' : ''}"`
+        + ` style="--tint:${row.tint}"`
         + ` onclick="recentFloatGo('${row.type}', '${row.key}')">${glyph}`
         + `<span class="name">${name}</span></button>`;
     }
@@ -28415,6 +28986,9 @@ function markdownHtml(source) {
       deskRenderColumns();
       deskRenderConvs();
       deskRenderRoster();
+      // Its terminal rows are live-pane fingerprints, not durable ids. Resolve them on every
+      // snapshot so a terminal that exited cannot remain as a button to a recycled pane id.
+      if (typeof recentFloatDraw === 'function') recentFloatDraw();
       // The two starts in the roster header, drawn from what the relay says it will start. Called
       // from here rather than from the start_options branch itself, because net.js answers that
       // message with render() and this is what render() means on this page.
