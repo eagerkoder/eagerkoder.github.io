@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-19">
+  <meta name="app-built" content="2026-09-20">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -690,6 +690,24 @@
     .desk-tab-pin.on { opacity: 1; color: var(--accent); }
     .mock-tabs span.active .desk-tab-pin.on { color: inherit; }
 
+    /* Dragged along the strip. The tab stays where it is and goes translucent rather than being
+       lifted out: the row is one line tall and a gap opening in it would move every tab after the
+       one being dragged, which is the thing the reader is aiming at. */
+    .mock-tabs span[data-key].dragging {
+      opacity: 0.4;
+      cursor: grabbing;
+    }
+
+    /* Where it would land, drawn as the edge it would be dropped against. A rule and not a gap,
+       for the same reason: nothing on the strip moves until the drop. */
+    .mock-tabs span[data-key].drop-before {
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+
+    .mock-tabs span[data-key].drop-after {
+      box-shadow: inset -2px 0 0 var(--accent);
+    }
+
     .mock-panes {
       display: grid;
       grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
@@ -846,6 +864,28 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    /* The id of the thing in this column, at the far end of the band. Monospace and dim: it is an
+       address to be copied or matched, not a name to be read, and at the band's own weight it
+       competed with the one. `flex-shrink: 6` is the "if space permits" — both this and the name
+       can give way, and in a narrow column it is the id that should go first. */
+    .desk-pane-id {
+      margin-left: auto;
+      flex: 0 6 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: var(--mono);
+      font-size: 0.85em;
+      opacity: 0.45;
+    }
+
+    /* The band ends in a group — count, id, merge — and exactly one of them takes the free space:
+       whichever comes first. Every one of the three claiming it split the gap between them, which
+       stood the id in the middle of the band instead of at its right-hand end. */
+    .desk-pane-count + .desk-pane-id,
+    .desk-pane-count + .desk-pane-merge,
+    .desk-pane-id + .desk-pane-merge { margin-left: 0; }
 
     /* The sidebar's dot, on a line of text rather than at the top of a two-line row: the band is
        already centring it, so the margin that hangs it off a row's first line comes back off. */
@@ -1383,6 +1423,40 @@
        to remember. */
     .desk-hang-btn.live { border-color: var(--accent); color: var(--accent); }
 
+    /* The two switches that say how the thread is drawn have three and four states, so being lit
+       is not enough to say which one they are in. The phone's colours, because it is the same
+       stored preference and a reader moving between the two pages is reading the same walk: the
+       orange of "how one answer is drawn" first, then further along. */
+    .desk-hang-btn[data-hang="para"].live,
+    .desk-hang-btn[data-hang="tint"].live {
+      border-color: var(--orange);
+      color: var(--orange);
+    }
+
+    /* Filled, because a fan-out folded into one bubble is the bigger claim of the two and the one
+       a reader needs to recognise before wondering where four answers went. */
+    .desk-hang-btn[data-hang="para"].grouped {
+      color: var(--bg);
+      background: var(--orange);
+      border-color: var(--orange);
+    }
+
+    /* The colour switch's third, in the cool blue nothing else in this row uses. Outlined and not
+       filled: these buttons hang over a thread and share one surface, and one filling itself in
+       reads as a different control rather than as the same one further along. */
+    .desk-hang-btn[data-hang="tint"].grouped {
+      border-color: var(--shell);
+      color: var(--shell);
+    }
+
+    /* Its fourth, which takes the borders off the thread as well, in the loudest colour the
+       palette has: it is the end of the walk and the furthest the thread gets from what it looks
+       like by default. */
+    .desk-hang-btn[data-hang="tint"].bare {
+      border-color: var(--pink);
+      color: var(--pink);
+    }
+
     /* The phone's, at a column's width. Per agent and not per column: it follows whoever the
        composer is addressing, so a room of two on two branches says which one is about to be
        written to. */
@@ -1609,13 +1683,17 @@
       width: 86%;
       box-sizing: border-box;
       align-self: flex-start;
-      border: 1px solid color-mix(in srgb, var(--conv-agent, var(--border)) 45%, var(--border));
+      /* Named, because the no-wash modes below swap it out and then have to put it back — and a
+         second copy of this expression is a second place for it to drift. */
+      --conv-border: color-mix(in srgb, var(--conv-agent, var(--border)) 45%, var(--border));
+      border: 1px solid var(--conv-border);
       border-radius: 12px;
       border-bottom-left-radius: 4px;
       padding: 8px 10px;
-      /* The agent's own tint, mixed in by the renderer. A wash rather than a fill: the text on it
-         is --text in both themes and has to keep its contrast. */
-      background: color-mix(in srgb, var(--conv-agent, var(--text)) 10%, var(--surface));
+      /* Nearly the page's own ground, a shade off it. The agent's own tint is put back over this
+         by the colour modes below, of which the default is one — so what a reader sees by default
+         is the wash this used to set here unconditionally. */
+      background: color-mix(in srgb, var(--surface) 40%, var(--bg));
       font-size: var(--conv-font, 7px);
       line-height: 1.45;
       /* Agent output is monospace on the pane and stays monospace here — a plan or a diff loses
@@ -1624,6 +1702,54 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
+    /* A bubble somebody outside this relay filled: a provider's answer in a room. Those keep the
+       wash whatever the setting says, because there it is the answer to a question the thread
+       genuinely asks -- a panel fans one question out to five providers and the ground is what
+       says which one came back. Down a thread of one agent the same question has one answer and
+       the colour is decoration.
+
+       Four states, named for what a reader sees rather than for how much wash is applied:
+       `normal`, every bubble carrying its agent's colour, which is what this page drew before any
+       of this was a setting and is still the fastest way to tell two panes apart; `agent`, where
+       the agent's own bubbles go dark and only the answers from outside keep their colour; `all`,
+       where every bubble is dark, for a reader who wants the thread to be text on one ground; and
+       `bare`, which takes the borders off that as well. `all` is the absence of every wash rule
+       and so has no selector here.
+
+       The same four the phone draws, off the same stored preference: a column and a phone draw
+       the same bubbles, and this page reaching only some of the modes would make one setting two.
+       The mobile page also names three threads by id; this one has none of them. */
+    body.conv-tint-agent .conv-msg.foreign,
+    body.conv-tint-normal .conv-msg,
+    body.conv-tint-normal .conv-slot {
+      background: color-mix(in srgb, var(--conv-agent, var(--text)) 10%, var(--surface));
+    }
+
+    /* Wherever an agent's bubble has lost its wash, the border is all it has left -- and it is
+       mixed 45% into the page's own border, which against a ground that is now the same everywhere
+       is very nearly nothing. Those bubbles take a plain one, so the thread still reads as bubbles
+       rather than as a wall of text with rounded corners. A bubble from outside is left alone:
+       where it still carries a wash the border has nothing to stand in for, and where it does not,
+       its agent colour is the one thing left saying which provider answered. */
+    body.conv-tint-agent .conv-msg:not(.foreign):not(.user),
+    body.conv-tint-agent .conv-slot,
+    body.conv-tint-all .conv-msg:not(.foreign):not(.user),
+    body.conv-tint-all .conv-slot {
+      border-color: var(--text);
+    }
+
+    /* `bare`, the fourth state and the one with nothing left to take away: no border and no ground
+       at all, so the thread is a page of text rather than a column of boxes. The name row and the
+       rules between the messages are what say who is speaking and where an answer starts -- a
+       bubble was never the only thing doing that, which is why this state is legible without one.
+       Every bubble, the ones from outside included: a wash surviving alone in a thread with no
+       boxes in it would read as a highlight on one message. */
+    body.conv-tint-bare .conv-msg,
+    body.conv-tint-bare .conv-slot {
+      border-color: transparent;
+      background: none;
+    }
+
     /* A table drawn in characters, lifted out of a turn by markdown.js's mdArtOnly. The bubble
        wraps at its own width and a table cannot survive that, so this one part of it scrolls. */
     .conv-msg .md-code {
@@ -1790,6 +1916,101 @@
 
     .conv-copy-ask:hover, .conv-copy-ask:focus-visible {
       color: var(--green);
+    }
+
+    /* The question that produced this answer, above it and inside the same bubble — the paragraph
+       view, which the column's ¶ switches on. Green, because that is the colour it wore as a
+       bubble of its own, and proportional for the same reason a user bubble is: it is something a
+       person typed, not program output. The rule under it is what makes the pair read as a
+       question and an answer; two blocks of prose with only space between them read as one message
+       that changed voice halfway down. */
+    .conv-msg.conv-qa .conv-ask {
+      display: block;
+      position: relative;
+      color: var(--green);
+      font-family: inherit;
+      /* A point larger than the answer under it. The question is the shorter half and the one a
+         reader scans a thread by, and at the same size the two halves read as one block of text
+         that changes colour halfway down. */
+      font-size: calc(1em + 1px);
+      /* Ruled off from the header above it as well as from the answer below it, so the bubble is
+         three bands and not a header with a two-tone message under it. The upper rule is the
+         bubble's own border colour, the lower one the question's green: the first separates a
+         label from the content, the second separates two voices. */
+      padding-top: 6px;
+      margin-top: 6px;
+      border-top: 1px solid color-mix(in srgb, var(--conv-agent, var(--border)) 30%, var(--border));
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid color-mix(in srgb, var(--green) 35%, var(--border));
+      /* A wash of the question's own green, pulled out to the bubble's edges so the band runs the
+         full width rather than floating as a box inside one. */
+      margin-left: -10px;
+      margin-right: -10px;
+      padding-left: 10px;
+      padding-right: 10px;
+      background: color-mix(in srgb, var(--green) 7%, transparent);
+    }
+
+    /* Which provider's answer this bubble is showing, under the question all of them were asked —
+       the third state of that switch. A row that scrolls rather than wraps: five providers is the
+       case this exists for, and a header that grows a second line moves every bubble under it. */
+    .conv-msg.conv-group .conv-pills {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      margin-bottom: 6px;
+      padding-bottom: 2px;
+    }
+
+    .conv-msg.conv-group .conv-pills::-webkit-scrollbar {
+      display: none;
+    }
+
+    .conv-msg.conv-group .conv-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--conv-agent, var(--border)) 40%, var(--border));
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.72em;
+      cursor: pointer;
+    }
+
+    /* Waiting on that provider: a dotted outline beside the grey the mark and the answer already
+       wear. The dots read as "still coming" at any size. */
+    .conv-msg.conv-group .conv-pill.waiting {
+      border-style: dotted;
+      border-color: var(--muted);
+    }
+
+    /* The lit one carries the provider's own colour, which is the colour its bubble wore when the
+       answers were five bubbles: the pill is standing in for that bubble's identity. */
+    .conv-msg.conv-group .conv-pill.on {
+      color: var(--conv-agent, var(--text));
+      border-color: var(--conv-agent, var(--text));
+      background: color-mix(in srgb, var(--conv-agent, var(--text)) 12%, transparent);
+    }
+
+    .conv-msg.conv-group .conv-pill svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+    }
+
+    /* The provider's name beside its mark. Marks alone are a row of logos, and the two families
+       that ship a monochrome glyph are not telling apart at 13px — which is the size a pill is. */
+    .conv-msg.conv-group .conv-pill-name {
+      max-width: 12ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /* Lowercased against the header's uppercase, so a clock reads as a clock and not as a label,
@@ -8323,10 +8544,8 @@
     // actually has. A record still naming the old one resolves to no prompt, which is what it always
     // had.
     const START_ROLES = [
-      // First, because it is the one that decides what the others are for — and because the
-      // Command Center's + Feature opens this dialog with a Commander in mind.
-      { name: 'Commander', role: 'architect', at: 'commander-prompt' },
       { name: 'Architect', role: 'architect', at: 'architect-prompt' },
+      { name: 'Commander', role: 'architect', at: 'commander-prompt' },
       { name: 'Reviewer', role: 'reviewer', at: 'reviewer-prompt' },
       { name: 'Implementer', role: 'agent', at: 'implementer-prompt' },
       { name: 'Arbitrator', role: 'agent', at: 'arbitrator-prompt' },
@@ -14309,6 +14528,94 @@ function markdownHtml(source) {
 
   </script>
   <script>
+// --- How a bubble is coloured ---
+//
+// Its own file because it is a preference read in every room on both pages. It began inside
+// web_agent.js, which the desktop page does not load: a column draws the same bubbles a phone
+// draws, and a setting one page could not reach would be one preference with two values.
+
+// How dark a bubble's ground is, and whether it is drawn as a bubble at all. Four modes:
+//
+//   normal  every bubble carries its agent's colour as a wash. What this app drew before any of
+//           this was a setting, and the default -- a change of appearance on upgrade is a change
+//           nobody asked for.
+//   agent   the agent's own bubbles go dark and the answers from outside keep their colour. Down
+//           a thread of one agent's replies the wash spends the largest surface a bubble has
+//           saying the same thing; where it says something is where the answers came from
+//           somewhere else.
+//   all     every bubble dark, for a thread read as text on one ground.
+//   bare    that, with the borders off as well: no boxes at all, which is the thread as a page of
+//           prose. The last step rather than a switch of its own, because it is what is left to
+//           take away once the colour is gone -- and a reader who wants the plainest thread walks
+//           to it in the same direction they were already pressing.
+//
+// A body class rather than a re-render: nothing about the markup changes, only which rule wins.
+// `all` is the absence of every wash rule, because one ground for everything is what the bubble
+// rule already draws before any of them is added.
+const CONV_TINT_KEY = 'herdr_conv_tint';
+const CONV_TINT_STATES = ['normal', 'agent', 'all', 'bare'];
+
+function convTintState() {
+  try {
+    const held = localStorage.getItem(CONV_TINT_KEY);
+    return CONV_TINT_STATES.indexOf(held) >= 0 ? held : 'normal';
+  } catch (_error) { return 'normal'; }
+}
+
+function convApplyTint() {
+  if (!document.body) return;
+  const state = convTintState();
+  CONV_TINT_STATES.forEach(id => document.body.classList.toggle(`conv-tint-${id}`, id === state));
+}
+
+// What the mode is called where it is shown as a value rather than as a floating button.
+function convTintLabel(state) {
+  return state === 'agent' ? 'Agent bubbles dark'
+    : state === 'all' ? 'Every bubble dark'
+    : state === 'bare' ? 'No bubbles' : 'Normal';
+}
+
+// The colour setting as one row of a composer's settings drawer. One builder and not one per
+// drawer: it is a single stored preference read in every room, and the drawers that offer it —
+// the conversation composer's, which every web room now draws, and the Web Agents chat
+// composer's — would otherwise be two descriptions of it drifting apart. A press cycles, so it
+// carries its value on the right rather than a tick on the left. `after` is what the caller does
+// to redraw itself, since the drawer stays open: a list that closed on every press would make
+// setting this a matter of opening it three times.
+function convTintMenuItem(after) {
+  const state = convTintState();
+  return `<button class="menu-item val" role="menuitem" `
+    + `onclick="convToggleTint();${after || ''}" `
+    + `title="${escapeHtml(convTintTitle(state))}">`
+    + `<span class="tick"></span>Bubble colour`
+    + `<span class="menu-val">${escapeHtml(convTintLabel(state))}</span></button>`;
+}
+
+function convTintTitle(state) {
+  return state === 'agent'
+      ? 'The agent’s bubbles are dark, the answers from outside keep their colour '
+        + '— tap to darken every one'
+    : state === 'all' ? 'Every bubble is dark — tap to take the borders off too'
+    : state === 'bare' ? 'No borders: the thread is one page of text '
+      + '— tap to put the colours back'
+    : 'Every bubble carries its agent’s colour — tap to darken the agent’s';
+}
+
+function convToggleTint() {
+  const at = CONV_TINT_STATES.indexOf(convTintState());
+  try { localStorage.setItem(CONV_TINT_KEY, CONV_TINT_STATES[(at + 1) % CONV_TINT_STATES.length]); }
+  catch (_error) { /* private mode: this page only */ }
+  convApplyTint();
+  if (typeof hangSync === 'function') hangSync();
+  if (typeof renderWebchatView === 'function') renderWebchatView();
+  // The desktop page has one of these per column and no `hangSync` to reach them; it redraws
+  // itself from `deskHangAct`, which is the only place it presses this.
+}
+
+convApplyTint();
+
+  </script>
+  <script>
     // --- The relay's record, read live ---
     //
     // The thread this app draws is folded out of pane reads, so it knows what *this browser* was
@@ -15489,6 +15796,11 @@ function markdownHtml(source) {
       else if (msg.type === 'cmd_project') {
         if (typeof ccReceive === 'function') ccReceive(msg);
       }
+      // One Commander's traffic, asked for when a session is selected. Prose somebody wrote, so
+      // it is answered to this client alone — the rule `arb_detail` and `conv_log` follow.
+      else if (msg.type === 'cmd_detail') {
+        if (typeof ccReceiveDetail === 'function') ccReceiveDetail(msg);
+      }
       else if (msg.type === 'webchat_state') {
         if (typeof webchatReceiveState === 'function') webchatReceiveState(msg);
       }
@@ -15608,6 +15920,11 @@ function markdownHtml(source) {
           // cannot, but a browser cannot know that — would land on an intent that failed.
           if (typeof startsInFlight !== 'undefined' && msg.ref) startsInFlight.delete(msg.ref);
         }
+      }
+      else if (msg.type === 'command_result' && msg.command === 'cmd_plan') {
+        // What the plan CLI printed about what it changed. A refusal never arrives here — it is
+        // an ordinary `error` and toasts above — so this is the confirmation half alone.
+        if (msg.detail) showToast(msg.detail);
       }
       else if (msg.type === 'command_result' && msg.command === 'create_project') {
         newProjectResult(msg);
@@ -18477,6 +18794,16 @@ function markdownHtml(source) {
       newAgentConfig = '';
       newAgentCustom = false;
       newAgentRole = 0;
+      // The Commander slot opens on the harness that has been doing the planning and on the
+      // prompt that tells a pane what it is about to be — the same two answers the Command
+      // Center's + Feature fills in for the same appointment. Still a dialog rather than a
+      // one-tap spawn: the Project, the config and the name are still the person's, and this
+      // form exists because that start used to happen with nobody asked.
+      if (forSlot === 'cmdWho') {
+        if (kinds.includes(CMD_SPAWN_KIND)) newAgentKind = CMD_SPAWN_KIND;
+        const which = startRoles().findIndex(r => r.at === 'commander-prompt');
+        if (which >= 0) newAgentRole = which;
+      }
       // Spawned where the conversation lives. Not a rule — the row is right there — but a Project
       // chosen for you is one fewer question in a dialog that exists to be quick.
       newAgentProject = from && projects.some(p => p.id === from.project_id)
@@ -19985,6 +20312,13 @@ function markdownHtml(source) {
     // Nothing is opened. The person is half way through filling this dialog in, and landing them
     // in a terminal is losing it.
     function arbAdoptStarted(a, want) {
+      // A slot in the Commander's form. The same start and the same "nothing is opened", but a
+      // different dialog: that one holds a scope somebody typed and has no state object to be
+      // redrawn around, so it adopts by replacing the one slot that asked.
+      if (String(want.slot || '').indexOf('cmd') === 0) {
+        if (typeof cmdAdoptStarted === 'function') cmdAdoptStarted(a, want.slot);
+        return;
+      }
       const at = arbSetupOpen() ? arbReadSetup() : {};
       if (want.slot !== 'arbWho') {
         const items = loadConvIndex();
@@ -21339,6 +21673,29 @@ function markdownHtml(source) {
     // roster, so every slot has to be able to say so.
     const CMD_NONE = 'cmd-nobody';
     const CMD_MEMBER_SLOTS = 6;
+    // The harness the Commander slot's `+ New` opens on. A Commander reads a plan file, surveys a
+    // checkout and writes prose back into a room; that is the job this harness has been doing, and
+    // the New agent dialog still asks every other question. Named here rather than in the dialog
+    // because it is a fact about Commanders.
+    const CMD_SPAWN_KIND = 'claude';
+    // The numbers a running Commander is worth changing, as [default, cap]. They are
+    // `COMMANDER_BUDGET` and `BUDGET_MAX` in the relay, which is the authority — these are what the
+    // field offers and what it refuses to send, so a person cannot be told no by a dialog that
+    // could have said so itself. `cmdHours` has the same default as cap, so nothing can move it —
+    // but it is still read and still sent, because `check_budget` fills anything a budget does not
+    // name from the defaults, and a budget missing that key resets a shorter lifetime to twenty
+    // hours.
+    const CMD_LIMITS = {cmdSteps: [20, 50], cmdRuns: [12, 20], cmdMinutes: [60, 480],
+                        cmdTotal: [200, 1000], cmdHours: [20, 20]};
+    // Which session the form is editing, or '' while it is a new one. Not a boolean: the rows a
+    // slot offers have to exclude this session's own panes, or a Commander's own coordinator is
+    // listed as taken by somebody and cannot be kept.
+    let cmdEditing = '';
+    // What the form was seeded with, taken once when it opened. The session object is replaced by
+    // every broadcast about it, so diffing against the live one turns somebody else's change into
+    // one of this form's — the field still holds what it was seeded with, so it reads as an edit
+    // back to the old value and is sent.
+    let cmdEditWas = null;
 
     // Per connection, never cached: what this relay will start is a fact about this relay.
     function cmdReset() {
@@ -21377,22 +21734,57 @@ function markdownHtml(source) {
       cmdSyncButton();
       // The dialog redraws itself only while it is standing over the session that moved — a
       // Commander pausing in another room must not take the form out from under somebody.
+      //
+      // And never over an open edit, which is a form with somebody's typing in it. A budget number
+      // moving underneath is not news worth destroying a scope for. The exception is the session
+      // ending: there is then nothing left to save, and a form that would be refused on Save is
+      // worse than one that closes and says why.
+      if (cmdEditing === s.id && s.state !== 'ended') return;
+      if (cmdEditing === s.id) {
+        cmdEditing = '';
+        cmdEditWas = null;
+        if (typeof showToast === 'function') showToast('That Commander ended while you were editing it.');
+      }
       if (cmdSetupConv && s.conversation === cmdSetupConv) cmdOpenFromConv(true);
     }
 
     // A child session's room is a consequence of starting it. The relay mints the deterministic
     // id but never writes the browser-owned conversations document, so the first client that sees
     // complete session metadata materialises it once.
+    //
+    // A child started into a room that already exists — which is what a Commander's own
+    // arbitration children now are — enrols its members into that room rather than doing nothing.
+    // Without it the shared room draws the Commander talking about work and never the work: the
+    // members whose turns it is about are in no conversation anybody is reading.
     function cmdMaterializeConversation(s) {
-      if (!s || !s.id || s.conversation !== 'c_cmd_' + s.id ||
+      if (!s || !s.id || !s.conversation ||
           typeof loadConvIndex !== 'function' || typeof saveConvIndex !== 'function') return;
-      const items = loadConvIndex();
-      if (items.some(c => c.id === s.conversation)) return;
-      // A coordinator owns the session but is not enrolled in its conversation. Adding it here
-      // would record its coordination output as ordinary member turns as well as session events.
+      // Only rooms nobody curated: the one the relay minted for this session, and any room a
+      // relay-started child was put in. A room a person made keeps the membership they chose.
+      if (s.conversation !== 'c_cmd_' + s.id && !s.parent_session) return;
+      // An *arbitrator* owns its session but is not enrolled in its conversation: its output is
+      // decisions, which are already recorded as decisions, and enrolling it would file them a
+      // second time as ordinary member turns.
+      //
+      // A Commander is the other case and is enrolled. What it produces is prose in this room —
+      // its own brief says so: "for most of your life it is your one output" — and a Commander
+      // outside its own room is one nobody can address, since the composer writes to members and
+      // a Commander may have none. That left `Open its pane` as the only way to say anything to
+      // the agent that owns the work, which is why its room read as a status board.
       const people = (s.members || []).filter(Boolean);
       if (people.some(p => !p.aid)) return;
-      const seen = new Set();
+      const boss = s.kind === 'commander' && (s.coordinator || {}).aid ? s.coordinator : null;
+      // Appended rather than prepended, and only when it has an id: an identity that has not
+      // landed yet arrives on a later snapshot, and the union below adds it then rather than
+      // holding the members out of the room in the meantime.
+      if (boss) people.push(boss);
+      const items = loadConvIndex();
+      const room = items.find(c => c.id === s.conversation);
+      // An ended child never adds to a room that is already there. Its members are what the
+      // person is free to remove once it is over, and this runs over the ended list on every
+      // snapshot — so re-adding them would undo that removal for as long as the session is listed.
+      if (room && s.state === 'ended') return;
+      const seen = new Set(((room && room.members) || []).map(m => m.aid).filter(Boolean));
       const members = [];
       people.forEach(p => {
         if (seen.has(p.aid)) return;
@@ -21401,6 +21793,12 @@ function markdownHtml(source) {
           label: p.label || p.pane_id || p.aid, agent: p.agent || '',
           project: s.project_id || ''});
       });
+      if (room) {
+        if (!members.length) return;
+        room.members = (room.members || []).concat(members);
+        saveConvIndex(items);
+        return;
+      }
       const name = String(s.scope || 'Commander child').trim().split('\n')[0].slice(0, 64);
       saveConvIndex([{id: s.conversation, name: name || 'Commander child',
         created: Date.now(), members: members}].concat(items));
@@ -21484,7 +21882,8 @@ function markdownHtml(source) {
       const sign = document.getElementById('arbSetupSign');
       if (sign) sign.innerHTML = cmdSign(20);
       const kind = document.getElementById('arbSetupKind');
-      if (kind) kind.textContent = live ? 'Commander' : 'New Commander';
+      if (kind) kind.textContent = cmdEditing ? 'Edit Commander'
+        : (live ? 'Commander' : 'New Commander');
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
       cmdSetupConv = conv.id;
@@ -21496,6 +21895,8 @@ function markdownHtml(source) {
 
     function closeCmdSetup() {
       cmdSetupConv = '';
+      cmdEditing = '';
+      cmdEditWas = null;
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
     }
@@ -21504,6 +21905,8 @@ function markdownHtml(source) {
     // both modules' idea of "open" back to shut.
     function cmdNoteClosed() {
       cmdSetupConv = '';
+      cmdEditing = '';
+      cmdEditWas = null;
     }
 
     // --- the form ---------------------------------------------------------------------------
@@ -21511,19 +21914,51 @@ function markdownHtml(source) {
     // A coordinator, a scope, where in the Project this sits, and — optionally — agents of its
     // own. No gates, no clocks and no instruction style: those are arbitration's questions about a
     // decision loop, and a Commander runs none.
-    function cmdSetupHtml(conv) {
-      const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null;
-      const free = arbArbiterRows(conv, project, '');
+    //
+    // `live` is the session being edited, or nothing for a new one. The same form either way: what
+    // a Commander *is* — its coordinator, its scope, its roster — is what `cmd_edit` changes, so a
+    // second dialog would be the same six questions asked in different words. Two parts differ.
+    // Where it sits is dropped, because a tier and a parent are not editable and a control that is
+    // drawn and then refused is worse than one that is absent. And the budget is drawn only here,
+    // because at the start nobody knows what to pick and the defaults are right, while the panel
+    // this opens from is the one saying how much is left.
+    function cmdSetupHtml(conv, live) {
+      const project = live && live.project_id ? live.project_id
+        : (typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null);
+      const except = live ? live.id : '';
+      const free = arbArbiterRows(conv, project, except);
       const rows = [{key: CMD_NONE, pane: null, label: 'Nobody'}]
-        .concat(arbMemberRows(conv, project, ''));
+        .concat(arbMemberRows(conv, project, except));
       const parents = cmdSessions.filter(s => s.state !== 'ended');
+      const was = live ? cmdSetupOf(live) : null;
+      const held = who => {
+        // A pane the roster names but the picker cannot offer — it exited, or it is claimed by
+        // another session — is still what this slot is holding. Offered as its own row rather than
+        // dropped, or Save would silently replace a member nobody meant to touch.
+        if (!who || (!who.pane_id && !who.aid)) return null;
+        const live = typeof agents !== 'undefined' ? (agents || []) : [];
+        const pane = live.find(a => (who.aid && convMemberKey(a) === who.aid)
+          || (who.pane_id && a.pane_id === who.pane_id)) || null;
+        return {key: who.aid || who.pane_id, pane: pane,
+                label: who.label || who.aid || who.pane_id};
+      };
+      const emptyOr = v => (!v || v === CMD_NONE ? CMD_NONE_VALUE(rows) : v);
+      const slotRows = (base, who) => {
+        const row = held(who);
+        return row && !base.some(r => arbSamePick(arbPickValue(r), arbPickValue(row)))
+          ? base.concat([row]) : base;
+      };
       return arbPart('Commander',
-          arbSlot('cmdWho', free, free[0] && arbPickValue(free[0]), false, false) +
-          '<span class="arb-note">The pane that plans. It is not one of the agents below.</span>',
+          arbSlot('cmdWho', slotRows(free, live && live.coordinator),
+                  was ? was.cmdWho : (free[0] && arbPickValue(free[0])), false) +
+          '<span class="arb-note">The pane that plans. Pick one that is running, or ' +
+          '<b>+ New</b> to start one — it comes up on claude with the Commander prompt and lands ' +
+          'back in this slot. It is not one of the agents below.</span>',
           cmdSign(16) + ' ') +
         '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
-        ' placeholder="What this Commander owns, and when it is done."></textarea></label>' +
-        arbPart('Where it sits',
+        ' placeholder="What this Commander owns, and when it is done.">' +
+        escapeHtml(was ? was.cmdScope : '') + '</textarea></label>' +
+        (live ? '' : arbPart('Where it sits',
           '<div class="arb-auto" id="cmdTiers">' +
           CMD_TIERS.map(([v, label, why]) =>
             badgeHtml(label, v === 'project', `cmdPickTier('${v}')`, {proj: true, title: why}))
@@ -21539,16 +21974,202 @@ function markdownHtml(source) {
           '</select></label>' +
           (parents.length ? '' :
             '<span class="arb-note" id="cmdParentNote" style="display:none">' +
-            'Nothing to sit under yet — start a Project Commander first.</span>')) +
-        arbPart('Its own agents',
+            'Nothing to sit under yet — start a Project Commander first.</span>'))) +
+        arbPart('Agents it works with directly',
           Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
-            arbSlot('cmdMember' + i, rows, CMD_NONE_VALUE(rows), false, false)).join('') +
-          '<span class="arb-note">Optional. A Commander that only manages child sessions has ' +
-          'none, and the ones it does have are its to write to directly.</span>') +
+            arbSlot('cmdMember' + i,
+                    slotRows(rows, live && (live.members || [])[i]),
+                    // `cmdSetupOf` says CMD_NONE for a slot holding nobody, which is the key of
+                    // that row and not the value the picker selects by. Translated here rather
+                    // than left to fall through to the first row: that row happens to be Nobody,
+                    // and a seed that is right by accident seeds a real pane the day it moves.
+                    emptyOr(was && was['cmdMember' + i]), false)).join('') +
+          '<span class="arb-note">Leave these empty unless you already know who is doing the ' +
+          'work. A Commander with nobody here still plans, still holds the Project and still ' +
+          'starts child sessions — what it does not do is watch anyone. Name an agent and this ' +
+          'Commander writes to it itself and wakes on every turn that agent ends.</span>') +
+        (live ? arbPart('How long it may run',
+          arbLimitField('cmdSteps', 'Sends in one window', was.cmdSteps, CMD_LIMITS.cmdSteps) +
+          arbLimitField('cmdRuns', 'Sends in a row with nobody joining in', was.cmdRuns,
+                        CMD_LIMITS.cmdRuns) +
+          arbLimitField('cmdMinutes', 'Minutes in one window', was.cmdMinutes,
+                        CMD_LIMITS.cmdMinutes) +
+          arbLimitField('cmdTotal', 'Sends over its whole life', was.cmdTotal,
+                        CMD_LIMITS.cmdTotal) +
+          arbLimitField('cmdHours', 'Hours over its whole life', was.cmdHours,
+                        CMD_LIMITS.cmdHours) +
+          // The distinction the arbitration form never had to draw, because an arbitration budget
+          // is a ceiling and this one is a rhythm.
+          '<span class="arb-note">The window renews — a Commander that has spent it waits for the ' +
+          'next one rather than stopping. The last two are the ceiling that does stop it.</span>')
+          : '') +
         '<div class="arb-go">' +
         `<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>` +
-        `<button type="button" class="badge pick on" onclick="cmdStart()">Start</button>` +
+        (live
+          ? `<button type="button" class="badge pick on" onclick="cmdSave()">Save</button>`
+          : `<button type="button" class="badge pick on" onclick="cmdStart()">Start</button>`) +
         '</div>';
+    }
+
+    // What the form would say about a session that is already running. The one place the wire's
+    // shape is turned into the form's, so reading it back and diffing are about the same fields.
+    // What a slot holds, in the picker's own value space. A participant whose pane is not running
+    // is a row with no pane, which `arbPickValue` encodes as `paused:<key>` — so a slot seeded
+    // with a bare pane id would not match its own row and would fall back to the first one, which
+    // is another agent. Everything below seeds and compares in this space and converts once, at
+    // the send.
+    function cmdPickOf(who) {
+      if (!who || (!who.pane_id && !who.aid)) {
+        return arbPickValue({key: CMD_NONE, pane: null});
+      }
+      const live = typeof agents !== 'undefined' ? (agents || []) : [];
+      return arbPickValue({key: who.aid || who.pane_id,
+                           pane: live.find(a => (who.aid && convMemberKey(a) === who.aid)
+                             || (who.pane_id && a.pane_id === who.pane_id)) || null});
+    }
+
+    // A slot's value as the wire wants it: a live pane, or the stable id of an away agent. The
+    // relay can resolve the latter if it came back since this snapshot, and otherwise explicitly
+    // refuses the edit instead of quietly discharging a member nobody meant to touch.
+    function cmdParticipantOf(value) {
+      const got = arbResolvePick(value);
+      if (!got || got.key === CMD_NONE || got.pane_id === CMD_NONE) return null;
+      return got.pane_id ? {pane_id: got.pane_id} : {aid: got.key};
+    }
+
+    // What the form would say about a session that is already running. The one place the wire's
+    // shape is turned into the form's, so reading it back and diffing are about the same fields.
+    //
+    // The budget names are the **wire's** — `max_minutes`, and not the relay's own
+    // `max_wall_clock_ms`, which is what this read the first time and is why a ninety-minute
+    // window displayed as sixty and was saved back as sixty.
+    function cmdSetupOf(s) {
+      const b = s.budget || {};
+      const num = (v, range) => String(v > 0 ? v : range[0]);
+      const at = {
+        cmdWho: cmdPickOf(s.coordinator),
+        cmdScope: s.scope || '',
+        cmdSteps: num(b.max_steps, CMD_LIMITS.cmdSteps),
+        cmdRuns: num(b.max_consecutive, CMD_LIMITS.cmdRuns),
+        cmdMinutes: num(b.max_minutes, CMD_LIMITS.cmdMinutes),
+        cmdTotal: num(b.max_total_steps, CMD_LIMITS.cmdTotal),
+        cmdHours: num(b.max_total_hours, CMD_LIMITS.cmdHours),
+      };
+      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
+        at['cmdMember' + i] = cmdPickOf((s.members || [])[i]);
+      }
+      return at;
+    }
+
+    // What the fields are holding now, in the same shape.
+    function cmdReadSetup() {
+      const at = {};
+      ['cmdWho', 'cmdScope'].forEach(id => {
+        at[id] = String((document.getElementById(id) || {}).value || '');
+      });
+      Object.keys(CMD_LIMITS).forEach(id => {
+        const range = CMD_LIMITS[id];
+        const n = parseInt((document.getElementById(id) || {}).value || '', 10);
+        at[id] = String(!(n > 0) ? range[0] : Math.min(n, range[1]));
+      });
+      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
+        at['cmdMember' + i] = String((document.getElementById('cmdMember' + i) || {}).value || '');
+      }
+      return at;
+    }
+
+    // The same form against a session that exists, and only what moved is sent. A roster edit is a
+    // replacement of the whole roster — the relay has no add and no remove — so naming `members`
+    // at all names every one of them, and naming it when nothing changed re-enrols panes that were
+    // already enrolled.
+    function cmdSave() {
+      const was = cmdEditWas;
+      if (!cmdEditing || !was) return;
+      const at = cmdReadSetup();
+      const who = arbResolvePick(at.cmdWho);
+      if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      const scope = at.cmdScope.trim();
+      if (!scope) { showToast('A Commander needs a scope — what it owns.'); return; }
+      const participants = [];
+      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
+        const participant = cmdParticipantOf(at['cmdMember' + i]);
+        if (participant) participants.push(participant);
+      }
+      // One string per participant, whichever way it is named, so two slots holding one agent
+      // collide whether they hold its pane or its id.
+      const idOf = p => (p.aid ? 'aid:' + p.aid : 'pane:' + p.pane_id);
+      const identities = participants.map(idOf).concat(['pane:' + who.pane_id]);
+      if (new Set(identities).size !== identities.length) {
+        showToast('Each slot needs a different pane.'); return;
+      }
+      const msg = {type: 'cmd_edit', session: cmdEditing};
+      if (scope !== was.cmdScope) msg.scope = scope;
+      if (at.cmdWho !== was.cmdWho) msg.coordinator = {pane_id: who.pane_id};
+      // Compared as the roster the relay will hold — the participants in order, with the empty
+      // slots taken out — and never slot by slot. A roster edit announces itself to every member,
+      // so moving two of them between slots and changing nothing else must not interrupt them
+      // both to tell them the roster is what it already was.
+      const wasRoster = Array.from({length: CMD_MEMBER_SLOTS},
+                                   (_, i) => cmdParticipantOf(was['cmdMember' + i]))
+        .filter(Boolean).map(idOf);
+      const roster = participants.map(idOf);
+      if (roster.length !== wasRoster.length || roster.some((p, i) => p !== wasRoster[i])) {
+        msg.members = participants;
+      }
+      // Every key, not the ones that moved: `check_budget` fills anything a budget does not name
+      // from the defaults, so a partial budget resets the numbers it left out.
+      if (['cmdSteps', 'cmdRuns', 'cmdMinutes', 'cmdTotal', 'cmdHours']
+            .some(k => at[k] !== was[k])) {
+        msg.budget = {max_steps: Number(at.cmdSteps), max_consecutive: Number(at.cmdRuns),
+                      max_wall_clock_ms: Number(at.cmdMinutes) * 60000,
+                      max_total_steps: Number(at.cmdTotal),
+                      max_total_ms: Number(at.cmdHours) * 3600000};
+      }
+      // Closed either way. Nothing moved is an answer to the question the dialog asked.
+      if (Object.keys(msg).length > 2) arbSend(msg);
+      closeCmdSetup();
+    }
+
+    // A pane started for one of this form's slots, once the poll has it. Only that slot is
+    // replaced: the rest of the form is a scope somebody typed, a tier they chose and a checkbox
+    // they ticked, and redrawing around it would be those answers thrown away to show this one.
+    //
+    // Nothing is opened, for the same reason the arbitration slots open nothing — the person is
+    // half way through this dialog, and landing them in a terminal is losing it. The pane is
+    // reachable the moment the Commander is running: the panel's own Open does that.
+    function cmdAdoptStarted(a, slot) {
+      const el = a && a.pane_id && document.getElementById(slot);
+      const box = el && el.closest ? el.closest('.arb-slot') : null;
+      const conv = box ? loadConvIndex().find(c => c.id === cmdSetupConv) : null;
+      if (!conv) return;
+      const live = cmdEditing ? cmdSessions.find(x => x.id === cmdEditing) : null;
+      const project = live && live.project_id ? live.project_id
+        : (typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null);
+      const rows = slot === 'cmdWho'
+        ? arbArbiterRows(conv, project, cmdEditing)
+        : [{key: CMD_NONE, pane: null, label: 'Nobody'}]
+            .concat(arbMemberRows(conv, project, cmdEditing));
+      // A pane the relay has only just published comes up `unresolved` — no agent id — and the
+      // candidate lists drop it, because a member is an agent id. Offered anyway, under the slot
+      // that asked for it: the alternative is a picker that silently falls back to its first row,
+      // which is somebody else's pane.
+      if (!rows.some(r => r.pane && r.pane.pane_id === a.pane_id)) {
+        rows.push({key: convMemberKey(a) || a.pane_id, pane: a, label: paneLabel(a)});
+      }
+      box.outerHTML = arbSlot(slot, rows, a.pane_id);
+      // And it joins the room, the Commander included — a Commander is a member of its own
+      // conversation, which is the whole of the shared-room change. A start made from a slot
+      // carries no conversation of its own (the dialog adopts it, not the roster), and
+      // `cmdMaterializeConversation` only enrols into rooms nobody curated, so a pane started
+      // into a room a person made would otherwise never be in it.
+      if (convMemberKey(a) && !(conv.members || []).some(m => m.aid === convMemberKey(a))) {
+        const items = loadConvIndex();
+        const room = items.find(c => c.id === conv.id);
+        if (room) {
+          room.members = (room.members || []).concat(convMemberOf(a));
+          saveConvIndex(items);
+        }
+      }
     }
 
     // The value of the "Nobody" row, which is whatever `arbPickValue` makes of a row with no pane.
@@ -21659,6 +22280,7 @@ function markdownHtml(source) {
           ? `<button type="button" class="badge pick proj"` +
             ` onclick="cmdOpenProject('${escapeHtml(s.project_id)}')">The whole Project</button>`
           : '') +
+        `<button type="button" class="badge pick proj" onclick="cmdOpenEdit()">Edit</button>` +
         `<button type="button" class="badge pick proj" onclick="cmdRebrief(this)">Re-brief</button>` +
         (paused
           ? `<button type="button" class="badge pick on" onclick="cmdResume()">Resume</button>`
@@ -21666,6 +22288,19 @@ function markdownHtml(source) {
         `<button type="button" class="badge pick" data-arm-key="end-session"` +
         ` onclick="cmdEnd(this)">End</button>` +
         '</div>';
+    }
+
+    // The form again, over the session that is running. Not a second dialog: `cmdOpenFromConv`
+    // chooses between the form and the panel by whether there is a live session, so the edit is a
+    // third state it has to be told about — `cmdEditing` is that, and it is also what stops the
+    // poll redrawing the panel over a form somebody is filling in.
+    function cmdOpenEdit() {
+      const s = cmdSessionHere();
+      const conv = loadConvIndex().find(c => c.id === cmdSetupConv);
+      if (!s || !conv) return;
+      cmdEditing = s.id;
+      cmdEditWas = cmdSetupOf(s);
+      cmdDraw(conv, cmdSetupHtml(conv, s), true, true);
     }
 
     function cmdOpenProject(projectId) {
@@ -24317,6 +24952,18 @@ function markdownHtml(source) {
          '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"' +
          ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
          '<path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg>'],
+        // How a thread is drawn rather than what is in it — the phone's two, in the same order
+        // and with the same marks. Both are one stored preference read by every column and by the
+        // other page, so a press here moves the phone too.
+        //
+        // The paragraph view: an answer under the question that produced it, in one bubble. The
+        // icon is the pair itself — a short line over a rule over two long ones.
+        ['para', 'Show each answer under the question that produced it',
+         icon(13, '<path d="M5 7h9" /><path d="M3 11.5h18" /><path d="M5 15.5h14M5 19h9" />')],
+        // Whether a bubble carries its agent's colour as a wash behind it, and whether it is
+        // drawn as a bubble at all. The icon is a drop.
+        ['tint', 'Use agent colours behind each bubble',
+         icon(13, '<path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />')],
         // What was committed between the messages. Only ever true of the relay's record — this
         // browser's own transcript has no commits in it.
         ['commits', 'Show what was committed between messages',
@@ -24389,6 +25036,35 @@ function markdownHtml(source) {
         const showing = typeof convCommitsOn === 'function' && convCommitsOn();
         commitsBtn.classList.toggle('live', showing);
         commitsBtn.setAttribute('aria-pressed', String(showing));
+      }
+      // The two that say how the thread is drawn. Offered over a room and not over a pane's rows:
+      // a pane column is lines of scrollback and has no bubble either of them could change.
+      //
+      // Three states on the paragraph switch and four on the colour one, so neither can say which
+      // it is in by being lit. Both escalate with the press — outlined, then marked further along
+      // — rather than with the amount of colour on screen, which would draw the default as
+      // something somebody had switched on.
+      const paraBtn = on('para', conv);
+      if (paraBtn) {
+        const state = typeof convParaState === 'function' ? convParaState() : '0';
+        paraBtn.classList.toggle('live', state !== '0');
+        paraBtn.classList.toggle('grouped', state === '2');
+        paraBtn.setAttribute('aria-pressed', String(state !== '0'));
+        paraBtn.title = state === '0'
+          ? 'Showing every message in its own bubble — click to pair each answer with its question'
+          : state === '1'
+          ? 'Showing each answer under its question — click to fold one question’s answers into one bubble'
+          : 'Showing one bubble per question, with a pill per provider — click for one bubble each';
+      }
+      const tintBtn = on('tint', conv);
+      if (tintBtn) {
+        const state = typeof convTintState === 'function' ? convTintState() : 'normal';
+        tintBtn.classList.toggle('live', state === 'agent');
+        tintBtn.classList.toggle('grouped', state === 'all');
+        // The fourth, which takes the borders off the thread.
+        tintBtn.classList.toggle('bare', state === 'bare');
+        tintBtn.setAttribute('aria-pressed', String(state !== 'normal'));
+        tintBtn.title = typeof convTintTitle === 'function' ? convTintTitle(state) : '';
       }
       // Offered only where the relay has said it arbitrates at all: on a relay with the feature
       // off there is no session to reach and no form worth opening.
@@ -24493,6 +25169,12 @@ function markdownHtml(source) {
       // module that owns them and the page is redrawn from what they now say.
       if (what === 'live') { toggleConvLive(); deskRenderAll(); return; }
       if (what === 'commits') { toggleConvCommits(); deskRenderAll(); return; }
+      // The same two the phone hangs over its thread. `convParaToggle` redraws the mobile page's
+      // own views, every one of which is absent here and guarded for it; the colour is a body
+      // class and needs no redraw at all. Both still end in `deskRenderAll`, because what has to
+      // move is every column drawing that room and the buttons in each of them.
+      if (what === 'para') { convParaToggle(); deskRenderAll(); return; }
+      if (what === 'tint') { convToggleTint(); deskRenderAll(); return; }
       if (what === 'arb') { arbOpenFromConv(); return; }
       if (what === 'cmd') { cmdOpenFromConv(); return; }
       // Refresh. Over a room it is one intention — "show me this properly" — so it throws away what
@@ -24777,7 +25459,7 @@ function markdownHtml(source) {
     function deskConvLayout(id) {
       const k = id || '';
       if (!deskConvLayouts[k]) {
-        deskConvLayouts[k] = {closed: [], extra: [], splits: [], active: null};
+        deskConvLayouts[k] = {closed: [], extra: [], splits: [], order: [], active: null};
       }
       const lay = deskConvLayouts[k];
       // Restored from localStorage, so each field is checked rather than trusted: a half-written
@@ -24785,6 +25467,7 @@ function markdownHtml(source) {
       if (!Array.isArray(lay.closed)) lay.closed = [];
       if (!Array.isArray(lay.extra)) lay.extra = [];
       if (!Array.isArray(lay.splits)) lay.splits = [];
+      if (!Array.isArray(lay.order)) lay.order = [];
       return lay;
     }
 
@@ -24843,8 +25526,44 @@ function markdownHtml(source) {
       // this browser has not been told about yet is kept, and a pane that is gone is marked ended
       // rather than removed — the tab is the last trace that the session happened.
       const docsArrived = typeof stateSyncPending !== 'function' || !stateSyncPending();
-      deskTabs = deskResolveRestored(out, agents, shells, retiredAgents,
-                                     loadConvIndex(), docsArrived);
+      deskTabs = deskOrdered(deskResolveRestored(out, agents, shells, retiredAgents,
+                                                 loadConvIndex(), docsArrived), lay.order);
+    }
+
+    // Where the reader dragged each tab. The strip is derived on every render — the room's tab,
+    // then its roster, then this browser's pins — so an order the reader chose has to be re-applied
+    // to each of those rebuilds rather than stored as the list itself. It is a hint and not the
+    // list: a tab the drag never touched, and a member that joined the room afterwards, keeps its
+    // derived place and follows the ones that were moved.
+    //
+    // Per room and per browser, beside the closed set and the splits, because it is the same kind
+    // of statement as a pin: where *this* reader wants a row. Nothing about it is written to the
+    // shared document.
+    function deskOrdered(tabs, order) {
+      if (!order || !order.length) return tabs;
+      const at = new Map(order.map((k, i) => [k, i]));
+      return tabs
+        .map((t, i) => ({t, i, rank: at.has(deskTabKey(t.kind, t.key))
+                                    ? at.get(deskTabKey(t.kind, t.key)) : Infinity}))
+        .sort((a, b) => (a.rank - b.rank) || (a.i - b.i))
+        .map(x => x.t);
+    }
+
+    // The drop. The strip draws neither split tabs nor closed ones, so the sequence it shows is a
+    // subset of the room's: the moved key is taken out and put back beside the tab it was dropped
+    // on, and every tab the strip is not showing keeps whatever rank it already had.
+    function deskReorderTab(key, beforeKey) {
+      const lay = deskConvLayout(deskSelectedConv);
+      const keys = deskTabs.map(t => deskTabKey(t.kind, t.key));
+      const from = keys.indexOf(key);
+      if (from === -1 || key === beforeKey) return;
+      keys.splice(from, 1);
+      const to = beforeKey ? keys.indexOf(beforeKey) : keys.length;
+      keys.splice(to === -1 ? keys.length : to, 0, key);
+      lay.order = keys;
+      deskSaveLayout();
+      deskComputeTabs();
+      deskRenderTabs();
     }
 
     // --- columns ---
@@ -24929,12 +25648,24 @@ function markdownHtml(source) {
       deskSyncColumns();
       deskFocusColumnFor(tabKey);
       deskSaveLayout();
+      deskNoteTabVisit(kind, key);
       deskRenderAll();
       deskReadColumn(deskFocus);
       // Opening something is the reader saying which pane they are about to write to, so the field
       // is ready for them. A click inside a column already does this; a click on the strip or in
       // the sidebar lands outside `#deskCols` and used to leave the focus where it was.
       deskFocusComposer();
+    }
+
+    // The visit log the floating puck reads. The phone writes it when a pane is opened; a column
+    // taking one is the same moment, and until this existed the puck's terminal filter was empty on
+    // this page however many shells had been opened in it. Terminals only: a room is logged when
+    // the sidebar selects it, and an agent pane is a member of a room rather than a place of its
+    // own — which is why the puck has three filters and not four.
+    function deskNoteTabVisit(kind, key) {
+      if (kind !== 'terminal' || typeof noteRecent !== 'function') return;
+      const shell = deskPaneOfTab({kind: kind, key: key});
+      if (shell) noteRecent(shell.pane_id);
     }
 
     // Double click. A column of its own — and a second double click on the same tab takes it back,
@@ -24968,6 +25699,7 @@ function markdownHtml(source) {
       deskSyncColumns();
       deskFocusColumnFor(tabKey);
       deskSaveLayout();
+      deskNoteTabVisit(kind, key);
       deskRenderAll();
       deskReadColumn(deskFocus);
       deskFocusComposer();
@@ -25159,7 +25891,7 @@ function markdownHtml(source) {
         const pinned = deskPinAt(key) !== -1;
         const cls = [t.state === 'ended' ? 'ended' : '', pinned ? 'pinned' : '',
                      splits.has(key) ? 'split' : ''].filter(Boolean).join(' ');
-        return `<span class="${cls}" data-key="${escapeHtml(key)}"` +
+        return `<span class="${cls}" data-key="${escapeHtml(key)}" draggable="true"` +
           ` title="${escapeHtml(t.label || t.key)}">` +
           `<button class="desk-tab-pin${pinned ? ' on' : ''}" data-pin-tab="${escapeHtml(key)}"` +
           ` aria-pressed="${pinned ? 'true' : 'false'}"` +
@@ -25199,6 +25931,64 @@ function markdownHtml(source) {
         const t = deskTabFor(tab.dataset.key);
         if (t) deskOpen(t.kind, t.key, t.label);
       });
+
+      // Drag a tab along the strip. Delegated like everything else here, because the strip is
+      // rewritten whenever its signature changes and a handler bound to a tab would go with it.
+      //
+      // The browser's own drag rather than pointer events: a tab is a row of text with two buttons
+      // in it, and `draggable` is what stops a press-and-move turning into a text selection across
+      // half the strip. A drag that ends anywhere else is a drag that did nothing — there is no
+      // meaning here for dropping a tab on a column.
+      let dragKey = '';
+      strip.addEventListener('dragstart', e => {
+        const tab = e.target.closest && e.target.closest('[data-key]');
+        if (!tab) return;
+        dragKey = tab.dataset.key;
+        tab.classList.add('dragging');
+        // Firefox starts no drag at all without something on the transfer.
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', dragKey); } catch (_e) { /* not offered */ }
+        }
+      });
+      strip.addEventListener('dragover', e => {
+        if (!dragKey) return;
+        // Without this the drop never fires: the default for dragover is to refuse it.
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        const over = e.target.closest && e.target.closest('[data-key]');
+        // Which side of the tab under the pointer, so the gap opens where the tab would land
+        // rather than always to its left — a strip where the mark never moved past the last tab
+        // would have no way to say "put it at the end".
+        const after = !!over && e.clientX > over.getBoundingClientRect().left
+          + over.getBoundingClientRect().width / 2;
+        strip.querySelectorAll('.drop-before, .drop-after')
+          .forEach(el => el.classList.remove('drop-before', 'drop-after'));
+        if (over && over.dataset.key !== dragKey) {
+          over.classList.add(after ? 'drop-after' : 'drop-before');
+        }
+      });
+      const endDrag = () => {
+        dragKey = '';
+        strip.querySelectorAll('.dragging, .drop-before, .drop-after')
+          .forEach(el => el.classList.remove('dragging', 'drop-before', 'drop-after'));
+      };
+      strip.addEventListener('dragend', endDrag);
+      strip.addEventListener('drop', e => {
+        e.preventDefault();
+        const key = dragKey;
+        const over = e.target.closest && e.target.closest('[data-key]');
+        endDrag();
+        if (!key || !over || over.dataset.key === key) return;
+        const after = e.clientX > over.getBoundingClientRect().left
+          + over.getBoundingClientRect().width / 2;
+        // Dropped on the right half of a tab means "after it", which is the tab after that one's
+        // place — and nothing at all when it is the last, which is the end of the strip.
+        const keys = deskTabs.map(t => deskTabKey(t.kind, t.key));
+        const at = keys.indexOf(over.dataset.key);
+        deskReorderTab(key, after ? (keys[at + 1] || '') : over.dataset.key);
+      });
+
       // The column's own title. A split tab has left the strip, so the two gestures it answered
       // there — the menu and the double click that merges it back — are answered here instead.
       const cols = document.getElementById('deskCols');
@@ -25903,8 +26693,16 @@ function markdownHtml(source) {
     // has asked for them — the same setting, off the same key, that the phone's landing section
     // reads: a browser that hid the auto ones there and showed them here would be two answers to
     // one question.
+    //
+    // A room of web providers is not one of them. This page loads none of the modules that drive
+    // one — no picker, no provider pills, no panel composer, no binding reconciler — so a row for
+    // one here opens a room whose whole point this page cannot act on, drawn with the composer
+    // that addresses panes. The phone is where those rooms are read and written; the desktop is
+    // the page made of panes. Asked of the kind rather than of a field, so the Providers editor
+    // turning a room into one on the phone takes it off this list with nothing else to change.
     function deskConvList() {
-      const all = loadConvIndex();
+      const all = loadConvIndex().filter(c => typeof convKindOf !== 'function'
+        || convKindOf(c) !== 'providers');
       const find = deskConvFind.trim().toLowerCase();
       const archive = typeof convLandingArchiveOn === 'function' && convLandingArchiveOn();
       const auto = !archive && typeof convLandingAutoOn === 'function' && convLandingAutoOn();
@@ -28158,7 +28956,10 @@ function markdownHtml(source) {
                                 {group: group, label: tab.label || tab.key, tab: tab}));
       };
       deskTabs.forEach(t => add('Tabs', t, deskPaneOfTab(t)));
-      loadConvIndex().forEach(c =>
+      // The rooms the sidebar lists, and not the whole index: a room of web providers is not
+      // one this page can act on, and a palette that opened one would be the way back in to what
+      // the list left out.
+      deskConvList().all.forEach(c =>
         add('Conversations', {kind: 'conversation', key: c.id, label: c.name || c.id}, null));
       agents.concat(typeof shells === 'undefined' ? [] : shells).forEach(p => {
         if (p.unresolved) return;
@@ -28553,6 +29354,27 @@ function markdownHtml(source) {
       recentFloatDraw();
     }
 
+    // A pane opened is a visit too, in the same log and the same order. A terminal has no `agent`
+    // to fingerprint on, so it is stored with its host and cwd and flagged — herdr reuses pane ids,
+    // and a recent terminal landing on the agent that inherited its id is exactly what the
+    // fingerprint exists to prevent.
+    //
+    // Here rather than in recents.js for the same reason the log is: the desktop page opens panes
+    // in its columns and loads none of that file, so a writer declared there left the terminal half
+    // of the log empty on one of the two pages — and the puck's terminal filter with it.
+    function noteRecent(paneId) {
+      const shell = isShell(paneId);
+      const pool = shell ? shells : agents;
+      const live = pool.filter(p => p.pane_id === paneId);
+      if (live.length !== 1) return;
+      const current = shell
+        ? { pane_id: paneId, host: live[0].host || 'local', cwd: live[0].cwd || '', terminal: true }
+        : recentFingerprint(live[0]);
+      const next = [current, ...loadRecents().filter(r => r.pane_id !== paneId)].slice(0, RECENT_LOG);
+      try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
     const RECENT_FLOAT_KEY = 'herdr_recent_float';
     const RECENT_FLOAT_MAX = 5;
 
@@ -28900,17 +29722,31 @@ function markdownHtml(source) {
     const RECENT_FLOAT_LABELS = {conv: 'conversations', web: 'web agent conversations',
                                  term: 'terminals'};
 
-    // The one row at the top: freeze the panel open, then the three filters. Icons and no words —
+    // Which of the three filters are worth drawing: the kinds this browser has actually been in,
+    // and never the ones it has not. A reader with no web-agent rooms was being offered a filter
+    // whose only answer is "nothing recent of that kind", and a row of marks for kinds that are
+    // not in the list is a question about the app rather than about the work. The selected one is
+    // kept whatever happens to the rows under it — the icon that turned a filter on is the only
+    // way back out of it. One kind is no filter at all: there is nothing to narrow to.
+    function recentFloatKinds(log, convs, shells, type) {
+      // Asked of the whole log rather than of the five rows on screen: a kind that is in the
+      // record but under the fold is exactly the one somebody would filter to.
+      const kinds = RECENT_FLOAT_TYPES.filter(one =>
+        one === type || recentFloatItems(log, convs, shells, one).length);
+      return kinds.length > 1 ? kinds : [];
+    }
+
+    // The one row at the top: freeze the panel open, then the filters. Icons and no words —
     // it is 232 pixels wide and every one of these marks is one the reader already reads elsewhere
     // in the app as that kind of thing.
-    function recentFloatHeadHtml(type) {
+    function recentFloatHeadHtml(type, kinds) {
       const pinned = recentFloatPinned();
       return `<div class="recent-float-head">`
         + `<button type="button" class="recent-float-ico pin${pinned ? ' on' : ''}"`
         + ` aria-pressed="${pinned ? 'true' : 'false'}"`
         + ` onclick="recentFloatTogglePin()" title="Keep this open"`
         + ` aria-label="Keep this list open">${recentFloatPinIco()}</button>`
-        + RECENT_FLOAT_TYPES.map(one => `<button type="button"`
+        + (kinds || []).map(one => `<button type="button"`
           + ` class="recent-float-ico ${one}${type === one ? ' on' : ''}"`
           + ` aria-pressed="${type === one ? 'true' : 'false'}"`
           + ` onclick="setRecentFloatType('${one}')" title="Only ${RECENT_FLOAT_LABELS[one]}"`
@@ -28951,7 +29787,8 @@ function markdownHtml(source) {
       if (!show) return;
       if (recentFloatOpen) {
         const here = recentFloatHere();
-        document.getElementById('recentFloatPanel').innerHTML = recentFloatHeadHtml(type)
+        const kinds = recentFloatKinds(log, convs, live, type);
+        document.getElementById('recentFloatPanel').innerHTML = recentFloatHeadHtml(type, kinds)
           + (items.length ? items.map(row => recentFloatRowHtml(row, here)).join('')
             : `<p class="recent-float-empty">Nothing recent of that kind.</p>`);
       }
@@ -29330,8 +30167,24 @@ function markdownHtml(source) {
       const said = count >= 0
         ? `<span class="desk-pane-count">${count} ${count === 1 ? 'message' : 'messages'}</span>`
         : '';
+      // What this column is holding, as the id the rest of the system calls it by: the conversation
+      // id for a room, and the agent id — or the pane id where there is none yet — for a pane. It is
+      // what a deep link carries and what a question about the relay's record is asked with, and it
+      // was nowhere on this page. Last before the merge button and the first thing to give way when
+      // the column is narrow: it is an address rather than a name, and the name is what the reader
+      // is looking at.
+      const idOf = () => {
+        if (!tab) return '';
+        if (tab.kind === 'conversation') return tab.key;
+        const pane = deskPaneOfTab(tab);
+        return pane ? (pane.aid || pane.pane_id || '') : '';
+      };
+      const id = idOf();
+      const ident = id
+        ? `<span class="desk-pane-id" title="${escapeHtml(id)}">${escapeHtml(id)}</span>`
+        : '';
       const html = status + `<span class="desk-pane-title-text">${escapeHtml(label)}</span>` +
-        `${badges}${said}${merge}`;
+        `${badges}${said}${ident}${merge}`;
       if (el.dataset.sig !== html) { el.innerHTML = html; el.dataset.sig = html; }
     }
 
@@ -29344,7 +30197,7 @@ function markdownHtml(source) {
         // Something selected beats an empty lower half on first connect, and the top of the list is
         // by definition the conversation this browser was last interested in. Before the tabs are
         // computed, because on this page the selected room is what the strip is made of.
-        const first = deskSortConvs(loadConvIndex(), deskPins())[0];
+        const first = deskSortConvs(deskConvList().all, deskPins())[0];
         if (first) { deskAdoptScratch(first.id); deskSelectedConv = first.id; }
       }
       deskResolveTabs();
