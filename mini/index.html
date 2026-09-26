@@ -30505,7 +30505,9 @@ function webchatReconcileBindings() {
     if (wanted.has(aid)) continue;
     const asked = webchatBindSent.get(`-${aid}`);
     if (asked && now - asked.at < WEBCHAT_BIND_RETRY_MS) continue;
-    if (webchatAsk({type: 'webchat_detach', aid})) {
+    // The index version says this page read the index it is acting on; the relay refuses a
+    // detach from a build that could not.
+    if (webchatAsk({type: 'webchat_detach', aid, index_version: CONV_INDEX_VERSION})) {
       webchatBindSent.set(`-${aid}`, {at: now, grant: ''});
     }
   }
