@@ -23001,8 +23001,7 @@ convApplyTint();
             `> ${escapeHtml(r.label || paneLabel(r.pane))}` +
             '</label>').join('')
             : '<span class="arb-note">Nobody in this room is running.</span>')) +
-        `<label>Hops per assignment<input type="number" id="loopHops" min="1" max="${LOOP_HOPS}"` +
-        ` value="${LOOP_HOPS}"></label>` +
+        loopSettingsHtml(LOOP_HOPS, 'pull', 1) +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="loopStart()">Start</button>' +
@@ -23066,14 +23065,14 @@ convApplyTint();
       const members = Array.from(document.querySelectorAll('[id^="loopMember"]'))
         .filter(b => b.checked && b.value !== who.pane_id).map(b => ({pane_id: b.value}));
       if (members.length < 2) { showToast('A loop needs two members to hand work between.'); return; }
-      const hops = Math.min(LOOP_HOPS, Math.max(1,
-        parseInt((document.getElementById('loopHops') || {}).value, 10) || LOOP_HOPS));
+      const settings = loopReadSettings(1);
+      if (!settings) return;
       const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : '';
       arbSend(Object.assign({
         type: 'cmd_start', conversation: conv.id, scope: `Manual loop in ${conv.name || conv.id}`,
         coordinator: {pane_id: who.pane_id}, members: members,
-        manual: true, handoff: hops, delivery: 'pull',
-      }, loopPlace(project)));
+        manual: true,
+      }, settings, loopPlace(project)));
       closeArbSetup();
     }
 
@@ -23089,6 +23088,8 @@ convApplyTint();
       return `<div class="arb-strip loop-strip" data-session="${escapeHtml(s.id)}"` +
         ` data-state="${escapeHtml(s.state || '')}">` +
         '<div class="arb-bar">' +
+        '<button class="hang-btn" onclick="loopOpenSettings()" aria-label="Loop settings"' +
+        ' title="Loop settings"><span class="arb-ico" aria-hidden="true">⚙</span></button>' +
         (s.manual
           ? btn('Assign', 'Hand the first piece of work to a member, with the route', 'loopOpenAssign()', 'lit') +
             btn('Hand over', 'Give the chain to the Commander; it is briefed and takes over',
@@ -23103,13 +23104,62 @@ convApplyTint();
         '<div class="arb-say">' +
         `<span class="arb-say-state">${escapeHtml((s.manual ? 'Loop · you own it' : 'Loop · Commander owns it') +
           (paused ? ' · paused' + (s.pause_reason ? ' — ' + String(s.pause_reason).replace(/_/g, ' ') : '') : ''))}</span>` +
-        `<span class="arb-say-budget">${escapeHtml(holder)}</span>` +
+        `<span class="arb-say-budget">${escapeHtml(holder + ' · ' + (s.delivery || 'pull'))}</span>` +
         '</div></div>';
     }
 
     function loopCommand(type, extra) {
       const s = loopSession();
       if (s) arbSend(Object.assign({type: type, session: s.id}, extra || {}));
+    }
+
+    function loopSettingsHtml(hops, delivery, min) {
+      return `<label>Hops per assignment<input type="number" id="loopHops" min="${min}"` +
+        ` max="${LOOP_HOPS}" step="1" value="${hops}"></label>` +
+        '<label>Delivery<select id="loopDelivery">' +
+        `<option value="pull"${delivery !== 'push' ? ' selected' : ''}>Pull — file and notice</option>` +
+        `<option value="push"${delivery === 'push' ? ' selected' : ''}>Push — text in terminal</option>` +
+        '</select></label>';
+    }
+
+    function loopReadSettings(min) {
+      const raw = String((document.getElementById('loopHops') || {}).value || '').trim();
+      const hops = Number(raw);
+      if (!raw || !Number.isInteger(hops) || hops < min || hops > LOOP_HOPS) {
+        showToast(`Choose a whole hop limit from ${min} to ${LOOP_HOPS}.`);
+        return null;
+      }
+      const delivery = (document.getElementById('loopDelivery') || {}).value || 'pull';
+      if (delivery !== 'pull' && delivery !== 'push') {
+        showToast('Choose pull or push delivery.');
+        return null;
+      }
+      return {handoff: hops, delivery: delivery};
+    }
+
+    function loopOpenSettings() {
+      const s = loopSession();
+      const conv = loopConv();
+      if (!s || !conv) return;
+      loopDraw(conv, loopSettingsHtml(s.handoff || 0, s.delivery || 'pull', 0) +
+        '<span class="arb-note">0 turns handoff off. Lowering the limit does not undo hops; ' +
+        'work comes back at the next attempted hand-off. Delivery changes apply to the next ' +
+        'delivery, not work already sent.</span>' +
+        '<div class="arb-go">' +
+        '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
+        '<button type="button" class="badge pick on" onclick="loopSaveSettings()">Save</button>' +
+        '</div>');
+    }
+
+    function loopSaveSettings() {
+      const s = loopSession();
+      const conv = loopConv();
+      if (!s || s.state === 'ended' || s.id !== loopSetupSession ||
+          !conv || conv.id !== loopSetupConv) return;
+      const settings = loopReadSettings(0);
+      if (!settings) return;
+      loopCommand('cmd_edit', settings);
+      closeArbSetup();
     }
 
     function loopTakeBack() {
