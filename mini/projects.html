@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-27">
+  <meta name="app-built" content="2026-10-04">
   <title>herdr-remote &mdash; projects</title>
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='3'%20y='3.5'%20width='4'%20height='9'%20rx='1'%20fill='%237aa2f7'/%3E%3Crect%20x='8.5'%20y='3.5'%20width='4.5'%20height='5.5'%20rx='1'%20fill='%239ece6a'/%3E%3C/svg%3E">
@@ -2974,6 +2974,37 @@
   border-color: var(--blue);
 }
 
+/* A loop the person owns is green while it runs and amber while it is stopped: the colour is what
+   says, from across the room, whether the chain is still moving. */
+.hang-loop.live {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.hang-loop.live.paused {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+/* The loop strip's controls carry words: four verbs that change who owns work are not ones to
+   guess from a glyph. Same chip as the row above, only as wide as its word. */
+.loop-strip .loop-txt {
+  display: inline-flex;
+  width: auto;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.loop-strip .loop-txt.lit {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.loop-strip .arb-say-budget {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
   </style>
 </head>
 
@@ -3086,7 +3117,7 @@
             <div id="startAgents" class="badge-strip"></div>
             <label class="start-check" id="startUnattendedRow" style="display:none">
               <input type="checkbox" id="startUnattended" onchange="pickStartUnattended(this.checked)" />
-              <span>Skip approvals</span>
+              <span id="startUnattendedText">Skip approvals</span>
             </label>
           </div>
           <!-- Under the agent, because it is a fact about the agent and not about the session:
@@ -5540,7 +5571,9 @@
     const CLAUDE_TOOL = /^[A-Z][A-Za-z0-9_-]*(?: [A-Z][A-Za-z0-9_-]*){0,3}\(\S/;
     const GUTTERS = {
       claude: { speaker: '⏺', result: ['⎿'], user: ['❯', '>'], tool: CLAUDE_TOOL },
-      codex: { speaker: '•', result: ['└', '│'], user: ['›'] },
+      // codex hangs a tip off its closing message with the result glyph, which is a footer under
+      // what it said rather than the output of a command it ran.
+      codex: { speaker: '•', result: ['└', '│'], user: ['›'], endLine: /^\s*└ Tip:(?:\s|$)/ },
       pi: { speaker: '⏺', result: ['$'], user: ['›'], ends: ['⋯'], indent: 1, composer: false },
       // OpenCode puts the user's messages, every tool block and the composer itself behind one
       // `┃` in column 2, and everything it says itself is plain prose indented five. So the bar is
@@ -5712,6 +5745,8 @@
       let gap = false;
       for (let j = start + 1; j < rows.length; j++) {
         const line = (rows[j] || '').trimStart();
+        // Before the glyph: a line closing a block on its content may wear the result glyph.
+        if (g.endLine && g.endLine.test(rows[j] || '')) break;
         // A result glyph means this block ran something rather than said something. Tested before
         // the end check, because on an indented harness a result glyph is itself an end.
         if (line && (!gap || g.indent) && g.result.includes(line[0])) return null;
@@ -6279,7 +6314,7 @@ function convWebModeOf(conv) {
     // not close that, so a re-read of a message already recorded normalized to a string the anchor
     // match had never seen, and the window it was in was written down as a gap or as a second copy.
     // Stored text stays exactly as it was extracted; only what the recorder compares is normalized.
-    function convKey(text) { return String(text == null ? '' : text).replace(/\s+/g, ''); }
+    function convKey(text) { return String(text == null ? '' : text).replace(/[\s`]+/g, ''); }
 
     // A prompt this browser sent can come back merged into the block underneath it. How many of a
     // pane's own sends are checked for that, and how much of one has to match at each end for the
@@ -6287,13 +6322,13 @@ function convWebModeOf(conv) {
     const CONV_SENT_LOOKBACK = 4;
     const CONV_ECHO_EDGE = 40;
 
-    // The offset in `text` just past its `count`th non-whitespace character. The comparison runs
-    // over `convKey`s, which hold no whitespace at all, so an offset found there means nothing to
+    // The offset in `text` just past its `count`th character `convKey` keeps. The comparison runs
+    // over `convKey`s, which hold no whitespace and no backticks, so an offset found there means nothing to
     // the text it came from until it is walked back like this.
     function convCutAt(text, count) {
       let seen = 0;
       for (let i = 0; i < text.length; i++) {
-        if (/\s/.test(text[i])) continue;
+        if (/[\s`]/.test(text[i])) continue;
         if (++seen === count) return i + 1;
       }
       return text.length;
@@ -6380,7 +6415,10 @@ function convWebModeOf(conv) {
       for (let i = 0; i < lines.length;) {
         let j = i;
         while (j + 1 < lines.length && lines[j + 1] === lines[j] + 1) j++;
-        found.push({ who: 'user', at: [lines[i], lines[j]] });
+        // Codex points at a menu's selected row with its prompt glyph; a menu ends on a key hint
+        // naming both enter and esc, which no prompt does. Same rule as pane_summary.py.
+        if (!(agent === 'codex' && /\benter\b.*\besc\b/i.test(rows[lines[j]] || '')))
+          found.push({ who: 'user', at: [lines[i], lines[j]] });
         i = j + 1;
       }
       return found.sort((a, b) => a.at[0] - b.at[0])
@@ -10063,7 +10101,8 @@ function convWebModeOf(conv) {
         // fact about the relay, not a failure to put in front of the user.
         if (stateSyncNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
-        showToast(msg.message || 'The relay refused that.');
+        showToast(typeof loopRefusal === 'function'
+          ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
       else if (msg.type === 'state') { stateSyncReceive(msg); }
       else if (msg.type === 'state_ack') { stateSyncAck(msg); }
@@ -11042,6 +11081,7 @@ function convWebModeOf(conv) {
     // work that runs without them; a stock start is the one they are sitting in front of.
     function startUnattendedOn() {
       if (!startUnattendedOffered(startAgentPick)) return false;
+      if (startAgentPick === 'agy') return true; // agy's required argv always skips approvals
       return startUnattendedPick === null ? !!startConfigPick : startUnattendedPick;
     }
 
@@ -11051,6 +11091,9 @@ function convWebModeOf(conv) {
       if (!row || !box) return;
       row.style.display = startUnattendedOffered(startAgentPick) ? 'flex' : 'none';
       box.checked = startUnattendedOn();
+      box.disabled = startAgentPick === 'agy';
+      document.getElementById('startUnattendedText').textContent =
+        box.disabled ? 'Approvals always skipped by agy' : 'Skip approvals';
     }
 
     function pickStartUnattended(on) {
@@ -11223,54 +11266,9 @@ function convWebModeOf(conv) {
       row.hidden = !show;
       row.style.display = show ? '' : 'none';
       if (!show) { row.innerHTML = ''; return; }
-      // A worktree is a way of *making* that folder rather than a second kind of start: git
-      // creates the directory, the next scan adopts it as a Project, and the pane comes up inside
-      // it exactly as it would have in one the relay mkdir'd. So it hangs off this field and is
-      // drawn in the same row — naming a repository and no folder is a start with nothing for git
-      // to create, which submitStart refuses here rather than spending a round trip on.
-      //
-      // The repository is picked from the Projects this relay already has, never typed as a path,
-      // and only the local ones: git runs on the relay's machine. A container is left out because
-      // it is a place Projects live rather than a checkout.
-      const repos = projects.filter(x => (x.host || 'local') === 'local' && !x.container
-        && x.id !== p.id);
       row.innerHTML = '<label class="start-field">New folder <span class="field-note">optional</span>'
         + '<input id="startChild" type="text" maxlength="64" autocapitalize="none"'
-        + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`
-        + (repos.length
-          ? '<label class="start-field">Make it a worktree of'
-            + ' <span class="field-note">optional</span>'
-            + '<select id="startWorktreeRepo" onchange="renderStartWorktree()"></select></label>'
-            + '<div id="startWorktreeRow" hidden style="display:none"></div>'
-          : '');
-      if (!repos.length) return;
-      fillSelect('startWorktreeRepo',
-        [['', 'Nothing — an empty folder']].concat(repos.map(x => [x.id, x.label || x.id])));
-      renderStartWorktree();
-    }
-
-    // The two ends `git worktree add` takes, named as it names them rather than translated: a new
-    // branch, and where to start it. Left empty they mean what git means by leaving them out — no
-    // new branch, and the repository's current HEAD. The pair is what lets one field do both jobs
-    // without a mode switch: a branch that already exists is checked out by naming it here as the
-    // base and asking for no new one, which is the case `-b` would refuse.
-    //
-    // Only drawn once a repository is picked, because with none there is nothing to branch from.
-    function renderStartWorktree() {
-      const row = document.getElementById('startWorktreeRow');
-      if (!row) return;
-      const repo = document.getElementById('startWorktreeRepo');
-      const on = !!(repo && repo.value);
-      row.hidden = !on;
-      row.style.display = on ? '' : 'none';
-      row.innerHTML = on
-        ? '<label class="start-field">New branch <span class="field-note">optional</span>'
-          + '<input id="startWorktreeBranch" type="text" maxlength="128" autocapitalize="none"'
-          + ' autocomplete="off" placeholder="leave empty to check one out" /></label>'
-          + '<label class="start-field">From <span class="field-note">optional</span>'
-          + '<input id="startWorktreeBase" type="text" maxlength="128" autocapitalize="none"'
-          + ' autocomplete="off" placeholder="branch or commit to start at" /></label>'
-        : '';
+        + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`;
     }
 
     // Picking one redraws the rest: placement is answered against what that Project has running,
@@ -11527,23 +11525,6 @@ function convWebModeOf(conv) {
       const raw = childField ? (childField.value || '') : '';
       const child = raw.trim() || raw;
       if (child) msg.child = child;
-      // Only with a child, and only an agent start: the relay refuses a worktree that has no
-      // directory to create, and refuses one on an open_terminal as an unexpected field. Said
-      // here rather than sent to be refused, because the fix is one field up the same sheet.
-      const repoField = terminal ? null : document.getElementById('startWorktreeRepo');
-      const repo = repoField ? (repoField.value || '') : '';
-      if (repo && !child) { setStartError('Name the folder the worktree goes in'); return; }
-      if (repo && child) {
-        // Trimmed, unlike the folder name beside them: a branch is git's to refuse and the relay
-        // checks a charset that has no whitespace in it, so a stray space is a round trip and an
-        // error about a name that looks right. Omitted rather than sent empty, which is how the
-        // relay reads "no new branch" and "from wherever HEAD is".
-        const branch = (document.getElementById('startWorktreeBranch') || {}).value || '';
-        const base = (document.getElementById('startWorktreeBase') || {}).value || '';
-        msg.worktree = Object.assign({repo: repo},
-          branch.trim() ? {branch: branch.trim()} : {},
-          base.trim() ? {base: base.trim()} : {});
-      }
       if (placement !== 'split') msg.slot = slotFor();
       // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
       // answered that for an agent, this answers it for the other message. Omitted, not empty — the
@@ -11841,7 +11822,12 @@ function convWebModeOf(conv) {
                           config)
           + commanderPick(name, 'role', roles.map(r => [r, r]), at('role'))
           + (name === 'arbitrator'
-            ? commanderPick(name, 'mode', COMMANDER_MODES.map(m => [m, m]), at('mode')) : '')
+            ? commanderPick(name, 'mode', COMMANDER_MODES.map(m => [m, m]), at('mode'))
+            // Where the worker's own Project writes down how it does this kind of work. The relay
+            // names the file on each assignment while it exists there, and says nothing otherwise.
+            : `<input type="text" title="prompt" value="${escapeHtml(at('prompt') || '')}"`
+              + ' placeholder="Its instructions, a path in the Project"'
+              + ` onchange="commanderProfileSet('${escapeHtml(name)}','prompt',this.value.trim())">`)
           + '</div>'
           + (problem ? `<div class="cfg-note cmd-def-problem">${escapeHtml(problem)}</div>` : '')
           + '</div>';
@@ -13924,6 +13910,10 @@ function convWebModeOf(conv) {
         if (typeof cmdAdoptStarted === 'function') cmdAdoptStarted(a, want.slot);
         return;
       }
+      if (want.slot === 'loopWho') {
+        if (typeof loopAdoptStarted === 'function') loopAdoptStarted(a, want);
+        return;
+      }
       const at = arbSetupOpen() ? arbReadSetup() : {};
       if (want.slot !== 'arbWho') {
         const items = loadConvIndex();
@@ -14029,6 +14019,7 @@ function convWebModeOf(conv) {
       // Without this the module would still think it was open and redraw itself into a hidden
       // dialog on the next `cmd_session`.
       if (typeof cmdNoteClosed === 'function') cmdNoteClosed();
+      if (typeof loopNoteClosed === 'function') loopNoteClosed();
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
     }
@@ -15399,6 +15390,9 @@ function convWebModeOf(conv) {
       const el = document.getElementById('convCommander');
       const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
       if (cmdSetupConv && cmdSetupConv !== conv) closeCmdSetup();
+      // The loop's button and strip are synced whether or not this page has the Commander button:
+      // the desktop page has a Loop button in its roster header and no Commander button at all.
+      if (typeof loopSync === 'function') loopSync();
       if (!el) return;
       const live = cmdOn && !!cmdSessionHere();
       el.classList.toggle('on', !!(cmdOn && conv));
@@ -17319,12 +17313,22 @@ function convWebModeOf(conv) {
         (s.locked === false ? 'Lock roster' : 'Unlock roster') + '</button>';
       if (s.state === 'ended') return '<div class="arb-go">' + lock + '</div>';
       const paused = s.state === 'paused';
+      // How this Commander group is handed work — its tasks and its agents' assignments: typed
+      // at the pane (push) or left as a file with a notice (pull). Either falls back to the other
+      // once when it fails. The person's to choose, and taken on the next delivery with nothing
+      // restarted. An arbitration session is always push, so it is not offered one.
+      const delivery = s.kind === 'commander'
+        ? `<button type="button" class="badge pick proj" onclick="ccToggleDelivery()" ` +
+          `title="Work for this Commander and its agents is ${s.delivery === 'pull'
+            ? 'left as a file with a notice' : 'typed at their panes'}">` +
+          (s.delivery === 'pull' ? 'Push work' : 'Pull work') + '</button>'
+        : '';
       return '<div class="arb-go">' +
         (s.conversation
           ? `<button type="button" class="badge pick proj" onclick="ccOpenConv('${escapeHtml(s.conversation)}')">` +
             'Open its room</button>' : '') +
         `<button type="button" class="badge pick proj" onclick="ccRebrief(this)">Re-brief</button>` +
-        lock +
+        lock + delivery +
         (paused
           ? `<button type="button" class="badge pick on" onclick="ccResume()">Resume</button>`
           : `<button type="button" class="badge pick proj" onclick="ccPause()">Pause</button>`) +
@@ -17456,6 +17460,15 @@ function convWebModeOf(conv) {
     const CC_TRAFFIC = [['tasks_in', 'Handed to it'], ['reports_in', 'Told to it'],
                         ['tasks_out', 'Handed down'], ['reports_out', 'Said upward']];
 
+    // How a task reached its pane: typed, left as a file, or claimed with `next` before its notice
+    // went in. `fell back` is the one rung a row takes when its own way failed, and the row a
+    // reader comparing push with pull is looking for. A report has no transport and says nothing.
+    function ccDeliveryOf(row) {
+      const how = {prompt: 'typed', inbox: 'as a file', next: 'by next'}[row && row.transport];
+      if (!how) return '';
+      return row.fell_back ? 'fell back, ' + how : how;
+    }
+
     function ccTrafficHtml() {
       const held = ccDetailOf(ccPick);
       if (!held) return '';
@@ -17473,6 +17486,9 @@ function convWebModeOf(conv) {
             `<span class="cc-step-id">${escapeHtml(String(row.step
               || (key.endsWith('_in') ? row.from : row.to) || '\u00b7'))}</span>` +
             `<span class="cc-step-what">${escapeHtml(String(row.text || ''))}</span>` +
+            (ccDeliveryOf(row)
+              ? `<span class="cc-step-link${row.fell_back ? ' missing' : ''}">` +
+                `${escapeHtml(ccDeliveryOf(row))}</span>` : '') +
             // A delivery the relay could not prove, and the two answers a person has about
             // one. Never retried automatically: an unproven paste may well have landed, and
             // re-typing a coding instruction that did runs it twice.
@@ -17529,6 +17545,13 @@ function convWebModeOf(conv) {
       armButton(btn, locked ? 'Lock roster?' : 'Unlock roster?', () =>
         arbSend({type: s.kind === 'commander' ? 'cmd_edit' : 'arb_edit',
                  session: s.id, locked}), 'cc-lock');
+    }
+
+    function ccToggleDelivery() {
+      const s = ccPickedSession();
+      if (s && s.kind === 'commander') {
+        arbSend({type: 'cmd_edit', session: s.id, delivery: s.delivery === 'pull' ? 'push' : 'pull'});
+      }
     }
 
     function ccRebrief(btn) {
@@ -18247,9 +18270,11 @@ function convWebModeOf(conv) {
             ` onclick="pbFilterStep('${escapeHtml(String(row.step))}')"` +
             ` title="Narrow to this plan row">#${escapeHtml(String(row.step))}</button>` : '') +
         (row.agenda_rev ? `<span>r${escapeHtml(String(row.agenda_rev))}</span>` : '') +
+        (ccDeliveryOf(row)
+          ? `<span>${row.fell_back ? '&#9888; ' : ''}${escapeHtml(ccDeliveryOf(row))}</span>` : '') +
         '</div>' +
         `<div class="proj-msg-text">${escapeHtml(String(row.text || ''))}</div>` +
-        pbWarnHtml(row, session, row.kind) +
+        pbMsgWarnHtml(row, session, row.kind) +
         (row.reply
           ? '<div class="proj-reply">' +
             '<div class="proj-msg-head">' +
@@ -18257,7 +18282,7 @@ function convWebModeOf(conv) {
             `<span class="proj-msg-who">${row.dir === 'in' ? '&uarr;' : '&darr;'} ` +
             (row.dir === 'in' ? 'said back' : 'answered') + '</span></div>' +
             `<div class="proj-msg-text">${escapeHtml(String(row.reply.text || ''))}</div>` +
-            pbWarnHtml(row.reply, session, 'report') +
+            pbMsgWarnHtml(row.reply, session, 'report') +
             '</div>'
           : '') +
         '</div>';
@@ -18266,7 +18291,7 @@ function convWebModeOf(conv) {
     // A delivery the relay could not prove, and the two answers a person has about one. Never
     // retried automatically: an unproven paste may well have landed, and re-typing a coding
     // instruction that did runs the work twice.
-    function pbWarnHtml(row, session, kind) {
+    function pbMsgWarnHtml(row, session, kind) {
       if (!row || !row.unconfirmed) return '';
       const at = escapeHtml(String(session));
       const id = escapeHtml(String(row.id));

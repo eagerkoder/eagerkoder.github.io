@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-09-27">
+  <meta name="app-built" content="2026-10-04">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -965,7 +965,7 @@
     .desk.tabs-bottom .mock-main { grid-template-rows: minmax(0, 1fr) auto; }
     .desk.tabs-bottom .mock-tabs-row { order: 2; }
     .desk.tabs-bottom #deskCols { order: 1; }
-    .desk.tabs-bottom #arbStrip { order: 3; }
+    .desk.tabs-bottom #deskSessionStack { order: 3; }
 
     /* No strip means no row: columns reclaim its height. Tabs still open from the sidebar, and
        split columns keep their own title controls. */
@@ -5182,26 +5182,63 @@
   border-color: var(--blue);
 }
 
+/* A loop the person owns is green while it runs and amber while it is stopped: the colour is what
+   says, from across the room, whether the chain is still moving. */
+.hang-loop.live {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.hang-loop.live.paused {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+/* The loop strip's controls carry words: four verbs that change who owns work are not ones to
+   guess from a glyph. Same chip as the row above, only as wide as its word. */
+.loop-strip .loop-txt {
+  display: inline-flex;
+  width: auto;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.loop-strip .loop-txt.lit {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.loop-strip .arb-say-budget {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
   </style>
     <style>
 
     /* The strip, over the column whose conversation it is about. Parked outside every column
        (and hidden) when that conversation is not open — see deskArbPlace. */
-    #deskCols #arbStrip[hidden],
-    #arbStrip[hidden] {
+    #deskCols #deskSessionStack[hidden],
+    #deskSessionStack[hidden] {
       display: none;
     }
 
-    #deskCols #arbStrip {
+    #deskCols #deskSessionStack {
       position: absolute;
       top: 8px;
       right: 12px;
       z-index: 5;
       display: flex;
-      justify-content: flex-end;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
       /* The column owns everything around it. Only the tray takes clicks. */
       pointer-events: none;
       max-width: min(72%, 340px);
+    }
+
+    #deskSessionStack > :empty {
+      display: none;
     }
 
     /* The roster's ⚖, which arbSyncOpenButton turns on and lights. `.hang-btn` is `display: none`
@@ -6491,7 +6528,7 @@
         aria-label="Resize the conversations list" title="Drag to resize · double click to reset"></div>
       <div class="mock-sidebar-half mock-sidebar-agents" id="deskRoster">
         <div class="mock-agent-title"><span class="desk-head-kind" id="deskAgentsGlyph"></span><span>agents</span><span id="deskRosterNote" class="desk-head-mode"></span><span class="desk-head-btns"><button class="desk-head-btn" id="deskStartNew" title="Start a session or a terminal" hidden>+</button></span></div>
-        <div class="desk-head-tools"><button class="desk-head-btn desk-head-act arm-btn" id="deskRosterPause" title="Pause all &#183; every session in this room stops and keeps its seat" aria-label="Pause all: every session in this room stops and keeps its seat">&#10074;&#10074;</button><button class="desk-head-btn desk-head-act arm-btn desk-head-act-last" id="deskRosterRestart" title="Restart all &#183; every session ends and starts again, one at a time" aria-label="Restart all: every session ends and starts again, one at a time">&#8635;</button><button class="hang-btn hang-arbitrator" id="convArbitrator" onclick="arbOpenFromConv()" aria-label="Arbitrate this conversation"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></button><button class="desk-head-btn" id="deskRosterCompact" title="Compact rows" aria-pressed="false">&#9636;</button></div>
+        <div class="desk-head-tools"><button class="desk-head-btn desk-head-act arm-btn" id="deskRosterPause" title="Pause all &#183; every session in this room stops and keeps its seat" aria-label="Pause all: every session in this room stops and keeps its seat">&#10074;&#10074;</button><button class="desk-head-btn desk-head-act arm-btn desk-head-act-last" id="deskRosterRestart" title="Restart all &#183; every session ends and starts again, one at a time" aria-label="Restart all: every session ends and starts again, one at a time">&#8635;</button><button class="hang-btn hang-loop" id="convLoop" onclick="loopOpenFromConv()" aria-label="Start a manual loop in this conversation"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" /><path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></svg></button><button class="hang-btn hang-arbitrator" id="convArbitrator" onclick="arbOpenFromConv()" aria-label="Arbitrate this conversation"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></button><button class="desk-head-btn" id="deskRosterCompact" title="Compact rows" aria-pressed="false">&#9636;</button></div>
         <div id="deskRosterRows"></div>
       </div>
       <!-- The sidebar's own controls, at the foot of it: the two that are about the whole page on
@@ -6521,11 +6558,12 @@
       <!-- --cols is the column count, 1..5. The `single` class is what the template's own
            single-pane rules hang off; a style-attribute selector would work and is a trap. -->
       <div class="mock-panes single" id="deskCols" style="--cols:1"></div>
-      <!-- The session strip. One element, moved into whichever column is drawing the conversation
-           it belongs to — a session is arbitrated in one room, and a strip in a column showing
+      <!-- The session strips. One element, moved into whichever column is drawing the
+           conversation it belongs to — a session runs in one room, and a strip in a column showing
            another room would be controls over somebody else's thread. Parked here, outside every
-           column, whenever that room is not open. -->
-      <div id="arbStrip" hidden></div>
+           column, whenever that room is not open. Arbitration's and the manual loop's share it, so
+           either may grow without covering the other. -->
+      <div id="deskSessionStack" hidden><div id="arbStrip"></div><div id="loopStrip"></div></div>
     </section>
     <!-- The right-click menu. One element for the page, positioned at the pointer: there is one
          pointer, so it is a singleton for the same reason a sheet is. -->
@@ -6757,7 +6795,7 @@
             <div id="startAgents" class="badge-strip"></div>
             <label class="start-check" id="startUnattendedRow" style="display:none">
               <input type="checkbox" id="startUnattended" onchange="pickStartUnattended(this.checked)" />
-              <span>Skip approvals</span>
+              <span id="startUnattendedText">Skip approvals</span>
             </label>
           </div>
           <!-- Under the agent, because it is a fact about the agent and not about the session:
@@ -9762,6 +9800,7 @@
     // Every tile saved before the checkbox existed reads through here, which is why the default
     // lives in one function rather than in each caller.
     function launcherUnattended(m) {
+      if (m && m.name === 'agy') return true; // the agy start argv already skips approvals
       return m && m.unattended === undefined ? !!(m && m.config) : !!(m && m.unattended);
     }
 
@@ -10053,7 +10092,9 @@
     const CLAUDE_TOOL = /^[A-Z][A-Za-z0-9_-]*(?: [A-Z][A-Za-z0-9_-]*){0,3}\(\S/;
     const GUTTERS = {
       claude: { speaker: '⏺', result: ['⎿'], user: ['❯', '>'], tool: CLAUDE_TOOL },
-      codex: { speaker: '•', result: ['└', '│'], user: ['›'] },
+      // codex hangs a tip off its closing message with the result glyph, which is a footer under
+      // what it said rather than the output of a command it ran.
+      codex: { speaker: '•', result: ['└', '│'], user: ['›'], endLine: /^\s*└ Tip:(?:\s|$)/ },
       pi: { speaker: '⏺', result: ['$'], user: ['›'], ends: ['⋯'], indent: 1, composer: false },
       // OpenCode puts the user's messages, every tool block and the composer itself behind one
       // `┃` in column 2, and everything it says itself is plain prose indented five. So the bar is
@@ -10225,6 +10266,8 @@
       let gap = false;
       for (let j = start + 1; j < rows.length; j++) {
         const line = (rows[j] || '').trimStart();
+        // Before the glyph: a line closing a block on its content may wear the result glyph.
+        if (g.endLine && g.endLine.test(rows[j] || '')) break;
         // A result glyph means this block ran something rather than said something. Tested before
         // the end check, because on an indented harness a result glyph is itself an end.
         if (line && (!gap || g.indent) && g.result.includes(line[0])) return null;
@@ -10795,7 +10838,7 @@ function convWebModeOf(conv) {
     // not close that, so a re-read of a message already recorded normalized to a string the anchor
     // match had never seen, and the window it was in was written down as a gap or as a second copy.
     // Stored text stays exactly as it was extracted; only what the recorder compares is normalized.
-    function convKey(text) { return String(text == null ? '' : text).replace(/\s+/g, ''); }
+    function convKey(text) { return String(text == null ? '' : text).replace(/[\s`]+/g, ''); }
 
     // A prompt this browser sent can come back merged into the block underneath it. How many of a
     // pane's own sends are checked for that, and how much of one has to match at each end for the
@@ -10803,13 +10846,13 @@ function convWebModeOf(conv) {
     const CONV_SENT_LOOKBACK = 4;
     const CONV_ECHO_EDGE = 40;
 
-    // The offset in `text` just past its `count`th non-whitespace character. The comparison runs
-    // over `convKey`s, which hold no whitespace at all, so an offset found there means nothing to
+    // The offset in `text` just past its `count`th character `convKey` keeps. The comparison runs
+    // over `convKey`s, which hold no whitespace and no backticks, so an offset found there means nothing to
     // the text it came from until it is walked back like this.
     function convCutAt(text, count) {
       let seen = 0;
       for (let i = 0; i < text.length; i++) {
-        if (/\s/.test(text[i])) continue;
+        if (/[\s`]/.test(text[i])) continue;
         if (++seen === count) return i + 1;
       }
       return text.length;
@@ -10896,7 +10939,10 @@ function convWebModeOf(conv) {
       for (let i = 0; i < lines.length;) {
         let j = i;
         while (j + 1 < lines.length && lines[j + 1] === lines[j] + 1) j++;
-        found.push({ who: 'user', at: [lines[i], lines[j]] });
+        // Codex points at a menu's selected row with its prompt glyph; a menu ends on a key hint
+        // naming both enter and esc, which no prompt does. Same rule as pane_summary.py.
+        if (!(agent === 'codex' && /\benter\b.*\besc\b/i.test(rows[lines[j]] || '')))
+          found.push({ who: 'user', at: [lines[i], lines[j]] });
         i = j + 1;
       }
       return found.sort((a, b) => a.at[0] - b.at[0])
@@ -16093,7 +16139,8 @@ convApplyTint();
         // fact about the relay, not a failure to put in front of the user.
         if (stateSyncNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
-        showToast(msg.message || 'The relay refused that.');
+        showToast(typeof loopRefusal === 'function'
+          ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
       else if (msg.type === 'state') { stateSyncReceive(msg); }
       else if (msg.type === 'state_ack') { stateSyncAck(msg); }
@@ -17412,6 +17459,7 @@ convApplyTint();
     // work that runs without them; a stock start is the one they are sitting in front of.
     function startUnattendedOn() {
       if (!startUnattendedOffered(startAgentPick)) return false;
+      if (startAgentPick === 'agy') return true; // agy's required argv always skips approvals
       return startUnattendedPick === null ? !!startConfigPick : startUnattendedPick;
     }
 
@@ -17421,6 +17469,9 @@ convApplyTint();
       if (!row || !box) return;
       row.style.display = startUnattendedOffered(startAgentPick) ? 'flex' : 'none';
       box.checked = startUnattendedOn();
+      box.disabled = startAgentPick === 'agy';
+      document.getElementById('startUnattendedText').textContent =
+        box.disabled ? 'Approvals always skipped by agy' : 'Skip approvals';
     }
 
     function pickStartUnattended(on) {
@@ -17593,54 +17644,9 @@ convApplyTint();
       row.hidden = !show;
       row.style.display = show ? '' : 'none';
       if (!show) { row.innerHTML = ''; return; }
-      // A worktree is a way of *making* that folder rather than a second kind of start: git
-      // creates the directory, the next scan adopts it as a Project, and the pane comes up inside
-      // it exactly as it would have in one the relay mkdir'd. So it hangs off this field and is
-      // drawn in the same row — naming a repository and no folder is a start with nothing for git
-      // to create, which submitStart refuses here rather than spending a round trip on.
-      //
-      // The repository is picked from the Projects this relay already has, never typed as a path,
-      // and only the local ones: git runs on the relay's machine. A container is left out because
-      // it is a place Projects live rather than a checkout.
-      const repos = projects.filter(x => (x.host || 'local') === 'local' && !x.container
-        && x.id !== p.id);
       row.innerHTML = '<label class="start-field">New folder <span class="field-note">optional</span>'
         + '<input id="startChild" type="text" maxlength="64" autocapitalize="none"'
-        + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`
-        + (repos.length
-          ? '<label class="start-field">Make it a worktree of'
-            + ' <span class="field-note">optional</span>'
-            + '<select id="startWorktreeRepo" onchange="renderStartWorktree()"></select></label>'
-            + '<div id="startWorktreeRow" hidden style="display:none"></div>'
-          : '');
-      if (!repos.length) return;
-      fillSelect('startWorktreeRepo',
-        [['', 'Nothing — an empty folder']].concat(repos.map(x => [x.id, x.label || x.id])));
-      renderStartWorktree();
-    }
-
-    // The two ends `git worktree add` takes, named as it names them rather than translated: a new
-    // branch, and where to start it. Left empty they mean what git means by leaving them out — no
-    // new branch, and the repository's current HEAD. The pair is what lets one field do both jobs
-    // without a mode switch: a branch that already exists is checked out by naming it here as the
-    // base and asking for no new one, which is the case `-b` would refuse.
-    //
-    // Only drawn once a repository is picked, because with none there is nothing to branch from.
-    function renderStartWorktree() {
-      const row = document.getElementById('startWorktreeRow');
-      if (!row) return;
-      const repo = document.getElementById('startWorktreeRepo');
-      const on = !!(repo && repo.value);
-      row.hidden = !on;
-      row.style.display = on ? '' : 'none';
-      row.innerHTML = on
-        ? '<label class="start-field">New branch <span class="field-note">optional</span>'
-          + '<input id="startWorktreeBranch" type="text" maxlength="128" autocapitalize="none"'
-          + ' autocomplete="off" placeholder="leave empty to check one out" /></label>'
-          + '<label class="start-field">From <span class="field-note">optional</span>'
-          + '<input id="startWorktreeBase" type="text" maxlength="128" autocapitalize="none"'
-          + ' autocomplete="off" placeholder="branch or commit to start at" /></label>'
-        : '';
+        + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`;
     }
 
     // Picking one redraws the rest: placement is answered against what that Project has running,
@@ -17897,23 +17903,6 @@ convApplyTint();
       const raw = childField ? (childField.value || '') : '';
       const child = raw.trim() || raw;
       if (child) msg.child = child;
-      // Only with a child, and only an agent start: the relay refuses a worktree that has no
-      // directory to create, and refuses one on an open_terminal as an unexpected field. Said
-      // here rather than sent to be refused, because the fix is one field up the same sheet.
-      const repoField = terminal ? null : document.getElementById('startWorktreeRepo');
-      const repo = repoField ? (repoField.value || '') : '';
-      if (repo && !child) { setStartError('Name the folder the worktree goes in'); return; }
-      if (repo && child) {
-        // Trimmed, unlike the folder name beside them: a branch is git's to refuse and the relay
-        // checks a charset that has no whitespace in it, so a stray space is a round trip and an
-        // error about a name that looks right. Omitted rather than sent empty, which is how the
-        // relay reads "no new branch" and "from wherever HEAD is".
-        const branch = (document.getElementById('startWorktreeBranch') || {}).value || '';
-        const base = (document.getElementById('startWorktreeBase') || {}).value || '';
-        msg.worktree = Object.assign({repo: repo},
-          branch.trim() ? {branch: branch.trim()} : {},
-          base.trim() ? {base: base.trim()} : {});
-      }
       if (placement !== 'split') msg.slot = slotFor();
       // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
       // answered that for an agent, this answers it for the other message. Omitted, not empty — the
@@ -18211,7 +18200,12 @@ convApplyTint();
                           config)
           + commanderPick(name, 'role', roles.map(r => [r, r]), at('role'))
           + (name === 'arbitrator'
-            ? commanderPick(name, 'mode', COMMANDER_MODES.map(m => [m, m]), at('mode')) : '')
+            ? commanderPick(name, 'mode', COMMANDER_MODES.map(m => [m, m]), at('mode'))
+            // Where the worker's own Project writes down how it does this kind of work. The relay
+            // names the file on each assignment while it exists there, and says nothing otherwise.
+            : `<input type="text" title="prompt" value="${escapeHtml(at('prompt') || '')}"`
+              + ' placeholder="Its instructions, a path in the Project"'
+              + ` onchange="commanderProfileSet('${escapeHtml(name)}','prompt',this.value.trim())">`)
           + '</div>'
           + (problem ? `<div class="cfg-note cmd-def-problem">${escapeHtml(problem)}</div>` : '')
           + '</div>';
@@ -20894,6 +20888,10 @@ convApplyTint();
         if (typeof cmdAdoptStarted === 'function') cmdAdoptStarted(a, want.slot);
         return;
       }
+      if (want.slot === 'loopWho') {
+        if (typeof loopAdoptStarted === 'function') loopAdoptStarted(a, want);
+        return;
+      }
       const at = arbSetupOpen() ? arbReadSetup() : {};
       if (want.slot !== 'arbWho') {
         const items = loadConvIndex();
@@ -20999,6 +20997,7 @@ convApplyTint();
       // Without this the module would still think it was open and redraw itself into a hidden
       // dialog on the next `cmd_session`.
       if (typeof cmdNoteClosed === 'function') cmdNoteClosed();
+      if (typeof loopNoteClosed === 'function') loopNoteClosed();
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
     }
@@ -22370,6 +22369,9 @@ convApplyTint();
       const el = document.getElementById('convCommander');
       const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
       if (cmdSetupConv && cmdSetupConv !== conv) closeCmdSetup();
+      // The loop's button and strip are synced whether or not this page has the Commander button:
+      // the desktop page has a Loop button in its roster header and no Commander button at all.
+      if (typeof loopSync === 'function') loopSync();
       if (!el) return;
       const live = cmdOn && !!cmdSessionHere();
       el.classList.toggle('on', !!(cmdOn && conv));
@@ -22855,6 +22857,397 @@ convApplyTint();
         arbSend({type: 'cmd_cancel', session: s.id, leave_children: leave});
         closeCmdSetup();
       });
+    }
+
+  </script>
+  <script>
+    // --- Manual loop ---------------------------------------------------------------------------
+    //
+    // A peer-to-peer chain a person owns. It is this room's Commander session with `manual` set:
+    // the Commander sits in its seat on standby, never briefed and never woken, while the person
+    // assigns the work and the members hand it to each other with `complete --next`. When the work
+    // comes back the person gets a push. Handing over briefs the Commander and gives it the chain;
+    // taking back reverses that. Nothing here is a second kind of session — see
+    // .workflow/02_architecture/2026-10-04_manual_loop_proposal.md.
+    //
+    // Everything this draws is read off the room's `cmd_session`, so the gate is commander.js's:
+    // a relay that sent no `cmd_sessions` draws no Loop button.
+
+    // The relay's `HANDOFF_MAX`, and the default: a loop is for work long enough to want it.
+    const LOOP_HOPS = 20;
+    // Sessions whose strip is open while their Commander owns the chain. A manual session's strip is
+    // always open — it is the only place its controls are.
+    const loopOpen = new Set();
+    let loopSetupConv = '';
+    let loopSetupSession = '';
+    let loopSetupManual = false;
+    let loopHtmlLast = '';
+    let loopSpawnToken = 0;
+
+    function loopNoteClosed() {
+      loopSetupConv = '';
+      loopSetupSession = '';
+      loopSpawnToken++;
+    }
+
+    function loopSession() {
+      return typeof cmdSessionHere === 'function' ? cmdSessionHere() : null;
+    }
+
+    function loopConv() {
+      return typeof convCurrentId === 'function' && typeof loadConvIndex === 'function'
+        ? loadConvIndex().find(c => c.id === convCurrentId()) || null : null;
+    }
+
+    function loopRefusal(msg) {
+      const text = msg.message || 'The relay refused that.';
+      const action = {
+        target_busy: 'Wait for that member to finish, then assign again.',
+        arbitrator_gone: 'Pick or start a replacement coordinator in the session controls.',
+        project_mismatch: 'Pick participants in the same Project.',
+      }[msg.code];
+      return action ? `${text} ${action}` : text;
+    }
+
+    // The button and the strip, from the room's session. Called from `cmdSyncButton`, which every
+    // session broadcast and every room change already reaches.
+    function loopSync() {
+      const el = document.getElementById('convLoop');
+      const conv = loopConv();
+      const s = loopSession();
+      if (loopSetupConv) {
+        if ((document.getElementById('arbSetupKind') || {}).textContent !== 'Loop') loopNoteClosed();
+        else if (!conv || conv.id !== loopSetupConv || (s ? s.id : '') !== loopSetupSession ||
+                 !!(s && s.manual) !== loopSetupManual) closeArbSetup();
+      }
+      if (el) {
+        el.classList.toggle('on', !!(typeof cmdCanOffer === 'function' && cmdCanOffer() && conv));
+        el.classList.toggle('live', !!(s && s.manual));
+        el.classList.toggle('paused', !!(s && s.manual && s.state === 'paused'));
+        const label = !s ? 'Start a manual loop in this conversation'
+          : s.manual ? 'This conversation’s loop — you own the chain'
+            : 'This conversation’s loop — its Commander owns the chain';
+        el.title = label;
+        el.setAttribute('aria-label', label);
+      }
+      const strip = document.getElementById('loopStrip');
+      if (strip) {
+        const html = s && conv && (s.manual || loopOpen.has(s.id)) ? loopStripHtml(s) : '';
+        if (html !== loopHtmlLast) {
+          if (typeof armedEl !== 'undefined' && armedEl && strip.contains(armedEl)) disarmButton();
+          loopHtmlLast = html;
+          strip.innerHTML = html;
+        }
+      }
+      // On a page of columns the strip hangs over the column drawing this room, beside the
+      // arbitration strip — see deskArbPlace.
+      if (typeof deskArbPlace === 'function') deskArbPlace();
+    }
+
+    function loopOpenFromConv() {
+      const conv = loopConv();
+      if (!conv) return;
+      const s = loopSession();
+      if (!s) { loopDraw(conv, loopSetupHtml(conv)); return; }
+      if (!s.manual) {
+        if (loopOpen.has(s.id)) loopOpen.delete(s.id); else loopOpen.add(s.id);
+      }
+      loopSync();
+    }
+
+    // Into the arbitration dialog's box, the way the Commander's views are: one dialog, one close.
+    function loopDraw(conv, html) {
+      closeArbSetup();
+      const s = loopSession();
+      loopSetupConv = conv.id;
+      loopSetupSession = s ? s.id : '';
+      loopSetupManual = !!(s && s.manual);
+      const body = document.getElementById('arbSetupBody');
+      if (body) body.innerHTML = html;
+      const sign = document.getElementById('arbSetupSign');
+      if (sign) sign.innerHTML = loopSign(20);
+      const kind = document.getElementById('arbSetupKind');
+      if (kind) kind.textContent = 'Loop';
+      const name = document.getElementById('arbSetupConvName');
+      if (name) name.textContent = conv.name || '';
+      const box = document.getElementById('arbModal');
+      if (box) box.style.display = 'block';
+    }
+
+    function loopSign(size) {
+      const n = size || 16;
+      return `<svg class="loop-sign" viewBox="0 0 24 24" width="${n}" height="${n}" fill="none"` +
+        ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' +
+        ' aria-hidden="true"><path d="M17 2l3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" />' +
+        '<path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></svg>';
+    }
+
+    // --- starting one -----------------------------------------------------------------------
+
+    // The Commander that waits on standby, the members, and how many hops one assignment may take.
+    // No scope question: the scope of a manual loop is whatever the person assigns.
+    function loopSetupHtml(conv) {
+      const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null;
+      const free = arbArbiterRows(conv, project, '');
+      const members = arbMemberRows(conv, project, '').filter(r => r.pane);
+      return arbPart('Commander on standby', loopSlot(free, free[0] ? arbPickValue(free[0]) : '') +
+          '<span class="arb-note">It is told nothing while you own the chain. It takes over ' +
+          'when you press Hand to Commander.</span>', cmdSign(16) + ' ') +
+        arbPart('Members',
+          (members.length ? members.map((r, i) =>
+            `<label class="arb-check"><input type="checkbox" id="loopMember${i}"` +
+            ` value="${escapeHtml(r.pane.pane_id)}"` +
+            ((conv.members || []).some(m => m.aid === r.key) ? ' checked' : '') +
+            `> ${escapeHtml(r.label || paneLabel(r.pane))}` +
+            '</label>').join('')
+            : '<span class="arb-note">Nobody in this room is running.</span>')) +
+        `<label>Hops per assignment<input type="number" id="loopHops" min="1" max="${LOOP_HOPS}"` +
+        ` value="${LOOP_HOPS}"></label>` +
+        '<div class="arb-go">' +
+        '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
+        '<button type="button" class="badge pick on" onclick="loopStart()">Start</button>' +
+        '</div>';
+    }
+
+    // The seat picker, with a + New that starts the standby rather than asking about one.
+    function loopSlot(rows, selected) {
+      return '<div class="arb-slot">' + arbPaneSelect('loopWho', rows, selected, false) +
+        (typeof arbCanSpawn === 'function' && arbCanSpawn()
+          ? '<button type="button" class="badge pick proj" onclick="loopSpawnStandby()"' +
+            ' title="Start a small agent to wait in the seat">+ New</button>' : '') +
+        '</div>';
+    }
+
+    // The catalogue's arbitrator profile, the agent Auto starts: small, cheap, and a seat-holder.
+    // Started with no role, because the brief is what the hand-over gives it.
+    function loopSpawnStandby() {
+      if (typeof submitNewAgent !== 'function') return;
+      const row = typeof arbAutoConfig === 'function' ? arbAutoConfig() : null;
+      openNewAgent('loopWho', ++loopSpawnToken);
+      newAgentRole = -1;
+      if (row) {
+        newAgentConfig = row.id;
+        newAgentKind = row.kind || newAgentKind;
+      }
+      submitNewAgent();
+    }
+
+    // A pane started for the standby slot, once the poll has it. The slot is replaced and nothing
+    // else is touched: the ticks and the number are the person's.
+    function loopAdoptStarted(a, want) {
+      const el = a && a.pane_id && document.getElementById('loopWho');
+      const box = el && el.closest ? el.closest('.arb-slot') : null;
+      const conv = loopConv();
+      if (!box || !conv || !loopSetupConv || conv.id !== loopSetupConv ||
+          !want || want.conv !== conv.id || want.auto !== loopSpawnToken) return;
+      const s = loopSession();
+      const rows = arbArbiterRows(conv, s ? s.project_id : arbPickedProject(conv, null),
+                                  s ? s.id : '');
+      // Just published, so possibly still unresolved and left out of the candidate list.
+      if (!rows.some(r => r.pane && r.pane.pane_id === a.pane_id)) {
+        rows.push({key: convMemberKey(a) || a.pane_id, pane: a, label: paneLabel(a)});
+      }
+      box.outerHTML = loopSlot(rows, a.pane_id);
+    }
+
+    // Under the Project's root Commander when it has one, since a Project holds one root; the
+    // root of its own Project otherwise.
+    function loopPlace(project) {
+      const root = (typeof cmdSessions !== 'undefined' ? cmdSessions : []).find(s =>
+        s.tier === 'project' && s.project_id === project && s.state !== 'ended');
+      return root ? {tier: 'feature', parent_session: root.id} : {tier: 'project', parent_session: ''};
+    }
+
+    function loopStart() {
+      const conv = loopConv();
+      if (!conv || conv.id !== loopSetupConv || loopSetupSession) return;
+      const who = arbResolvePick((document.getElementById('loopWho') || {}).value);
+      if (!who || !who.pane_id) { showToast('Pick or start a Commander to wait on standby.'); return; }
+      const members = Array.from(document.querySelectorAll('[id^="loopMember"]'))
+        .filter(b => b.checked && b.value !== who.pane_id).map(b => ({pane_id: b.value}));
+      if (members.length < 2) { showToast('A loop needs two members to hand work between.'); return; }
+      const hops = Math.min(LOOP_HOPS, Math.max(1,
+        parseInt((document.getElementById('loopHops') || {}).value, 10) || LOOP_HOPS));
+      const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : '';
+      arbSend(Object.assign({
+        type: 'cmd_start', conversation: conv.id, scope: `Manual loop in ${conv.name || conv.id}`,
+        coordinator: {pane_id: who.pane_id}, members: members,
+        manual: true, handoff: hops, delivery: 'pull',
+      }, loopPlace(project)));
+      closeArbSetup();
+    }
+
+    // --- the strip -------------------------------------------------------------------------
+
+    function loopStripHtml(s) {
+      const paused = s.state === 'paused';
+      const btn = (label, why, onclick, cls) =>
+        `<button class="hang-btn loop-txt${cls ? ' ' + cls : ''}" onclick="${onclick}"` +
+        ` title="${escapeHtml(why)}">${escapeHtml(label)}</button>`;
+      const holder = s.holder ? `${s.holder.label || s.holder.member} has it` +
+        ` · hop ${s.holder.hops} of ${s.handoff}` : (s.handoff ? `up to ${s.handoff} hops` : 'handoff off');
+      return `<div class="arb-strip loop-strip" data-session="${escapeHtml(s.id)}"` +
+        ` data-state="${escapeHtml(s.state || '')}">` +
+        '<div class="arb-bar">' +
+        (s.manual
+          ? btn('Assign', 'Hand the first piece of work to a member, with the route', 'loopOpenAssign()', 'lit') +
+            btn('Hand over', 'Give the chain to the Commander; it is briefed and takes over',
+                'loopHandOver()')
+          : btn('Take back', 'Own the chain yourself; the Commander goes on standby', 'loopTakeBack()')) +
+        (paused
+          ? btn('Resume', 'Let the chain move again', 'loopCommand(\'cmd_resume\')', 'lit')
+          : btn('Pause', 'Stop handing work on until you resume', 'loopCommand(\'cmd_pause\')')) +
+        `<button class="hang-btn loop-txt" data-arm-key="end-session" onclick="loopEnd(this)"` +
+        ' title="End the loop and its session">End</button>' +
+        '</div>' +
+        '<div class="arb-say">' +
+        `<span class="arb-say-state">${escapeHtml((s.manual ? 'Loop · you own it' : 'Loop · Commander owns it') +
+          (paused ? ' · paused' + (s.pause_reason ? ' — ' + String(s.pause_reason).replace(/_/g, ' ') : '') : ''))}</span>` +
+        `<span class="arb-say-budget">${escapeHtml(holder)}</span>` +
+        '</div></div>';
+    }
+
+    function loopCommand(type, extra) {
+      const s = loopSession();
+      if (s) arbSend(Object.assign({type: type, session: s.id}, extra || {}));
+    }
+
+    function loopTakeBack() {
+      const s = loopSession();
+      if (s) loopCommand('cmd_edit', Object.assign({manual: true}, s.handoff ? {} : {handoff: LOOP_HOPS}));
+    }
+
+    function loopEnd(btn) {
+      const s = loopSession();
+      if (!s) return;
+      armEndSession(btn, s.id, leave => arbSend({type: 'cmd_cancel', session: s.id, leave_children: leave}));
+    }
+
+    // The seat was filled when the loop started; if its agent is gone, a replacement is picked
+    // here and handed the session in the same edit.
+    function loopHandOver() {
+      const s = loopSession();
+      const conv = loopConv();
+      if (!s || !conv) return;
+      const at = (s.coordinator || {}).pane_id;
+      if (at && paneOf(at)) { loopCommand('cmd_edit', {manual: false}); return; }
+      const free = arbArbiterRows(conv, s.project_id, s.id);
+      loopDraw(conv, arbPart('Its Commander is gone — pick another',
+          loopSlot(free, free[0] ? arbPickValue(free[0]) : ''), cmdSign(16) + ' ') +
+        '<div class="arb-go">' +
+        '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
+        '<button type="button" class="badge pick on" onclick="loopHandOverTo()">Hand over</button>' +
+        '</div>');
+    }
+
+    function loopHandOverTo() {
+      const s = loopSession();
+      if (!s || s.id !== loopSetupSession || !s.manual) return;
+      const who = arbResolvePick((document.getElementById('loopWho') || {}).value);
+      if (!who || !who.pane_id) { showToast('Pick or start a Commander to hand over to.'); return; }
+      loopCommand('cmd_edit', {manual: false, coordinator: {pane_id: who.pane_id}});
+      closeArbSetup();
+    }
+
+    // --- assigning ---------------------------------------------------------------------------
+
+    // What the first member is told: the task, and when the work is done. The route is not in it:
+    // it goes to the relay as `route`, which shows every holder it and who comes after them.
+    function loopInstruction(o) {
+      return String(o.task || '').trim() + '\n\n' +
+        `Keep going round until ${String(o.until || 'the reviewer passes every part').trim()}, ` +
+        'then whoever holds it gives it back with `complete "<summary>"` and no --next.';
+    }
+
+    // The member being read is the one the person is "with", so the work starts there.
+    function loopFirstMember(s) {
+      const at = typeof dockAddressed === 'function' ? dockAddressed() : null;
+      const ms = s.members || [];
+      return (ms.find(m => at && (m.pane_id === at || m.aid === at)) || ms[0] || {}).id || '';
+    }
+
+    function loopOpenAssign() {
+      const s = loopSession();
+      const conv = loopConv();
+      if (!s || !conv) return;
+      const ms = s.members || [];
+      if (ms.length < 2) { showToast('A loop needs two members.'); return; }
+      const first = loopFirstMember(s);
+      const then = (ms.find(m => m.id !== first) || {}).id;
+      const pick = (id, at) => `<select id="${id}">${loopOptions(ms, at, false)}</select>`;
+      loopDraw(conv,
+        '<label>Task<textarea id="loopTask" rows="4" maxlength="4000"' +
+        ' placeholder="What to build. A plan step id below links it to the task list."></textarea></label>' +
+        `<label>Starts with${pick('loopFirst', first)}</label>` +
+        `<label>Then${pick('loopThen', then)}</label>` +
+        '<div id="loopMore"></div>' +
+        '<button type="button" class="badge pick proj" onclick="loopAddLink()"' +
+        ' title="Another member in the route, before it goes back to the first">+ Add a link</button>' +
+        '<label>Until<input id="loopUntil" value="the reviewer passes every part"></label>' +
+        '<label>Gate<select id="loopGate"><option value="implement">implement</option>' +
+        '<option value="review">review</option></select></label>' +
+        '<label>Plan step (optional)<input id="loopStep" placeholder="e.g. s3"></label>' +
+        '<div class="arb-go">' +
+        '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
+        '<button type="button" class="badge pick on" onclick="loopAssign()">Assign</button>' +
+        '</div>');
+    }
+
+    function loopOptions(ms, at, blank) {
+      return (blank ? '<option value="">— none</option>' : '') + ms.map(m =>
+        `<option value="${escapeHtml(m.id)}"${m.id === at ? ' selected' : ''}>` +
+        escapeHtml(`${m.label || m.id} (${m.id})`) + '</option>').join('');
+    }
+
+    // The route as picked, in order: who starts, then every link after it. A link set to none is
+    // left out rather than refused, so taking one back out needs no second control.
+    function loopRouteIds() {
+      return Array.from(document.querySelectorAll('#loopFirst, [id^="loopThen"]'))
+        .map(el => String(el.value || '').trim()).filter(Boolean);
+    }
+
+    function loopAddLink() {
+      const s = loopSession();
+      const more = document.getElementById('loopMore');
+      if (!s || !more) return;
+      const ms = s.members || [];
+      const used = new Set(loopRouteIds());
+      const free = ms.find(m => !used.has(m.id));
+      if (!free) { showToast('Every member is already in the route.'); return; }
+      const n = document.querySelectorAll('[id^="loopThen"]').length + 1;
+      more.insertAdjacentHTML('beforeend',
+        `<label>Then<select id="loopThen${n}">${loopOptions(ms, free.id, true)}</select></label>`);
+    }
+
+    function loopAssign() {
+      const s = loopSession();
+      if (!s || s.id !== loopSetupSession || !s.manual) return;
+      const val = id => String((document.getElementById(id) || {}).value || '').trim();
+      const task = val('loopTask');
+      if (!task) { showToast('Say what the task is.'); return; }
+      const ids = loopRouteIds();
+      if (ids.length < 2) { showToast('A route needs two members.'); return; }
+      if (new Set(ids).size !== ids.length) { showToast('Name each member once in the route.'); return; }
+      const route = ids.map(id => (s.members || []).find(m => m.id === id));
+      if (route.some(m => !m)) {
+        showToast('The roster changed — reopen Assign and pick the route again.');
+        return;
+      }
+      if (new Set(route.map(m => m.aid || m.pane_id || m.id)).size !== route.length) {
+        showToast('Choose a different agent for each member in the route.');
+        return;
+      }
+      const step = val('loopStep');
+      const instruction = loopInstruction({task: task, until: val('loopUntil')});
+      if (Array.from(instruction).length > 4000) {
+        showToast('Task and Until must fit in 4000 characters — shorten one.');
+        return;
+      }
+      loopCommand('cmd_assign', Object.assign({
+        to: ids[0], gate: val('loopGate') || 'implement',
+        instruction: instruction, route: ids,
+      }, step ? {step: step, agenda_rev: s.agenda_rev} : {}));
+      closeArbSetup();
     }
 
   </script>
@@ -24295,12 +24688,22 @@ convApplyTint();
         (s.locked === false ? 'Lock roster' : 'Unlock roster') + '</button>';
       if (s.state === 'ended') return '<div class="arb-go">' + lock + '</div>';
       const paused = s.state === 'paused';
+      // How this Commander group is handed work — its tasks and its agents' assignments: typed
+      // at the pane (push) or left as a file with a notice (pull). Either falls back to the other
+      // once when it fails. The person's to choose, and taken on the next delivery with nothing
+      // restarted. An arbitration session is always push, so it is not offered one.
+      const delivery = s.kind === 'commander'
+        ? `<button type="button" class="badge pick proj" onclick="ccToggleDelivery()" ` +
+          `title="Work for this Commander and its agents is ${s.delivery === 'pull'
+            ? 'left as a file with a notice' : 'typed at their panes'}">` +
+          (s.delivery === 'pull' ? 'Push work' : 'Pull work') + '</button>'
+        : '';
       return '<div class="arb-go">' +
         (s.conversation
           ? `<button type="button" class="badge pick proj" onclick="ccOpenConv('${escapeHtml(s.conversation)}')">` +
             'Open its room</button>' : '') +
         `<button type="button" class="badge pick proj" onclick="ccRebrief(this)">Re-brief</button>` +
-        lock +
+        lock + delivery +
         (paused
           ? `<button type="button" class="badge pick on" onclick="ccResume()">Resume</button>`
           : `<button type="button" class="badge pick proj" onclick="ccPause()">Pause</button>`) +
@@ -24432,6 +24835,15 @@ convApplyTint();
     const CC_TRAFFIC = [['tasks_in', 'Handed to it'], ['reports_in', 'Told to it'],
                         ['tasks_out', 'Handed down'], ['reports_out', 'Said upward']];
 
+    // How a task reached its pane: typed, left as a file, or claimed with `next` before its notice
+    // went in. `fell back` is the one rung a row takes when its own way failed, and the row a
+    // reader comparing push with pull is looking for. A report has no transport and says nothing.
+    function ccDeliveryOf(row) {
+      const how = {prompt: 'typed', inbox: 'as a file', next: 'by next'}[row && row.transport];
+      if (!how) return '';
+      return row.fell_back ? 'fell back, ' + how : how;
+    }
+
     function ccTrafficHtml() {
       const held = ccDetailOf(ccPick);
       if (!held) return '';
@@ -24449,6 +24861,9 @@ convApplyTint();
             `<span class="cc-step-id">${escapeHtml(String(row.step
               || (key.endsWith('_in') ? row.from : row.to) || '\u00b7'))}</span>` +
             `<span class="cc-step-what">${escapeHtml(String(row.text || ''))}</span>` +
+            (ccDeliveryOf(row)
+              ? `<span class="cc-step-link${row.fell_back ? ' missing' : ''}">` +
+                `${escapeHtml(ccDeliveryOf(row))}</span>` : '') +
             // A delivery the relay could not prove, and the two answers a person has about
             // one. Never retried automatically: an unproven paste may well have landed, and
             // re-typing a coding instruction that did runs it twice.
@@ -24505,6 +24920,13 @@ convApplyTint();
       armButton(btn, locked ? 'Lock roster?' : 'Unlock roster?', () =>
         arbSend({type: s.kind === 'commander' ? 'cmd_edit' : 'arb_edit',
                  session: s.id, locked}), 'cc-lock');
+    }
+
+    function ccToggleDelivery() {
+      const s = ccPickedSession();
+      if (s && s.kind === 'commander') {
+        arbSend({type: 'cmd_edit', session: s.id, delivery: s.delivery === 'pull' ? 'push' : 'pull'});
+      }
     }
 
     function ccRebrief(btn) {
@@ -26402,12 +26824,12 @@ convApplyTint();
     function launcherUnattendedHtml(m, id, readOnly) {
       if (!launcherUnattendedOffered(m.name)) return '';
       const checked = launcherUnattended(m) ? ' checked' : '';
-      const disabled = readOnly ? ' disabled' : '';
+      const disabled = readOnly || m.name === 'agy' ? ' disabled' : '';
       const ident = id ? ` id="${id}"` : '';
       return `<label class="ql-solo${readOnly ? ' ql-solo-readonly' : ''}">`
         + `<input type="checkbox"${ident}${checked}${disabled}`
         + ` aria-label="Start ${escapeHtml(m.name)} without approval prompts" />`
-        + '<span>Skip approvals</span></label>';
+        + `<span>${m.name === 'agy' ? 'Approvals always skipped by agy' : 'Skip approvals'}</span></label>`;
     }
 
     // The relay says which harnesses it can start this way. An older relay says nothing, and then
@@ -31463,30 +31885,32 @@ convApplyTint();
       return deskColumns.findIndex(c => c.tabKey === key);
     }
 
-    // The strip is one element and it is about one room, so it is moved rather than duplicated: a
-    // second copy over a column showing another conversation would be controls over somebody
+    // The strips are one element and they are about one room, so it is moved rather than duplicated:
+    // a second copy over a column showing another conversation would be controls over somebody
     // else's thread, and that is the exact mistake `arbSessionHere` exists to prevent at the other
     // end. When the room is not open in any column there is nowhere honest to hang it, so it is
-    // parked outside the columns and hidden — the ⚖ in the roster header is what is left, and it
-    // opens the session's own sheets.
+    // parked outside the columns and hidden — the ⚖ and the loop button in the roster header are
+    // what is left, and they open the session's own sheets. The element is the stack holding the
+    // arbitration strip and the loop strip, so the two never land on top of each other.
     function deskArbPlace() {
-      const el = document.getElementById('arbStrip');
+      const el = document.getElementById('deskSessionStack');
       if (!el) return;
       // Nothing to show is the ordinary state — most rooms are not being arbitrated — and an empty
       // strip inside a column is an empty element in somebody's thread. It goes back to the park.
-      const i = el.innerHTML ? deskArbColumn() : -1;
+      const full = [...el.children].some(c => c.innerHTML);
+      const i = full ? deskArbColumn() : -1;
       const frame = i >= 0 ? document.querySelector(`#deskCols [data-col="${i}"]`) : null;
       // Parked on the main panel rather than removed: an element taken out of the document loses
-      // nothing but has to be put back by whoever wrote to it, and arbRender writes to it by id.
+      // nothing but has to be put back by whoever wrote to it, and both strips are written by id.
       const home = frame || document.querySelector('.mock-main') || document.body;
       if (el.parentElement !== home) home.appendChild(el);
-      el.hidden = !frame || !el.innerHTML;
+      el.hidden = !frame;
     }
 
     // Out of the columns, before the box they are in is rewritten. Same element either way: it is
     // written to by id, so losing it costs the session its controls until the page is reloaded.
     function deskArbPark() {
-      const el = document.getElementById('arbStrip');
+      const el = document.getElementById('deskSessionStack');
       const home = document.querySelector('.mock-main');
       if (el && home && el.parentElement !== home) home.appendChild(el);
     }
@@ -32604,7 +33028,11 @@ convApplyTint();
     // for it, and the second name this page is required to answer to rather than guard. It is
     // called when a recorded read restamps a member and when another browser writes the document,
     // both of which move rows in the list; on this page that list is the top half of the sidebar.
-    function renderConversations() { deskRenderConvs(); }
+    function renderConversations() {
+      deskRenderConvs();
+      // A synchronized room deletion also removes its session controls and any open form.
+      if (typeof arbRender === 'function') arbRender();
+    }
 
     function deskMarkFocus() {
       document.querySelectorAll('#deskCols .mock-pane').forEach((el, i) => {
