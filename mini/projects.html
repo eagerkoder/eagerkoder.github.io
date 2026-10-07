@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-06">
+  <meta name="app-built" content="2026-10-07">
   <title>herdr-remote &mdash; projects</title>
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='3'%20y='3.5'%20width='4'%20height='9'%20rx='1'%20fill='%237aa2f7'/%3E%3Crect%20x='8.5'%20y='3.5'%20width='4.5'%20height='5.5'%20rx='1'%20fill='%239ece6a'/%3E%3C/svg%3E">
@@ -3055,6 +3055,88 @@
 }
 
   </style>
+  <!-- The bar every scroller on every page gets. This page had none of its own, so all four of its
+       columns were drawing the OS default. -->
+  <style>
+/* Scrollbars, for every page that has one.
+
+   Left alone they arrive as a wide light gutter that belongs to the OS rather than to this page,
+   and against a dark terminal it reads as a seam down the side. On Chrome and Edge for Windows
+   that default is the loud one: a ~15px light track with a grey thumb, and on older builds a
+   stepper arrow at each end. Firefox and Safari default to something slim and quiet, which is why
+   this was only ever visibly wrong on two of the four.
+
+   These rules were index.html's alone. desktop.html had one `scrollbar-width: thin` on one tab
+   strip and nothing else, and projects.html had nothing at all — so every column, pane, sidebar
+   and thread on the two wide pages, which are the ones actually read on a desktop, fell back to
+   that default. Shared rather than copied a third time, for app_chrome.css's reason: one copy
+   drifting from another is a page that looks like the app and a page that does not.
+
+   It names no colour of its own — only the palette variables the page around it has already
+   defined, the same contract app_chrome.css keeps.
+
+   Linked ahead of each page's own sheet, so anything that wants a different bar — the strips that
+   hide theirs — still overrides from there. Those use a class and win on specificity regardless.
+
+   Touch browsers overlay their own bar and ignore both mechanisms, which is why nothing here
+   reserves space. */
+
+/* The two mechanisms are not additive, and that is the whole reason for the `@supports`.
+   `scrollbar-width`/`scrollbar-color` are the standard properties; `::-webkit-scrollbar` is the
+   older pseudo-element tree. Blink used to honour only the second, which is what the note this
+   replaces assumed — "no browser has both". Chrome and Edge 121 shipped the first, and in Blink
+   the standard property *suppresses* the pseudo-elements rather than layering with them: declare
+   `scrollbar-width` on an element and every `::-webkit-scrollbar` rule for it is dropped. So the
+   old unconditional `* { scrollbar-width: thin }` would now take the pill below away from exactly
+   the two browsers it was drawn for, and hand them a plain tinted bar instead.
+
+   Gated on the pseudo-element rather than on the property, because that is the question being
+   asked — "is the detailed version available here?" — and it answers false only where it is true
+   that it is not. Firefox has no `::-webkit-scrollbar` and takes this branch; Chrome, Edge and
+   Safari skip it and take the pill. A future engine with neither gets its own default, which is
+   the right answer for an engine this file has never been looked at in. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  /* Inset via a transparent border so the thumb reads as a slim pill rather than filling the
+     gutter edge to edge. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Chrome and Edge draw a stepper at each end of a scrollbar they have not been told not to. It is
+   not part of this design on any other engine, and a button the page has given no size is drawn
+   at the platform's. Said explicitly so the bar is the thumb and the track and nothing else. */
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+  </style>
 </head>
 
 <body>
@@ -3405,6 +3487,10 @@
     // per-server counter, so two hosts polled by one relay both report w1:p1 and `activePane`
     // alone cannot say which of them was tapped. Set beside it, cleared with it.
     let activeAid = null;
+    // Where the last paint left the pane's scroll box, until the next scroll event spends it. A
+    // paint that shrinks the text moves the box itself — the browser clamps it, to 0 when the text
+    // now fits — and the scroll event that follows is the paint's, not the reader's.
+    let panePaintedTop = -1;
 
     // The agent in the open pane. Every caller used to write this find itself, keyed on the pane
     // id, and so every caller picked whichever host sorted first. The fallback is not decoration:
@@ -4176,9 +4262,10 @@
     // The table is also the list of stock harnesses the launcher offers a colour choice for. kiro
     // before pi: `startsWith('pi')` does not match it, but the two shared
     // --green until kiro got a badge of its own, and a reader cannot tell two kinds apart by one
-    // colour.
+    // colour. devin wears claude's orange by default — the person's call; `--agent-devin` stays
+    // defined because the palette's theme blocks are anchored on it.
     const KIND_COLORS = [
-      ['claude', 'var(--agent-claude)'], ['codex', 'var(--blue)'], ['devin', 'var(--agent-devin)'],
+      ['claude', 'var(--agent-claude)'], ['codex', 'var(--blue)'], ['devin', 'var(--agent-claude)'],
       ['kiro', 'var(--agent-kiro)'], ['opencode', 'var(--agent-opencode)'], ['pi', 'var(--green)'],
       ['agy', 'var(--agent-agy)'],
     ];
@@ -10377,6 +10464,12 @@ function convWebModeOf(conv) {
         // fact about the relay, not a failure to put in front of the user.
         if (stateSyncNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
+        // A refusal that names the message it refused is the answer to a button somebody pressed,
+        // and the screen that pressed it is still open. Offered there first, where it persists and
+        // the input that caused it can be corrected; a toast is for an error nobody is waiting on.
+        // `command` is new, so an older relay still falls through to the toast below.
+        if (msg.command === 'cmd_start' && typeof cmdNoteStartResult === 'function'
+            && cmdNoteStartResult(msg)) return;
         showToast(typeof loopRefusal === 'function'
           ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
@@ -10573,6 +10666,11 @@ function convWebModeOf(conv) {
           // cannot, but a browser cannot know that — would land on an intent that failed.
           if (typeof startsInFlight !== 'undefined' && msg.ref) startsInFlight.delete(msg.ref);
         }
+      }
+      else if (msg.type === 'command_result' && msg.command === 'cmd_start') {
+        // The success half. The setup sheet stays open from the press until one of these, so that
+        // a refusal has somewhere to be read; this is what closes it.
+        if (msg.ok && typeof cmdNoteStartResult === 'function') cmdNoteStartResult(msg);
       }
       else if (msg.type === 'command_result' && msg.command === 'cmd_plan') {
         // What the plan CLI printed about what it changed. A refusal never arrives here — it is
@@ -12968,12 +13066,26 @@ function convWebModeOf(conv) {
       if (window.cue) cue('tick');
     }
 
+    // A pane started into one of a Commander's slots, rather than for somebody to sit at. The
+    // slot ids are the form's own: `cmdWho` is the coordinator, `cmdMember0…` its roster.
+    function newAgentForCommanderSlot() {
+      return /^cmd/.test(newAgentFor || '');
+    }
+
     // The same question the Start sheet asks, in the other dialog that starts an agent. Drawn only
     // for a harness this relay has a flag for — startUnattendedOffered reads what it advertised.
+    //
+    // A Commander's pane defaults to unattended whatever the harness would otherwise default to,
+    // because nobody sits at one: a Commander is driven by its inbox and its members are written
+    // to by the relay, so a harness parked on its own trust prompt ends no turn and whatever is
+    // waiting on it waits for ever. `_commander_participant` applies exactly this reasoning to the
+    // members a Commander starts for itself; this is the same kind of pane, started from the form
+    // instead, and it was the one left asking. The person's own answer still wins either way.
     function newAgentUnattendedOn() {
       if (typeof startUnattendedOffered !== 'function'
         || !startUnattendedOffered(newAgentKind)) return false;
-      return newAgentUnattended === null ? !!newAgentConfig : newAgentUnattended;
+      if (newAgentUnattended !== null) return newAgentUnattended;
+      return newAgentForCommanderSlot() || !!newAgentConfig;
     }
 
     function renderNewAgentUnattended() {
@@ -15924,8 +16036,49 @@ function convWebModeOf(conv) {
       cmdSetupConv = '';
       cmdEditing = '';
       cmdEditWas = null;
+      cmdSetupStatus('');
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
+    }
+
+    // The line under the form: what pressing Start is doing, and what the relay said if it refused.
+    //
+    // It exists because the sheet used to close the instant the message went out, so the relay's
+    // answer arrived with nothing on screen to put it on and could only be a toast — which goes
+    // away. A `cmd_start` refusal is the answer to a button somebody pressed and names the thing
+    // that was wrong ("reviewer runs devin-sol-high and this agent the stock config"); losing it
+    // cost a day of diagnosis. Red and persistent for a refusal, muted while waiting, following
+    // `setStartStatus` in `start_dialog.js`, which solved the same problem for `start_agent`.
+    let cmdStartWait = null;
+    // Long enough not to talk over a slow start: the relay brings up one pane per `at_start` seat
+    // and waits out each harness's TUI. Worded as a report, not a failure — by then this knows
+    // nothing except that no answer has come.
+    const CMD_START_WAIT_MS = 90000;
+
+    function cmdSetupStatus(text, busy) {
+      clearTimeout(cmdStartWait);
+      cmdStartWait = null;
+      const el = document.getElementById('cmdStartStatus');
+      if (!el) return;
+      el.textContent = text || '';
+      el.style.display = text ? 'block' : 'none';
+      el.style.color = busy ? 'var(--muted)' : 'var(--red)';
+      if (!busy) return;
+      cmdStartWait = setTimeout(
+        () => cmdSetupStatus(`${text} no answer yet — it may still be coming up.`), CMD_START_WAIT_MS);
+    }
+
+    // The relay's answer to a `cmd_start` this sheet sent. Called for both halves: the refusal,
+    // which keeps the form open so the press can be corrected, and the success, which is the only
+    // thing that closes it now.
+    function cmdNoteStartResult(msg) {
+      if (!cmdSetupConv) return false;       // nothing open; whatever this is, it is not ours
+      if (msg.type === 'error') {
+        cmdSetupStatus(msg.message || 'The relay refused that.');
+        return true;
+      }
+      closeCmdSetup();
+      return false;                          // the success still toasts, as it always did
     }
 
     // The dialog's own close button calls arbitration's. One box, so one close — which has to put
@@ -16029,6 +16182,11 @@ function convWebModeOf(conv) {
           'next one rather than stopping. Running out of sends pauses it, and Resume lifts the ' +
           'pause.</span>')
           : '') +
+        // Where the relay's answer to Start lands. A start brings up one pane per `at_start` seat
+        // and each can take 30s, so this carries the waiting as well as the refusal — and it is
+        // inside the form, which is what makes a refusal correctable: the scope and the recipe are
+        // still filled in behind it. See `cmdSetupStatus`.
+        '<p class="arb-note" id="cmdStartStatus" style="display:none"></p>' +
         '<div class="arb-go">' +
         `<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>` +
         (live
@@ -16293,7 +16451,12 @@ function convWebModeOf(conv) {
         coordinator: {pane_id: who.pane_id}, members: members,
         tier: tier, parent_session: parent, ...(recipe ? {recipe: recipe} : {}),
       });
-      closeCmdSetup();
+      // Open until the relay answers. It used to close here, which is what left a refusal with
+      // nowhere to be shown but a toast — and a recipe start is refused for things worth reading:
+      // which seat, which harness, which config. `cmdNoteStartResult` closes it on success.
+      cmdSetupStatus(recipe
+        ? 'Starting the Commander and staffing its seats… this can take a minute.'
+        : 'Starting the Commander…', true);
     }
 
     // --- managing one ------------------------------------------------------------------------

@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-06">
+  <meta name="app-built" content="2026-10-07">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -98,6 +98,88 @@
     })();
 
   </script>
+  <!-- The bar every scroller on every page gets, shared with desktop.html and projects.html.
+       Ahead of this page's sheet, so the strips below that hide their own still override it. -->
+  <style>
+/* Scrollbars, for every page that has one.
+
+   Left alone they arrive as a wide light gutter that belongs to the OS rather than to this page,
+   and against a dark terminal it reads as a seam down the side. On Chrome and Edge for Windows
+   that default is the loud one: a ~15px light track with a grey thumb, and on older builds a
+   stepper arrow at each end. Firefox and Safari default to something slim and quiet, which is why
+   this was only ever visibly wrong on two of the four.
+
+   These rules were index.html's alone. desktop.html had one `scrollbar-width: thin` on one tab
+   strip and nothing else, and projects.html had nothing at all — so every column, pane, sidebar
+   and thread on the two wide pages, which are the ones actually read on a desktop, fell back to
+   that default. Shared rather than copied a third time, for app_chrome.css's reason: one copy
+   drifting from another is a page that looks like the app and a page that does not.
+
+   It names no colour of its own — only the palette variables the page around it has already
+   defined, the same contract app_chrome.css keeps.
+
+   Linked ahead of each page's own sheet, so anything that wants a different bar — the strips that
+   hide theirs — still overrides from there. Those use a class and win on specificity regardless.
+
+   Touch browsers overlay their own bar and ignore both mechanisms, which is why nothing here
+   reserves space. */
+
+/* The two mechanisms are not additive, and that is the whole reason for the `@supports`.
+   `scrollbar-width`/`scrollbar-color` are the standard properties; `::-webkit-scrollbar` is the
+   older pseudo-element tree. Blink used to honour only the second, which is what the note this
+   replaces assumed — "no browser has both". Chrome and Edge 121 shipped the first, and in Blink
+   the standard property *suppresses* the pseudo-elements rather than layering with them: declare
+   `scrollbar-width` on an element and every `::-webkit-scrollbar` rule for it is dropped. So the
+   old unconditional `* { scrollbar-width: thin }` would now take the pill below away from exactly
+   the two browsers it was drawn for, and hand them a plain tinted bar instead.
+
+   Gated on the pseudo-element rather than on the property, because that is the question being
+   asked — "is the detailed version available here?" — and it answers false only where it is true
+   that it is not. Firefox has no `::-webkit-scrollbar` and takes this branch; Chrome, Edge and
+   Safari skip it and take the pill. A future engine with neither gets its own default, which is
+   the right answer for an engine this file has never been looked at in. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  /* Inset via a transparent border so the thumb reads as a slim pill rather than filling the
+     gutter edge to edge. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Chrome and Edge draw a stepper at each end of a scrollbar they have not been told not to. It is
+   not part of this design on any other engine, and a button the page has given no size is drawn
+   at the platform's. Said explicitly so the bar is the thumb and the track and nothing else. */
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+  </style>
   <style>
     /* Dark is the product default, not the OS's. Light is opt-in from Settings and goes all the
        way down — the pane included, because a light shell around a dark terminal was the jarring
@@ -279,47 +361,9 @@
       overflow: hidden;
     }
 
-    /* Scrollbars, on the desktop where they are drawn at all. Left alone they arrive as a wide
-       light gutter that belongs to the OS rather than to this page, and against a dark terminal
-       it reads as a seam down the side.
-
-       Two mechanisms, because no browser has both: `scrollbar-*` is the standard property and
-       what Firefox honours, `::-webkit-scrollbar` is what Safari and Chrome honour. Touch
-       browsers overlay their own and ignore both, which is why nothing here reserves space.
-
-       Scoped away from the strips that deliberately hide their bar (.agent-tabs, .chip-strip) —
-       those set `scrollbar-width: none` themselves and come later in the cascade. */
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
-    }
-
-    ::-webkit-scrollbar {
-      width: 10px;
-      height: 10px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--border);
-      /* Inset via a transparent border so the thumb reads as a slim pill rather than filling the
-         gutter edge to edge. */
-      border: 2px solid transparent;
-      background-clip: padding-box;
-      border-radius: 5px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--muted);
-      background-clip: padding-box;
-    }
-
-    ::-webkit-scrollbar-corner {
-      background: transparent;
-    }
+    /* Scrollbars are src/scrollbars.css, linked above this sheet and shared with the two wide
+       pages. The strips that deliberately hide their bar — .agent-tabs, .chip-strip and the rest —
+       still say so below, and win on specificity wherever they sit in the cascade. */
 
     @keyframes spin {
       to { transform: rotate(360deg); }
@@ -13422,6 +13466,10 @@
     // per-server counter, so two hosts polled by one relay both report w1:p1 and `activePane`
     // alone cannot say which of them was tapped. Set beside it, cleared with it.
     let activeAid = null;
+    // Where the last paint left the pane's scroll box, until the next scroll event spends it. A
+    // paint that shrinks the text moves the box itself — the browser clamps it, to 0 when the text
+    // now fits — and the scroll event that follows is the paint's, not the reader's.
+    let panePaintedTop = -1;
 
     // The agent in the open pane. Every caller used to write this find itself, keyed on the pane
     // id, and so every caller picked whichever host sorted first. The fallback is not decoration:
@@ -14193,9 +14241,10 @@
     // The table is also the list of stock harnesses the launcher offers a colour choice for. kiro
     // before pi: `startsWith('pi')` does not match it, but the two shared
     // --green until kiro got a badge of its own, and a reader cannot tell two kinds apart by one
-    // colour.
+    // colour. devin wears claude's orange by default — the person's call; `--agent-devin` stays
+    // defined because the palette's theme blocks are anchored on it.
     const KIND_COLORS = [
-      ['claude', 'var(--agent-claude)'], ['codex', 'var(--blue)'], ['devin', 'var(--agent-devin)'],
+      ['claude', 'var(--agent-claude)'], ['codex', 'var(--blue)'], ['devin', 'var(--agent-claude)'],
       ['kiro', 'var(--agent-kiro)'], ['opencode', 'var(--agent-opencode)'], ['pi', 'var(--green)'],
       ['agy', 'var(--agent-agy)'],
     ];
@@ -17260,6 +17309,12 @@
         // fact about the relay, not a failure to put in front of the user.
         if (stateSyncNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
+        // A refusal that names the message it refused is the answer to a button somebody pressed,
+        // and the screen that pressed it is still open. Offered there first, where it persists and
+        // the input that caused it can be corrected; a toast is for an error nobody is waiting on.
+        // `command` is new, so an older relay still falls through to the toast below.
+        if (msg.command === 'cmd_start' && typeof cmdNoteStartResult === 'function'
+            && cmdNoteStartResult(msg)) return;
         showToast(typeof loopRefusal === 'function'
           ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
@@ -17456,6 +17511,11 @@
           // cannot, but a browser cannot know that — would land on an intent that failed.
           if (typeof startsInFlight !== 'undefined' && msg.ref) startsInFlight.delete(msg.ref);
         }
+      }
+      else if (msg.type === 'command_result' && msg.command === 'cmd_start') {
+        // The success half. The setup sheet stays open from the press until one of these, so that
+        // a refusal has somewhere to be read; this is what closes it.
+        if (msg.ok && typeof cmdNoteStartResult === 'function') cmdNoteStartResult(msg);
       }
       else if (msg.type === 'command_result' && msg.command === 'cmd_plan') {
         // What the plan CLI printed about what it changed. A refusal never arrives here — it is
@@ -34742,6 +34802,7 @@ function nlmSourceDelete(source) {
       } else {
         el.scrollTop = el.scrollHeight;
       }
+      panePaintedTop = el.scrollTop;
       // setPaneText drew against the old scroll position; the band lives outside the scroller.
       drawSel();
       // After the pane is drawn: recording must never be what a user waits on, and it runs on
@@ -41088,12 +41149,26 @@ function studioCardHtml() {
       if (window.cue) cue('tick');
     }
 
+    // A pane started into one of a Commander's slots, rather than for somebody to sit at. The
+    // slot ids are the form's own: `cmdWho` is the coordinator, `cmdMember0…` its roster.
+    function newAgentForCommanderSlot() {
+      return /^cmd/.test(newAgentFor || '');
+    }
+
     // The same question the Start sheet asks, in the other dialog that starts an agent. Drawn only
     // for a harness this relay has a flag for — startUnattendedOffered reads what it advertised.
+    //
+    // A Commander's pane defaults to unattended whatever the harness would otherwise default to,
+    // because nobody sits at one: a Commander is driven by its inbox and its members are written
+    // to by the relay, so a harness parked on its own trust prompt ends no turn and whatever is
+    // waiting on it waits for ever. `_commander_participant` applies exactly this reasoning to the
+    // members a Commander starts for itself; this is the same kind of pane, started from the form
+    // instead, and it was the one left asking. The person's own answer still wins either way.
     function newAgentUnattendedOn() {
       if (typeof startUnattendedOffered !== 'function'
         || !startUnattendedOffered(newAgentKind)) return false;
-      return newAgentUnattended === null ? !!newAgentConfig : newAgentUnattended;
+      if (newAgentUnattended !== null) return newAgentUnattended;
+      return newAgentForCommanderSlot() || !!newAgentConfig;
     }
 
     function renderNewAgentUnattended() {
@@ -41638,13 +41713,24 @@ function studioCardHtml() {
       renderPairStrip();
     }
 
-    // Jump to the newest line. It also puts the pane back to following the tail: the scroll
-    // handler recomputes userScrolledUp from where this lands, so one assignment does both.
-    // Reading backscroll is what pins the pane, and thumbing back down a long one is real work.
+    // Jump to the newest line, and put the pane back to following the tail. Reading backscroll is
+    // what pins the pane, and thumbing back down a long one is real work — so this is the way out,
+    // and it has to work from every position the reader can be in.
+    //
+    // The flag is cleared here rather than left to the scroll handler. Assigning scrollTop only
+    // fires a scroll event when it actually moves, so a pane already at the end — or one too short
+    // to scroll at all, where scrollHeight === clientHeight — fired nothing, kept `userScrolledUp`
+    // set, and every later read then held its offset instead of following the tail. Last was the
+    // one control that could not undo the state it exists to undo, and only switching panes
+    // cleared it.
+    //
+    // The thread box needs no equivalent: its stick is measured at render time against where it
+    // actually sits (see renderConvView), so scrolling it to the end is the whole statement.
     function scrollPaneToBottom() {
       const box = document.getElementById('convThread');
       const el = box && !box.hidden ? box : document.getElementById('termContent');
       el.scrollTop = el.scrollHeight;
+      userScrolledUp = false;
     }
 
     // paneTextPrimed is already exactly "this pane has not delivered its own text yet" — it exists
@@ -45021,8 +45107,49 @@ function studioCardHtml() {
       cmdSetupConv = '';
       cmdEditing = '';
       cmdEditWas = null;
+      cmdSetupStatus('');
       const box = document.getElementById('arbModal');
       if (box) box.style.display = 'none';
+    }
+
+    // The line under the form: what pressing Start is doing, and what the relay said if it refused.
+    //
+    // It exists because the sheet used to close the instant the message went out, so the relay's
+    // answer arrived with nothing on screen to put it on and could only be a toast — which goes
+    // away. A `cmd_start` refusal is the answer to a button somebody pressed and names the thing
+    // that was wrong ("reviewer runs devin-sol-high and this agent the stock config"); losing it
+    // cost a day of diagnosis. Red and persistent for a refusal, muted while waiting, following
+    // `setStartStatus` in `start_dialog.js`, which solved the same problem for `start_agent`.
+    let cmdStartWait = null;
+    // Long enough not to talk over a slow start: the relay brings up one pane per `at_start` seat
+    // and waits out each harness's TUI. Worded as a report, not a failure — by then this knows
+    // nothing except that no answer has come.
+    const CMD_START_WAIT_MS = 90000;
+
+    function cmdSetupStatus(text, busy) {
+      clearTimeout(cmdStartWait);
+      cmdStartWait = null;
+      const el = document.getElementById('cmdStartStatus');
+      if (!el) return;
+      el.textContent = text || '';
+      el.style.display = text ? 'block' : 'none';
+      el.style.color = busy ? 'var(--muted)' : 'var(--red)';
+      if (!busy) return;
+      cmdStartWait = setTimeout(
+        () => cmdSetupStatus(`${text} no answer yet — it may still be coming up.`), CMD_START_WAIT_MS);
+    }
+
+    // The relay's answer to a `cmd_start` this sheet sent. Called for both halves: the refusal,
+    // which keeps the form open so the press can be corrected, and the success, which is the only
+    // thing that closes it now.
+    function cmdNoteStartResult(msg) {
+      if (!cmdSetupConv) return false;       // nothing open; whatever this is, it is not ours
+      if (msg.type === 'error') {
+        cmdSetupStatus(msg.message || 'The relay refused that.');
+        return true;
+      }
+      closeCmdSetup();
+      return false;                          // the success still toasts, as it always did
     }
 
     // The dialog's own close button calls arbitration's. One box, so one close — which has to put
@@ -45126,6 +45253,11 @@ function studioCardHtml() {
           'next one rather than stopping. Running out of sends pauses it, and Resume lifts the ' +
           'pause.</span>')
           : '') +
+        // Where the relay's answer to Start lands. A start brings up one pane per `at_start` seat
+        // and each can take 30s, so this carries the waiting as well as the refusal — and it is
+        // inside the form, which is what makes a refusal correctable: the scope and the recipe are
+        // still filled in behind it. See `cmdSetupStatus`.
+        '<p class="arb-note" id="cmdStartStatus" style="display:none"></p>' +
         '<div class="arb-go">' +
         `<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>` +
         (live
@@ -45390,7 +45522,12 @@ function studioCardHtml() {
         coordinator: {pane_id: who.pane_id}, members: members,
         tier: tier, parent_session: parent, ...(recipe ? {recipe: recipe} : {}),
       });
-      closeCmdSetup();
+      // Open until the relay answers. It used to close here, which is what left a refusal with
+      // nowhere to be shown but a toast — and a recipe start is refused for things worth reading:
+      // which seat, which harness, which config. `cmdNoteStartResult` closes it on success.
+      cmdSetupStatus(recipe
+        ? 'Starting the Commander and staffing its seats… this can take a minute.'
+        : 'Starting the Commander…', true);
     }
 
     // --- managing one ------------------------------------------------------------------------
@@ -49268,7 +49405,12 @@ function studioCardHtml() {
       const el = this;
       userScrolledUp = (el.scrollHeight - el.scrollTop - el.clientHeight) > 50;
       drawSel();  // the band lives outside the scroller, so it has to be re-placed by hand
-      if (el.scrollTop === 0 && paneLines < paneHistoryMax()) loadMore();
+      // Reaching the top asks for older history — when the reader got there. A paint lands on 0
+      // whenever its text fits the box, and the read after Clear screen is exactly that: fetching
+      // then put the backlog back and undid the clear it had just drawn.
+      const painted = el.scrollTop === panePaintedTop;
+      panePaintedTop = -1;
+      if (!painted && el.scrollTop === 0 && paneLines < paneHistoryMax()) loadMore();
       // Back at the tail after reading history: the pane goes live again, at the depth it opens
       // on. A frozen tail is worse than fetching the history a second time, and the history is
       // one scroll up either way.
