@@ -3054,6 +3054,47 @@
   overflow-wrap: anywhere;
 }
 
+#loopStrip {
+  min-width: 0;
+  max-width: 100%;
+}
+/* border-box: the tray has padding and a border, and 100% of the stack plus those is wider
+   than the column lane it sits in. */
+.loop-strip, .loop-strip .arb-bar {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.loop-chains {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+.loop-chain {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.loop-chain-holder { max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
+.loop-chain.good { color: var(--green); }
+.loop-chain.warn { color: var(--orange); }
+.loop-chain.bad { color: var(--red); }
+
   </style>
   <!-- The bar every scroller on every page gets. This page had none of its own, so all four of its
        columns were drawing the OS default. -->
@@ -7929,7 +7970,36 @@ function convWebModeOf(conv) {
       } catch (e) { /* no database, or it is already gone: the fallback copy is deleted either way */ }
     }
 
-    function loadConvIndex() { return parseConvIndex(localStorage.getItem(CONV_INDEX_KEY)); }
+    // The index is read on every render, dozens of times per snapshot across the views, and a phone
+    // holding a few hundred conversations was parsing most of half a megabyte each time: the poll's
+    // redraw blocked the page for a quarter of a second every three seconds, and typing stuttered
+    // with it. So it is parsed once per stored string, whoever wrote that string — this tab, the
+    // state sync adopting another browser's, another tab — and each caller is handed a copy of its
+    // own. Callers edit what they are handed before saving it, and one sharing the cached rows that
+    // edited and then did not save would change what every later read sees.
+    let convIndexRaw = null, convIndexParsed = [];
+
+    function loadConvIndex() {
+      const raw = localStorage.getItem(CONV_INDEX_KEY);
+      if (raw !== convIndexRaw) { convIndexParsed = parseConvIndex(raw); convIndexRaw = raw; }
+      return convPlainCopy(convIndexParsed);
+    }
+
+    // A deep copy of JSON-shaped data. A third of what parsing the same rows costs, and
+    // structuredClone is slower than either.
+    function convPlainCopy(v) {
+      if (Array.isArray(v)) {
+        const out = new Array(v.length);
+        for (let i = 0; i < v.length; i++) out[i] = convPlainCopy(v[i]);
+        return out;
+      }
+      if (v && typeof v === 'object') {
+        const out = {};
+        for (const k in v) out[k] = convPlainCopy(v[k]);
+        return out;
+      }
+      return v;
+    }
 
     // What a member is called *now*. Labels are stamped into the index and into every entry as they
     // are written, which is right for a member whose pane has gone — that stamp is all there is
@@ -10523,6 +10593,12 @@ function convWebModeOf(conv) {
       else if (msg.type === 'arb_detail') {
         if (typeof arbReceiveDetail === 'function') arbReceiveDetail(msg);
       }
+      // What a `prose` choice would produce, asked for by the recipe editor and drawn only
+      // there. Answered to this client alone, for `arb_detail`'s reason in reverse: nobody else
+      // asked, and a sample landing in a page with no editor open is a frame nothing reads.
+      else if (msg.type === 'prose_preview') {
+        if (typeof recipeReceivePreview === 'function') recipeReceivePreview(msg);
+      }
       else if (msg.type === 'push_status') {
         if (typeof loopPushStatus === 'function') loopPushStatus(msg);
       }
@@ -11673,6 +11749,28 @@ function convWebModeOf(conv) {
         + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`;
     }
 
+    // A Project that is a git checkout on the relay's host (`repo` on the Project) can start a pane
+    // in a worktree of its own: the relay makes `<project>/.worktrees/<name>` on a branch of that
+    // name, or reuses it, and starts there — so the branch the pane's badge says is the branch its
+    // commits go to. Both modes, since open_terminal takes it too. Rebuilt on every pick for the
+    // New folder row's reason: a worktree named under one repository means nothing in another.
+    function renderStartWorktree() {
+      const row = document.getElementById('startWorktreeRow');
+      if (!row) return;
+      const p = projects.find(x => x.id === startProjectId);
+      const show = !!(p && p.repo);
+      row.hidden = !show;
+      row.style.display = show ? '' : 'none';
+      if (!show) { row.innerHTML = ''; return; }
+      const input = (id, max, hint) => `<input id="${id}" type="text" maxlength="${max}"`
+        + ` autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="${hint}" />`;
+      row.innerHTML = '<div style="display:flex;gap:8px">'
+        + '<label class="start-field" style="flex:1;min-width:0">Worktree <span class="field-note">optional</span>'
+        + input('startWorktree', 64, 'Main checkout') + '</label>'
+        + '<label class="start-field" style="flex:1;min-width:0">Branch <span class="field-note">optional</span>'
+        + input('startBranch', 100, 'Same as worktree') + '</label></div>';
+    }
+
     // Picking one redraws the rest: placement is answered against what that Project has running,
     // and the answer the previous Project gave means nothing here. submitStart already refuses
     // without a Project, so the sheet is simply unusable until this is tapped.
@@ -11681,6 +11779,7 @@ function convWebModeOf(conv) {
       syncStartProjectBadge();
       renderStartProjects();
       renderStartChild();
+      renderStartWorktree();
       renderStartTarget();
       if (document.getElementById('startSubmit').disabled) {
         document.getElementById('startPlacement').value = 'new_workspace';
@@ -11710,6 +11809,7 @@ function convWebModeOf(conv) {
       syncStartProjectBadge();
       renderStartProjects();
       renderStartChild();
+      renderStartWorktree();
       document.getElementById('startTitle').textContent = terminal ? 'New terminal' : 'Start session';
       document.getElementById('startAgentRows').style.display = terminal ? 'none' : '';
       document.getElementById('startSubmit').textContent = terminal ? 'Open terminal' : 'Start session';
@@ -11927,6 +12027,15 @@ function convWebModeOf(conv) {
       const raw = childField ? (childField.value || '') : '';
       const child = raw.trim() || raw;
       if (child) msg.child = child;
+      // Both messages take it, trimmed the way New folder is and for its reason — only spaces are
+      // sent as they stand, so the relay refuses them rather than the pane landing in the main
+      // checkout. A branch alone is not sent: it names what a worktree is made on, and the relay
+      // refuses one with no worktree, which the empty field beside it already says.
+      const wt = (id) => { const raw = (document.getElementById(id) || {}).value || ''; return raw.trim() || raw; };
+      if (wt('startWorktree')) {
+        msg.worktree = wt('startWorktree');
+        if (wt('startBranch')) msg.branch = wt('startBranch');
+      }
       if (placement !== 'split') msg.slot = slotFor();
       // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
       // answered that for an agent, this answers it for the other message. Omitted, not empty — the
@@ -12287,13 +12396,22 @@ function convWebModeOf(conv) {
           .filter(r => r.kind === kind);
         // The relay's sentence about this profile, and only while it is still about what is on
         // screen: an edit this browser has made and the relay has not answered yet would
-        // otherwise carry the complaint about the value it replaced.
-        const problem = (config === relay.config && relay.problem) ? relay.problem : '';
+        // otherwise carry the complaint about the value it replaced. It can be about either
+        // field now — the harness this relay does not start, or the config that does not resolve
+        // on it — so both have to still be the pair the relay was answering about.
+        const problem = (kind === relay.kind && config === relay.config && relay.problem)
+          ? relay.problem : '';
+        // A harness the document names and this relay cannot start is still what the next spawn
+        // would ask for, so it is offered rather than left out. A select whose value matches no
+        // option shows the first one instead, which on a devin-only install drew every built-in
+        // profile as `devin` while the stored document said claude — the screen reading as
+        // already-fixed being exactly how this went unnoticed.
+        const kindOptions = (kind && !kinds.includes(kind)) ? kinds.concat([kind]) : kinds;
         return '<div class="cmd-def">'
           + `<div class="cmd-def-head">${escapeHtml(name)}`
           + `<span class="cfg-sub">${escapeHtml(COMMANDER_PROFILE_NOTES[name] || '')}</span>`
           + '</div><div class="cmd-def-fields">'
-          + commanderPick(name, 'kind', kinds.map(k => [k, k]), kind)
+          + commanderPick(name, 'kind', kindOptions.map(k => [k, k]), kind)
           + commanderPick(name, 'config',
                           [['', 'stock']].concat(options.map(r => [r.id, r.label || r.id])),
                           config)
@@ -15856,14 +15974,26 @@ function convWebModeOf(conv) {
     let cmdSetupConv = '';
 
     // The tiers a person may start by hand, in the order the Project contains them. `project` has
-    // no parent and there may be one unfinished one per Project; the other two require a parent,
-    // which is why the selector exists at all — without it those two choices would be refused
-    // every time with `parent_required`.
+    // no parent and there may be one unfinished one per Project; a feature may sit under another
+    // Commander or answer to the person alone, as many at once as the work needs; a branch
+    // requires a parent, and would be refused every time with `parent_required` without one.
     const CMD_TIERS = [
       ['project', 'Project', 'Owns the whole Project. One at a time.'],
-      ['feature', 'Feature', 'A piece of work inside a Project.'],
+      ['feature', 'Feature', 'A piece of work inside a Project. Answers to you, or to a Commander above it.'],
       ['branch', 'Branch', 'One branch of one feature.'],
     ];
+    // How much each assignment says, and how it reaches the agent. Three choices each, and the
+    // first is **Default** rather than a style: a sheet left alone sends neither field, so the
+    // relay's own precedence decides — the recipe's own `prose`, else the parent's, else verbose.
+    // Default and Verbose are therefore different answers and not two names for one. Picking
+    // Verbose on a sheet whose recipe is compact is an override of that recipe; leaving it on
+    // Default is deference to it, and the recipe stays the place the default is edited.
+    //
+    // `omit` is not offered here. It names individual parts of an assignment, which is a decision
+    // about a way of working rather than about one session, and it stays in the recipe editor.
+    const CMD_PROSE = [['', 'Default'], ['compact', 'Compact'], ['verbose', 'Verbose']];
+    const CMD_DELIVERY = [['', 'Default'], ['pull', 'Pull'], ['push', 'Push']];
+
     // The value a member slot carries when it is holding nobody. A Commander may run with an empty
     // roster, so every slot has to be able to say so.
     const CMD_NONE = 'cmd-nobody';
@@ -16026,6 +16156,10 @@ function convWebModeOf(conv) {
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
       cmdSetupConv = conv.id;
+      // What Default means is computed from the recipe, the tier and the parent, all of which
+      // have just been drawn — so the first paint has to ask once, or the labels say `Default`
+      // with nothing after it until something is touched.
+      if (!live) cmdSyncDefaults();
       if (!keepOpen) {
         const box = document.getElementById('arbModal');
         if (box) box.style.display = 'block';
@@ -16146,16 +16280,21 @@ function convWebModeOf(conv) {
           '<input type="hidden" id="cmdTier" value="project">' +
           '<span class="arb-note" id="cmdTierNote">' + escapeHtml(CMD_TIERS[0][2]) + '</span>' +
           '</div>' +
-          // Required for the two lower tiers and meaningless for the top one, so it is drawn
-          // either way and disabled rather than appearing and disappearing under the thumb.
-          '<label id="cmdParentRow" style="display:none">Under<select id="cmdParent">' +
+          // Optional for a feature, required for a branch and meaningless for a project. The
+          // empty choice is first so a feature answers to the person unless somebody picks.
+          // `onchange` and not only the tier: which parent is picked is what the Briefs row
+          // defers to, so moving between two parents moves what Default means.
+          '<label id="cmdParentRow" style="display:none">Under' +
+          '<select id="cmdParent" onchange="cmdSyncDefaults()">' +
+          '<option value="">Nobody — it answers to you</option>' +
           parents.map(s => `<option value="${escapeHtml(s.id)}">` +
             escapeHtml(cmdName(s)) + '</option>').join('') +
           '</select></label>' +
           (parents.length ? '' :
             '<span class="arb-note" id="cmdParentNote" style="display:none">' +
-            'Nothing to sit under yet — start a Project Commander first.</span>'))) +
+            'A branch sits under another Commander — start one first.</span>'))) +
         (live ? '' : cmdRecipeHtml()) +
+        (live ? '' : cmdBriefHtml()) +
         '<div id="cmdMembersPart">' + arbPart('Agents it works with directly',
           Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
             arbSlot('cmdMember' + i,
@@ -16364,21 +16503,25 @@ function convWebModeOf(conv) {
       const box = document.getElementById('cmdTiers');
       if (box) {
         const found = CMD_TIERS.find(t => t[0] === tier);
+        // Redrawn rather than toggled: a picked badge's look is an inline style `badgeHtml`
+        // writes, so flipping the class left Project lit whichever tier was picked.
         box.querySelectorAll('.badge.pick').forEach((b, i) => {
-          const on = CMD_TIERS[i][0] === tier;
-          b.classList.toggle('on', on);
-          b.setAttribute('aria-pressed', String(on));
+          const [v, label, why] = CMD_TIERS[i];
+          b.outerHTML = badgeHtml(label, v === tier, `cmdPickTier('${v}')`, {proj: true, title: why});
         });
         const note = document.getElementById('cmdTierNote');
         if (note && found) note.textContent = found[2];
       }
-      // The parent is required below the top tier and refused at it, so the row follows the
-      // choice rather than being a question asked of every start.
+      // The parent is refused at the top tier, so the row follows the choice rather than being a
+      // question asked of every start. A branch with nothing to sit under is told so instead.
       const row = document.getElementById('cmdParentRow');
       const note = document.getElementById('cmdParentNote');
-      const has = !!document.querySelector('#cmdParent option');
-      if (row) row.style.display = (tier !== 'project' && has) ? '' : 'none';
-      if (note) note.style.display = (tier !== 'project' && !has) ? '' : 'none';
+      const has = !!document.querySelector('#cmdParent option[value]:not([value=""])');
+      if (row) row.style.display = (tier === 'feature' || (tier === 'branch' && has)) ? '' : 'none';
+      if (note) note.style.display = (tier === 'branch' && !has) ? '' : 'none';
+      // A child defers to its parent and a Project Commander to nobody, so the tier is one of the
+      // three things that moves what Default resolves to.
+      cmdSyncDefaults();
     }
 
     // The recipes this relay can start from. One with a blocking problem is left out rather than
@@ -16409,6 +16552,11 @@ function convWebModeOf(conv) {
       const r = cmdRecipes().find(x => x.id === id);
       const part = document.getElementById('cmdMembersPart');
       if (part) part.hidden = !!r;
+      // A recipe carries its own `prose`, so picking one changes what Default means — and only
+      // what it means. An explicit choice already made is left alone. Ahead of the note below,
+      // which returns early when there is no note to write: the two rows are a separate part of
+      // the sheet and must not depend on this one's element being there.
+      cmdSyncDefaults();
       const note = document.getElementById('cmdRecipeNote');
       if (!note) return;
       note.textContent = r
@@ -16416,6 +16564,121 @@ function convWebModeOf(conv) {
             `${seat.name} (${seat.kind}${seat.config ? ' · ' + seat.config : ''})`).join(', ') + '.'
         : 'With a recipe, the relay starts its seats before the Commander is briefed, and the ' +
           'Commander can staff only those seats.';
+    }
+
+    // --- what the briefs say, and how they arrive ---------------------------------------------
+
+    // Two forms draw these rows and both are on the phone's page at once: the Commander setup sheet
+    // and `+ Feature` in the Command Center, and closing either hides it and keeps what it drew. So
+    // each draws them under ids of its own — `cmd` on the setup sheet, anything else on the other.
+    // One set of ids for both was two `#cmdProse` in one document, and `getElementById` answers
+    // with whichever comes first: a pick on the setup sheet was written into the hidden `+ Feature`
+    // form, and the start read it back from there.
+    function cmdBriefHtml(form = 'cmd') {
+      const tail = form === 'cmd' ? '' : `,'${form}'`;
+      const row = (id, choices, fn) =>
+        `<div class="arb-auto" id="${form}${id}s">` +
+        choices.map(([v, label]) =>
+          badgeHtml(label, v === '', `${fn}('${v}'${tail})`, {proj: true})).join('') +
+        `<input type="hidden" id="${form}${id}" value="">` +
+        `<span class="arb-note" id="${form}${id}Note"></span></div>`;
+      return arbPart('Briefs',
+        row('Prose', CMD_PROSE, 'cmdPickProse') +
+        // Off by default and only meaningful beside an explicit style. Worded as the recipe
+        // editor words the same flag, because it is the same flag: what it pastes is the
+        // *standing brief* — the part that does not change from one assignment to the next —
+        // and `member_brief` types that file's whole body ahead of naming it. "The work" would
+        // have been a different thing entirely, and the work is always there.
+        `<label class="arb-check" id="${form}PasteRow" style="display:none">` +
+        `<input type="checkbox" id="${form}PasteFirst" title="Type the standing brief into the` +
+        ' Commander\'s first assignment to each member as well as naming its file">' +
+        " Paste the brief into the Commander's first assignment</label>") +
+        arbPart('Delivery', row('Delivery', CMD_DELIVERY, 'cmdPickDelivery'));
+    }
+
+    // The parent a form other than the setup sheet was opened under, by form. `+ Feature` has no
+    // recipe, tier or parent field to read — it knows its parent from the tree before anything is
+    // drawn — so it is handed over once when the form opens and kept here, where a pick made later
+    // finds it. Recomputing without it read the setup sheet's fields instead.
+    const cmdBriefOver = {};
+
+    // What `Default` would actually resolve to, said on the badge's own note rather than left for
+    // the reader to work out. A default nobody can see the value of is a default nobody trusts,
+    // and the value moves with the recipe and the parent — both of which are picked on this sheet,
+    // above these rows.
+    function cmdDefaults(form = 'cmd') {
+      const sheet = form === 'cmd';
+      const id = sheet ? (document.getElementById('cmdRecipe') || {}).value || '' : '';
+      const r = id && cmdRecipes().find(x => x.id === id);
+      const style = r && ((r.recipe.prose || {}).style);
+      const tier = (document.getElementById('cmdTier') || {}).value || 'project';
+      const up = !sheet ? cmdBriefOver[form] : (tier === 'project' ? null : cmdSessions.find(
+        s => s.id === ((document.getElementById('cmdParent') || {}).value || '')));
+      const delivery = up && up.delivery ? up.delivery + ", its parent's" : '';
+      if (style) return {prose: `${style}, from ${r.recipe.label}`, delivery};
+      if (up) {
+        return {prose: ((up.prose || {}).style || 'verbose') + ", its parent's",
+                delivery};
+      }
+      return {prose: 'verbose', delivery: ''};
+    }
+
+    // Both rows' Default label, recomputed wherever one of its inputs moves: the recipe, the tier
+    // and the parent. An explicit choice is left exactly as it was — re-picking a recipe changes
+    // what Default *means*, and must not quietly change what was asked for. `over` is given once,
+    // by the form that knows its parent rather than reading it off a field.
+    function cmdSyncDefaults(form = 'cmd', over) {
+      if (over !== undefined) cmdBriefOver[form] = over;
+      const at = cmdDefaults(form);
+      const say = (id, what, fallback) => {
+        const box = document.getElementById(form + id + 's');
+        const first = box && box.querySelector('.badge.pick');
+        if (first) first.textContent = what ? `Default (${what})` : 'Default';
+        const note = document.getElementById(form + id + 'Note');
+        if (note) note.textContent = (document.getElementById(form + id) || {}).value ? '' : fallback;
+      };
+      say('Prose', at.prose,
+          'How much each assignment spells out. The recipe decides unless this does.');
+      say('Delivery', at.delivery || 'pull',
+          'Pull leaves the work as a file with a notice; push types it into the pane.');
+    }
+
+    function cmdPickOne(form, id, choices, value) {
+      const at = document.getElementById(form + id);
+      if (at) at.value = value;
+      const box = document.getElementById(form + id + 's');
+      if (box) {
+        box.querySelectorAll('.badge.pick').forEach((b, i) => {
+          const [v, label] = choices[i];
+          const tail = form === 'cmd' ? '' : `,'${form}'`;
+          b.outerHTML = badgeHtml(label, v === value, `cmdPick${id}('${v}'${tail})`, {proj: true});
+        });
+      }
+      cmdSyncDefaults(form);
+    }
+
+    function cmdPickProse(style, form = 'cmd') {
+      cmdPickOne(form, 'Prose', CMD_PROSE, style);
+      // Shown only beside an explicit style: on Default there is nothing for it to ride on, and a
+      // checkbox that silently does nothing is worse than one that is not there.
+      const row = document.getElementById(form + 'PasteRow');
+      if (row) row.style.display = style ? '' : 'none';
+    }
+
+    function cmdPickDelivery(how, form = 'cmd') {
+      cmdPickOne(form, 'Delivery', CMD_DELIVERY, how);
+    }
+
+    // What the two rows put on the wire: nothing at all while they are on Default, which is what
+    // keeps the recipe the source of its own default.
+    function cmdBriefFields(form = 'cmd') {
+      const style = (document.getElementById(form + 'Prose') || {}).value || '';
+      const delivery = (document.getElementById(form + 'Delivery') || {}).value || '';
+      const paste = !!(document.getElementById(form + 'PasteFirst') || {}).checked;
+      return {
+        ...(style ? {prose: {style: style, paste_first: paste}} : {}),
+        ...(delivery ? {delivery: delivery} : {}),
+      };
     }
 
     // A pane id and a scope, and never a fingerprint: the relay reads a participant's identity off
@@ -16430,8 +16693,8 @@ function convWebModeOf(conv) {
       const tier = (document.getElementById('cmdTier') || {}).value || 'project';
       const parent = tier === 'project'
         ? '' : ((document.getElementById('cmdParent') || {}).value || '');
-      if (tier !== 'project' && !parent) {
-        showToast('A ' + tier + ' Commander sits under another one — start a Project Commander first.');
+      if (tier === 'branch' && !parent) {
+        showToast('A branch Commander sits under another one — pick it, or start a Feature.');
         return;
       }
       const recipe = (document.getElementById('cmdRecipe') || {}).value || '';
@@ -16450,6 +16713,7 @@ function convWebModeOf(conv) {
         type: 'cmd_start', conversation: conv.id, scope: scope,
         coordinator: {pane_id: who.pane_id}, members: members,
         tier: tier, parent_session: parent, ...(recipe ? {recipe: recipe} : {}),
+        ...cmdBriefFields(),
       });
       // Open until the relay answers. It used to close here, which is what left a refusal with
       // nowhere to be shown but a toast — and a recipe start is refused for things worth reading:
@@ -18581,6 +18845,15 @@ function convWebModeOf(conv) {
           ? 'Leave it off to talk to it first. A Commander can be appointed from the room later.'
           : 'Nobody commands this Project yet, so this one would own it.';
       }
+      // The same two rows the Commander setup sheet draws, from the same functions, under ids of
+      // this form's own (`ccf`) — the setup sheet is on this page too. This form has no recipe
+      // picker and already knows its parent from the tree, so the parent is handed over rather
+      // than read off a field that is not here.
+      const briefs = document.getElementById('ccFeatureBriefs');
+      if (briefs && typeof cmdBriefHtml === 'function') {
+        briefs.innerHTML = cmdBriefHtml('ccf');
+        cmdSyncDefaults('ccf', over || null);
+      }
       sheet.style.display = '';
     }
 
@@ -18607,7 +18880,7 @@ function convWebModeOf(conv) {
     //
     // `anchor` is the row of the appointing Commander's plan the new one owns (C11.1a). Empty is
     // the Project Commander, which owns the plan itself and is refused an anchor.
-    function ccAppointOver(conv, scope, anchor) {
+    function ccAppointOver(conv, scope, anchor, briefs) {
       if (typeof openStartDialog !== 'function' || typeof startOptions === 'undefined'
           || !startOptions) {
         showToast('This relay does not start sessions.');
@@ -18627,6 +18900,14 @@ function convWebModeOf(conv) {
           tier: ccFeatureTier(over),
           parent: over ? over.id : '',
           anchor: anchor || '',
+          // Carried rather than read later: the start is sent from `landStart`, once the pane is
+          // up, and by then this sheet has been closed and may have been reopened on something
+          // else. What the person answered belongs to the press they answered it on.
+          //
+          // Absent when nothing was picked, rather than an empty object — the same rule the rows
+          // themselves follow. An intent that always carries the key would say this form has an
+          // opinion about prose on every start it makes, and it usually has none.
+          ...(briefs && Object.keys(briefs).length ? {briefs: briefs} : {}),
         };
       }
     }
@@ -18661,8 +18942,10 @@ function convWebModeOf(conv) {
         if (over.plan_anchor) fields.parent = over.plan_anchor;
         ccPlanEdit('add', fields, over.id);
       }
+      // Read before the sheet closes, for the reason `ccAppointOver` records.
+      const briefs = typeof cmdBriefFields === 'function' ? cmdBriefFields('ccf') : {};
       ccCloseFeature();
-      ccAppointOver(conv.id, wants ? scope : '', anchor);
+      ccAppointOver(conv.id, wants ? scope : '', anchor, briefs);
     }
 
     // What `landStart` calls once the pane is up and in the room. The coordinator is named by
@@ -18673,7 +18956,7 @@ function convWebModeOf(conv) {
       arbSend({type: 'cmd_start', conversation: plan.conv || '', scope: plan.scope,
                coordinator: {pane_id: pane.pane_id}, members: [],
                tier: plan.tier, parent_session: plan.parent || '',
-               plan_anchor: plan.anchor || ''});
+               plan_anchor: plan.anchor || '', ...(plan.briefs || {})});
     }
 
     // --- spawning from a node --------------------------------------------------------------

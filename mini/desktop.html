@@ -3280,66 +3280,80 @@
     }
 
     /* One dock at a time, above the bubble, inside the column. Never a sheet over the page: the
-       whole point of five columns is that the other four stay readable. */
+       whole point of five columns is that the other four stay readable. Drawn as the phone draws
+       its dock lists (.chip-menu in index.html) — the same rounded surface floating over the
+       thread, the same rows — because it is the same list, and it looked like a different app. */
     .desk-dock {
       max-height: 40vh;
       margin-bottom: 0.3rem;
-      padding: 0.3rem 0.6ch;
+      padding: 4px;
       overflow: auto;
-      border: 1px solid var(--term-border);
-      border-radius: var(--radius-md);
-      background: var(--term-sidebar-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
     }
 
     .desk-dock input {
       width: 100%;
       box-sizing: border-box;
-      margin-bottom: 0.3rem;
-      padding: 0.2rem 0.4ch;
-      border: 1px solid var(--term-border);
-      border-radius: var(--radius-md);
+      min-height: 36px;
+      margin-bottom: 4px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
       background: var(--term-bg);
-      color: var(--term-text);
-      font: inherit;
+      color: var(--text);
+      font: 500 0.8rem -apple-system, system-ui, sans-serif;
       outline: none;
     }
 
     .desk-dock input:focus { border-color: var(--accent); }
 
+    .desk-dock-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
     .desk-dock-list button,
     .desk-pick-menu button {
       display: flex;
       gap: 0.8ch;
-      align-items: baseline;
+      align-items: center;
       width: 100%;
-      padding: 0.2rem 0.4ch;
-      border: 0;
-      border-radius: var(--radius-md);
-      background: none;
-      color: var(--term-text);
-      font: inherit;
+      min-height: 40px;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font: 500 0.8rem -apple-system, system-ui, sans-serif;
       text-align: left;
       cursor: pointer;
     }
 
+    .desk-dock-list button strong { font-weight: 600; }
+
     .desk-dock-list button:hover,
-    .desk-pick-menu button:hover { background: var(--term-active-bg); }
+    .desk-pick-menu button:hover { background: var(--border); }
     /* The row the arrow keys are on. Same wash as a hover, plus an edge — a keyboard reader has no
        pointer to tell them which of the two marks is theirs. */
     .desk-dock-list button.on {
-      background: var(--term-active-bg);
-      box-shadow: inset 0.25ch 0 0 var(--accent);
+      background: var(--border);
+      box-shadow: inset 3px 0 0 var(--accent);
     }
     .desk-dock-list button.danger strong { color: var(--red); }
     .desk-dock-list button small,
     .desk-pick-menu button small {
       overflow: hidden;
-      color: var(--term-muted);
+      color: var(--muted);
+      font-weight: 400;
       white-space: nowrap;
       text-overflow: ellipsis;
     }
 
-    .desk-pick-menu button.on { background: var(--term-active-bg); }
+    .desk-pick-menu button.on { background: var(--border); }
 
     /* Who this goes to. Above the rail rather than over the page, for the same reason the docks
        are: a menu that covered the column beside it would hide the thing being answered.
@@ -3355,10 +3369,11 @@
       min-width: 20ch;
       max-height: 40vh;
       overflow: auto;
-      padding: 0.3rem 0.4ch;
-      border: 1px solid var(--term-border);
-      border-radius: var(--radius-md);
-      background: var(--term-sidebar-bg);
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
     }
 
     .desk-key-row {
@@ -5429,6 +5444,47 @@
   overflow-wrap: anywhere;
 }
 
+#loopStrip {
+  min-width: 0;
+  max-width: 100%;
+}
+/* border-box: the tray has padding and a border, and 100% of the stack plus those is wider
+   than the column lane it sits in. */
+.loop-strip, .loop-strip .arb-bar {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.loop-chains {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+.loop-chain {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.loop-chain-holder { max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
+.loop-chain.good { color: var(--green); }
+.loop-chain.warn { color: var(--orange); }
+.loop-chain.bad { color: var(--red); }
+
   </style>
     <style>
 
@@ -6909,50 +6965,113 @@
 
     .cmd-def-problem { color: var(--red); margin-top: 6px; }
 
-    /* --- Recipes ---
-       The list is `.cfg-row`s; a seat in the editor is a `.cmd-def` block, since every control in
-       it is one the finger lands on directly. */
-    .rcp-label { font-weight: 600; }
-    .rcp-tag {
-      font-size: 0.55rem;
-      padding: 0 5px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--muted);
-    }
-    .rcp-tag.rcp-bad { color: var(--red); border-color: var(--red); }
-    .rcp-reset { margin-left: auto; font-size: 0.65rem; padding: 2px 8px; }
-    .rcp-seat .cmd-def-head { flex-wrap: nowrap; align-items: center; }
-    .rcp-seat-name { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    /* The controls inside a .cmd-def block wear the dialog's own field treatment. Left to the
-       browser they were white boxes in a dark sheet — the catalogue's selects and prompt paths
-       included, which is where this was first missed. */
-    .cmd-def select, .cmd-def input[type="text"], .cmd-def textarea {
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      padding: 4px 6px;
-    }
-    .rcp-x { flex: 0 0 auto; padding: 2px 8px; }
-    .rcp-roles { margin-top: 6px; }
-    .rcp-check { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; }
-    .rcp-parts { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-    .rcp-parts .rcp-check { font-size: 0.8rem; text-transform: none; letter-spacing: normal; font-weight: normal; color: var(--text); }
-    .rcp-check:has(input:disabled) { opacity: 0.55; }
-    /* A recipe takes the width there is: seats side by side, the parts in columns down the page
-       in the order an assignment says them. Every other editor in this modal stays one column. */
-    #launcherModal.rcp-open [role="dialog"] { max-width: min(1200px, calc(100% - 32px)) !important; max-height: 92dvh !important; }
-    #launcherModal.rcp-open .rcp-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
-    #launcherModal.rcp-open .rcp-parts { display: block; columns: 260px 3; column-gap: 24px; }
-    #launcherModal.rcp-open .rcp-parts .rcp-check { break-inside: avoid; margin-bottom: 4px; }
-    #launcherModal.rcp-open .rcp-notes { min-height: 7.5em; }
-    #launcherModal.rcp-open .rcp-rules { min-height: 16em; }
-    .rcp-seats { display: flex; flex-direction: column; gap: 10px; }
-    .rcp-notes, .rcp-rules { width: 100%; box-sizing: border-box; margin-top: 6px; font-size: 0.72rem; }
-    .rcp-rules { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .rcp-add { margin-top: 6px; }
 </style>
+  <!-- Both pages open the recipe editor, so its rules are one file. -->
+  <style>
+/* --- Recipes ---
+   The list is `.cfg-row`s; a seat in the editor is a `.cmd-def` block, since every control in
+   it is one the finger lands on directly. One file because both pages open the launcher's
+   recipe editor, and the desktop page's copy of these rules had already fallen behind. */
+.rcp-label { font-weight: 600; }
+.rcp-tag {
+  font-size: 0.55rem;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+}
+.rcp-tag.rcp-bad { color: var(--red); border-color: var(--red); }
+.rcp-reset { margin-left: auto; font-size: 0.65rem; padding: 2px 8px; }
+.rcp-seat .cmd-def-head { flex-wrap: nowrap; align-items: center; }
+.rcp-seat-name { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* The controls inside a .cmd-def block wear the dialog's own field treatment. Left to the
+   browser they were white boxes in a dark sheet — the catalogue's selects and prompt paths
+   included, which is where this was first missed. */
+.cmd-def select, .cmd-def input[type="text"], .cmd-def textarea {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 4px 6px;
+}
+.rcp-x { flex: 0 0 auto; padding: 2px 8px; }
+.rcp-roles { margin-top: 6px; }
+.rcp-check { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; }
+.rcp-parts { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.rcp-parts .rcp-check { font-size: 0.8rem; text-transform: none; letter-spacing: normal; font-weight: normal; color: var(--text); }
+.rcp-check:has(input:disabled) { opacity: 0.55; }
+/* What one assignment says, as the pane receives it. Monospace and `pre-wrap` because it is
+   a terminal's text and its own line breaks are part of what is being judged; bounded and
+   scrolled so a verbose sample does not push the seats off the screen. */
+.rcp-preview { margin: 6px 0 0; padding: 8px 10px; max-height: 20em; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem;
+  line-height: 1.45; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere;
+  /* Inside a `.start-field`, whose label is set in capitals: a pane is sent this text as it
+     is, paths included, so it is shown that way. */
+  text-transform: none; letter-spacing: normal; font-weight: 400; }
+/* Which moment of a session the tab on show is: a sentence, not a label. */
+.rcp-when { text-transform: none; letter-spacing: normal; font-weight: 400; margin-top: 4px; }
+/* A recipe takes the width there is: seats side by side, the parts in columns down the page
+   in the order an assignment says them. Every other editor in this modal stays one column. */
+#launcherModal.rcp-open [role="dialog"] { max-width: min(1200px, calc(100% - 32px)) !important; max-height: 92dvh !important; }
+#launcherModal.rcp-open .rcp-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+#launcherModal.rcp-open .rcp-parts { display: block; columns: 260px 3; column-gap: 24px; }
+#launcherModal.rcp-open .rcp-parts .rcp-check { break-inside: avoid; margin-bottom: 4px; }
+#launcherModal.rcp-open .rcp-notes { min-height: 7.5em; }
+#launcherModal.rcp-open .rcp-rules { min-height: 16em; }
+.rcp-seats { display: flex; flex-direction: column; gap: 10px; }
+.rcp-notes, .rcp-rules { width: 100%; box-sizing: border-box; margin-top: 6px; font-size: 0.72rem; }
+.rcp-rules { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.rcp-add { margin-top: 6px; }
+
+/* An answer for a draft no longer on screen, kept until the next one lands rather than taken
+   away under the finger. */
+.rcp-preview.rcp-stale { opacity: 0.5; }
+.rcp-as { align-items: center; }
+.rcp-as .cfg-sub { margin-right: 4px; }
+
+/* The flow as a picture. Markup and borders only: a hub is a tree, a chain is a row with its
+   seats in a dashed loop. Wider than a phone at six seats, so it scrolls on its own rather than
+   taking the page with it. */
+.rcp-flow { margin-top: 8px; overflow-x: auto; padding-bottom: 2px;
+  text-transform: none; letter-spacing: normal; font-weight: 400; }
+.rcp-node { display: inline-block; padding: 3px 10px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface); color: var(--text); white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; }
+.rcp-node.rcp-cmd { border-color: var(--blue); color: var(--blue); font-weight: 600;
+  font-family: inherit; }
+.rcp-node.rcp-direct { border-style: dashed; }
+.rcp-arrow { color: var(--muted); font-size: 0.8rem; }
+.rcp-flow-note { margin-top: 6px; font-size: 0.68rem; color: var(--muted); }
+.rcp-hub { display: flex; flex-direction: column; align-items: center; width: max-content; }
+.rcp-hub > .rcp-cmd { position: relative; margin-bottom: 12px; }
+.rcp-hub > .rcp-cmd::after { content: ''; position: absolute; left: 50%; top: 100%; height: 12px;
+  border-left: 1px solid var(--muted); }
+.rcp-kids { display: flex; }
+.rcp-kid { position: relative; padding: 12px 4px 0; display: flex; justify-content: center; }
+.rcp-kid::before { content: ''; position: absolute; top: 0; left: 50%; height: 12px;
+  border-left: 1px solid var(--muted); }
+.rcp-kid::after { content: ''; position: absolute; top: 0; left: 0; right: 0;
+  border-top: 1px solid var(--muted); }
+.rcp-kid:first-child::after { left: 50%; }
+.rcp-kid:last-child::after { right: 50%; }
+.rcp-kid:only-child::after { display: none; }
+/* Wraps rather than scrolls: the hand back to the Commander is half of what a chain is, and a
+   phone would otherwise put it past the edge. */
+.rcp-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* The way back wraps as one piece, so an arrow never ends a line pointing at nothing. */
+.rcp-ret { display: inline-flex; align-items: center; gap: 6px; }
+.rcp-loop { display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 10px 4px; border: 1px dashed var(--muted); border-radius: 12px; max-width: 100%; }
+.rcp-loop-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  justify-content: center; }
+.rcp-loop .rcp-flow-note { margin: 0; }
+.rcp-loop-tag { font-size: 0.62rem; color: var(--muted); }
+.rcp-off { margin-top: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  font-size: 0.68rem; color: var(--muted); }
+
+  </style>
 
 </head>
 
@@ -7264,6 +7383,9 @@
              under one is naming a directory. Drawn only where the relay says a start may make one
              (`root` on the Project), and never for a terminal — open_terminal refuses `child`. -->
         <div id="startChildRow" hidden style="display:none"></div>
+        <!-- A git checkout on the relay's host (`repo` on the Project) can start a pane in a
+             worktree of its own, which the relay makes under `.worktrees/`. Both modes. -->
+        <div id="startWorktreeRow" hidden style="display:none"></div>
         <!-- Hidden whole for a terminal: there is no agent to choose and no role for it to play.
              Everything below this — where it goes, what it is called — is the same question. -->
         <div id="startAgentRows" style="display:flex;flex-direction:column;gap:12px">
@@ -12804,7 +12926,36 @@ function convWebModeOf(conv) {
       } catch (e) { /* no database, or it is already gone: the fallback copy is deleted either way */ }
     }
 
-    function loadConvIndex() { return parseConvIndex(localStorage.getItem(CONV_INDEX_KEY)); }
+    // The index is read on every render, dozens of times per snapshot across the views, and a phone
+    // holding a few hundred conversations was parsing most of half a megabyte each time: the poll's
+    // redraw blocked the page for a quarter of a second every three seconds, and typing stuttered
+    // with it. So it is parsed once per stored string, whoever wrote that string — this tab, the
+    // state sync adopting another browser's, another tab — and each caller is handed a copy of its
+    // own. Callers edit what they are handed before saving it, and one sharing the cached rows that
+    // edited and then did not save would change what every later read sees.
+    let convIndexRaw = null, convIndexParsed = [];
+
+    function loadConvIndex() {
+      const raw = localStorage.getItem(CONV_INDEX_KEY);
+      if (raw !== convIndexRaw) { convIndexParsed = parseConvIndex(raw); convIndexRaw = raw; }
+      return convPlainCopy(convIndexParsed);
+    }
+
+    // A deep copy of JSON-shaped data. A third of what parsing the same rows costs, and
+    // structuredClone is slower than either.
+    function convPlainCopy(v) {
+      if (Array.isArray(v)) {
+        const out = new Array(v.length);
+        for (let i = 0; i < v.length; i++) out[i] = convPlainCopy(v[i]);
+        return out;
+      }
+      if (v && typeof v === 'object') {
+        const out = {};
+        for (const k in v) out[k] = convPlainCopy(v[k]);
+        return out;
+      }
+      return v;
+    }
 
     // What a member is called *now*. Labels are stamped into the index and into every entry as they
     // are written, which is right for a member whose pane has gone — that stamp is all there is
@@ -15071,14 +15222,22 @@ function markdownHtml(source) {
     // A backfilled entry was already on screen the first time this browser read the pane, so its
     // time is an ordering and not a reading — the tilde is the difference between a stamp and a
     // guess, and the title says which of the four sources it came from (§5).
+    //
+    // The formatters are built once: a `toLocale…String` call builds a new one every time, and the
+    // thread asks twice per bubble on every redraw.
+    let convClockFmt = null;
+
     function convClock(e) {
       const at = convAt(e);
       if (!at) return '';
+      if (!convClockFmt) convClockFmt = {
+        day: new Intl.DateTimeFormat([], { month: 'short', day: 'numeric' }),
+        time: new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' }),
+      };
       const date = new Date(at), today = new Date();
       const day = date.toDateString() === today.toDateString() ? '' :
-        date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ';
-      const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      return (convAtRank(e) ? '' : '~') + day + time;
+        convClockFmt.day.format(date) + ' ';
+      return (convAtRank(e) ? '' : '~') + day + convClockFmt.time.format(date);
     }
 
     // `self` is what an entry written before the recorder stamped its own label and harness falls
@@ -16912,6 +17071,12 @@ convApplyTint();
       else if (msg.type === 'arb_detail') {
         if (typeof arbReceiveDetail === 'function') arbReceiveDetail(msg);
       }
+      // What a `prose` choice would produce, asked for by the recipe editor and drawn only
+      // there. Answered to this client alone, for `arb_detail`'s reason in reverse: nobody else
+      // asked, and a sample landing in a page with no editor open is a frame nothing reads.
+      else if (msg.type === 'prose_preview') {
+        if (typeof recipeReceivePreview === 'function') recipeReceivePreview(msg);
+      }
       else if (msg.type === 'push_status') {
         if (typeof loopPushStatus === 'function') loopPushStatus(msg);
       }
@@ -18437,6 +18602,28 @@ convApplyTint();
         + ` autocomplete="off" placeholder="Start in ${escapeHtml(p.label || p.id)} itself" /></label>`;
     }
 
+    // A Project that is a git checkout on the relay's host (`repo` on the Project) can start a pane
+    // in a worktree of its own: the relay makes `<project>/.worktrees/<name>` on a branch of that
+    // name, or reuses it, and starts there — so the branch the pane's badge says is the branch its
+    // commits go to. Both modes, since open_terminal takes it too. Rebuilt on every pick for the
+    // New folder row's reason: a worktree named under one repository means nothing in another.
+    function renderStartWorktree() {
+      const row = document.getElementById('startWorktreeRow');
+      if (!row) return;
+      const p = projects.find(x => x.id === startProjectId);
+      const show = !!(p && p.repo);
+      row.hidden = !show;
+      row.style.display = show ? '' : 'none';
+      if (!show) { row.innerHTML = ''; return; }
+      const input = (id, max, hint) => `<input id="${id}" type="text" maxlength="${max}"`
+        + ` autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="${hint}" />`;
+      row.innerHTML = '<div style="display:flex;gap:8px">'
+        + '<label class="start-field" style="flex:1;min-width:0">Worktree <span class="field-note">optional</span>'
+        + input('startWorktree', 64, 'Main checkout') + '</label>'
+        + '<label class="start-field" style="flex:1;min-width:0">Branch <span class="field-note">optional</span>'
+        + input('startBranch', 100, 'Same as worktree') + '</label></div>';
+    }
+
     // Picking one redraws the rest: placement is answered against what that Project has running,
     // and the answer the previous Project gave means nothing here. submitStart already refuses
     // without a Project, so the sheet is simply unusable until this is tapped.
@@ -18445,6 +18632,7 @@ convApplyTint();
       syncStartProjectBadge();
       renderStartProjects();
       renderStartChild();
+      renderStartWorktree();
       renderStartTarget();
       if (document.getElementById('startSubmit').disabled) {
         document.getElementById('startPlacement').value = 'new_workspace';
@@ -18474,6 +18662,7 @@ convApplyTint();
       syncStartProjectBadge();
       renderStartProjects();
       renderStartChild();
+      renderStartWorktree();
       document.getElementById('startTitle').textContent = terminal ? 'New terminal' : 'Start session';
       document.getElementById('startAgentRows').style.display = terminal ? 'none' : '';
       document.getElementById('startSubmit').textContent = terminal ? 'Open terminal' : 'Start session';
@@ -18691,6 +18880,15 @@ convApplyTint();
       const raw = childField ? (childField.value || '') : '';
       const child = raw.trim() || raw;
       if (child) msg.child = child;
+      // Both messages take it, trimmed the way New folder is and for its reason — only spaces are
+      // sent as they stand, so the relay refuses them rather than the pane landing in the main
+      // checkout. A branch alone is not sent: it names what a worktree is made on, and the relay
+      // refuses one with no worktree, which the empty field beside it already says.
+      const wt = (id) => { const raw = (document.getElementById(id) || {}).value || ''; return raw.trim() || raw; };
+      if (wt('startWorktree')) {
+        msg.worktree = wt('startWorktree');
+        if (wt('startBranch')) msg.branch = wt('startBranch');
+      }
       if (placement !== 'split') msg.slot = slotFor();
       // A terminal takes the typed name too, and has no role to have been named after: startRoleFields
       // answered that for an agent, this answers it for the other message. Omitted, not empty — the
@@ -19051,13 +19249,22 @@ convApplyTint();
           .filter(r => r.kind === kind);
         // The relay's sentence about this profile, and only while it is still about what is on
         // screen: an edit this browser has made and the relay has not answered yet would
-        // otherwise carry the complaint about the value it replaced.
-        const problem = (config === relay.config && relay.problem) ? relay.problem : '';
+        // otherwise carry the complaint about the value it replaced. It can be about either
+        // field now — the harness this relay does not start, or the config that does not resolve
+        // on it — so both have to still be the pair the relay was answering about.
+        const problem = (kind === relay.kind && config === relay.config && relay.problem)
+          ? relay.problem : '';
+        // A harness the document names and this relay cannot start is still what the next spawn
+        // would ask for, so it is offered rather than left out. A select whose value matches no
+        // option shows the first one instead, which on a devin-only install drew every built-in
+        // profile as `devin` while the stored document said claude — the screen reading as
+        // already-fixed being exactly how this went unnoticed.
+        const kindOptions = (kind && !kinds.includes(kind)) ? kinds.concat([kind]) : kinds;
         return '<div class="cmd-def">'
           + `<div class="cmd-def-head">${escapeHtml(name)}`
           + `<span class="cfg-sub">${escapeHtml(COMMANDER_PROFILE_NOTES[name] || '')}</span>`
           + '</div><div class="cmd-def-fields">'
-          + commanderPick(name, 'kind', kinds.map(k => [k, k]), kind)
+          + commanderPick(name, 'kind', kindOptions.map(k => [k, k]), kind)
           + commanderPick(name, 'config',
                           [['', 'stock']].concat(options.map(r => [r.id, r.label || r.id])),
                           config)
@@ -19604,6 +19811,8 @@ convApplyTint();
         return seat;
       });
       recipeDraft.chain = recipeChain(recipeDraft).slice();
+      recipePreview = null;
+      recipePreviewSeat = '';
       drawRecipe();
       const box = document.getElementById('launcherModal');
       // A recipe is six seats, a list of parts and a page of rules: it takes the width there is,
@@ -19708,6 +19917,187 @@ convApplyTint();
       recipeProse('omit', off ? omit.concat(part) : omit);
     }
 
+    // --- what those checkboxes actually produce ------------------------------------------------
+    //
+    // The section above is a screen of checkboxes with nothing to show for itself: unticking
+    // `stop` removes something a person cannot see, and how much shorter compact is than verbose
+    // is the question the whole section exists to answer. So the relay is asked to render the
+    // choice, with `arb_prompts.member_assignment` — the same function the send path uses, which
+    // is the only reason this can be trusted. See its docstring, and the guard in
+    // tests/test_handoff.py.
+    //
+    // Held here rather than in the DOM because every choice redraws the dialog, and asked for by
+    // key so a redraw that changed nothing about the prose costs no round trip.
+    let recipePreview = null;          // {key, samples}
+    let recipePreviewTab = 'first';
+    let recipePreviewSeat = '';        // the seat it is previewed as, by name; '' is the default
+    let recipePreviewAt = null;
+
+    // Which moment of a session each tab is, said under the tabs. Kept here rather than sent by
+    // the relay: the ids are stable, and a relay older than this line still gets its tabs explained.
+    const RECIPE_PREVIEW_WHEN = {
+      brief: "This seat's standing brief: the part that stays the same from one assignment to the"
+        + ' next, written once to a file that every assignment points at. Its notes, its role files,'
+        + ' the rules and every part unticked above end up here.',
+      first: 'Until the member acks an assignment carrying this brief from the pane it is in now: it'
+        + ' is told to read the brief, or is sent it whole when that box is ticked. Again after a'
+        + ' restart, and after the brief changes.',
+      later: 'Once it has acked one: the brief is recalled, not introduced, and is not read again'
+        + ' unless the member has lost it. Most of a session looks like this.',
+      handoff: 'A member handing the work straight to the next seat in the chain, with no Commander'
+        + ' between them. Chain recipes only.',
+    };
+
+    // The seat on screen to preview as: the one picked, else where a chain starts, else the first
+    // with a name. None while no seat has one, and the relay previews a placeholder seat instead.
+    function recipePreviewSeatOf(d) {
+      const named = d.seats.filter(s => s.name);
+      const first = d.flow === 'chain' ? d.chain[0] : '';
+      return named.find(s => s.name === recipePreviewSeat) || named.find(s => s.name === first)
+        || named[0] || null;
+    }
+
+    // What of the draft the relay renders with: the seat it is previewed as, the rules and the
+    // chain. Unsaved on purpose — a preview is of what is on screen.
+    function recipePreviewDraft(d) {
+      const seat = recipePreviewSeatOf(d);
+      return {label: d.label || '', rules: d.rules || '', hops: Number(d.hops) || 0,
+              chain: d.flow === 'chain' ? d.chain.slice() : [],
+              seat: seat ? {name: seat.name, roles: seat.roles.slice(), notes: seat.notes || ''} : null};
+    }
+
+    function recipePreviewKey(d) {
+      const prose = recipeProseOf(d);
+      return JSON.stringify([d.id || '', d.flow, prose.style, prose.paste_first,
+                             prose.omit.slice().sort(), recipePreviewDraft(d)]);
+    }
+
+    // Debounced, because this fires on every toggle and every keystroke in a seat's notes or the
+    // rules, and only the last answer of a run is ever drawn.
+    function recipePreviewAsk(d) {
+      if (!d || typeof ws === 'undefined' || !ws || ws.readyState !== 1) return;
+      const key = recipePreviewKey(d);
+      if (recipePreview && recipePreview.key === key) return;
+      clearTimeout(recipePreviewAt);
+      recipePreviewAt = setTimeout(() => {
+        const prose = recipeProseOf(d);
+        // The flow on screen rather than the saved one: a hub just switched to chain, or a recipe
+        // never saved, is previewed as what it is about to be.
+        ws.send(JSON.stringify({type: 'prose_preview', key, recipe: d.id || '',
+                                flow: d.flow === 'chain' ? 'chain' : 'hub',
+                                prose: {style: prose.style, paste_first: prose.paste_first,
+                                        omit: prose.omit},
+                                draft: recipePreviewDraft(d)}));
+      }, 200);
+    }
+
+    // Nothing at all until the relay has answered. A relay too old for this message never will,
+    // and an empty panel with dead tabs on it is worse than no panel: it reads as a thing that is
+    // broken rather than a thing that is not there. An answer for something no longer on screen
+    // is still drawn, dimmed, until the next one lands: a panel that vanished on every keystroke
+    // in the notes would make the dialog jump under the finger.
+    function recipePreviewInner(d) {
+      if (!recipePreview) return '';
+      const samples = recipePreview.samples || [];
+      if (!samples.length) return '';
+      const on = samples.find(s => s.id === recipePreviewTab) || samples[0];
+      const named = d.seats.filter(s => s.name);
+      const as = recipePreviewSeatOf(d);
+      const stale = recipePreview.key !== recipePreviewKey(d);
+      return '<div class="start-field">What a member is sent'
+        + (named.length > 1
+          ? '<div class="badge-strip rcp-as"><span class="cfg-sub">As</span>'
+            + named.map(s => badgeHtml(s.name, as === s,
+                escapeHtml(`recipePreviewSeatPick(${JSON.stringify(s.name)})`),
+                {title: `Preview what the ${s.name} seat is sent`})).join('') + '</div>'
+          : '')
+        + '<div class="badge-strip">'
+        + samples.map(s => badgeHtml(`${s.label} · ${s.chars}`, s.id === on.id,
+            `recipePreviewPick('${s.id}')`, {title: `${s.chars} characters`})).join('')
+        + '</div>'
+        + (RECIPE_PREVIEW_WHEN[on.id] ? `<div class="cfg-note rcp-when">${RECIPE_PREVIEW_WHEN[on.id]}</div>` : '')
+        // textContent and never markup: this is exactly what a pane is sent, and a preview that
+        // rendered it would be showing something no agent ever receives.
+        + `<pre class="rcp-preview${stale ? ' rcp-stale' : ''}" id="rcpPreview"></pre></div>`;
+    }
+
+    function recipePreviewDraw() {
+      const box = document.getElementById('rcpPreview');
+      if (!box || !recipePreview) return;
+      const samples = recipePreview.samples || [];
+      const on = samples.find(s => s.id === recipePreviewTab) || samples[0];
+      box.textContent = on ? on.text : '';
+    }
+
+    // The panel alone, never the dialog: an answer can land while somebody is typing a seat's
+    // notes, and rewriting the dialog under them would take the field they are typing in.
+    function recipePreviewRefresh() {
+      const box = document.getElementById('rcpPreviewBox');
+      if (!box || !recipeDraft) return;
+      box.innerHTML = recipePreviewInner(recipeDraft);
+      recipePreviewDraw();
+    }
+
+    function recipePreviewPick(id) {
+      recipePreviewTab = id;
+      recipePreviewRefresh();
+    }
+
+    function recipePreviewSeatPick(name) {
+      recipePreviewSeat = name;
+      recipePreviewRefresh();
+      recipePreviewAsk(recipeDraft);
+    }
+
+    function recipeReceivePreview(msg) {
+      if (!recipeDraft) return;
+      // A reply for prose or a draft no longer on screen is dropped. A relay older than the key
+      // echoes none, and its answer is taken as the current one rather than never drawn.
+      const key = recipePreviewKey(recipeDraft);
+      if (msg.key !== undefined && msg.key !== key) return;
+      recipePreview = {key, samples: msg.samples || []};
+      if (!(recipePreview.samples || []).some(s => s.id === recipePreviewTab)) {
+        recipePreviewTab = 'first';
+      }
+      recipePreviewRefresh();
+    }
+
+    // The flow as a picture, in markup and CSS alone: who hands work to whom. A hub is the
+    // Commander over every seat, tasks down and reports up; a chain is the Commander handing work
+    // into a loop of seats that pass it round themselves and hand it back. A seat outside the
+    // chain is still there, reached by the Commander directly, so it is drawn and not dropped.
+    function recipeFlowHtml(d) {
+      const names = d.seats.map((s, i) => s.name || `seat ${i + 1}`);
+      const node = (n, cls) => `<span class="rcp-node${cls ? ' ' + cls : ''}">${escapeHtml(n)}</span>`;
+      const arrow = '<span class="rcp-arrow" aria-hidden="true">→</span>';
+      const cmd = node('Commander', 'rcp-cmd');
+      if (d.flow !== 'chain') {
+        return `<div class="rcp-flow" role="img" aria-label="${escapeHtml(
+            `The Commander hands tasks to ${names.join(', ') || 'its seats'} and takes every report back`)}">`
+          + `<div class="rcp-hub">${cmd}<div class="rcp-kids">`
+          + (names.length ? names : ['no seats yet']).map(n => `<div class="rcp-kid">${node(n)}</div>`).join('')
+          + '</div></div>'
+          + '<div class="rcp-flow-note">Tasks go down, reports come back up. Seats never hand work to each other.</div>'
+          + '</div>';
+      }
+      const loop = d.chain.filter(n => n && names.includes(n));
+      const off = names.filter(n => !loop.includes(n));
+      const hops = Number(d.hops) || 1;
+      return `<div class="rcp-flow" role="img" aria-label="${escapeHtml(
+          `The Commander hands work to ${loop[0] || 'the chain'}; ${loop.join(', then ')} pass it on`
+          + ` for up to ${hops} hops, then it comes back to the Commander`)}">`
+        + `<div class="rcp-line">${cmd}${arrow}<div class="rcp-loop"><span class="rcp-loop-row">`
+        + (loop.length >= 2 ? loop.map(n => node(n)).join(arrow) : '<span class="rcp-flow-note">pick the chain below</span>')
+        + '</span>'
+        + `<span class="rcp-loop-tag">↻ passed on, up to ${hops} hop${hops === 1 ? '' : 's'}</span>`
+        + `</div><span class="rcp-ret">${arrow}${cmd}</span></div>`
+        + (off.length
+          ? `<div class="rcp-off">Off the chain, assigned directly: ${off.map(n => node(n, 'rcp-direct')).join('')}</div>`
+          : '')
+        + '<div class="rcp-flow-note">The Commander can still assign any seat directly.</div>'
+        + '</div>';
+    }
+
     function recipeChainHtml(d) {
       const names = d.seats.map(s => s.name).filter(Boolean);
       const rest = names.filter(n => !d.chain.includes(n));
@@ -19762,12 +20152,13 @@ convApplyTint();
             {title: 'The Commander hands every task out and takes every report back'})
         + badgeHtml('chain', d.flow === 'chain', "recipeSet('flow','chain')",
             {title: 'Members hand work to each other in a fixed order'})
-        + '</div></div>'
+        + '</div>' + recipeFlowHtml(d) + '</div>'
         + (d.flow === 'chain'
           ? recipeField('Hops', `<input type="number" min="1" max="20" value="${Number(d.hops) || 1}"`
             + ` onchange="recipeSet('hops', Math.max(1, Math.min(20, Number(this.value) || 1)))">`)
           : '')
         + recipePartsHtml(d)
+        + `<div id="rcpPreviewBox">${recipePreviewInner(d)}</div>`
         + `<div class="start-field">Seats<span class="cfg-sub">${d.seats.length} of ${RECIPE_SEATS_MAX}</span></div>`
         + '<div class="rcp-seats">' + d.seats.map((s, i) => recipeSeatHtml(s, i, problems)).join('')
         + '</div>'
@@ -19787,18 +20178,26 @@ convApplyTint();
           : '<button class="ql-secondary" onclick="closeLauncherEdit()">Cancel</button>')
         + '<button class="ql-primary" onclick="saveRecipe()">Save recipe</button></div>';
       if (scroller) scroller.scrollTop = at;
+      // After the write, because the panel's text goes in as `textContent` and the element it
+      // goes into has only just been made. Then ask for the next one, which is a no-op whenever
+      // the prose did not move — most redraws are a seat being edited.
+      recipePreviewDraw();
+      recipePreviewAsk(d);
     }
 
     // Typed fields record and do not redraw, for the config dialog's reason: one innerHTML write
     // per keystroke is a field that drops focus after one character. Only choices redraw.
     function recipeType(field, value) {
-      if (recipeDraft) recipeDraft[field] = value;
+      if (!recipeDraft) return;
+      recipeDraft[field] = value;
+      recipePreviewAsk(recipeDraft);
     }
 
     // While a recipe is new its id follows its name, until somebody types an id of their own.
     function recipeLabel(value) {
       if (!recipeDraft) return;
       recipeDraft.label = value;
+      recipePreviewAsk(recipeDraft);       // a seat's brief names its recipe
       if (recipeDraft.saved || recipeDraft.idTyped) return;
       recipeDraft.id = recipeSlug(value);
       const el = document.getElementById('rcpId');
@@ -19824,7 +20223,9 @@ convApplyTint();
 
     function recipeSeatType(i, field, value) {
       const s = recipeSeat(i);
-      if (s) s[field] = value;
+      if (!s) return;
+      s[field] = value;
+      recipePreviewAsk(recipeDraft);
     }
 
     function recipeSeatSet(i, field, value) {
@@ -23780,14 +24181,26 @@ convApplyTint();
     let cmdSetupConv = '';
 
     // The tiers a person may start by hand, in the order the Project contains them. `project` has
-    // no parent and there may be one unfinished one per Project; the other two require a parent,
-    // which is why the selector exists at all — without it those two choices would be refused
-    // every time with `parent_required`.
+    // no parent and there may be one unfinished one per Project; a feature may sit under another
+    // Commander or answer to the person alone, as many at once as the work needs; a branch
+    // requires a parent, and would be refused every time with `parent_required` without one.
     const CMD_TIERS = [
       ['project', 'Project', 'Owns the whole Project. One at a time.'],
-      ['feature', 'Feature', 'A piece of work inside a Project.'],
+      ['feature', 'Feature', 'A piece of work inside a Project. Answers to you, or to a Commander above it.'],
       ['branch', 'Branch', 'One branch of one feature.'],
     ];
+    // How much each assignment says, and how it reaches the agent. Three choices each, and the
+    // first is **Default** rather than a style: a sheet left alone sends neither field, so the
+    // relay's own precedence decides — the recipe's own `prose`, else the parent's, else verbose.
+    // Default and Verbose are therefore different answers and not two names for one. Picking
+    // Verbose on a sheet whose recipe is compact is an override of that recipe; leaving it on
+    // Default is deference to it, and the recipe stays the place the default is edited.
+    //
+    // `omit` is not offered here. It names individual parts of an assignment, which is a decision
+    // about a way of working rather than about one session, and it stays in the recipe editor.
+    const CMD_PROSE = [['', 'Default'], ['compact', 'Compact'], ['verbose', 'Verbose']];
+    const CMD_DELIVERY = [['', 'Default'], ['pull', 'Pull'], ['push', 'Push']];
+
     // The value a member slot carries when it is holding nobody. A Commander may run with an empty
     // roster, so every slot has to be able to say so.
     const CMD_NONE = 'cmd-nobody';
@@ -23950,6 +24363,10 @@ convApplyTint();
       const name = document.getElementById('arbSetupConvName');
       if (name) name.textContent = conv.name || '';
       cmdSetupConv = conv.id;
+      // What Default means is computed from the recipe, the tier and the parent, all of which
+      // have just been drawn — so the first paint has to ask once, or the labels say `Default`
+      // with nothing after it until something is touched.
+      if (!live) cmdSyncDefaults();
       if (!keepOpen) {
         const box = document.getElementById('arbModal');
         if (box) box.style.display = 'block';
@@ -24070,16 +24487,21 @@ convApplyTint();
           '<input type="hidden" id="cmdTier" value="project">' +
           '<span class="arb-note" id="cmdTierNote">' + escapeHtml(CMD_TIERS[0][2]) + '</span>' +
           '</div>' +
-          // Required for the two lower tiers and meaningless for the top one, so it is drawn
-          // either way and disabled rather than appearing and disappearing under the thumb.
-          '<label id="cmdParentRow" style="display:none">Under<select id="cmdParent">' +
+          // Optional for a feature, required for a branch and meaningless for a project. The
+          // empty choice is first so a feature answers to the person unless somebody picks.
+          // `onchange` and not only the tier: which parent is picked is what the Briefs row
+          // defers to, so moving between two parents moves what Default means.
+          '<label id="cmdParentRow" style="display:none">Under' +
+          '<select id="cmdParent" onchange="cmdSyncDefaults()">' +
+          '<option value="">Nobody — it answers to you</option>' +
           parents.map(s => `<option value="${escapeHtml(s.id)}">` +
             escapeHtml(cmdName(s)) + '</option>').join('') +
           '</select></label>' +
           (parents.length ? '' :
             '<span class="arb-note" id="cmdParentNote" style="display:none">' +
-            'Nothing to sit under yet — start a Project Commander first.</span>'))) +
+            'A branch sits under another Commander — start one first.</span>'))) +
         (live ? '' : cmdRecipeHtml()) +
+        (live ? '' : cmdBriefHtml()) +
         '<div id="cmdMembersPart">' + arbPart('Agents it works with directly',
           Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
             arbSlot('cmdMember' + i,
@@ -24288,21 +24710,25 @@ convApplyTint();
       const box = document.getElementById('cmdTiers');
       if (box) {
         const found = CMD_TIERS.find(t => t[0] === tier);
+        // Redrawn rather than toggled: a picked badge's look is an inline style `badgeHtml`
+        // writes, so flipping the class left Project lit whichever tier was picked.
         box.querySelectorAll('.badge.pick').forEach((b, i) => {
-          const on = CMD_TIERS[i][0] === tier;
-          b.classList.toggle('on', on);
-          b.setAttribute('aria-pressed', String(on));
+          const [v, label, why] = CMD_TIERS[i];
+          b.outerHTML = badgeHtml(label, v === tier, `cmdPickTier('${v}')`, {proj: true, title: why});
         });
         const note = document.getElementById('cmdTierNote');
         if (note && found) note.textContent = found[2];
       }
-      // The parent is required below the top tier and refused at it, so the row follows the
-      // choice rather than being a question asked of every start.
+      // The parent is refused at the top tier, so the row follows the choice rather than being a
+      // question asked of every start. A branch with nothing to sit under is told so instead.
       const row = document.getElementById('cmdParentRow');
       const note = document.getElementById('cmdParentNote');
-      const has = !!document.querySelector('#cmdParent option');
-      if (row) row.style.display = (tier !== 'project' && has) ? '' : 'none';
-      if (note) note.style.display = (tier !== 'project' && !has) ? '' : 'none';
+      const has = !!document.querySelector('#cmdParent option[value]:not([value=""])');
+      if (row) row.style.display = (tier === 'feature' || (tier === 'branch' && has)) ? '' : 'none';
+      if (note) note.style.display = (tier === 'branch' && !has) ? '' : 'none';
+      // A child defers to its parent and a Project Commander to nobody, so the tier is one of the
+      // three things that moves what Default resolves to.
+      cmdSyncDefaults();
     }
 
     // The recipes this relay can start from. One with a blocking problem is left out rather than
@@ -24333,6 +24759,11 @@ convApplyTint();
       const r = cmdRecipes().find(x => x.id === id);
       const part = document.getElementById('cmdMembersPart');
       if (part) part.hidden = !!r;
+      // A recipe carries its own `prose`, so picking one changes what Default means — and only
+      // what it means. An explicit choice already made is left alone. Ahead of the note below,
+      // which returns early when there is no note to write: the two rows are a separate part of
+      // the sheet and must not depend on this one's element being there.
+      cmdSyncDefaults();
       const note = document.getElementById('cmdRecipeNote');
       if (!note) return;
       note.textContent = r
@@ -24340,6 +24771,121 @@ convApplyTint();
             `${seat.name} (${seat.kind}${seat.config ? ' · ' + seat.config : ''})`).join(', ') + '.'
         : 'With a recipe, the relay starts its seats before the Commander is briefed, and the ' +
           'Commander can staff only those seats.';
+    }
+
+    // --- what the briefs say, and how they arrive ---------------------------------------------
+
+    // Two forms draw these rows and both are on the phone's page at once: the Commander setup sheet
+    // and `+ Feature` in the Command Center, and closing either hides it and keeps what it drew. So
+    // each draws them under ids of its own — `cmd` on the setup sheet, anything else on the other.
+    // One set of ids for both was two `#cmdProse` in one document, and `getElementById` answers
+    // with whichever comes first: a pick on the setup sheet was written into the hidden `+ Feature`
+    // form, and the start read it back from there.
+    function cmdBriefHtml(form = 'cmd') {
+      const tail = form === 'cmd' ? '' : `,'${form}'`;
+      const row = (id, choices, fn) =>
+        `<div class="arb-auto" id="${form}${id}s">` +
+        choices.map(([v, label]) =>
+          badgeHtml(label, v === '', `${fn}('${v}'${tail})`, {proj: true})).join('') +
+        `<input type="hidden" id="${form}${id}" value="">` +
+        `<span class="arb-note" id="${form}${id}Note"></span></div>`;
+      return arbPart('Briefs',
+        row('Prose', CMD_PROSE, 'cmdPickProse') +
+        // Off by default and only meaningful beside an explicit style. Worded as the recipe
+        // editor words the same flag, because it is the same flag: what it pastes is the
+        // *standing brief* — the part that does not change from one assignment to the next —
+        // and `member_brief` types that file's whole body ahead of naming it. "The work" would
+        // have been a different thing entirely, and the work is always there.
+        `<label class="arb-check" id="${form}PasteRow" style="display:none">` +
+        `<input type="checkbox" id="${form}PasteFirst" title="Type the standing brief into the` +
+        ' Commander\'s first assignment to each member as well as naming its file">' +
+        " Paste the brief into the Commander's first assignment</label>") +
+        arbPart('Delivery', row('Delivery', CMD_DELIVERY, 'cmdPickDelivery'));
+    }
+
+    // The parent a form other than the setup sheet was opened under, by form. `+ Feature` has no
+    // recipe, tier or parent field to read — it knows its parent from the tree before anything is
+    // drawn — so it is handed over once when the form opens and kept here, where a pick made later
+    // finds it. Recomputing without it read the setup sheet's fields instead.
+    const cmdBriefOver = {};
+
+    // What `Default` would actually resolve to, said on the badge's own note rather than left for
+    // the reader to work out. A default nobody can see the value of is a default nobody trusts,
+    // and the value moves with the recipe and the parent — both of which are picked on this sheet,
+    // above these rows.
+    function cmdDefaults(form = 'cmd') {
+      const sheet = form === 'cmd';
+      const id = sheet ? (document.getElementById('cmdRecipe') || {}).value || '' : '';
+      const r = id && cmdRecipes().find(x => x.id === id);
+      const style = r && ((r.recipe.prose || {}).style);
+      const tier = (document.getElementById('cmdTier') || {}).value || 'project';
+      const up = !sheet ? cmdBriefOver[form] : (tier === 'project' ? null : cmdSessions.find(
+        s => s.id === ((document.getElementById('cmdParent') || {}).value || '')));
+      const delivery = up && up.delivery ? up.delivery + ", its parent's" : '';
+      if (style) return {prose: `${style}, from ${r.recipe.label}`, delivery};
+      if (up) {
+        return {prose: ((up.prose || {}).style || 'verbose') + ", its parent's",
+                delivery};
+      }
+      return {prose: 'verbose', delivery: ''};
+    }
+
+    // Both rows' Default label, recomputed wherever one of its inputs moves: the recipe, the tier
+    // and the parent. An explicit choice is left exactly as it was — re-picking a recipe changes
+    // what Default *means*, and must not quietly change what was asked for. `over` is given once,
+    // by the form that knows its parent rather than reading it off a field.
+    function cmdSyncDefaults(form = 'cmd', over) {
+      if (over !== undefined) cmdBriefOver[form] = over;
+      const at = cmdDefaults(form);
+      const say = (id, what, fallback) => {
+        const box = document.getElementById(form + id + 's');
+        const first = box && box.querySelector('.badge.pick');
+        if (first) first.textContent = what ? `Default (${what})` : 'Default';
+        const note = document.getElementById(form + id + 'Note');
+        if (note) note.textContent = (document.getElementById(form + id) || {}).value ? '' : fallback;
+      };
+      say('Prose', at.prose,
+          'How much each assignment spells out. The recipe decides unless this does.');
+      say('Delivery', at.delivery || 'pull',
+          'Pull leaves the work as a file with a notice; push types it into the pane.');
+    }
+
+    function cmdPickOne(form, id, choices, value) {
+      const at = document.getElementById(form + id);
+      if (at) at.value = value;
+      const box = document.getElementById(form + id + 's');
+      if (box) {
+        box.querySelectorAll('.badge.pick').forEach((b, i) => {
+          const [v, label] = choices[i];
+          const tail = form === 'cmd' ? '' : `,'${form}'`;
+          b.outerHTML = badgeHtml(label, v === value, `cmdPick${id}('${v}'${tail})`, {proj: true});
+        });
+      }
+      cmdSyncDefaults(form);
+    }
+
+    function cmdPickProse(style, form = 'cmd') {
+      cmdPickOne(form, 'Prose', CMD_PROSE, style);
+      // Shown only beside an explicit style: on Default there is nothing for it to ride on, and a
+      // checkbox that silently does nothing is worse than one that is not there.
+      const row = document.getElementById(form + 'PasteRow');
+      if (row) row.style.display = style ? '' : 'none';
+    }
+
+    function cmdPickDelivery(how, form = 'cmd') {
+      cmdPickOne(form, 'Delivery', CMD_DELIVERY, how);
+    }
+
+    // What the two rows put on the wire: nothing at all while they are on Default, which is what
+    // keeps the recipe the source of its own default.
+    function cmdBriefFields(form = 'cmd') {
+      const style = (document.getElementById(form + 'Prose') || {}).value || '';
+      const delivery = (document.getElementById(form + 'Delivery') || {}).value || '';
+      const paste = !!(document.getElementById(form + 'PasteFirst') || {}).checked;
+      return {
+        ...(style ? {prose: {style: style, paste_first: paste}} : {}),
+        ...(delivery ? {delivery: delivery} : {}),
+      };
     }
 
     // A pane id and a scope, and never a fingerprint: the relay reads a participant's identity off
@@ -24354,8 +24900,8 @@ convApplyTint();
       const tier = (document.getElementById('cmdTier') || {}).value || 'project';
       const parent = tier === 'project'
         ? '' : ((document.getElementById('cmdParent') || {}).value || '');
-      if (tier !== 'project' && !parent) {
-        showToast('A ' + tier + ' Commander sits under another one — start a Project Commander first.');
+      if (tier === 'branch' && !parent) {
+        showToast('A branch Commander sits under another one — pick it, or start a Feature.');
         return;
       }
       const recipe = (document.getElementById('cmdRecipe') || {}).value || '';
@@ -24374,6 +24920,7 @@ convApplyTint();
         type: 'cmd_start', conversation: conv.id, scope: scope,
         coordinator: {pane_id: who.pane_id}, members: members,
         tier: tier, parent_session: parent, ...(recipe ? {recipe: recipe} : {}),
+        ...cmdBriefFields(),
       });
       // Open until the relay answers. It used to close here, which is what left a refusal with
       // nowhere to be shown but a toast — and a recipe start is refused for things worth reading:
@@ -24707,6 +25254,8 @@ convApplyTint();
     let loopSetupManual = false;
     let loopHtmlLast = '';
     let loopSpawnToken = 0;
+    let loopRosterAt = [];
+    let loopMemberCandidates = [];
     let loopPushSubscribed = null;
 
     function loopPushWarning() {
@@ -24727,6 +25276,8 @@ convApplyTint();
       loopSetupConv = '';
       loopSetupSession = '';
       loopSpawnToken++;
+      loopRosterAt = [];
+      loopMemberCandidates = [];
     }
 
     function loopSession() {
@@ -24809,6 +25360,7 @@ convApplyTint();
       loopSetupConv = conv.id;
       loopSetupSession = s ? s.id : '';
       loopSetupManual = !!(s && s.manual);
+      loopRosterAt = ((s || {}).members || []).map(m => ({...m}));
       const body = document.getElementById('arbSetupBody');
       if (body) body.innerHTML = loopPushWarning() + html;
       const sign = document.getElementById('arbSetupSign');
@@ -24939,6 +25491,7 @@ convApplyTint();
         ' title="Loop settings"><span class="arb-ico" aria-hidden="true">⚙</span></button>' +
         (s.manual
           ? btn('Assign', 'Hand the first piece of work to a member, with the route', 'loopOpenAssign()', 'lit') +
+            btn('Members', 'Add members without changing the current seats', 'loopOpenMembers()') +
             btn('Hand over', 'Give the chain to the Commander; it is briefed and takes over',
                 'loopHandOver()')
           : btn('Take back', 'Own the chain yourself; the Commander goes on standby', 'loopTakeBack()')) +
@@ -24952,7 +25505,46 @@ convApplyTint();
         `<span class="arb-say-state">${escapeHtml((s.manual ? 'Loop · you own it' : 'Loop · Commander owns it') +
           (paused ? ' · paused' + (s.pause_reason ? ' — ' + String(s.pause_reason).replace(/_/g, ' ') : '') : ''))}</span>` +
         `<span class="arb-say-budget">${escapeHtml(holder + ' · ' + (s.delivery || 'pull'))}</span>` +
-        '</div>' + (s.manual ? loopPushWarning() : '') + '</div>';
+        '</div>' + (s.manual ? loopPushWarning() : '') + loopChainsHtml(s) + '</div>';
+    }
+
+    function loopChainsHtml(s) {
+      if (!Array.isArray(s.chains) || !s.chains.length) return '';
+      return '<div class="loop-chains" role="group" aria-label="Observed chains">' + s.chains.map(c => {
+        const m = (s.members || []).find(m => m.id === c.holder && m.aid === c.holder_aid);
+        const label = m ? m.label || m.id : c.holder;
+        const cls = c.state === 'back' ? 'bad' : c.state === 'done' ? ''
+          : s.state === 'paused' || c.state === 'waiting' || c.delivery !== 'sent' ? 'warn' : 'good';
+        const state = c.state === 'done' ? '✓ done (claimed)' : c.state;
+        const text = `#${c.root} ${label} · ${c.hops}/${c.limit} · ${state}` +
+          (c.delivery === 'pending' || c.delivery === 'unconfirmed' ? ` · ${c.delivery}` : '');
+        return `<button type="button" class="loop-chain ${cls}" data-root="${Number(c.root)}"` +
+          ` onclick="loopAddress(${Number(c.root)})" title="${escapeHtml(text)}"` +
+          ` aria-label="${escapeHtml(text)}">#${Number(c.root)} ` +
+          `<span class="loop-chain-holder">${escapeHtml(label || 'away')}</span>` +
+          ` · ${c.hops}/${c.limit} · ${escapeHtml(state)}` +
+          (c.delivery === 'pending' || c.delivery === 'unconfirmed' ? ` · ${c.delivery}` : '') +
+          '</button>';
+      }).join('') + '</div>';
+    }
+
+    function loopAddress(root) {
+      const s = loopSession();
+      const c = s && (s.chains || []).find(c => c.root === root);
+      const m = c && c.holder_aid && (s.members || []).find(m =>
+        m.id === c.holder && m.aid === c.holder_aid);
+      const pane = m && !m.away && agents.find(a => a.aid === m.aid && a.pane_id === m.pane_id);
+      if (!pane) { showToast('That chain’s recorded holder is away or the seat changed.'); return; }
+      const conv = loopConv();
+      if (!conv || !(conv.members || []).some(member => member.aid === m.aid) ||
+          (typeof convHidden === 'function' && convHidden(conv.id).has(m.aid))) {
+        showToast('Show that holder in this conversation before addressing it.'); return;
+      }
+      if (typeof setDockTarget === 'function') setDockTarget(pane.pane_id);
+      else if (typeof deskTargets !== 'undefined') {
+        deskTargets.set(conv.id, m.aid);
+        deskSyncComposer(deskFocus);
+      }
     }
 
     function loopCommand(type, extra) {
@@ -25048,6 +25640,22 @@ convApplyTint();
 
     // --- assigning ---------------------------------------------------------------------------
 
+    function loopAgent(m) { return m.aid || m.pane_id || m.id; }
+
+    function loopOccupied(s) {
+      const out = new Map();
+      for (const c of s.chains || []) {
+        if (c.state !== 'moving' && c.state !== 'waiting') continue;
+        const observed = new Set([...(c.aids || []), c.next_aid].filter(Boolean));
+        const planned = (s.members || []).filter(m => (c.route || []).includes(m.id)).map(loopAgent);
+        for (const aid of new Set([...observed, ...planned])) {
+          if (!out.has(aid)) out.set(aid, []);
+          out.get(aid).push({root: c.root, planned: !observed.has(aid)});
+        }
+      }
+      return out;
+    }
+
     // What the first member is told: the task, and when the work is done. The route is not in it:
     // it goes to the relay as `route`, which shows every holder it and who comes after them.
     function loopInstruction(o) {
@@ -25058,9 +25666,26 @@ convApplyTint();
 
     // The member being read is the one the person is "with", so the work starts there.
     function loopFirstMember(s) {
-      const at = typeof dockAddressed === 'function' ? dockAddressed() : null;
-      const ms = s.members || [];
+      const at = typeof dockAddressed === 'function' ? dockAddressed()
+        : typeof deskTargetPane === 'function' ? (deskTargetPane(s.conversation, deskFocus) || {}).pane_id : null;
+      const occupied = loopOccupied(s);
+      const ms = (s.members || []).filter(m => !occupied.has(loopAgent(m)));
       return (ms.find(m => at && (m.pane_id === at || m.aid === at)) || ms[0] || {}).id || '';
+    }
+
+    function loopNextMember(s, ids) {
+      const ms = s.members || [];
+      const used = new Set(ms.filter(m => ids.includes(m.id)).map(loopAgent));
+      const occupied = loopOccupied(s);
+      return (ms.find(m => !used.has(loopAgent(m)) && !occupied.has(loopAgent(m))) || {}).id || '';
+    }
+
+    function loopRouteDefaults(s) {
+      const occupied = loopOccupied(s);
+      const free = new Set((s.members || []).filter(m => !occupied.has(loopAgent(m))).map(loopAgent));
+      if (free.size < 2) return ['', ''];
+      const first = loopFirstMember(s);
+      return [first, loopNextMember(s, [first])];
     }
 
     function loopOpenAssign() {
@@ -25069,15 +25694,17 @@ convApplyTint();
       if (!s || !conv) return;
       const ms = s.members || [];
       if (ms.length < 2) { showToast('A loop needs two members.'); return; }
-      const first = loopFirstMember(s);
-      const then = (ms.find(m => m.id !== first) || {}).id;
-      const pick = (id, at) => `<select id="${id}">${loopOptions(ms, at, false)}</select>`;
+      const [first, then] = loopRouteDefaults(s);
+      const pick = (id, at) => `<select id="${id}" onchange="loopRouteWarning()">${loopOptions(ms, at, true)}</select>`;
       loopDraw(conv,
         '<label>Task<textarea id="loopTask" rows="4" maxlength="4000"' +
         ' placeholder="What to build. A plan step id below links it to the task list."></textarea></label>' +
         `<label>Starts with${pick('loopFirst', first)}</label>` +
         `<label>Then${pick('loopThen', then)}</label>` +
         '<div id="loopMore"></div>' +
+        '<span id="loopRouteNote" class="arb-note" role="status">' +
+        (!first ? 'Fewer than two unoccupied agents. No new route is selected; shared agents may wait and pause the whole loop.' : '') +
+        '</span>' +
         '<button type="button" class="badge pick proj" onclick="loopAddLink()"' +
         ' title="Another member in the route, before it goes back to the first">+ Add a link</button>' +
         '<label>Until<input id="loopUntil" value="the reviewer passes every part"></label>' +
@@ -25091,9 +25718,25 @@ convApplyTint();
     }
 
     function loopOptions(ms, at, blank) {
+      const occupied = loopOccupied(loopSession() || {});
       return (blank ? '<option value="">— none</option>' : '') + ms.map(m =>
         `<option value="${escapeHtml(m.id)}"${m.id === at ? ' selected' : ''}>` +
-        escapeHtml(`${m.label || m.id} (${m.id})`) + '</option>').join('');
+        escapeHtml(`${m.label || m.id} (${m.id})` + (occupied.has(loopAgent(m))
+          ? ' · ' + occupied.get(loopAgent(m)).map(item =>
+            `${item.planned ? 'planned for' : 'in'} #${item.root}`).join(', ') : '')) + '</option>').join('');
+    }
+
+    function loopRouteWarning() {
+      const note = document.getElementById('loopRouteNote');
+      const s = loopSession();
+      if (!note || !s) return;
+      const occupied = loopOccupied(s);
+      const roots = new Set((s.members || []).filter(m => loopRouteIds().includes(m.id))
+        .flatMap(m => (occupied.get(loopAgent(m)) || []).map(item =>
+          `${item.planned ? 'planned for' : 'in'} #${item.root}`)));
+      note.textContent = roots.size ? 'Sharing agents ' + [...roots].join(', ') +
+        ' may wait and pause the whole loop. This is not a reservation.'
+        : !loopRouteDefaults(s)[0] ? 'Fewer than two unoccupied agents; no new route is selected by default.' : '';
     }
 
     // The route as picked, in order: who starts, then every link after it. A link set to none is
@@ -25108,12 +25751,14 @@ convApplyTint();
       const more = document.getElementById('loopMore');
       if (!s || !more) return;
       const ms = s.members || [];
-      const used = new Set(loopRouteIds());
-      const free = ms.find(m => !used.has(m.id));
-      if (!free) { showToast('Every member is already in the route.'); return; }
+      const ids = loopRouteIds();
+      const used = new Set(ms.filter(m => ids.includes(m.id)).map(loopAgent));
+      if (!ms.some(m => !used.has(loopAgent(m)))) { showToast('Every agent is already in the route.'); return; }
+      const free = loopNextMember(s, ids);
       const n = document.querySelectorAll('[id^="loopThen"]').length + 1;
       more.insertAdjacentHTML('beforeend',
-        `<label>Then<select id="loopThen${n}">${loopOptions(ms, free.id, true)}</select></label>`);
+        `<label>Then<select id="loopThen${n}" onchange="loopRouteWarning()">${loopOptions(ms, free, true)}</select></label>`);
+      loopRouteWarning();
     }
 
     function loopAssign() {
@@ -25126,7 +25771,7 @@ convApplyTint();
       if (ids.length < 2) { showToast('A route needs two members.'); return; }
       if (new Set(ids).size !== ids.length) { showToast('Name each member once in the route.'); return; }
       const route = ids.map(id => (s.members || []).find(m => m.id === id));
-      if (route.some(m => !m)) {
+      if (route.some(m => !m || !loopRosterAt.some(old => old.id === m.id && loopAgent(old) === loopAgent(m)))) {
         showToast('The roster changed — reopen Assign and pick the route again.');
         return;
       }
@@ -25144,6 +25789,52 @@ convApplyTint();
         to: ids[0], gate: val('loopGate') || 'implement',
         instruction: instruction, route: ids,
       }, step ? {step: step, agenda_rev: s.agenda_rev} : {}));
+      closeArbSetup();
+    }
+
+    // Add seats only. Existing (including away) seats are preserved, never removable here.
+    function loopOpenMembers() {
+      const s = loopSession(), conv = loopConv();
+      if (!s || !s.manual || !conv) return;
+      const ms = s.members || [], held = new Set(ms.map(loopAgent)), cmd = s.coordinator || {};
+      const candidates = arbCandidates(conv, s.project_id, s.id).filter(a =>
+        a.aid && !held.has(a.aid) && a.aid !== cmd.aid && a.pane_id !== cmd.pane_id);
+      loopDraw(conv, arbPart('Current seats', ms.map(m =>
+        `<label class="arb-check"><input type="checkbox" checked disabled> ${escapeHtml(m.label || m.id)}` +
+        ` · ${escapeHtml(m.role || 'member')}${m.away ? ' — away' : ''}</label>`).join('') ||
+        '<span class="arb-note">No members yet.</span>') +
+        arbPart('Add from this Project', candidates.map((a, i) =>
+          `<label class="arb-check"><input type="checkbox" id="loopAddMember${i}"` +
+          ` value="${escapeHtml(a.aid)}"> ${escapeHtml(paneLabel(a))}</label>`).join('') ||
+          '<span class="arb-note">No other agents in this Project.</span>') +
+        '<span class="arb-note">Up to six seats. To remove or replace a seat, use the full Commander edit.</span>' +
+        '<div class="arb-go"><button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
+        '<button type="button" class="badge pick on" onclick="loopSaveMembers()">Save members</button></div>');
+      loopMemberCandidates = candidates.map(a => a.aid);
+    }
+
+    function loopSaveMembers() {
+      const s = loopSession(), conv = loopConv();
+      if (!s || !s.manual || s.id !== loopSetupSession || !conv || conv.id !== loopSetupConv) return;
+      const ms = s.members || [];
+      const signature = rows => JSON.stringify(rows.map(m => [m.id, loopAgent(m), m.role || '']));
+      if (signature(ms) !== signature(loopRosterAt)) {
+        showToast('The roster changed — reopen Members before saving.'); return;
+      }
+      const added = Array.from(document.querySelectorAll('[id^="loopAddMember"]'))
+        .filter(el => el.checked).map(el => el.value);
+      if (!added.length) { closeArbSetup(); return; }
+      if (ms.length + added.length > 6) { showToast('A loop has at most six seats.'); return; }
+      const cmd = s.coordinator || {};
+      const live = arbCandidates(conv, s.project_id, s.id).filter(a =>
+        a.aid && a.aid !== cmd.aid && a.pane_id !== cmd.pane_id);
+      if (added.some(aid => !loopMemberCandidates.includes(aid) || !live.some(a => a.aid === aid) ||
+          ms.some(m => m.aid === aid))) {
+        showToast('Those candidates changed — reopen Members before saving.'); return;
+      }
+      loopCommand('cmd_edit', {members: ms.map(m => Object.assign(
+        m.aid ? {aid: m.aid} : {pane_id: m.pane_id}, {role: m.role || ''}))
+        .concat(added.map(aid => ({aid: aid})))});
       closeArbSetup();
     }
 
@@ -26974,6 +27665,15 @@ convApplyTint();
           ? 'Leave it off to talk to it first. A Commander can be appointed from the room later.'
           : 'Nobody commands this Project yet, so this one would own it.';
       }
+      // The same two rows the Commander setup sheet draws, from the same functions, under ids of
+      // this form's own (`ccf`) — the setup sheet is on this page too. This form has no recipe
+      // picker and already knows its parent from the tree, so the parent is handed over rather
+      // than read off a field that is not here.
+      const briefs = document.getElementById('ccFeatureBriefs');
+      if (briefs && typeof cmdBriefHtml === 'function') {
+        briefs.innerHTML = cmdBriefHtml('ccf');
+        cmdSyncDefaults('ccf', over || null);
+      }
       sheet.style.display = '';
     }
 
@@ -27000,7 +27700,7 @@ convApplyTint();
     //
     // `anchor` is the row of the appointing Commander's plan the new one owns (C11.1a). Empty is
     // the Project Commander, which owns the plan itself and is refused an anchor.
-    function ccAppointOver(conv, scope, anchor) {
+    function ccAppointOver(conv, scope, anchor, briefs) {
       if (typeof openStartDialog !== 'function' || typeof startOptions === 'undefined'
           || !startOptions) {
         showToast('This relay does not start sessions.');
@@ -27020,6 +27720,14 @@ convApplyTint();
           tier: ccFeatureTier(over),
           parent: over ? over.id : '',
           anchor: anchor || '',
+          // Carried rather than read later: the start is sent from `landStart`, once the pane is
+          // up, and by then this sheet has been closed and may have been reopened on something
+          // else. What the person answered belongs to the press they answered it on.
+          //
+          // Absent when nothing was picked, rather than an empty object — the same rule the rows
+          // themselves follow. An intent that always carries the key would say this form has an
+          // opinion about prose on every start it makes, and it usually has none.
+          ...(briefs && Object.keys(briefs).length ? {briefs: briefs} : {}),
         };
       }
     }
@@ -27054,8 +27762,10 @@ convApplyTint();
         if (over.plan_anchor) fields.parent = over.plan_anchor;
         ccPlanEdit('add', fields, over.id);
       }
+      // Read before the sheet closes, for the reason `ccAppointOver` records.
+      const briefs = typeof cmdBriefFields === 'function' ? cmdBriefFields('ccf') : {};
       ccCloseFeature();
-      ccAppointOver(conv.id, wants ? scope : '', anchor);
+      ccAppointOver(conv.id, wants ? scope : '', anchor, briefs);
     }
 
     // What `landStart` calls once the pane is up and in the room. The coordinator is named by
@@ -27066,7 +27776,7 @@ convApplyTint();
       arbSend({type: 'cmd_start', conversation: plan.conv || '', scope: plan.scope,
                coordinator: {pane_id: pane.pane_id}, members: [],
                tier: plan.tier, parent_session: plan.parent || '',
-               plan_anchor: plan.anchor || ''});
+               plan_anchor: plan.anchor || '', ...(plan.briefs || {})});
     }
 
     // --- spawning from a node --------------------------------------------------------------
