@@ -4292,10 +4292,17 @@
 
     function paneLabel(a) { return a.label || a.project || a.agent || a.pane_id; }
 
+    // The formatters are built once: toLocaleTimeString builds one on every call, and the landing
+    // list calls this for every card quiet for more than a day — about half of what a snapshot
+    // cost it on a phone holding a few hundred conversations. A formatter keeps the time zone it
+    // was built in, so a phone that crosses into another one reads the old zone until a reload.
     function fmtStamp(d) {
-      const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return `${t} · ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+      stampFormats = stampFormats || [
+        new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }),
+        new Intl.DateTimeFormat([], { month: 'short', day: 'numeric' })];
+      return `${stampFormats[0].format(d)} · ${stampFormats[1].format(d)}`;
     }
+    let stampFormats = null;
 
     function fmtAgo(d) {
       const s = Math.round((Date.now() - d.getTime()) / 1000);
@@ -4523,12 +4530,50 @@
     // the write is skipped when the markup has not moved. The signature is a property rather than
     // a `data-` attribute because it is the whole markup — several tens of kilobytes — and the DOM
     // is not where that belongs.
-    function paintList(el, html) {
+    //
+    // `rows`, when given, is the same markup as `[key, html]` pairs, one element each, and only the
+    // rows whose markup moved are replaced. A list of a few hundred cards is rewritten whole when
+    // one card's count moves, which is every activity delta, and on a phone that was a full style
+    // and layout pass each time. `html` is then only the signature, and must be the rows joined.
+    function paintList(el, html, rows) {
       if (!el || el._painted === html) return false;
       el._painted = html;
+      if (rows) {
+        paintRows(el, rows);
+        return true;
+      }
       el.innerHTML = html;
       paintKeepPulse(el);
       return true;
+    }
+
+    // A kept row is the node already on the page; a changed one is replaced where it stands, so
+    // an order that did not move moves no node. What a row was painted with is held on the list,
+    // and a node something else took off the page is built again rather than trusted.
+    function paintRows(el, rows) {
+      const held = el._rows || new Map();
+      const now = new Map();
+      const nodes = rows.map(([key, html]) => {
+        const was = !now.has(key) && held.get(key);
+        const onPage = was && was.node.parentNode === el;
+        if (onPage && was.html === html) {
+          now.set(key, was);
+          return was.node;
+        }
+        const t = document.createElement('template');
+        t.innerHTML = html;
+        const node = t.content.firstElementChild;
+        paintKeepPulse(node);
+        if (onPage) was.node.replaceWith(node);
+        now.set(key, {html, node});
+        return node;
+      });
+      const keep = new Set(nodes);
+      for (const n of [...el.childNodes]) if (!keep.has(n)) n.remove();
+      nodes.forEach((node, i) => {
+        if (el.children[i] !== node) el.insertBefore(node, el.children[i] || null);
+      });
+      el._rows = now;
     }
 
     // How long one breath of `.dot.pulse` takes. Here as well as in the stylesheet because the
