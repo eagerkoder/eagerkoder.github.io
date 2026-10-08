@@ -10857,10 +10857,17 @@ function convWebModeOf(conv) {
       connect();
     }
 
-    const WEB_PROTOCOL = 1;
+    // 2: this page keeps a snapshot's `shells` and `retired` when a later snapshot leaves them out,
+    // so the relay may send them only when they moved. The relay still accepts 1 and sends such a
+    // page every part every time.
+    const WEB_PROTOCOL = 2;
     // Set once the relay says this page is too old for it, and never cleared: the answer to it is a
     // reload, which starts the page over.
     let wsOutdated = false;
+    // Whether the next `agents` on this socket is its first. The first is always whole, so a part
+    // missing from it is a feature switched off or a relay too old to omit anything; after it, a
+    // missing part is one that has not changed since this socket was last sent it.
+    let snapshotFirst = true;
 
     // Built here rather than in each page's markup: three pages load this file, and the bar has to
     // be on all of them. Stays until the reload it asks for, because a toast that fades leaves a
@@ -10912,6 +10919,7 @@ function convWebModeOf(conv) {
       // Which page this is, so a relay that has moved past it can refuse it outright rather than
       // take half of what it sends. Bumped with WEB_PROTOCOL in relay/herdr_relay.py.
       wsUrl += (wsUrl.includes('?') ? '&' : '?') + 'proto=' + WEB_PROTOCOL;
+      snapshotFirst = true;
       ws = new WebSocket(wsUrl);
       const socket = ws;
       // Central wire accounting. Every caller goes through this socket, so instrumenting it here
@@ -11228,7 +11236,8 @@ function convWebModeOf(conv) {
         // Same rule: apply the label only once the relay confirms herdr took it. Painting it
         // optimistically made a relay that never handled the message look like a working rename
         // until the next poll silently undid it.
-        const a = paneOf(msg.pane_id);
+        // Shell rows are retained between snapshots: a late receipt must not overwrite them.
+        const a = agents.find(a => a.pane_id === msg.pane_id);
         if (a && msg.ok) {
           a.label = msg.label;
           if (activePane === msg.pane_id && typeof syncOpenPaneChrome === 'function') syncOpenPaneChrome();
@@ -11270,10 +11279,15 @@ function convWebModeOf(conv) {
         // one event to the person hearing it, not a chord.
         if (ring && window.cue) cue('chime');
         agents = msg.agents;
-        // Not `msg.shells || []` — a relay with terminal mode off sends no key at all, and this
-        // has to read as "no terminals" rather than crash the next .filter.
-        shells = Array.isArray(msg.shells) ? msg.shells : [];
-        retiredAgents = Array.isArray(msg.retired) ? msg.retired : [];
+        // Not `msg.shells || []` — a relay with terminal mode off sends no key at all, and the
+        // first snapshot has to read that as "no terminals" rather than crash the next .filter.
+        // Every later one leaves out a part it did not change (see WEB_PROTOCOL), so absence then
+        // means keep what is held.
+        if (Array.isArray(msg.shells)) shells = msg.shells;
+        else if (snapshotFirst) shells = [];
+        if (Array.isArray(msg.retired)) retiredAgents = msg.retired;
+        else if (snapshotFirst) retiredAgents = [];
+        snapshotFirst = false;
         // A pane told to quit is only finished once it turns up as a shell, and a snapshot is the
         // only thing that says so. Before the render, so the pane it exits is gone from this one.
         if (typeof endTick === 'function') endTick();
