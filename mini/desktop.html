@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-07">
+  <meta name="app-built" content="2026-10-08">
   <title>herdr-remote — desktop</title>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
@@ -13840,8 +13840,14 @@ function convWebModeOf(conv) {
       // The open pane cannot take the silent path: its reply lands on the draw branch, which would
       // replace the rows under the reader's finger. It gets Load more to the same depth instead
       // (§2.5), and the recorder does not care which of the two brought the rows.
-      if (a.pane_id === activePane) { paneLines = lines; refreshPane(); }
-      else ws.send(JSON.stringify(
+      // Load more also takes the pane off the live frame Clear left it on; without that the next
+      // poll would read the frame alone and the history this read painted would flash and go.
+      if (a.pane_id === activePane) {
+        paneLines = lines;
+        if (typeof paneSource === 'string') paneSource = 'recent-unwrapped';
+      }
+      // Recovery asks for a fresh whole read, even when its answer will also paint the open pane.
+      ws.send(JSON.stringify(
         Object.assign({ type: 'read_pane', lines: lines, source: 'recent-unwrapped' }, paneAddr(a))));
       return true;
     }
@@ -17341,9 +17347,10 @@ convApplyTint();
     }
 
     // 2: this page keeps a snapshot's `shells` and `retired` when a later snapshot leaves them out,
-    // so the relay may send them only when they moved. The relay still accepts 1 and sends such a
-    // page every part every time.
-    const WEB_PROTOCOL = 2;
+    // so the relay may send them only when they moved. 3: it asks for a room's ended arbitration
+    // sessions with `arb_past` and needs an ended Commander's parent alone. The relay still accepts
+    // 1 and sends such a page every part and every ended session every time.
+    const WEB_PROTOCOL = 3;
     // Set once the relay says this page is too old for it, and never cleared: the answer to it is a
     // reload, which starts the page over.
     let wsOutdated = false;
@@ -17351,6 +17358,41 @@ convApplyTint();
     // missing from it is a feature switched off or a relay too old to omit anything; after it, a
     // missing part is one that has not changed since this socket was last sent it.
     let snapshotFirst = true;
+
+    // The last whole pane read this page holds for each pane, with the relay's digest of it. A
+    // re-read on a timer sends that digest as `have`, and a relay that finds nothing moved answers
+    // `same` and leaves the text out — which is most re-reads, since an idle pane says the same
+    // thing every time it is asked. Keyed by agent id where there is one, else pane id: the digest
+    // covers the host, depth, source and width as well as the text, so a key that is too coarse
+    // costs a whole answer and never a wrong one. Memory only, for paneTextCache's reason.
+    const paneHeld = new Map();
+    const PANE_HELD_MAX = 16;   // a deep read is megabytes; this bounds what is kept for re-reads
+    function paneHeldKey(a) {
+      const addr = paneAddr(a);
+      return addr.aid || addr.pane_id || '';
+    }
+    // The `have` for a read of this pane: "" says this page understands `same` and holds nothing yet.
+    function paneHave(a) {
+      const held = paneHeld.get(paneHeldKey(a));
+      return held ? held.digest : '';
+    }
+    // Makes `msg` whole again, or says it cannot be. A `same` names the digest it is the same as,
+    // and only the copy held under that digest stands in for it: two reads of one pane can cross,
+    // and the held copy may already be a newer read than the one this answers. False drops it; the
+    // next re-read is asked against the copy this page does hold.
+    function paneContentWhole(msg) {
+      if (!msg.digest) return true;
+      const key = msg.aid || msg.pane_id || '';
+      const held = paneHeld.get(key);
+      if (msg.same) {
+        if (!held || held.digest !== msg.digest) return false;
+        msg.content = held.content;
+      }
+      paneHeld.delete(key);
+      paneHeld.set(key, {digest: msg.digest, content: msg.content || ''});
+      while (paneHeld.size > PANE_HELD_MAX) paneHeld.delete(paneHeld.keys().next().value);
+      return true;
+    }
 
     // Built here rather than in each page's markup: three pages load this file, and the bar has to
     // be on all of them. Stays until the reload it asks for, because a toast that fades leaves a
@@ -17526,6 +17568,10 @@ convApplyTint();
         // The Command Center draws arbitration sessions in the tree beside the Commanders, and
         // now starts them — so one moving changes that screen exactly as a Commander moving does.
         if (typeof ccSessionMoved === 'function') ccSessionMoved();
+      }
+      // One room's ended sessions, answered to the page that asked when that room came on screen.
+      else if (msg.type === 'arb_past') {
+        if (typeof arbReceivePast === 'function') arbReceivePast(msg);
       }
       // Answered to this client alone, because it carries prose — so it arrives only where a sheet
       // asked for it.
@@ -17902,6 +17948,8 @@ convApplyTint();
         if (typeof renderQuickActions === 'function') renderQuickActions();
         if (typeof syncConvBadge === 'function') syncConvBadge();
       } else if (msg.type === 'pane_content') {
+        // Before anything reads `content`: from here on a `same` is the whole answer it stands for.
+        if (!paneContentWhole(msg)) return;
         // The page draws it, or nobody does. A read that reaches no surface is still worth
         // recording: recordPane ignores any pane no conversation names, so a stray read is
         // harmless, and a turn read for the record must not depend on somebody looking at it.
@@ -21991,6 +22039,10 @@ convApplyTint();
     let arbSessions = [];       // unfinished sessions, newest first; one may be running
     let arbPast = [];           // the *ended* sessions, newest first. Never drawn as a
                                 // session: read for the setup it ran with, and for its arbitrator's aid
+    // Whether this relay sends `past` per room on request rather than all of it on connect, and the
+    // rooms already asked about on this connection. A relay at PAST_PROTOCOL leaves the key out.
+    let arbPastLazy = false;
+    let arbPastAsked = new Set();
     // The conversation the setup dialog is open over, or '' when it is closed. The dialog is drawn
     // once, when it opens, and never again while it is open: its pane lists are derived from live
     // status, and a candidate going `working` two seconds in would otherwise rebuild the textarea a
@@ -22037,6 +22089,8 @@ convApplyTint();
       arbSession = null;
       arbSessions = [];
       arbPast = [];
+      arbPastLazy = false;
+      arbPastAsked = new Set();
       closeArbSetup();
       arbHtmlLast = '';
       arbDetail = null;
@@ -22063,6 +22117,9 @@ convApplyTint();
       // is arbitrating. It is read for two things — the setup a finished session ran with, and
       // the agent id of the arbitrator that ran it.
       arbPast = (msg.past || []).filter(s => s && s.id);
+      // No `past` at all is a relay that answers per room instead: see arbPastOf.
+      arbPastLazy = !('past' in msg);
+      arbPastAsked = new Set();
       arbSessions = (msg.sessions || []).filter(s => s && s.state !== 'ended');
       arbSession = arbSessions[0] || null;
       arbAskDetail(arbSession);
@@ -22127,7 +22184,38 @@ convApplyTint();
     // also offered to refill itself from a finished session is two answers to one question.
     function arbPastFor(convId) {
       if (!convId || arbSessionForConversation(convId)) return null;
-      return arbPast.find(s => s.conversation === convId) || null;
+      return arbPastOf(convId)[0] || null;
+    }
+
+    // One room's ended sessions, newest first — every reader of a past session is about one room.
+    // A relay that sends none on connect is asked for this room's the first time anything reads
+    // it, once per connection, and arbReceivePast redraws whatever read it empty meanwhile.
+    function arbPastOf(convId) {
+      if (!convId) return [];
+      if (arbPastLazy && !arbPastAsked.has(convId) && ws && ws.readyState === 1) {
+        arbPastAsked.add(convId);
+        ws.send(JSON.stringify({type: 'arb_past', conversation: convId}));
+      }
+      return arbPast.filter(s => s.conversation === convId);
+    }
+
+    // The answer to that ask. A session that ended on this socket while it was in flight is kept
+    // ahead of the rows, since it is newer than any of them.
+    function arbReceivePast(msg) {
+      const convId = msg.conversation || '';
+      if (!convId || !arbPastLazy) return;
+      const rows = (msg.past || []).filter(s => s && s.id && s.conversation === convId);
+      const ended = arbPast.filter(s => s.conversation === convId && !rows.some(r => r.id === s.id));
+      arbPast = arbPast.filter(s => s.conversation !== convId).concat(ended, rows);
+      // The setup may have opened before this answer. Add the offer without replacing its fields.
+      const again = document.getElementById('arbAgain');
+      if (again && arbSetupConv === convId && !arbSetupSession) {
+        again.innerHTML = arbStartAgainHtml(false);
+      }
+      arbAskArchive(convId);
+      arbRender();
+      if (arbDetailFor) arbRenderDetail();
+      arbRenderThread();
     }
 
     // What a finished session is still good for. Not the panes: pane ids are herdr's and are
@@ -22575,7 +22663,7 @@ convApplyTint();
     // the archive when its answer arrives instead, so it is reached either way.
     function arbAskArchive(convId) {
       if (!convId || !arbBubblesOn() || !ws || ws.readyState !== 1) return;
-      for (const s of arbPast.filter(p => p.conversation === convId).slice(0, ARB_ARCHIVE_MAX)) {
+      for (const s of arbPastOf(convId).slice(0, ARB_ARCHIVE_MAX)) {
         if (s.id === arbDetailFor || arbArchiveAsked.has(s.id)) continue;
         arbArchiveAsked.add(s.id);
         arbSend({type: 'arb_detail', session: s.id, brief: true});
@@ -22635,8 +22723,8 @@ convApplyTint();
       // conversation, and which session a decision fell in is an accident of when somebody
       // pressed Start. The path is not drawn for them: `arbEvents` belongs to whichever session
       // the sheet is reading, and the bubbles never drew it for the others either.
-      for (const past of arbPast) {
-        if (past.conversation !== convId || (s && past.id === s.id)) continue;
+      for (const past of arbPastOf(convId)) {
+        if (s && past.id === s.id) continue;
         const kept = arbArchive[past.id];
         if (kept) out.push(...arbDecisionEntries(past, kept));
       }
@@ -23026,7 +23114,7 @@ convApplyTint();
               '</span></div>'
             : '') +
           '<span class="arb-note">@arbitrator starter prompt — not defined yet.</span>' +
-          arbStartAgainHtml(editing) +
+          '<div id="arbAgain">' + arbStartAgainHtml(editing) + '</div>' +
           // Not folded into Clocks and limits: those are stops nobody touches, and this is a
           // choice about the two agents in the room that a person makes every time.
           arbModeFieldHtml(at.arbMode) +
@@ -24217,8 +24305,7 @@ convApplyTint();
     // The room's sessions, newest first: what is running or paused, then what has ended.
     function arbRoomSessions(convId) {
       if (!convId) return [];
-      return arbSessions.filter(s => s.conversation === convId)
-        .concat(arbPast.filter(s => s.conversation === convId));
+      return arbSessions.filter(s => s.conversation === convId).concat(arbPastOf(convId));
     }
 
     // A way through the room's sessions rather than a badge for each of them. The roster row opens
@@ -24644,7 +24731,7 @@ convApplyTint();
 
     let cmdOn = false;            // this relay sent cmd_sessions on this connection
     let cmdSessions = [];         // unfinished Commanders, newest first
-    let cmdPast = [];             // the ended ones, read for the setup they ran with
+    let cmdPast = [];             // the ended ones, read for where they hung (arbDescendantsRunning)
     // The conversation the dialog is open over, or '' when it is closed. Same rule as the
     // arbitration form's: drawn once on open, because its pane lists move under a scope being
     // typed into it.
@@ -31514,7 +31601,7 @@ convApplyTint();
       if (!ws || ws.readyState !== 1) return;
       col.pollAt = Date.now();
       ws.send(JSON.stringify(Object.assign(
-        {type: 'read_pane', lines: col.lines, source: col.source}, paneAddr(pane))));
+        {type: 'read_pane', lines: col.lines, source: col.source, have: paneHave(pane)}, paneAddr(pane))));
     }
 
     // One timer for the page, not one per column: five intervals drifting against each other read
