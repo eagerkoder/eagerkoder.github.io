@@ -13202,12 +13202,34 @@ function convWebModeOf(conv) {
     function convRetired() { convIndexFresh(); return convIndexRetired; }
 
     function loadConvIndex() {
+      return convPlainCopy(convIndexCurrent());
+    }
+
+    // For a caller that only reads. A copy per call was eight copies of the whole index per
+    // snapshot on the landing page alone — 14 ms of every one at 4x on a phone holding nine hundred
+    // conversations — so readers share one copy until the index or the activity laid over it
+    // moves. Frozen, because it is shared: a caller that edits what it was handed has to take
+    // loadConvIndex's copy, and here its edit goes nowhere instead of into every later read.
+    function readConvIndex() {
+      const rows = convIndexCurrent();
+      return convIndexView || (convIndexView = convFrozen(convPlainCopy(rows)));
+    }
+    let convIndexView = null;
+
+    function convIndexCurrent() {
       convIndexFresh();
       if (convIndexOverlaid !== convActivityGen) {
         convActivityOverlay(convIndexParsed);
         convIndexOverlaid = convActivityGen;
+        convIndexView = null;
       }
-      return convPlainCopy(convIndexParsed);
+      return convIndexParsed;
+    }
+
+    function convFrozen(v) {
+      if (!v || typeof v !== 'object') return v;
+      for (const k in v) convFrozen(v[k]);
+      return Object.freeze(v);
     }
 
     // --- The landing list's numbers ---
@@ -14549,13 +14571,15 @@ function convWebModeOf(conv) {
       // and this is the pass that mints one room per live pane in a single tick.
       if (typeof stateSyncSettled === 'function' && !stateSyncSettled()) return;
       const seen = convAutoSeen(), had = new Set(seen);
-      const items = loadConvIndex();
+      // Read without a copy: on nearly every snapshot there is nothing fresh, and the copy is taken
+      // below once there is something to add.
+      const index = readConvIndex();
       // The relay holds an index and this browser reads none. Nobody emptied it: storage was
       // cleared under a page that stayed connected, or the adopt was refused for space. Either
       // way the emptiness is this browser's accident and not a fact about the fleet, and filing
       // every live pane against it mints a copy of the index that then replaces the real one for
       // every browser. stateSyncHeal writes the document back on the next snapshot.
-      if (!items.length && typeof stateSyncHeld === 'function'
+      if (!index.length && typeof stateSyncHeld === 'function'
           && parseConvIndex(stateSyncHeld('conversations')).length) return;
       // A pane the index already files is not fresh, whoever filed it. The seen list is this
       // browser's own memory and a second browser has none of it, so membership is what survives
@@ -14564,7 +14588,7 @@ function convWebModeOf(conv) {
       // the slot and then the agent separately, because a pane id is a slot herdr recycles and an
       // agent that moved between polls arrived wearing a key no conversation named while being, in
       // every sense that mattered, already filed.
-      for (const c of items) for (const m of (c && c.members) || []) {
+      for (const c of index) for (const m of (c && c.members) || []) {
         if (m && m.aid) had.add(m.aid);
       }
       // Only a pane an agent is running in has messages to record — the same gate the menu item
@@ -14576,6 +14600,7 @@ function convWebModeOf(conv) {
         && profileFor(a.agent)
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
+      const items = loadConvIndex();
       const added = fresh.map(a => {
         const conv = {
           id: convNewId(items),
@@ -14612,6 +14637,9 @@ function convWebModeOf(conv) {
     // and a respawn adds a member either way.
     function convPruneAuto() {
       if (!agents.length) return;
+      // Asked on every snapshot and almost always answered no, so the no is read off the shared
+      // view. Only a room over the cap pays for the copy a save needs.
+      if (!readConvIndex().some(c => c.auto && (c.members || []).length > CONV_AUTO_ROSTER_MAX)) return;
       const live = new Set(agents.map(x => convMemberKey(x)));
       let changed = false;
       const items = loadConvIndex().map(c => {
@@ -14647,7 +14675,7 @@ function convWebModeOf(conv) {
       try {
         const set = localStorage.getItem(CONV_LANDING_AUTO_KEY);
         if (set) return set === 'on';
-        return !loadConvIndex().some(c => c && !c.auto);
+        return !readConvIndex().some(c => c && !c.auto);
       }
       catch (e) { return false; }
     }
@@ -17205,8 +17233,8 @@ convApplyTint();
     // way -- they named the checkout the room's harness was started in, which is a fact about that
     // shell and about nothing anybody in the room is doing.
     function convViewIsWeb() {
-      const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
-        ? loadConvIndex().find(row => row.id === convViewId) : null;
+      const conv = typeof convViewId !== 'undefined' && typeof readConvIndex === 'function'
+        ? readConvIndex().find(row => row.id === convViewId) : null;
       return typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
     }
 
@@ -29086,7 +29114,7 @@ convApplyTint();
               .find(s => s.project_id === tile.project_id && (s.label || '') === tile.label) || null;
         return {conv: null, held: open, live: open};
       }
-      const conv = loadConvIndex().find(c => c.id === launcherBotConvId(tile.bot)) || null;
+      const conv = readConvIndex().find(c => c.id === launcherBotConvId(tile.bot)) || null;
       const held = launcherBotMember(conv);
       const list = typeof agents !== 'undefined' && agents ? agents : [];
       const live = !held ? null
@@ -30615,7 +30643,7 @@ convApplyTint();
     // in the focused column. Selecting is not optional: a tile that opened a thread without moving
     // the sidebar would leave the members of some other room listed under it.
     function openConversation(id) {
-      const conv = loadConvIndex().find(c => c.id === id);
+      const conv = readConvIndex().find(c => c.id === id);
       if (!conv) return;
       // As above: the room asked for is behind whatever sheet asked for it.
       deskCloseOverlay();
@@ -30671,7 +30699,7 @@ convApplyTint();
       // Then the room the sidebar is showing, which is a column of its own rather than a pane: its
       // live members are running somewhere, and another colleague in that room belongs where they
       // are. Nothing at all leaves the dialog on its own picker, the way the landing page's + is.
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv);
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv);
       const member = conv && (conv.members || [])
         .map(m => agents.find(a => a.aid === m.aid))
         .find(a => a && a.project_id);
@@ -30684,7 +30712,7 @@ convApplyTint();
     function deskStartOpen(mode) {
       if (!startOptions) return;
       openStartDialog(deskStartProject(), null, mode);
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv);
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv);
       if (mode !== 'terminal' && conv) startIntent = {conv: conv.id};
     }
 
@@ -31775,7 +31803,7 @@ convApplyTint();
     }
 
     function deskComputeTabs() {
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv) || null;
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv) || null;
       const lay = deskConvLayout(deskSelectedConv);
       const closed = new Set(lay.closed);
       const seen = new Set();
@@ -31796,7 +31824,7 @@ convApplyTint();
       // rather than removed — the tab is the last trace that the session happened.
       const docsArrived = typeof stateSyncPending !== 'function' || !stateSyncPending();
       deskTabs = deskOrdered(deskResolveRestored(out, agents, shells, retiredAgents,
-                                                 loadConvIndex(), docsArrived), lay.order);
+                                                 readConvIndex(), docsArrived), lay.order);
     }
 
     // Where the reader dragged each tab. The strip is derived on every render — the room's tab,
@@ -31896,7 +31924,7 @@ convApplyTint();
     function deskRememberExtra(tab) {
       const key = deskTabKey(tab.kind, tab.key);
       if (deskPinAt(key) !== -1) return;
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv) || null;
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv) || null;
       if (deskConvTabs(conv).some(t => deskTabKey(t.kind, t.key) === key)) return;
       const lay = deskConvLayout(deskSelectedConv);
       if (lay.extra.some(t => deskTabKey(t.kind, t.key) === key)) return;
@@ -31985,7 +32013,7 @@ convApplyTint();
     // this browser and was never this room's to move — but they do take columns, so the cap can
     // still bite, and it says so rather than silently dropping the last members.
     function deskOpenAll(id) {
-      const conv = loadConvIndex().find(c => c.id === id);
+      const conv = readConvIndex().find(c => c.id === id);
       if (!conv) return;
       deskSelectConv(id);
       const lay = deskConvLayout(id);
@@ -32482,7 +32510,7 @@ convApplyTint();
     // selected room first, because that is the one the reader is looking at, and any other room
     // otherwise: a pane reached from the tab strip may well belong to a room that is not open.
     function convLifeConvId(key) {
-      const rooms = loadConvIndex();
+      const rooms = readConvIndex();
       const here = rooms.find(c => c.id === deskSelectedConv);
       if (here && (here.members || []).some(m => m.aid === key)) return here.id;
       const other = rooms.find(c => (c.members || []).some(m => m.aid === key));
@@ -32637,7 +32665,7 @@ convApplyTint();
     // it. Chosen by pane id, because that is what `pickPaneRow` keys on and what `deskJoinConv`
     // takes; the membership it writes is by agent id, as it always was.
     function deskAddMembers(convId) {
-      const conv = loadConvIndex().find(c => c.id === convId);
+      const conv = readConvIndex().find(c => c.id === convId);
       if (!conv) return;
       const taken = new Set((conv.members || []).map(m => m.aid));
       // Newest first. Which of nine running sessions is meant is nearly always the one that was
@@ -32726,7 +32754,7 @@ convApplyTint();
     // them: two copies of "Restart all" disagreeing about when it is disabled is exactly the bug a
     // page with a command palette grows.
     function deskConvItems(id) {
-      const conv = loadConvIndex().find(c => c.id === id);
+      const conv = readConvIndex().find(c => c.id === id);
       if (!conv) return [];
       const pinned = deskPins().includes(id);
       const live = (conv.members || [])
@@ -32950,7 +32978,7 @@ convApplyTint();
     // the same menu rather than two buttons — which is also what the mobile launcher's tile menu is.
     function deskNewItems() {
       if (!startOptions) return [];
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv);
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv);
       const configs = typeof agentConfigOffered === 'function' ? agentConfigOffered() : [];
       return [
         {label: conv ? `New in ${conv.name || conv.id}` : 'New'},
@@ -33015,7 +33043,7 @@ convApplyTint();
       // Pins for conversations that are gone are dropped here, on the write, and never on the read:
       // a conversation missing from the index may be missing because the document has not arrived
       // yet, and dropping it then would quietly unpin rows on every slow connect.
-      const known = new Set(loadConvIndex().map(c => c.id));
+      const known = new Set(readConvIndex().map(c => c.id));
       const kept = pins.filter(p => known.has(p));
       try { localStorage.setItem(DESK_PINS_KEY, JSON.stringify(kept)); }
       catch (e) { /* private mode: this session only */ }
@@ -33029,7 +33057,9 @@ convApplyTint();
     // delivered to an element that is no longer in the document and never reaches the delegated
     // listener — so double click silently did nothing at all. Selection and focus are drawn by
     // toggling a class instead, and the markup is rebuilt only when the rows themselves moved.
-    let deskConvsSig = null, deskRosterSig = null;
+    // The conversation list goes further and replaces only the rows that moved (paintList): an
+    // activity delta moves one room's count, and rewriting all of them cost a full relayout.
+    let deskRosterSig = null;
 
     // Which rooms this list is about. The named ones, and the two other tiers only when the reader
     // has asked for them — the same setting, off the same key, that the phone's landing section
@@ -33043,7 +33073,7 @@ convApplyTint();
     // the page made of panes. Asked of the kind rather than of a field, so the Providers editor
     // turning a room into one on the phone takes it off this list with nothing else to change.
     function deskConvList() {
-      const all = loadConvIndex().filter(c => typeof convKindOf !== 'function'
+      const all = readConvIndex().filter(c => typeof convKindOf !== 'function'
         || convKindOf(c) !== 'providers');
       const find = deskConvFind.trim().toLowerCase();
       const archive = typeof convLandingArchiveOn === 'function' && convLandingArchiveOn();
@@ -33087,12 +33117,12 @@ convApplyTint();
             ? '<div class="mock-space"><div><small>nothing here — the rooms this app filed ' +
               'itself are under ⋯</small></div></div>'
             : '<div class="mock-space"><div><small>no conversations yet</small></div></div>';
-        if (html !== deskConvsSig) { box.innerHTML = html; deskConvsSig = html; }
+        paintList(box, html);
         return;
       }
       const pins = deskPins();
       const now = Date.now();
-      const html = deskSortConvs(convs, pins).map(c => {
+      const rows = deskSortConvs(convs, pins).map(c => {
         const members = c.members || [];
         const live = members.map(m => agents.find(a => convMemberKey(a) === m.aid)).filter(Boolean);
         // The same lead, dot and badges the mobile landing card draws, and for the same reason: a
@@ -33125,7 +33155,7 @@ convApplyTint();
         // Nothing running in it. Said three ways because they are read at three distances: the row
         // steps back, the dot is hollow, and the word is there for a reader who has learned
         // neither.
-        return `<div class="mock-space${members.length ? '' : ' empty'}` +
+        return [c.id, `<div class="mock-space${members.length ? '' : ' empty'}` +
           `${live.length ? '' : ' inactive'}"` +
           ` data-conv="${escapeHtml(c.id)}">` +
           `<span class="mock-dot${lead && lead.status === 'working' ? ' pulse' : ''}` +
@@ -33147,9 +33177,9 @@ convApplyTint();
           `<button class="desk-pin${pinned ? ' on' : ''}" data-pin="${escapeHtml(c.id)}"` +
           ` aria-pressed="${pinned ? 'true' : 'false'}"` +
           ' aria-label="Keep this conversation at the top of the list">★</button>' +
-          '</div>';
-      }).join('');
-      if (html !== deskConvsSig) { box.innerHTML = html; deskConvsSig = html; }
+          '</div>'];
+      });
+      paintList(box, rows.map(r => r[1]).join(''), rows);
       deskMarkConvActive();
     }
 
@@ -33224,7 +33254,7 @@ convApplyTint();
     function deskRenderRoster() {
       const box = document.getElementById('deskRosterRows');
       const note = document.getElementById('deskRosterNote');
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv);
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv);
       if (!conv) {
         if (deskRosterSig !== '') { box.innerHTML = ''; deskRosterSig = ''; }
         note.textContent = '';
@@ -33368,7 +33398,7 @@ convApplyTint();
         if (e.detail > 1) return;
         const row = e.target.closest('[data-conv]');
         if (!row) return;
-        const conv = loadConvIndex().find(c => c.id === row.dataset.conv);
+        const conv = readConvIndex().find(c => c.id === row.dataset.conv);
         if (!conv) return;
         // Select the room, then open its own tab. Selecting alone derives the strip, and a room
         // whose conversation tab was closed in it stayed closed — with the row in the sidebar the
@@ -33380,7 +33410,7 @@ convApplyTint();
       document.getElementById('deskConvRows').addEventListener('dblclick', e => {
         const row = e.target.closest('[data-conv]');
         if (!row) return;
-        const c = loadConvIndex().find(x => x.id === row.dataset.conv);
+        const c = readConvIndex().find(x => x.id === row.dataset.conv);
         if (!c) return;
         // Select first: a room can only be split into a column of its own once it is the room the
         // strip is made of, and the single click that preceded this may have been on another row.
@@ -33975,7 +34005,7 @@ convApplyTint();
     // live member — a target that has ended is not a target, and refusing to send until the reader
     // picks again would make the commonest case a two-step.
     function deskTargetPane(convId, col) {
-      const conv = loadConvIndex().find(c => c.id === convId);
+      const conv = readConvIndex().find(c => c.id === convId);
       if (!conv) return null;
       // Minus whoever this browser is not reading: in solo mode the room is one member, and a
       // composer still addressing a hidden one would send where nothing is on screen. The hide
@@ -34112,7 +34142,7 @@ convApplyTint();
       // chips' own double click is a gesture nobody has been told about.
       const tab = deskTabFor((deskColumns[i] || {}).tabKey);
       const room = tab && tab.kind === 'conversation'
-        ? loadConvIndex().find(c => c.id === tab.key) : null;
+        ? readConvIndex().find(c => c.id === tab.key) : null;
       const solo = room && typeof convSoloKey === 'function' ? convSoloKey(room.id) : '';
       if (room && ((room.members || []).length > 1 || solo)) {
         items.push({
@@ -34680,7 +34710,7 @@ convApplyTint();
     function deskPaintTargets(root, i, now) {
       const strip = deskRole(root, 'targets');
       const tab = deskTabFor(deskColumns[i].tabKey);
-      const conv = tab && loadConvIndex().find(c => c.id === tab.key);
+      const conv = tab && readConvIndex().find(c => c.id === tab.key);
       // Minus whoever this browser is not reading: the thread above is drawn from the same list,
       // and a chip for a member whose messages are not on screen is a target with no conversation.
       const hidden = conv && typeof convHidden === 'function' ? convHidden(conv.id) : new Set();
@@ -35357,7 +35387,7 @@ convApplyTint();
     // — the badges are what a reader means by "the codex one in charts", and they are the same
     // markup the sidebar and every pane row use, so the field matches on them too.
     function deskCmdConvRow(id) {
-      const conv = loadConvIndex().find(c => c.id === id);
+      const conv = readConvIndex().find(c => c.id === id);
       const members = (conv || {}).members || [];
       const live = agents.concat(typeof shells === 'undefined' ? [] : shells);
       const values = members.map(m => {
@@ -35376,7 +35406,7 @@ convApplyTint();
     }
 
     function deskCmdMembers() {
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv);
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv);
       if (!conv) return [];
       const rows = [];
       (conv.members || []).forEach(m => {
@@ -35434,7 +35464,7 @@ convApplyTint();
       }
       // The room's own actions, which are not the tab's even when the tab *is* the room: a tab is
       // closed and pinned, a room is paused, reset and restarted.
-      const conv = loadConvIndex().find(c => c.id === deskSelectedConv);
+      const conv = readConvIndex().find(c => c.id === deskSelectedConv);
       if (conv) push(conv.name || conv.id, deskConvItems(conv.id));
       push('New', deskNewItems());
       push('New', [{label: 'Conversation', hint: 'a new room, and who is in it',
@@ -35893,7 +35923,7 @@ convApplyTint();
       const id = typeof deskSelectedConv !== 'undefined' && deskSelectedConv
         ? deskSelectedConv : typeof convViewId !== 'undefined' && convViewId ? convViewId : '';
       if (!id) return null;
-      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const convs = typeof readConvIndex === 'function' ? readConvIndex() : [];
       const conv = convs.find(one => one.id === id);
       const web = conv && typeof convKindOf === 'function' && convKindOf(conv) === 'providers';
       return {type: web ? 'web' : 'conv', key: id};
@@ -36147,7 +36177,7 @@ convApplyTint();
       const el = typeof document !== 'undefined' ? document.getElementById('recentFloat') : null;
       if (!el) return;
       const log = loadRecents();
-      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const convs = typeof readConvIndex === 'function' ? readConvIndex() : [];
       const live = typeof shells === 'undefined' ? [] : (shells || []);
       // Whether the puck is worth drawing is asked of everything, and what is *listed* is asked of
       // the filter: a filter that emptied the list would also take the control that set it off the
@@ -36456,7 +36486,7 @@ convApplyTint();
       }
       let moved = false;
       if (tab.kind === 'conversation') {
-        const conv = loadConvIndex().find(c => c.id === tab.key);
+        const conv = readConvIndex().find(c => c.id === tab.key);
         moved = draw(deskConvHtml(conv));
         // The markup carries no picks, so a repaint is where they would be lost.
         if (moved && typeof deskDrawPicks === 'function') deskDrawPicks(i);
@@ -36500,7 +36530,7 @@ convApplyTint();
         ` aria-label="${escapeHtml(says)}"></span>`;
       let status = '', badges = '';
       if (tab && tab.kind === 'conversation') {
-        const conv = loadConvIndex().find(c => c.id === tab.key);
+        const conv = readConvIndex().find(c => c.id === tab.key);
         // Whose state the room's dot shows: the member the sidebar's row would show, so the row and
         // the column it opened never disagree about what the room is doing.
         const live = ((conv && conv.members) || [])
@@ -36545,7 +36575,7 @@ convApplyTint();
       // from, so the number and the bubbles can never disagree — a count taken from the index's
       // member list would say how many agents are in it, which the badges already say.
       const count = tab && tab.kind === 'conversation' && typeof deskConvCount === 'function'
-        ? deskConvCount(loadConvIndex().find(c => c.id === tab.key)) : -1;
+        ? deskConvCount(readConvIndex().find(c => c.id === tab.key)) : -1;
       const said = count >= 0
         ? `<span class="desk-pane-count">${count} ${count === 1 ? 'message' : 'messages'}</span>`
         : '';
@@ -36596,7 +36626,7 @@ convApplyTint();
       if (!id) { deskLink = ''; return; }
       let opened = false;
       if (kind === 'conv') {
-        opened = !!loadConvIndex().find(c => c.id === id);
+        opened = !!readConvIndex().find(c => c.id === id);
         if (opened) openConversation(id);
       } else if (kind === 'pane') {
         // An agent id where the pane has one, because herdr recycles pane ids and a link written

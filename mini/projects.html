@@ -8241,12 +8241,34 @@ function convWebModeOf(conv) {
     function convRetired() { convIndexFresh(); return convIndexRetired; }
 
     function loadConvIndex() {
+      return convPlainCopy(convIndexCurrent());
+    }
+
+    // For a caller that only reads. A copy per call was eight copies of the whole index per
+    // snapshot on the landing page alone — 14 ms of every one at 4x on a phone holding nine hundred
+    // conversations — so readers share one copy until the index or the activity laid over it
+    // moves. Frozen, because it is shared: a caller that edits what it was handed has to take
+    // loadConvIndex's copy, and here its edit goes nowhere instead of into every later read.
+    function readConvIndex() {
+      const rows = convIndexCurrent();
+      return convIndexView || (convIndexView = convFrozen(convPlainCopy(rows)));
+    }
+    let convIndexView = null;
+
+    function convIndexCurrent() {
       convIndexFresh();
       if (convIndexOverlaid !== convActivityGen) {
         convActivityOverlay(convIndexParsed);
         convIndexOverlaid = convActivityGen;
+        convIndexView = null;
       }
-      return convPlainCopy(convIndexParsed);
+      return convIndexParsed;
+    }
+
+    function convFrozen(v) {
+      if (!v || typeof v !== 'object') return v;
+      for (const k in v) convFrozen(v[k]);
+      return Object.freeze(v);
     }
 
     // --- The landing list's numbers ---
@@ -9588,13 +9610,15 @@ function convWebModeOf(conv) {
       // and this is the pass that mints one room per live pane in a single tick.
       if (typeof stateSyncSettled === 'function' && !stateSyncSettled()) return;
       const seen = convAutoSeen(), had = new Set(seen);
-      const items = loadConvIndex();
+      // Read without a copy: on nearly every snapshot there is nothing fresh, and the copy is taken
+      // below once there is something to add.
+      const index = readConvIndex();
       // The relay holds an index and this browser reads none. Nobody emptied it: storage was
       // cleared under a page that stayed connected, or the adopt was refused for space. Either
       // way the emptiness is this browser's accident and not a fact about the fleet, and filing
       // every live pane against it mints a copy of the index that then replaces the real one for
       // every browser. stateSyncHeal writes the document back on the next snapshot.
-      if (!items.length && typeof stateSyncHeld === 'function'
+      if (!index.length && typeof stateSyncHeld === 'function'
           && parseConvIndex(stateSyncHeld('conversations')).length) return;
       // A pane the index already files is not fresh, whoever filed it. The seen list is this
       // browser's own memory and a second browser has none of it, so membership is what survives
@@ -9603,7 +9627,7 @@ function convWebModeOf(conv) {
       // the slot and then the agent separately, because a pane id is a slot herdr recycles and an
       // agent that moved between polls arrived wearing a key no conversation named while being, in
       // every sense that mattered, already filed.
-      for (const c of items) for (const m of (c && c.members) || []) {
+      for (const c of index) for (const m of (c && c.members) || []) {
         if (m && m.aid) had.add(m.aid);
       }
       // Only a pane an agent is running in has messages to record — the same gate the menu item
@@ -9615,6 +9639,7 @@ function convWebModeOf(conv) {
         && profileFor(a.agent)
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
+      const items = loadConvIndex();
       const added = fresh.map(a => {
         const conv = {
           id: convNewId(items),
@@ -9651,6 +9676,9 @@ function convWebModeOf(conv) {
     // and a respawn adds a member either way.
     function convPruneAuto() {
       if (!agents.length) return;
+      // Asked on every snapshot and almost always answered no, so the no is read off the shared
+      // view. Only a room over the cap pays for the copy a save needs.
+      if (!readConvIndex().some(c => c.auto && (c.members || []).length > CONV_AUTO_ROSTER_MAX)) return;
       const live = new Set(agents.map(x => convMemberKey(x)));
       let changed = false;
       const items = loadConvIndex().map(c => {
@@ -9686,7 +9714,7 @@ function convWebModeOf(conv) {
       try {
         const set = localStorage.getItem(CONV_LANDING_AUTO_KEY);
         if (set) return set === 'on';
-        return !loadConvIndex().some(c => c && !c.auto);
+        return !readConvIndex().some(c => c && !c.auto);
       }
       catch (e) { return false; }
     }
@@ -10722,8 +10750,8 @@ function convWebModeOf(conv) {
     // way -- they named the checkout the room's harness was started in, which is a fact about that
     // shell and about nothing anybody in the room is doing.
     function convViewIsWeb() {
-      const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
-        ? loadConvIndex().find(row => row.id === convViewId) : null;
+      const conv = typeof convViewId !== 'undefined' && typeof readConvIndex === 'function'
+        ? readConvIndex().find(row => row.id === convViewId) : null;
       return typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
     }
 

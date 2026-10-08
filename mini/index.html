@@ -20283,7 +20283,7 @@
       const id = typeof deskSelectedConv !== 'undefined' && deskSelectedConv
         ? deskSelectedConv : typeof convViewId !== 'undefined' && convViewId ? convViewId : '';
       if (!id) return null;
-      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const convs = typeof readConvIndex === 'function' ? readConvIndex() : [];
       const conv = convs.find(one => one.id === id);
       const web = conv && typeof convKindOf === 'function' && convKindOf(conv) === 'providers';
       return {type: web ? 'web' : 'conv', key: id};
@@ -20537,7 +20537,7 @@
       const el = typeof document !== 'undefined' ? document.getElementById('recentFloat') : null;
       if (!el) return;
       const log = loadRecents();
-      const convs = typeof loadConvIndex === 'function' ? loadConvIndex() : [];
+      const convs = typeof readConvIndex === 'function' ? readConvIndex() : [];
       const live = typeof shells === 'undefined' ? [] : (shells || []);
       // Whether the puck is worth drawing is asked of everything, and what is *listed* is asked of
       // the filter: a filter that emptied the list would also take the control that set it off the
@@ -22812,7 +22812,7 @@
               .find(s => s.project_id === tile.project_id && (s.label || '') === tile.label) || null;
         return {conv: null, held: open, live: open};
       }
-      const conv = loadConvIndex().find(c => c.id === launcherBotConvId(tile.bot)) || null;
+      const conv = readConvIndex().find(c => c.id === launcherBotConvId(tile.bot)) || null;
       const held = launcherBotMember(conv);
       const list = typeof agents !== 'undefined' && agents ? agents : [];
       const live = !held ? null
@@ -26232,12 +26232,34 @@ function convWebModeOf(conv) {
     function convRetired() { convIndexFresh(); return convIndexRetired; }
 
     function loadConvIndex() {
+      return convPlainCopy(convIndexCurrent());
+    }
+
+    // For a caller that only reads. A copy per call was eight copies of the whole index per
+    // snapshot on the landing page alone — 14 ms of every one at 4x on a phone holding nine hundred
+    // conversations — so readers share one copy until the index or the activity laid over it
+    // moves. Frozen, because it is shared: a caller that edits what it was handed has to take
+    // loadConvIndex's copy, and here its edit goes nowhere instead of into every later read.
+    function readConvIndex() {
+      const rows = convIndexCurrent();
+      return convIndexView || (convIndexView = convFrozen(convPlainCopy(rows)));
+    }
+    let convIndexView = null;
+
+    function convIndexCurrent() {
       convIndexFresh();
       if (convIndexOverlaid !== convActivityGen) {
         convActivityOverlay(convIndexParsed);
         convIndexOverlaid = convActivityGen;
+        convIndexView = null;
       }
-      return convPlainCopy(convIndexParsed);
+      return convIndexParsed;
+    }
+
+    function convFrozen(v) {
+      if (!v || typeof v !== 'object') return v;
+      for (const k in v) convFrozen(v[k]);
+      return Object.freeze(v);
     }
 
     // --- The landing list's numbers ---
@@ -27579,13 +27601,15 @@ function convWebModeOf(conv) {
       // and this is the pass that mints one room per live pane in a single tick.
       if (typeof stateSyncSettled === 'function' && !stateSyncSettled()) return;
       const seen = convAutoSeen(), had = new Set(seen);
-      const items = loadConvIndex();
+      // Read without a copy: on nearly every snapshot there is nothing fresh, and the copy is taken
+      // below once there is something to add.
+      const index = readConvIndex();
       // The relay holds an index and this browser reads none. Nobody emptied it: storage was
       // cleared under a page that stayed connected, or the adopt was refused for space. Either
       // way the emptiness is this browser's accident and not a fact about the fleet, and filing
       // every live pane against it mints a copy of the index that then replaces the real one for
       // every browser. stateSyncHeal writes the document back on the next snapshot.
-      if (!items.length && typeof stateSyncHeld === 'function'
+      if (!index.length && typeof stateSyncHeld === 'function'
           && parseConvIndex(stateSyncHeld('conversations')).length) return;
       // A pane the index already files is not fresh, whoever filed it. The seen list is this
       // browser's own memory and a second browser has none of it, so membership is what survives
@@ -27594,7 +27618,7 @@ function convWebModeOf(conv) {
       // the slot and then the agent separately, because a pane id is a slot herdr recycles and an
       // agent that moved between polls arrived wearing a key no conversation named while being, in
       // every sense that mattered, already filed.
-      for (const c of items) for (const m of (c && c.members) || []) {
+      for (const c of index) for (const m of (c && c.members) || []) {
         if (m && m.aid) had.add(m.aid);
       }
       // Only a pane an agent is running in has messages to record — the same gate the menu item
@@ -27606,6 +27630,7 @@ function convWebModeOf(conv) {
         && profileFor(a.agent)
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
+      const items = loadConvIndex();
       const added = fresh.map(a => {
         const conv = {
           id: convNewId(items),
@@ -27642,6 +27667,9 @@ function convWebModeOf(conv) {
     // and a respawn adds a member either way.
     function convPruneAuto() {
       if (!agents.length) return;
+      // Asked on every snapshot and almost always answered no, so the no is read off the shared
+      // view. Only a room over the cap pays for the copy a save needs.
+      if (!readConvIndex().some(c => c.auto && (c.members || []).length > CONV_AUTO_ROSTER_MAX)) return;
       const live = new Set(agents.map(x => convMemberKey(x)));
       let changed = false;
       const items = loadConvIndex().map(c => {
@@ -27677,7 +27705,7 @@ function convWebModeOf(conv) {
       try {
         const set = localStorage.getItem(CONV_LANDING_AUTO_KEY);
         if (set) return set === 'on';
-        return !loadConvIndex().some(c => c && !c.auto);
+        return !readConvIndex().some(c => c && !c.auto);
       }
       catch (e) { return false; }
     }
@@ -35168,8 +35196,8 @@ function nlmSourceDelete(source) {
     // way -- they named the checkout the room's harness was started in, which is a fact about that
     // shell and about nothing anybody in the room is doing.
     function convViewIsWeb() {
-      const conv = typeof convViewId !== 'undefined' && typeof loadConvIndex === 'function'
-        ? loadConvIndex().find(row => row.id === convViewId) : null;
+      const conv = typeof convViewId !== 'undefined' && typeof readConvIndex === 'function'
+        ? readConvIndex().find(row => row.id === convViewId) : null;
       return typeof convWebModeOf === 'function' && !!convWebModeOf(conv);
     }
 
@@ -37321,7 +37349,7 @@ function nlmSourceDelete(source) {
       // busy pushing them down the page is the app rearranging their shelf. Within each tier it is
       // the work that decides — newest message first, then the fuller record.
       const by = (a, b) => (!!a.auto - !!b.auto) || seenOf(b) - seenOf(a) || countOf(b) - countOf(a);
-      const all = loadConvIndex().sort(by);
+      const all = readConvIndex().slice().sort(by);
       const archived = all.filter(c => c.archived);
       const active = all.filter(c => !c.archived);
       const autos = active.filter(c => c.auto);
@@ -37421,11 +37449,16 @@ function nlmSourceDelete(source) {
       // Both lists, because the archive is drawn from the same rows: building only the shown ones
       // left `archivedRows` matching nothing, so the Archive button counted cards it could never
       // draw and an archived conversation could not be got back at.
+      //
+      // Agents by member key, built once: a find per member, twice, was a scan of every pane for
+      // every member of every card on every activity delta. First wins, as find did.
+      const byKey = new Map();
+      for (const a of agents) { const k = convMemberKey(a); if (!byKey.has(k)) byKey.set(k, a); }
       const rows = list.shown.concat(list.archived).map(c => {
         const members = c.members || [];
         const count = members.reduce((n, m) => n + (Number(m.messages) || 0), 0);
         const seen = Math.max(0, ...members.map(m => Number(m.seen) || 0));
-        const live = members.map(m => agents.find(a => convMemberKey(a) === m.aid)).filter(Boolean);
+        const live = members.map(m => byKey.get(m.aid)).filter(Boolean);
         const names = members.map(m => escapeHtml(convMemberName(m.aid, m.label, 'Former pane')));
         // What each member is and where it is working, in the order of how much each source knows.
         // The member record, written when it joined; then the live pane, which is right for a
@@ -37433,7 +37466,7 @@ function nlmSourceDelete(source) {
         // `[host, pane_id, agent, cwd]` — and an agent id describes nothing, which is the point of
         // it.
         const badgeValues = members.map(m => {
-          const pane = agents.find(a => convMemberKey(a) === m.aid) || {};
+          const pane = byKey.get(m.aid) || {};
           return { agent: m.agent || pane.agent || '',
             project: m.project || pane.project || '' };
         });
@@ -37567,9 +37600,12 @@ function nlmSourceDelete(source) {
         `<div class="conversation-meta names">${r.names.join(' · ')}</div>` +
         `<div class="conversation-meta live">${r.liveNames.length ? 'Live: ' + r.liveNames.join(', ') : 'No live members'}` +
         `${r.seen ? ' · Last activity ' + fmtAgo(new Date(Math.min(r.seen, now))) : ''}</div></div>`;
-      const archivedRows = list.archived.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
-      const activeRows = list.shown.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
-      const autoRows = list.autos.map(c => rows.find(r => r.c.id === c.id)).filter(Boolean);
+      const rowById = new Map();
+      for (const r of rows) if (!rowById.has(r.c.id)) rowById.set(r.c.id, r);
+      const pick = cs => cs.map(c => rowById.get(c.id)).filter(Boolean);
+      const archivedRows = pick(list.archived);
+      const activeRows = pick(list.shown);
+      const autoRows = pick(list.autos);
       // In a mode the header carries one control — the way back. Nothing else there acts on what
       // is on screen: + New makes a named conversation, and the other mode's button would be a
       // second exit that lands somewhere the reader did not ask for.
@@ -39047,7 +39083,7 @@ function nlmSourceDelete(source) {
     // they joined. A member that has exited is still in the record and still in the roster panel;
     // it is not here, because there is nothing to send to.
     function dockMembers() {
-      const conv = loadConvIndex().find(c => c.id === convViewId);
+      const conv = readConvIndex().find(c => c.id === convViewId);
       if (!conv) return [];
       const hidden = convHidden(conv.id);
       const live = (conv.members || []).filter(m => !hidden.has(m.aid))
