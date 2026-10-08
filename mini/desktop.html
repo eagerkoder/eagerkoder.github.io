@@ -2836,9 +2836,14 @@
 
     /* Inside a .setting-group, which paints every button as the green primary — one class and
        one type, which outranks a bare .field-clear whatever the order. The clear is not a primary
-       action and was coming up as a green square over the end of the field. */
+       action and was coming up as a green square over the end of the field. The same rule's
+       margin-top pushed it below the field's middle; top/bottom 0 with auto margins centres it on
+       the field itself rather than on whatever static position the engine gives it. */
     .setting-group .field-clear {
       position: absolute;
+      top: 0;
+      bottom: 0;
+      margin: auto 0;
       right: 4px;
       width: 26px;
       height: 26px;
@@ -7015,7 +7020,7 @@
 /* A recipe takes the width there is: seats side by side, the parts in columns down the page
    in the order an assignment says them. Every other editor in this modal stays one column. */
 #launcherModal.rcp-open [role="dialog"] { max-width: min(1200px, calc(100% - 32px)) !important; max-height: 92dvh !important; }
-#launcherModal.rcp-open .rcp-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+#launcherModal.rcp-open .rcp-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 10px; }
 #launcherModal.rcp-open .rcp-parts { display: block; columns: 260px 3; column-gap: 24px; }
 #launcherModal.rcp-open .rcp-parts .rcp-check { break-inside: avoid; margin-bottom: 4px; }
 #launcherModal.rcp-open .rcp-notes { min-height: 7.5em; }
@@ -8093,9 +8098,21 @@
       } catch (e) { lastSeen = {}; }
     }
 
+    // Every pane that moves notes itself, several a poll, so the map is written at most once a
+    // second and what is past the hour is dropped as it goes. Losing the last second to a closed
+    // page costs a dot one shade cooler than it should be.
+    let seenTimer = 0;
+
     function noteActivity(paneId) {
       if (!paneId) return;
       lastSeen[paneId] = Date.now();
+      if (!seenTimer) seenTimer = setTimeout(saveSeen, 1000);
+    }
+
+    function saveSeen() {
+      seenTimer = 0;
+      const cutoff = Date.now() - RECENT_MS;
+      for (const id in lastSeen) if (!(lastSeen[id] > cutoff)) delete lastSeen[id];
       try { localStorage.setItem(SEEN_KEY, JSON.stringify(lastSeen)); }
       catch (e) { /* private mode: session-only */ }
     }
@@ -8777,6 +8794,98 @@
       for (const dot of el.querySelectorAll('.dot.pulse')) dot.style.animationDelay = phase;
     }
 
+    // Composer drafts kept across a reload. Written after a pause in typing rather than on every
+    // keystroke, flushed when the page is hidden or put away, and dropped once a month old. A read
+    // sees a write still waiting, so leaving a chat and coming straight back loses nothing.
+    const DRAFT_PAUSE_MS = 400;
+    const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    const DRAFT_DATE_PREFIX = 'herdr_draft_date:';
+    const draftPending = new Map();
+    let draftTimer = 0;
+
+    function draftWrite(key, text) {
+      draftPending.set(key, text || '');
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(draftFlush, DRAFT_PAUSE_MS);
+    }
+
+    function draftFlush() {
+      clearTimeout(draftTimer);
+      for (const [key, text] of draftPending) {
+        try {
+          // Keep the old key plain text: a tab loaded before these helpers reads it directly.
+          if (text) {
+            localStorage.setItem(key, text);
+            localStorage.setItem(DRAFT_DATE_PREFIX + key, JSON.stringify({ text, at: Date.now() }));
+          } else {
+            localStorage.removeItem(key);
+            localStorage.removeItem(DRAFT_DATE_PREFIX + key);
+          }
+          draftPending.delete(key);
+        } catch (e) { /* quota or private mode: the draft lives as long as the page */ }
+      }
+    }
+
+    // A draft that was sent. Taken out of the queue too, or the write waiting on the pause would
+    // put the message back in the box after it went.
+    function draftDrop(key) {
+      draftPending.delete(key);
+      try {
+        localStorage.removeItem(key);
+        localStorage.removeItem(DRAFT_DATE_PREFIX + key);
+      } catch (e) { /* nothing held */ }
+    }
+
+    function draftParse(raw) {
+      try {
+        const v = JSON.parse(raw);
+        if (v && typeof v.text === 'string' && Number.isFinite(v.at)) return v;
+      } catch (e) { /* written before drafts carried a date */ }
+      return null;
+    }
+
+    function draftRead(key) {
+      if (draftPending.has(key)) return draftPending.get(key);
+      let raw = null;
+      try { raw = localStorage.getItem(key); } catch (e) { return ''; }
+      if (!raw) return '';
+      return raw;
+    }
+
+    // Once per page, per prefix. A draft from before the date was stored is dated now, so it is
+    // kept for a month from the first page that sees it rather than dropped unread.
+    function draftSweep(prefix) {
+      try {
+        const now = Date.now();
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith(prefix)) continue;
+          const raw = localStorage.getItem(key);
+          const dateKey = DRAFT_DATE_PREFIX + key;
+          const v = draftParse(localStorage.getItem(dateKey));
+          // An old tab can replace the text without dating it. That is a new draft, not expired.
+          if (!v || v.text !== raw) localStorage.setItem(dateKey, JSON.stringify({ text: raw, at: now }));
+          else if (!(now - v.at < DRAFT_TTL_MS)) {
+            localStorage.removeItem(key);
+            localStorage.removeItem(dateKey);
+          }
+        }
+      } catch (e) { /* a sweep is a tidy-up */ }
+    }
+
+    if (typeof addEventListener === 'function') addEventListener('pagehide', draftFlush);
+    if (typeof document === 'object' && document && document.addEventListener) {
+      document.addEventListener('visibilitychange', () => { if (document.hidden) draftFlush(); });
+    }
+
+    // The newest `max` keys of a map only this browser writes. Insertion order is age, so a writer
+    // that wants an entry to count as new deletes it before setting it.
+    function capMap(obj, max) {
+      const keys = Object.keys(obj);
+      for (const k of keys.slice(0, Math.max(0, keys.length - max))) delete obj[k];
+      return obj;
+    }
+
   </script>
   <script>
     // --- Shared user state ---
@@ -8853,6 +8962,9 @@
     const stateTimers = {};
     const stateInFlight = new Set();
     const stateSent = {};
+    // name -> the last body this browser either adopted from the relay or had acknowledged by it.
+    // Such a body is in the relay's history already, so overwriting it needs no `_local` copy.
+    const stateRelayHad = {};
 
     // Pure. What to do with one document on the first answer after connect.
     //   'adopt'  — the relay holds it; take it whole
@@ -9142,9 +9254,10 @@
         // it without a copy is not part of the deal — one slot, last overwrite only, written here
         // and never read back by this app, so a first connect that discards a browser's pairs is
         // recoverable by hand.
-        if (had) localStorage.setItem(key + '_local', had);
+        if (had && had !== stateRelayHad[name]) localStorage.setItem(key + '_local', had);
         if (body === null) localStorage.removeItem(key); else localStorage.setItem(key, body);
       } catch (e) { return false; }
+      stateRelayHad[name] = body;
       stateSyncRerender(name);
       return true;
     }
@@ -9193,6 +9306,7 @@
         const body = doc.body == null ? null : doc.body;
         // Whatever this browser then decides to do with it, this is what the relay holds.
         if (rev > 0) stateHeld[name] = body;
+        if (rev > 0 && body != null && body === stateRead(name)) stateRelayHad[name] = body;
         if (first) {
           const local = stateRead(name);
           const pending = statePending(name);
@@ -9259,7 +9373,7 @@
       stateInFlight.delete(name);
       stateClearPending(name, stateSent[name]);
       // Accepted, so what we sent is now what the relay holds.
-      if (stateSent[name] != null) stateHeld[name] = stateSent[name];
+      if (stateSent[name] != null) stateHeld[name] = stateRelayHad[name] = stateSent[name];
       delete stateSent[name];
       if (stateDirty.has(name)) stateSyncFlush(name);
     }
@@ -12290,9 +12404,10 @@ function convWebModeOf(conv) {
       });
     }
 
+    // `raw` is the stored string, or the document already parsed out of it.
     function parseConvIndex(raw) {
       try {
-        const d = JSON.parse(raw || '');
+        const d = raw && typeof raw === 'object' ? raw : JSON.parse(raw || '');
         if (!d || !Array.isArray(d.items)) return [];
         if (d.version !== 1 && d.version !== 2 && d.version !== CONV_INDEX_VERSION) return [];
         const old = d.version === 1;
@@ -12798,6 +12913,7 @@ function convWebModeOf(conv) {
       }
       try {
         await idbReq(db.transaction(CONV_DB_STORE, 'readwrite').objectStore(CONV_DB_STORE).put(rec));
+        convBudgetCheck();
         return true;
       } catch (e) {
         // Out of quota. One eviction pass, one retry, and then it is the session's own memory.
@@ -12854,8 +12970,10 @@ function convWebModeOf(conv) {
 
     // Which keys any conversation still names. Read from the index, which is why the index is the
     // synchronous half: eviction must not wait on a database to know what is protected.
+    // A room the relay retired is still named: its agents are listed in the document's `retired`,
+    // so retiring a room does not move its transcripts down a tier.
     function convReferenced() {
-      const out = new Set();
+      const out = new Set(convRetired());
       for (const c of loadConvIndex()) for (const m of c.members || []) out.add(m.aid);
       return out;
     }
@@ -12890,17 +13008,108 @@ function convWebModeOf(conv) {
       for (const k of keys) delete all[k];
     }
 
+    // Each record's key and time, oldest first, read through the `touched` index and never the
+    // bodies: eviction needs nothing else, and a transcript can be megabytes. A record written
+    // before it carried a time is not in the index, so a store holding one is read whole instead.
+    async function convKeyTimes(db, name) {
+      const store = db.transaction(name, 'readonly').objectStore(name);
+      const count = idbReq(store.count());
+      const out = await new Promise((res, rej) => {
+        const got = [], req = store.index('touched').openKeyCursor();
+        req.onsuccess = () => {
+          const c = req.result;
+          if (!c) return res(got);
+          got.push({ key: c.primaryKey, touched: c.key });
+          c.continue();
+        };
+        req.onerror = () => rej(req.error);
+      });
+      if (out.length === await count) return out;
+      const all = db.transaction(name, 'readonly').objectStore(name);
+      const path = all.keyPath;
+      return ((await idbReq(all.getAll())) || [])
+        .map(r => ({ key: r[path], touched: r.touched || 0 }))
+        .sort((a, b) => a.touched - b.touched);
+    }
+
+    async function convDropKeys(db, name, keys) {
+      if (!keys.length) return 0;
+      const write = db.transaction(name, 'readwrite').objectStore(name);
+      await Promise.all(keys.map(k => idbReq(write.delete(k))));
+      return keys.length;
+    }
+
     async function convEvict() {
       const db = await openConvDB();
-      if (!db) return;
+      if (!db) return 0;
       try {
-        const read = db.transaction(CONV_DB_STORE, 'readonly').objectStore(CONV_DB_STORE);
-        const all = await idbReq(read.getAll());
-        const drop = convEvictable(all, convReferenced(), convKept());
-        if (!drop.length) return;
-        const write = db.transaction(CONV_DB_STORE, 'readwrite').objectStore(CONV_DB_STORE);
-        await Promise.all(drop.map(k => idbReq(write.delete(k))));
-      } catch (e) { /* nothing to evict is not an error */ }
+        const all = await convKeyTimes(db, CONV_DB_STORE);
+        return await convDropKeys(db, CONV_DB_STORE, convEvictable(all, convReferenced(), convKept()));
+      } catch (e) { return 0; /* nothing to evict is not an error */ }
+    }
+
+    // --- The byte budget ---
+    //
+    // The counts bound how many records each store keeps, not how big they are: five hundred
+    // transcripts of five thousand entries is gigabytes. So the database also has one budget in
+    // bytes, read from the browser's own estimate of what this origin uses, checked at most every
+    // ten minutes after a write. Past it, the oldest quarter of one store goes per check, copies
+    // first — the adapter still holds every provider thread and the relay every row it has not
+    // pruned — and this browser's own transcripts last, in the order the count ceiling uses and
+    // never one a named conversation holds. The same check makes the transcript count a ceiling
+    // rather than something reached only when a write fails.
+    const CONV_BYTES_BUDGET = 256 * 1024 * 1024, CONV_BUDGET_EVERY_MS = 10 * 60 * 1000;
+    // The last time a ceiling removed anything, for the storage panel to say.
+    const CONV_CUT_KEY = 'herdr_storage_cut';
+    let convBudgetAt = 0;
+
+    async function convEstimate() {
+      try {
+        const s = typeof navigator === 'object' && navigator.storage;
+        return s && typeof s.estimate === 'function' ? await s.estimate() : null;
+      } catch (e) { return null; }
+    }
+
+    async function convOldestQuarter(db, name) {
+      const all = await convKeyTimes(db, name);
+      return convDropKeys(db, name, all.slice(0, Math.ceil(all.length / 4)).map(r => r.key));
+    }
+
+    // The transcripts past `keep` records (the count ceiling when 0), by evictOrder. Silent, unlike
+    // a failed write's pass: a periodic check finding only named recordings is not news.
+    async function convTrimTranscripts(db, keep) {
+      const all = await convKeyTimes(db, CONV_DB_STORE);
+      const max = keep ? Math.max(1, all.length - Math.ceil(all.length / 4)) : 0;
+      return convDropKeys(db, CONV_DB_STORE, evictOrder(all, convReferenced(), max, convKept()));
+    }
+
+    async function convBudgetCheck(now = Date.now()) {
+      if (now - convBudgetAt < CONV_BUDGET_EVERY_MS) return null;
+      convBudgetAt = now;
+      const db = await openConvDB();
+      if (!db) return null;
+      const cut = { at: now, transcripts: 0 };
+      try {
+        cut.transcripts = await convTrimTranscripts(db, false);
+        const est = await convEstimate();
+        if (est && est.usage > Math.min(CONV_BYTES_BUDGET, (est.quota || Infinity) / 2)) {
+          cut.bytes = est.usage;
+          cut.webchat = await convOldestQuarter(db, CONV_WEB_STORE);
+          if (!cut.webchat) cut.live = await convOldestQuarter(db, CONV_LIVE_STORE);
+          if (!cut.webchat && !cut.live) cut.transcripts += await convTrimTranscripts(db, true);
+        }
+      } catch (e) { /* the budget is a tidy-up, not a correctness property */ }
+      if (!(cut.transcripts || cut.webchat || cut.live)) return cut;
+      try { localStorage.setItem(CONV_CUT_KEY, JSON.stringify(cut)); }
+      catch (e) { /* the panel just cannot say so */ }
+      return cut;
+    }
+
+    function convStorageCut() {
+      try {
+        const d = JSON.parse(localStorage.getItem(CONV_CUT_KEY) || '');
+        return d && typeof d === 'object' && d.at ? d : null;
+      } catch (e) { return null; }
     }
 
     // Erase these transcripts outright, from both stores and from the fold held in memory.
@@ -12933,12 +13142,161 @@ function convWebModeOf(conv) {
     // state sync adopting another browser's, another tab — and each caller is handed a copy of its
     // own. Callers edit what they are handed before saving it, and one sharing the cached rows that
     // edited and then did not save would change what every later read sees.
-    let convIndexRaw = null, convIndexParsed = [];
+    let convIndexRaw = null, convIndexParsed = [], convIndexOverlaid = -1, convIndexRetired = [];
+
+    function convIndexFresh() {
+      const raw = localStorage.getItem(CONV_INDEX_KEY);
+      if (raw === convIndexRaw) return;
+      let doc = null;
+      try { doc = JSON.parse(raw || ''); } catch (e) { /* read as empty */ }
+      convIndexParsed = parseConvIndex(doc); convIndexRaw = raw; convIndexOverlaid = -1;
+      convIndexRetired = doc && Array.isArray(doc.retired) ? doc.retired : [];
+    }
+
+    // The agents of the rooms the relay retired, which the relay writes and every save carries on.
+    function convRetired() { convIndexFresh(); return convIndexRetired; }
 
     function loadConvIndex() {
-      const raw = localStorage.getItem(CONV_INDEX_KEY);
-      if (raw !== convIndexRaw) { convIndexParsed = parseConvIndex(raw); convIndexRaw = raw; }
+      convIndexFresh();
+      if (convIndexOverlaid !== convActivityGen) {
+        convActivityOverlay(convIndexParsed);
+        convIndexOverlaid = convActivityGen;
+      }
       return convPlainCopy(convIndexParsed);
+    }
+
+    // --- The landing list's numbers ---
+    // How many messages each agent has, when it last spoke and what it said, counted by the relay's
+    // record and fed to every browser as `activity`. They used to live on the members of the
+    // shared index, which made every turn of every agent a revision of the one document every
+    // browser rewrites. Now they are laid over the index as it is read, and a save while the feed
+    // is live leaves them out. Against a relay with no feed the index carries them as it did.
+    const CONV_ACTIVITY_KEY = 'herdr_conv_activity';
+    let convActivity = null, convActivityState = 'unknown', convActivityGen = 0, convActivityTimer = 0;
+
+    function convActivityHeld() {
+      if (convActivity) return convActivity;
+      try {
+        const v = JSON.parse(localStorage.getItem(CONV_ACTIVITY_KEY) || 'null');
+        if (v && typeof v.epoch === 'string' && v.items && typeof v.items === 'object') {
+          return (convActivity = { epoch: v.epoch, rev: Number(v.rev) || 0, items: v.items });
+        }
+      } catch (e) { /* unreadable: start empty */ }
+      return (convActivity = { epoch: '', rev: 0, items: {} });
+    }
+
+    function convActivityLive() { return convActivityState === 'live'; }
+
+    // Whether the relay is writing the record this page would otherwise witness: said on this
+    // socket, or, before this socket's answer is in, said last time and not taken back since. An
+    // `off` answer clears the held feed, so a relay that stopped recording costs one guess at most.
+    function convActivityRecorded() {
+      return convActivityState === 'live'
+        || (convActivityState === 'unknown' && !!convActivityHeld().epoch);
+    }
+
+    function convActivityOverlay(items) {
+      const feed = convActivityHeld().items;
+      for (const c of items) for (const m of (c && c.members) || []) {
+        const a = m && m.aid && feed[m.aid];
+        if (!a) continue;
+        m.messages = Math.max(Number(m.messages) || 0, Number(a[0]) || 0);
+        if ((Number(a[1]) || 0) >= (Number(m.seen) || 0)) {
+          m.seen = Number(a[1]) || 0;
+          if (a[2]) m.last = a[2];
+        }
+      }
+    }
+
+    function convActivityOpen(socket) {
+      const held = convActivityHeld();
+      try { socket.send(JSON.stringify({ type: 'activity_get', epoch: held.epoch, since: held.rev })); }
+      catch (e) { /* the socket closed under us; the next open asks again */ }
+    }
+
+    function convActivityReceive(msg) {
+      if (!msg || msg.available === false) { convActivityOff(); return; }
+      const held = convActivityHeld();
+      if (!msg.full && msg.epoch !== held.epoch) return;
+      if (msg.full || msg.epoch !== held.epoch) {
+        convActivity = { epoch: String(msg.epoch || ''), rev: 0, items: {} };
+        convIndexRaw = null;   // a fresh table may count lower than what is already laid over
+      }
+      for (const [aid, a] of Object.entries(msg.items || {})) convActivityMerge(aid, a);
+      convActivity.rev = Math.max(convActivity.rev, Number(msg.rev) || 0);
+      convActivityState = 'live';
+      convActivityChanged();
+      if (typeof document !== 'undefined' && document.hidden) return;
+      // The desktop sidebar is always on screen. The phone's landing list is behind an open pane,
+      // and renderBody redraws it on the way back out.
+      if (typeof deskRenderConvs === 'function') deskRenderConvs();
+      else if (typeof activePane !== 'undefined' && !activePane
+          && typeof renderConversations === 'function') renderConversations();
+    }
+
+    // Raised and never lowered, and the line goes with whichever side is newer: the record answers
+    // a window and a browser that watched a pane for a week holds more of it than the record does.
+    function convActivityMerge(aid, a) {
+      const items = convActivityHeld().items, was = items[aid];
+      const next = !was ? [Number(a[0]) || 0, Number(a[1]) || 0, String(a[2] || '')] : [
+        Math.max(Number(a[0]) || 0, Number(was[0]) || 0),
+        Math.max(Number(a[1]) || 0, Number(was[1]) || 0),
+        ((Number(a[1]) || 0) >= (Number(was[1]) || 0) && a[2]) || was[2]];
+      if (was && was[0] === next[0] && was[1] === next[1] && was[2] === next[2]) return false;
+      items[aid] = next;
+      return true;
+    }
+
+    function convActivityChanged() {
+      convActivityGen++;
+      clearTimeout(convActivityTimer);
+      convActivityTimer = setTimeout(() => {
+        try { localStorage.setItem(CONV_ACTIVITY_KEY, JSON.stringify(convActivity)); }
+        catch (e) { /* private mode: this session only */ }
+      }, 2000);
+    }
+
+    // What this browser's own record says about a member, laid into the same numbers. Local: the
+    // other browsers have the relay's count, which is the one that is shared.
+    function convActivityNote(aid, messages, seen, last) {
+      if (!aid || !convActivityMerge(aid, [messages, seen, last])) return false;
+      convActivityChanged();
+      return true;
+    }
+
+    // A relay with no record, or one from before the feed: the index keeps its own numbers.
+    function convActivityOff() {
+      convActivityState = 'off';
+      convActivity = { epoch: '', rev: 0, items: {} };
+      convIndexRaw = null;
+      convActivityGen++;
+      try { localStorage.removeItem(CONV_ACTIVITY_KEY); } catch (e) { /* nothing held */ }
+    }
+
+    function convActivityNoteError(text) {
+      if (!/unknown message type/i.test(String(text || '')) || !/activity_get/.test(String(text))) return false;
+      convActivityOff();
+      return true;
+    }
+
+    // The index as it is stored while the feed is live: an identified member's numbers are the
+    // feed's, and writing them down would make every turn an edit again. Whatever a caller wrote
+    // there is taken into the feed first, so a save never loses a number.
+    function convIndexStored(items) {
+      if (!convActivityLive()) return items;
+      let noted = false;
+      const out = items.map(c => !c || !Array.isArray(c.members) ? c : Object.assign({}, c, {
+        members: c.members.map(m => {
+          if (!m || !m.aid) return m;
+          const { messages, seen, last, ...rest } = m;
+          if (messages !== undefined || seen !== undefined || last !== undefined) {
+            noted = convActivityMerge(m.aid, [messages, seen, last]) || noted;
+          }
+          return rest;
+        }),
+      }));
+      if (noted) convActivityChanged();
+      return out;
     }
 
     // A deep copy of JSON-shaped data. A third of what parsing the same rows costs, and
@@ -13339,6 +13697,11 @@ function convWebModeOf(conv) {
       // is invalidated rather than sent, and the render that follows asks for the roster it is
       // actually showing (conv_live.js).
       if (convLiveOn()) { convLiveInvalidate(); renderConvView(); }
+      // The relay is recording and this page draws its record, not this browser's transcript: the
+      // desktop page always, the phone while its thread reads the relay. A read here would grow a
+      // copy nobody on this page is shown. Sends, transfers and spawns still write the transcript,
+      // and Recover history and the reconnect recovery still read panes.
+      if (convActivityRecorded() && (convLiveOn() || typeof deskRenderConvs === 'function')) return;
       const a = paneOf(paneId);
       if (!a || !profileFor(a.agent) || !convReferenced().has(convMemberKey(a))) return;
       // Not while a recovery is in flight for this transcript. `pane_content` carries no request
@@ -13563,28 +13926,41 @@ function convWebModeOf(conv) {
     // is the one thing the landing list is asked.
     function convNoteCounts(key, entries, now, label) {
       const items = loadConvIndex();
-      const last = convAt(entries[entries.length - 1]) || now;
-      let hit = false;
+      const seen = convAt(entries[entries.length - 1]) || now;
+      // Enough of the newest message to recognise it on a card, and no more: this lives in the
+      // ~5 MB localStorage index beside fourteen other keys, and the words themselves are in
+      // IndexedDB where there is room for them.
+      const preview = String((entries[entries.length - 1] || {}).text || '')
+        .replace(/\s+/g, ' ').trim().slice(0, 120);
+      let hit = false, drawn = false;
       for (const c of items) for (const m of c.members || []) {
-        if (m.aid === key) {
-          m.messages = entries.length;
-          m.seen = last;
-          // Enough of the newest message to recognise it on a card, and no more: this lives in
-          // the ~5 MB localStorage index beside fourteen other keys, and the words themselves are
-          // in IndexedDB where there is room for them.
-          m.last = String((entries[entries.length - 1] || {}).text || '')
-            .replace(/\s+/g, ' ').trim().slice(0, 120);
-          // The name too, so a rename outlives the pane it was made on. The index stamps a label
-          // when a member joins and never again; the record's is written on every read, so this is
-          // where the two are kept in step. The landing card is drawn from the index alone.
-          const name = label && convMemberName(key, label, m.label);
-          if (name && m.label !== name) m.label = name;
+        if (m.aid !== key) continue;
+        // The name too, so a rename outlives the pane it was made on. The index stamps a label
+        // when a member joins and never again; the record's is written on every read, so this is
+        // where the two are kept in step. The landing card is drawn from the index alone.
+        const name = (label && convMemberName(key, label, m.label)) || m.label;
+        // While the feed counts, this browser's numbers go into it and the index only keeps the
+        // name in step: a recorded read is not an edit of the shared document.
+        if (convActivityLive()) {
+          if (convActivityNote(key, entries.length, seen, preview)) drawn = true;
+          if (name === undefined || m.label === name) continue;
+          m.label = name;
           hit = true;
+          continue;
         }
+        // Only a change is a save: this runs on every recorded read of every member.
+        if (m.messages === entries.length && m.seen === seen && m.last === preview
+            && m.label === name) continue;
+        m.messages = entries.length;
+        m.seen = seen;
+        m.last = preview;
+        if (name !== undefined) m.label = name;
+        hit = true;
       }
       // Not while a pane is open: the landing list is behind it, and this runs on every recorded
       // read of every member. renderBody redraws it on the way back out.
-      if (hit) { saveConvIndex(items); if (!activePane) renderConversations(); }
+      if (hit) saveConvIndex(items);
+      if ((hit || drawn) && !activePane) renderConversations();
     }
 
     // The relay cache is the source a fresh browser can fill before it has watched any panes.
@@ -13595,7 +13971,7 @@ function convWebModeOf(conv) {
     // count down would tell the reader their record had shrunk. The card says the larger of what
     // is on disk here and what the relay just handed over.
     function convNoteLiveCounts(keys) {
-      if (typeof convLiveEntries !== 'function') return;
+      if (typeof convLiveEntries !== 'function' || convActivityLive()) return;
       const items = loadConvIndex();
       let hit = false;
       for (const c of items) for (const m of c.members || []) {
@@ -13682,6 +14058,16 @@ function convWebModeOf(conv) {
 
     function saveConvIndex(items) {
       const kept = convFit(items);
+      if (kept.length < items.length) {
+        const here = new Set(kept.map(c => c && c.id));
+        convDropReadingState(items.filter(c => c && !here.has(c.id)).map(c => c.id));
+      }
+      const retired = convRetired();
+      const raw = JSON.stringify(Object.assign({ version: CONV_INDEX_VERSION, items: convIndexStored(kept) },
+        retired.length ? { retired } : {}));
+      // A save that changes nothing is not an edit: no storage write, and nothing to sync.
+      try { if (localStorage.getItem(CONV_INDEX_KEY) === raw) return; }
+      catch (e) { /* private mode: fall through and try the write */ }
       try {
         // What this save adds that the index did not already have is what the relay has never been
         // told about. Ids the save drops leave the outbox with them: a conversation deleted before
@@ -13693,7 +14079,7 @@ function convWebModeOf(conv) {
         const next = new Set((Array.isArray(pending) ? pending : []).filter(id => here.has(id)));
         for (const c of kept) if (c && c.id && !before.has(c.id)) next.add(c.id);
         localStorage.setItem(CONV_PENDING_KEY, JSON.stringify(Array.from(next)));
-        localStorage.setItem(CONV_INDEX_KEY, JSON.stringify({ version: CONV_INDEX_VERSION, items: kept }));
+        localStorage.setItem(CONV_INDEX_KEY, raw);
       } catch (e) { /* private mode: this session only */ }
       // A half-written message and the agent it was addressed to belong to a conversation, so they
       // go when it does. Here rather than in deleteConversation: the cap evicts conversations too,
@@ -13940,11 +14326,11 @@ function convWebModeOf(conv) {
     }
 
     function convMemberOf(a) {
-      return { key: convMemberKey(a), added: Date.now(), label: paneLabel(a),
+      return { added: Date.now(), label: paneLabel(a),
         agent: a.agent || '', project: a.project || '',
-        // The colleague, as opposed to the pane it is sitting in. `key` names a pane and is what
-        // the transcript is filed under; this is what says the member is still *there* after the
-        // pane it was in has been recycled. Empty against a relay that does not mint them.
+        // The colleague, as opposed to the pane it is sitting in, and the key its transcript is
+        // filed under. No separate `key`: it was always this id, and saying it twice cost a field
+        // on every member of every room. Empty against a relay that does not mint them.
         aid: a.aid || '' };
     }
 
@@ -14254,6 +14640,29 @@ function convWebModeOf(conv) {
         const d = JSON.parse(localStorage.getItem(CONV_HIDDEN_KEY) || '');
         return d && typeof d === 'object' ? d : {};
       } catch (e) { return {}; }
+    }
+
+    // The reading state of rooms that are gone: their hide lists, and every pane read under them.
+    // Otherwise a room made later on a recycled id inherits a stranger's folded-out members, and
+    // both maps only ever grow. Each is written only when it held something to drop.
+    function convDropReadingState(ids) {
+      const gone = new Set((ids || []).filter(Boolean));
+      if (!gone.size) return;
+      const hidden = convHiddenAll();
+      if (Object.keys(hidden).some(id => gone.has(id))) {
+        for (const id of gone) delete hidden[id];
+        try { localStorage.setItem(CONV_HIDDEN_KEY, JSON.stringify(hidden)); }
+        catch (e) { /* private mode: this session only */ }
+        if (typeof stateSyncMark === 'function') stateSyncMark('conv_hidden');
+      }
+      const views = convViews();
+      const stale = Object.keys(views).filter(key => gone.has(views[key]));
+      if (stale.length) {
+        for (const key of stale) delete views[key];
+        try { localStorage.setItem(CONV_VIEW_KEY, JSON.stringify(views)); }
+        catch (e) { /* private mode: this session only */ }
+        if (typeof stateSyncMark === 'function') stateSyncMark('conv_view');
+      }
     }
 
     // Per conversation, because the same pane can be worth reading in one grouping and noise in
@@ -15968,45 +16377,79 @@ convApplyTint();
     // one conversation, and the whole value of the toggle is being able to tell them apart.
     const CONV_LIVE_KEEP = 400;      // fingerprints kept on disk, oldest touched evicted first
 
-    // The buckets read back from disk, once per page. Everything that reads the cache awaits it, so
-    // a render arriving before the disk does draws the record rather than an empty thread.
-    let convLiveLoaded = null;
+    // The buckets read back from disk, per agent and once per page: a page draws one room, and the
+    // store holds up to CONV_LIVE_KEEP buckets of up to CONV_LIVE_DEEP_MAX rows. A fetch waits for
+    // its agents' buckets, so a render arriving before the disk does draws the record rather than
+    // an empty thread. `convLiveAll` is the whole store, read only by the storage panel.
+    const convLiveRead = new Map(), convLiveReady = new Set();
+    let convLiveAll = null, convLiveAllReady = false;
     // Fingerprints this session has heard the relay answer for. The first ask for each is the whole
     // window rather than a delta: a watermark restored from disk names an id in a database this
     // session has never spoken to, and a relay whose record was reset or moved would answer that
     // delta with silence forever. One window per fingerprint per session settles it.
     const convLiveVerified = new Set();
 
-    function convLiveHydrate() {
-      if (convLiveLoaded) return convLiveLoaded;
-      convLiveLoaded = (async () => {
-        if (typeof openConvDB !== 'function') return;
-        const db = await openConvDB();
-        if (!db) return;
-        try {
-          const read = db.transaction(CONV_LIVE_STORE, 'readonly').objectStore(CONV_LIVE_STORE);
-          for (const rec of (await idbReq(read.getAll())) || []) {
-            if (!rec || !rec.fp || convLiveCache.has(rec.fp)) continue;
-            convLiveCache.set(rec.fp, {
-              turns: rec.turns || [], syncedTo: rec.syncedTo || 0, lastFetch: 0,
-              // Without this a walk back would survive the reload only until the next answer, when
-              // the trim would cut every pane to one window again and throw it all away.
-              depth: rec.depth || {}, ended: rec.ended || {},
-              // Answered by the relay once, on a previous day. Without this the thread would say
-              // "Reading the relay's record…" over rows it is already drawing.
-              answered: true,
-            });
-          }
-        } catch (e) { /* the session keeps its own copy in memory */ }
-      })();
-      return convLiveLoaded;
+    // Never over a bucket this session has already been answered into: a live answer is newer than
+    // anything on disk by construction.
+    function convLiveAdopt(rec) {
+      if (!rec || !rec.fp || convLiveCache.has(rec.fp)) return;
+      convLiveCache.set(rec.fp, {
+        turns: rec.turns || [], syncedTo: rec.syncedTo || 0, lastFetch: 0,
+        // Without this a walk back would survive the reload only until the next answer, when the
+        // trim would cut every pane to one window again and throw it all away. A number and a
+        // flag: an object here read as "ended" and made the trim's ceiling NaN.
+        depth: Number(rec.depth) || 0, ended: rec.ended === true,
+        // Answered by the relay once, on a previous day. Without this the thread would say
+        // "Reading the relay's record…" over rows it is already drawing.
+        answered: true,
+      });
+    }
+
+    // `aids` reads those buckets; none reads them all.
+    function convLiveHydrate(aids) {
+      if (!aids) {
+        if (!convLiveAll) {
+          convLiveAll = (async () => {
+            const db = typeof openConvDB === 'function' ? await openConvDB() : null;
+            try {
+              if (db) {
+                const read = db.transaction(CONV_LIVE_STORE, 'readonly').objectStore(CONV_LIVE_STORE);
+                for (const rec of (await idbReq(read.getAll())) || []) convLiveAdopt(rec);
+              }
+            } catch (e) { /* the session keeps its own copy in memory */ }
+            convLiveAllReady = true;
+          })();
+        }
+        return convLiveAll;
+      }
+      if (convLiveAll) return convLiveAll;
+      const want = [...new Set(aids.filter(aid => aid && !convLiveRead.has(aid)))];
+      if (want.length) {
+        const read = (async () => {
+          const db = typeof openConvDB === 'function' ? await openConvDB() : null;
+          try {
+            if (db) {
+              const store = db.transaction(CONV_LIVE_STORE, 'readonly').objectStore(CONV_LIVE_STORE);
+              const recs = await Promise.all(want.map(aid => idbReq(store.get(aid))));
+              recs.forEach(convLiveAdopt);
+            }
+          } catch (e) { /* the session keeps its own copy in memory */ }
+          for (const aid of want) convLiveReady.add(aid);
+        })();
+        for (const aid of want) convLiveRead.set(aid, read);
+      }
+      return Promise.all(aids.map(aid => convLiveRead.get(aid)));
+    }
+
+    function convLiveHydrated(aids) {
+      return convLiveAllReady || aids.every(aid => convLiveReady.has(aid));
     }
 
     // Write-through, per fingerprint, after the answer that changed it. Failures are silent by
     // design: a full quota costs this session's durability and nothing else, and the thread on
     // screen is already drawn from memory.
     async function convLivePersist(fpKeys) {
-      if (typeof openConvDB !== 'function') return;
+      if (!fpKeys || !fpKeys.size || typeof openConvDB !== 'function') return;
       const db = await openConvDB();
       if (!db) return;
       const now = Date.now();
@@ -16016,11 +16459,12 @@ convApplyTint();
           const bucket = convLiveCache.get(fpKey);
           if (!bucket) return null;
           return idbReq(store.put({ fp: fpKey, turns: bucket.turns || [],
-            syncedTo: bucket.syncedTo || 0, depth: bucket.depth || {},
-            ended: bucket.ended || {}, touched: now }));
+            syncedTo: bucket.syncedTo || 0, depth: bucket.depth || 0,
+            ended: !!bucket.ended, touched: now }));
         }).filter(Boolean));
       } catch (e) { return; }
       await convLiveEvict(db);
+      if (typeof convBudgetCheck === 'function') convBudgetCheck();
     }
 
     // The store's own ceiling. The per-fingerprint cap (CONV_LIVE_ROWS) bounds one pane; this bounds
@@ -16115,8 +16559,8 @@ convApplyTint();
       // Whatever is on disk, before deciding anything: the watermark that says what to ask for
       // lives there now, and asking without it would re-fetch a window this browser already holds.
       // The render that follows draws from the same buckets, so a thread is on screen either way.
-      if (!convLiveLoaded) {
-        convLiveHydrate().then(() => {
+      if (!convLiveHydrated(aids)) {
+        convLiveHydrate(aids).then(() => {
           if (background) convLiveFetch(keys, force, true);
           else renderConvView();
         });
@@ -16204,7 +16648,9 @@ convApplyTint();
     // ordinary freshness rule already asks for a member with no bucket, which is the fresh browser
     // this exists for.
     function convLiveWarmRecent() {
-      if (typeof loadConvIndex !== 'function') return;
+      // The feed already says what the landing list needs, so nothing has to be read to count it.
+      if (typeof loadConvIndex !== 'function'
+          || (typeof convActivityLive === 'function' && convActivityLive())) return;
       const items = loadConvIndex();
       const recent = items.slice().sort((a, b) => {
         const seen = c => Math.max(0, ...((c.members || []).map(m => Number(m.seen) || 0)));
@@ -16433,6 +16879,7 @@ convApplyTint();
       // from one that was never asked, and a quiet pane would never come up to date.
       for (const aid of (Array.isArray(msg.aids) ? msg.aids : [])) {
         const bucket = convLiveBucket(aid);
+        const was = [bucket.syncedTo, bucket.ended];
         // Heard from, this session, against this relay: the next ask for it can be a delta.
         //
         // `until_id` excluded: a backfill's highest id is *older* than this bucket's watermark, so
@@ -16448,7 +16895,9 @@ convApplyTint();
         // walk is over rather than handed a button that does nothing, and the depth this ask
         // raised is not spent again on a question with no answer.
         if (msg.until_id != null && !turns.length) bucket.ended = true;
-        touched.add(aid);
+        // Written back only when what is kept moved. A quiet roster is asked every few seconds,
+        // and an answer saying nothing new rewrote every bucket in it each time.
+        if (bucket.syncedTo !== was[0] || bucket.ended !== was[1]) touched.add(aid);
       }
 
       for (const aid of touched) {
@@ -16965,6 +17414,8 @@ convApplyTint();
         if (window.cue) cue('ready');
         if (typeof announceSubscription === 'function') announceSubscription();
         if (typeof ccReconnect === 'function') ccReconnect();
+        // Before state_get: one lane, so the numbers are in hand when the index first lands.
+        if (typeof convActivityOpen === 'function') convActivityOpen(socket);
         stateSyncOpen(socket);
       };
       socket.onclose = () => {
@@ -17010,6 +17461,7 @@ convApplyTint();
       if (msg.type === 'error') {
         // A relay older than this client answers state_get with "unknown message type". That is a
         // fact about the relay, not a failure to put in front of the user.
+        if (typeof convActivityNoteError === 'function' && convActivityNoteError(msg.message)) return;
         if (stateSyncNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
         // A refusal that names the message it refused is the answer to a button somebody pressed,
@@ -17021,6 +17473,7 @@ convApplyTint();
         showToast(typeof loopRefusal === 'function'
           ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
+      else if (msg.type === 'activity') { if (typeof convActivityReceive === 'function') convActivityReceive(msg); }
       else if (msg.type === 'state') { stateSyncReceive(msg); }
       else if (msg.type === 'state_ack') { stateSyncAck(msg); }
       else if (msg.type === 'state_conflict') { stateSyncConflict(msg); }
@@ -19977,6 +20430,7 @@ convApplyTint();
     function recipePreviewAsk(d) {
       if (!d || typeof ws === 'undefined' || !ws || ws.readyState !== 1) return;
       const key = recipePreviewKey(d);
+      recipePreviewRefresh();
       if (recipePreview && recipePreview.key === key) return;
       clearTimeout(recipePreviewAt);
       recipePreviewAt = setTimeout(() => {
@@ -20197,17 +20651,19 @@ convApplyTint();
     function recipeLabel(value) {
       if (!recipeDraft) return;
       recipeDraft.label = value;
+      if (!recipeDraft.saved && !recipeDraft.idTyped) {
+        recipeDraft.id = recipeSlug(value);
+        const el = document.getElementById('rcpId');
+        if (el) el.value = recipeDraft.id;
+      }
       recipePreviewAsk(recipeDraft);       // a seat's brief names its recipe
-      if (recipeDraft.saved || recipeDraft.idTyped) return;
-      recipeDraft.id = recipeSlug(value);
-      const el = document.getElementById('rcpId');
-      if (el) el.value = recipeDraft.id;
     }
 
     function recipeTypeId(value) {
       if (!recipeDraft || recipeDraft.saved) return;
       recipeDraft.id = value.trim();
       recipeDraft.idTyped = true;
+      recipePreviewAsk(recipeDraft);
     }
 
     function recipeSet(field, value) {
@@ -25962,8 +26418,10 @@ convApplyTint();
       if (!node || !node.dataset) return;
       const key = node.dataset.session + '\n' + node.dataset.group;
       const state = ccFoldState();
-      if (String(node.dataset.dflt || '') === (node.open ? '1' : '')) delete state[key];
-      else state[key] = !!node.open;
+      delete state[key];
+      if (String(node.dataset.dflt || '') !== (node.open ? '1' : '')) state[key] = !!node.open;
+      // Sessions end and their folds stay behind, so the oldest go first past this many.
+      capMap(state, 500);
       try { localStorage.setItem(CC_FOLDS_KEY, JSON.stringify(state)); }
       catch (e) { /* private mode: the native details state still works until the next render */ }
     }
@@ -30335,6 +30793,8 @@ convApplyTint();
     // rule in the composers exists to avoid.
 
     function renderConvView() {
+      // Painted once by deskVisibilityChanged when the window is in front again.
+      if (document.hidden) return;
       for (let i = 0; i < deskColumns.length; i++) {
         const tab = deskTabFor(deskColumns[i].tabKey);
         if (tab && tab.kind === 'conversation') deskPaintColumn(i);
@@ -31071,6 +31531,9 @@ convApplyTint();
     // most likely to be blamed for.
     function deskVisibilityChanged() {
       if (document.hidden) return;
+      // Every snapshot and every turn that arrived while hidden was drawn as a title only.
+      render();
+      renderConvView();
       const focused = deskFocused();
       if (focused) deskReadColumn(deskFocus);
       for (let i = 0; i < deskColumns.length; i++) if (i !== deskFocus) deskReadColumn(i);
@@ -36009,6 +36472,9 @@ convApplyTint();
     }
 
     function render() {
+      // A window behind another one draws nothing but its tab title; deskVisibilityChanged draws
+      // the rest once it is in front again.
+      if (document.hidden) { syncBrowserTab(); return; }
       deskOpenLink();
       if (!deskSelectedConv) {
         // Something selected beats an empty lower half on first connect, and the top of the list is
