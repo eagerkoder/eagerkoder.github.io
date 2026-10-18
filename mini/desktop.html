@@ -7,8 +7,11 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-08">
+  <meta name="app-built" content="2026-10-18">
   <title>herdr-remote — desktop</title>
+  <!-- command.html is this page under another name. Named here, before attention.js reads the
+       title it puts its unread count in front of. -->
+  <script>if (/command\.html$/.test(location.pathname)) document.title = 'herdr · Projects';</script>
   <!-- Rewritten by syncBrowserTab: red while something is blocked or a session wants a
        person, the resting blue otherwise. The count is in the title beside it. -->
   <link rel="icon" id="favicon"
@@ -1646,6 +1649,14 @@
     .desk-hang-btn[data-hang="tint"].live {
       border-color: var(--orange);
       color: var(--orange);
+    }
+
+    /* The live switch's third state, the record with what was said mid-turn: filled, as the
+       paragraph switch fills its own third. */
+    .desk-hang-btn[data-hang="live"].grouped {
+      color: var(--bg);
+      background: var(--green);
+      border-color: var(--green);
     }
 
     /* Filled, because a fan-out folded into one bubble is the bigger claim of the two and the one
@@ -7077,7 +7088,765 @@
   font-size: 0.68rem; color: var(--muted); }
 
   </style>
+  <style>
+/* The heading, drawn like a tile band's but not one: the tile bands are the launcher document's. */
+.bench-band {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 
+/* The launcher's Bench band. Both pages draw the launcher, so its rules are one file. A fold per
+   Project, spanning the tile grid, holding one row per entry. */
+.bench-project {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
+}
+
+.bench-project > summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px 0;
+}
+
+/* The rest of the Projects, one control rather than one fold each. */
+.bench-add {
+  grid-column: 1 / -1;
+  justify-self: start;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.bench-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+
+.bench-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bench-row[aria-busy="true"] { opacity: 0.7; cursor: progress; }
+
+.bench-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 1.5px solid var(--muted);
+}
+
+.bench-row[data-state="live"] .bench-dot { background: var(--green); border-color: var(--green); }
+.bench-row[data-state="away"] .bench-dot { border-color: var(--orange); }
+
+.bench-name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.bench-state { color: var(--muted); font-size: 0.7rem; }
+
+/* `architect · <Project>` beside a bench agent's badge. */
+.badge.bench {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+  </style>
+  <!-- command.html's rail, Agents panel and Project file column. -->
+  <style>
+/* command.html: the Projects rail and the Agents panel in the sidebar, and the Project file
+   column. Every sidebar rule is scoped under `.cmd-page`, which `command_shell.js` puts on the
+   desk only on that page; the Project file column is a tab kind both pages can hold, so its rules
+   are not. */
+
+/* Two panels side by side need more than the conversation list's 180px. The width the reader
+   dragged to still wins once it is wider than this. */
+.desk.cmd-page:not(.side-off) {
+  grid-template-columns: minmax(360px, min(var(--desk-side-w, 17%), 50%)) 5px minmax(0, 1fr);
+}
+
+.cmd-page .cmd-side {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  border-top: 1px solid var(--term-border);
+}
+
+.cmd-page .cmd-rail,
+.cmd-page .cmd-agents {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The rail's share of the sidebar is the reader's: `--cmd-rail-w` is set by the grip beside it. */
+.cmd-page .cmd-rail { flex: 0 0 var(--cmd-rail-w, 40%); }
+
+.cmd-page .cmd-rail-grip {
+  flex: 0 0 4px;
+  cursor: col-resize;
+  background: var(--term-border);
+  touch-action: none;
+}
+
+.cmd-page .cmd-rail-grip:hover,
+.cmd-page .cmd-rail-grip:focus-visible,
+.cmd-page .cmd-rail-grip.dragging { background: var(--accent); outline: none; }
+
+.cmd-page .cmd-agents { flex: 1 1 0; }
+
+.cmd-page .cmd-rail > .mock-sidebar-title,
+.cmd-page .cmd-tabs { flex: none; }
+
+.cmd-page .cmd-rows {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cmd-page .cmd-dot.ended {
+  background: none !important;
+  box-shadow: inset 0 0 0 1px var(--dot-cold);
+}
+
+/* The rail. One row per Project: the dot and the name, and under it the three ways in. */
+.cmd-page .cmd-rail-row {
+  padding: 0.45em 0.8em;
+  cursor: pointer;
+  color: var(--term-text);
+}
+
+.cmd-page .cmd-rail-row:hover { background: var(--term-active-bg); }
+
+.cmd-page .cmd-rail-row.sel {
+  background: var(--term-active-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.cmd-page .cmd-rail-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+}
+
+.cmd-page .cmd-rail-line .mock-dot,
+.cmd-page .cmd-card-head .mock-dot,
+.cmd-page .cmd-room .mock-dot,
+.cmd-page .cmd-badge .mock-dot { margin-top: 0; }
+
+.cmd-page .cmd-rail-name,
+.cmd-page .cmd-card-name,
+.cmd-page .cmd-room-name {
+  overflow: hidden;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cmd-page .cmd-rail-name { font-weight: 700; }
+
+.cmd-page .cmd-rail-icons {
+  display: flex;
+  gap: 0.3em;
+  margin: 0.25em 0 0 1em;
+}
+
+.cmd-page .cmd-icon {
+  padding: 0 0.45em;
+  border: 1px solid var(--term-border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--term-muted);
+  font: inherit;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.cmd-page .cmd-icon:hover { border-color: var(--accent); color: var(--term-text); }
+
+/* The two tabs over the Agents panel. */
+.cmd-page .cmd-tabs {
+  display: flex;
+  gap: 0.2em;
+  padding: 0.35em 0.6em;
+  border-bottom: 1px solid var(--term-border);
+}
+
+.cmd-page .cmd-tabs button {
+  padding: 0.15em 0.7em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--term-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cmd-page .cmd-tabs button[aria-selected="true"] {
+  border-color: var(--term-border);
+  background: var(--term-tab-active-bg);
+  color: var(--term-tab-active-text);
+}
+
+/* A Commander card: its head, a row of badges, and its tree when unfolded. */
+.cmd-page .cmd-card {
+  padding: 0.45em 0.6em;
+  border-bottom: 1px solid var(--term-border);
+}
+
+.cmd-page .cmd-card-child {
+  margin: 0.3em 0 0 0.5em;
+  padding: 0.3em 0 0.3em 0.6em;
+  border-bottom: 0;
+  border-left: 1px solid var(--term-border);
+}
+
+.cmd-page .cmd-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+  color: var(--term-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cmd-page .cmd-card-head:hover .cmd-card-name { text-decoration: underline; }
+
+.cmd-page .cmd-card-state {
+  margin-left: auto;
+  color: var(--term-muted);
+  font-weight: 400;
+}
+
+.cmd-page .cmd-caret {
+  width: 1.4em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--term-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cmd-page .cmd-caret-gap { display: inline-block; width: 1.4em; flex: none; }
+.cmd-page .cmd-general,
+.cmd-page .cmd-bench-mark { flex: none; }
+.cmd-page .cmd-room-mark { flex: none; color: var(--accent); opacity: .7; font-size: .95em; }
+.cmd-page .cmd-available .cmd-card-badges { margin: 0.35em 0 0.5em 0.6em; }
+.cmd-page .cmd-general { color: var(--orange); }
+
+.cmd-page .cmd-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  margin: 0.35em 0 0 1.9em;
+}
+
+.cmd-page .cmd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  max-width: 100%;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--term-border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--term-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cmd-page .cmd-badge:hover { border-color: var(--accent); }
+
+.cmd-page .cmd-badge-role {
+  overflow: hidden;
+  color: var(--term-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cmd-page .cmd-card-recipe {
+  margin: 0.25em 0 0 1.9em;
+  color: var(--term-dim);
+}
+
+.cmd-page .cmd-tree {
+  margin: 0.35em 0 0 0.9em;
+  padding-left: 0.6em;
+  border-left: 1px solid var(--term-border);
+}
+
+.cmd-page .cmd-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+  margin: 0.2em 0;
+}
+
+.cmd-page .cmd-tree-label {
+  overflow: hidden;
+  color: var(--term-dim);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cmd-page .cmd-none {
+  padding: 0.6em 0.8em;
+  color: var(--term-dim);
+}
+
+/* The bands under the cards: rooms, and the fold of ended Commanders. */
+.cmd-page .cmd-band {
+  padding: 0.6em 0.8em 0.25em;
+  color: var(--term-muted);
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.cmd-page summary.cmd-band { cursor: pointer; }
+
+.cmd-page .cmd-room {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+  padding: 0.3em 0.8em 0.3em 1.4em;
+  color: var(--term-text);
+  cursor: pointer;
+}
+
+.cmd-page .cmd-room:hover { background: var(--term-active-bg); }
+
+.cmd-page .cmd-room-quiet {
+  flex: none;
+  margin-left: auto;
+  color: var(--term-dim);
+}
+
+.cmd-page .cmd-room-gone { color: var(--term-dim); cursor: default; }
+
+/* Compact: one line per card, nothing under the head. */
+.cmd-page.cmd-compact .cmd-card { padding-block: 0.25em; }
+.cmd-page.cmd-compact .cmd-room { padding-block: 0.15em; }
+
+/* The Project file column: a head with the two views and a refresh, held at the top while the
+   file scrolls under it. */
+.cmd-pf { color: var(--term-text); }
+
+.cmd-pf-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.5em 0.9em;
+  border-bottom: 1px solid var(--term-border);
+  background: var(--term-bg);
+}
+
+.cmd-pf-when { color: var(--term-dim); }
+
+.cmd-pf-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  margin-left: auto;
+}
+
+/* The four views are one segmented control. */
+.cmd-pf-views { display: inline-flex; }
+.cmd-pf-views .cmd-pf-btn { border-radius: 0; }
+.cmd-pf-views .cmd-pf-btn + .cmd-pf-btn { margin-left: -1px; }
+.cmd-pf-views .cmd-pf-btn:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.cmd-pf-views .cmd-pf-btn:last-child { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.cmd-pf-views .cmd-pf-btn:hover { position: relative; }
+.cmd-pf-focus[aria-pressed="true"] { border-color: var(--accent); }
+
+.cmd-pf-btn {
+  padding: 0.1em 0.7em;
+  border: 1px solid var(--term-border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--term-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cmd-pf-btn:hover { border-color: var(--accent); }
+
+.cmd-pf-btn[aria-pressed="true"] {
+  background: var(--term-tab-active-bg);
+  color: var(--term-tab-active-text);
+}
+
+.cmd-pf-body { padding: 0.6em 1.1em 1.4em; }
+
+.cmd-pf-md h1,
+.cmd-pf-md h2,
+.cmd-pf-md h3 { margin: 1em 0 0.4em; color: var(--term-text); }
+.cmd-pf-md h1 { font-size: 1.35em; }
+.cmd-pf-md h2 { font-size: 1.15em; border-bottom: 1px solid var(--term-border); padding-bottom: 0.2em; }
+.cmd-pf-md h3 { font-size: 1em; }
+.cmd-pf-md ul,
+.cmd-pf-md ol { padding-left: 1.6em; }
+.cmd-pf-md code { color: var(--term-str); }
+.cmd-pf-md a { color: var(--accent); }
+.cmd-pf-md .md-copy { display: none; }
+
+.cmd-pf-md .md-code pre {
+  padding: 0.5em 0.8em;
+  border-radius: var(--radius-md);
+  background: var(--term-active-bg);
+  overflow-x: auto;
+}
+
+/* The Roadmap view: a category, a fold per feature, the tasks naming it. */
+.cmd-category h3 {
+  margin: 1em 0 0.3em;
+  color: var(--term-muted);
+  font-size: 1em;
+  text-transform: lowercase;
+}
+
+.cmd-feature {
+  margin: 0.2em 0;
+  border-left: 2px solid var(--term-border);
+  padding-left: 0.6em;
+}
+
+.cmd-feature > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  cursor: pointer;
+}
+
+.cmd-feature-id { color: var(--accent); font-weight: 700; }
+.cmd-feature-name { font-weight: 700; }
+.cmd-feature-count { margin-left: auto; color: var(--term-dim); }
+.cmd-feature-line { color: var(--term-muted); margin: 0.2em 0 0.3em; }
+.cmd-feature-line p { margin: 0; }
+
+.cmd-tasks {
+  margin: 0.2em 0 0.4em;
+  padding: 0;
+  list-style: none;
+}
+
+.cmd-task {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.1em 0;
+}
+
+.cmd-task-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cmd-task-id,
+.cmd-task-phase { flex: none; color: var(--term-dim); }
+.cmd-doc,
+.cmd-mention {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  margin-left: 0.5em;
+  padding: 0 0.4em;
+  border: 1px solid var(--term-border);
+  border-radius: 0.6em;
+  font-size: 0.85em;
+  color: var(--term-muted);
+  white-space: nowrap;
+}
+.cmd-doc { background: none; font: inherit; font-size: 0.85em; cursor: pointer; }
+.cmd-doc.plan { color: var(--accent); }
+.cmd-pf-path { color: var(--term-muted); overflow-wrap: anywhere; }
+.cmd-legacy { color: var(--term-dim); }
+.cmd-mention { background: none; font: inherit; font-size: 0.85em; color: var(--accent); cursor: pointer; }
+.cmd-task[data-status="done"] { color: var(--term-muted); }
+.cmd-task[data-status="dropped"] { color: var(--term-dim); text-decoration: line-through; }
+
+/* The checkbox every view draws: an empty box, a half-filled one under way, a green tick when
+   done, a faint cross when dropped. A drawn box, so it reads the same in every font. */
+.cmd-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 1.05em;
+  height: 1.05em;
+  border: 1.5px solid var(--term-dim);
+  border-radius: 0.25em;
+  font-size: 0.95em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: -0.15em;
+  color: var(--term-bg);
+}
+
+.cmd-check[data-status="doing"] {
+  border-color: var(--orange);
+  background: linear-gradient(90deg, var(--orange) 50%, transparent 50%);
+}
+
+.cmd-check[data-status="done"] { border-color: var(--green); background: var(--green); }
+.cmd-check[data-status="dropped"] { border-color: var(--term-border); color: var(--term-dim); }
+
+.cmd-task { align-items: center; padding: 0.15em 0; }
+
+/* Text view: Markdown's own task items, drawn with the same box. */
+.cmd-pf-md li.cmd-md-task {
+  position: relative;
+  list-style: none;
+}
+
+.cmd-pf-md li.cmd-md-task > .cmd-check { position: absolute; left: -1.6em; top: 0.2em; }
+
+.cmd-pf-md li.cmd-md-task[data-status="done"] { color: var(--term-muted); }
+.cmd-pf-md li.cmd-md-task[data-status="dropped"] { color: var(--term-dim); text-decoration: line-through; }
+
+/* Progress: a thin bar and the count beside it. */
+.cmd-progress {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.45em;
+  margin-left: auto;
+  color: var(--term-dim);
+  font-size: 0.9em;
+  font-weight: 400;
+}
+
+.cmd-progress-bar {
+  width: 4.5em;
+  height: 0.35em;
+  overflow: hidden;
+  border-radius: 1em;
+  background: var(--term-active-bg);
+}
+
+.cmd-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 1em;
+  background: var(--green);
+}
+
+/* Tree view: a card per phase, folded by its own caret. */
+.cmd-pf-tree { display: flex; flex-direction: column; gap: 0.5em; }
+
+.cmd-tree-phase {
+  border: 1px solid var(--term-border);
+  border-radius: var(--radius-md);
+  background: var(--term-bg);
+}
+
+.cmd-tree-phase > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.45em 0.7em;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.cmd-tree-phase > summary::-webkit-details-marker { display: none; }
+.cmd-tree-phase[open] > summary { border-bottom: 1px solid var(--term-border); }
+
+.cmd-tree-caret {
+  flex: none;
+  width: 0.8em;
+  color: var(--term-muted);
+  transition: transform 0.12s;
+}
+
+.cmd-tree-caret::before { content: '▸'; }
+.cmd-tree-phase[open] .cmd-tree-caret { transform: rotate(90deg); }
+.cmd-tree-id { flex: none; color: var(--accent); }
+.cmd-tree-name { overflow: hidden; min-width: 0; white-space: nowrap; text-overflow: ellipsis; }
+.cmd-tree-closed { flex: none; color: var(--green); font-weight: 400; }
+.cmd-tree-phase[data-done="1"] > summary .cmd-tree-name { color: var(--term-muted); }
+
+.cmd-tree-phase > .cmd-tasks {
+  margin: 0;
+  padding: 0.35em 0.8em 0.45em 2.1em;
+}
+
+/* Table view. */
+.cmd-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--term-border);
+  border-radius: var(--radius-md);
+}
+
+.cmd-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cmd-table th,
+.cmd-table td {
+  padding: 0.35em 0.6em;
+  border-bottom: 1px solid var(--term-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.cmd-table th {
+  position: sticky;
+  top: 0;
+  background: var(--term-active-bg);
+  color: var(--term-muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cmd-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--term-active-bg) 45%, transparent); }
+.cmd-table tbody tr:hover { background: var(--term-active-bg); }
+.cmd-table tbody tr:last-child td { border-bottom: 0; }
+.cmd-table-id,
+.cmd-table-phase { color: var(--term-dim); white-space: nowrap; }
+.cmd-table-text { min-width: 14em; overflow-wrap: anywhere; }
+.cmd-table-by { color: var(--accent); }
+.cmd-table-links .cmd-doc:first-child { margin-left: 0; }
+.cmd-table tr[data-status="done"] .cmd-table-text { color: var(--term-muted); }
+.cmd-table tr[data-status="dropped"] .cmd-table-text { color: var(--term-dim); text-decoration: line-through; }
+
+.cmd-feature-tag {
+  display: inline-block;
+  margin: 0.1em 0.3em 0.1em 0;
+  padding: 0 0.45em;
+  border-radius: 0.6em;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+/* Focus mode: every phase but the one under way is greyed, and that one is marked. The sticky
+   head is what `scroll-margin-top` clears. */
+.cmd-pf [data-dim="1"] { opacity: 0.4; transition: opacity 0.12s; }
+.cmd-pf [data-dim="1"]:hover { opacity: 0.75; }
+.cmd-pf [data-dim="1"]:focus-within { opacity: 1; }
+.cmd-pf [data-focus="1"] { scroll-margin-top: 3.2em; }
+.cmd-tree-phase[data-focus="1"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.cmd-md-phase[data-focus="1"] {
+  margin: 0 -0.6em;
+  padding: 0.1em 0.6em;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.cmd-task[data-focus="1"],
+.cmd-table tr[data-focus="1"] { box-shadow: inset 3px 0 0 var(--accent); }
+.cmd-task[data-focus="1"] { padding-left: 0.5em; }
+
+  </style>
+
+  <style>
+/* The waiting bar (waiting_bar.js): a pill pinned to the top centre of every page, over the page
+   rather than in its flow, so no page's layout has to make room for it. Red and still — the badges
+   already blink, and a bar that blinks for an hour is noise. */
+.wait-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  font: 12px/1.3 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+}
+.wait-bar button { font: inherit; color: inherit; cursor: pointer; }
+@media (max-width: 520px) { .wait-more { display: none; } }
+.wait-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 4px 12px;
+  border: 1px solid var(--red);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+.wait-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wait-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+.wait-rows {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px;
+  width: min(420px, calc(100vw - 24px));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.wait-row { display: flex; align-items: stretch; gap: 4px; }
+.wait-row + .wait-row { border-top: 1px solid var(--border); }
+.wait-open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+.wait-open:hover, .wait-snooze:hover { background: var(--border); }
+.wait-who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wait-age { color: var(--muted); }
+.wait-what { grid-column: 1 / -1; color: var(--red); }
+.wait-snooze {
+  flex: none;
+  align-self: center;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+}
+.wait-bar .wait-snooze { color: var(--muted); }
+
+  </style>
 </head>
 
 <body>
@@ -7357,6 +8126,10 @@
         <label class="start-field">Folder name<input id="newProjectName" type="text" maxlength="64"
             autocapitalize="none" autocomplete="off" placeholder="what this project is called"
             onkeydown="if(event.key==='Enter')submitNewProject()" /></label>
+        <!-- Each harness the General's recipes use is started once in the new folder, so its
+             trust prompt is answered now rather than in front of a waiting Commander. -->
+        <label class="start-check"><input type="checkbox" id="newProjectTrust" checked />
+          <span>Approve harness trust now</span></label>
         <p id="newProjectError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
         <button id="newProjectSubmit" onclick="submitNewProject()"
           style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:var(--bg);font-weight:600;font-size:0.85rem;cursor:pointer">Create
@@ -8514,9 +9287,20 @@
     // Moved here from shortcuts.js so net.js can reach it. The dispatch reports what the relay
     // refused in eight places, and a page that cannot say so has no business holding a socket.
     let toastTimer = null;
-    function showToast(text, kind) {
+    // `onTap` makes the toast a button for as long as it is up: the one place a notice about a pane
+    // is also the way to it.
+    function showToast(text, kind, onTap) {
       const el = document.getElementById('toast');
       el.textContent = text;
+      el.onclick = onTap ? () => { el.style.display = 'none'; onTap(); } : null;
+      el.setAttribute('role', onTap ? 'button' : 'status');
+      if (onTap) el.setAttribute('tabindex', '0');
+      else el.removeAttribute('tabindex');
+      el.onkeydown = onTap ? e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+      } : null;
+      el.style.cursor = onTap ? 'pointer' : '';
+      el.style.pointerEvents = onTap ? 'auto' : '';  // its stack passes taps through
       // Three kinds, and the default is the loud one: a toast with no kind is something that went
       // wrong, which is what most of them are. `ok` is the other end — a send that landed — and it
       // is a colour rather than only a ✓ because the tick is 8px of a line read at arm's length.
@@ -8524,7 +9308,7 @@
         : kind === 'info' ? 'var(--border)' : 'var(--red)';
       el.style.display = 'block';
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+      toastTimer = setTimeout(() => { el.style.display = 'none'; }, onTap ? 15000 : 5000);
       if (window.cue && kind !== 'info' && kind !== 'ok') cue('error');
     }
 
@@ -8672,7 +9456,19 @@
       const badge = agentBadge((row && row.label) || pane.agent, pane.agent,
                                row ? colorVar(row.color) : '');
       const arb = mark && typeof arbMark === 'function' ? arbMark(pane) : '';
-      return badge && arb ? badge + arb : badge;
+      // The bench name is not one of the marks `mark` turns off: those rows draw the arbitrator
+      // their own way, and nothing else says which standing agent this is.
+      return badge ? badge + arb + benchMark(pane) : badge;
+    }
+
+    // `architect · <Project>`: which bench entry this agent is, as the relay's snapshot says.
+    function benchMark(pane) {
+      const b = pane && pane.bench;
+      if (!b || !b.name) return '';
+      const p = projects.find(x => x.id === b.project_id);
+      const where = (p && p.label) || b.project_id || '';
+      return ` <span class="badge bench" title="On the bench of ${escapeHtml(where)}">`
+        + `${escapeHtml(b.name)} · ${escapeHtml(where)}</span>`;
     }
 
     // A recorded kind, upgraded to the alias when the pane it names is live and was started under
@@ -14598,6 +15394,9 @@ function convWebModeOf(conv) {
       // in the one it was started for.
       const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
         && profileFor(a.agent)
+        // A folder-trust check's pane is closed the moment it is answered: a room for it would be
+        // a thread of nothing that outlives it.
+        && !String(a.ref || '').startsWith('trust-')
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
       const items = loadConvIndex();
@@ -15913,7 +16712,8 @@ function markdownHtml(source) {
         // Named as well as unfilled: the fill says "not settled", the word says which of the two
         // reasons it is. `~` in front of the clock already says backfill, so only the draft is
         // spelled out.
-        const mark = e.draft ? '<span class="conv-state">draft</span>' : '';
+        const mark = e.draft ? '<span class="conv-state">draft</span>'
+          : e.detail ? '<span class="conv-state">detailed</span>' : '';
         // What can be done to a bubble that is still waiting: reopen the provider's tab, or ask the
         // same question again. Drawn at the end of the header, which is the bubble's top right, and
         // only where the page holds the turn -- it is the only party that still has the message.
@@ -16585,13 +17385,25 @@ convApplyTint();
       showToast('Forgot the kept copy of the relay’s record');
     }
 
-    function convLiveOn() {
-      try { return localStorage.getItem(CONV_LIVE_KEY) === 'on'; } catch (e) { return false; }
+    // Three states: this browser's transcript (`off`), the relay's record (`on`), and the record
+    // with its `agent_detail` rows (`detail`) -- what a Claude pane said mid-turn and lost from its
+    // window before the turn ended. Those rows are always fetched and only drawn in `detail`, so
+    // switching it costs no ask.
+    function convLiveState() {
+      try {
+        const v = localStorage.getItem(CONV_LIVE_KEY);
+        return v === 'on' || v === 'detail' ? v : 'off';
+      } catch (e) { return 'off'; }
     }
 
+    function convLiveOn() { return convLiveState() !== 'off'; }
+
+    function convLiveDetailOn() { return convLiveState() === 'detail'; }
+
     function toggleConvLive() {
-      const on = !convLiveOn();
-      try { localStorage.setItem(CONV_LIVE_KEY, on ? 'on' : 'off'); }
+      const next = { off: 'on', on: 'detail', detail: 'off' }[convLiveState()];
+      const on = next !== 'off';
+      try { localStorage.setItem(CONV_LIVE_KEY, next); }
       catch (e) { /* private mode: this session only */ }
       // Kept rather than dropped, now that a row belongs to a bucket and a bucket belongs to a
       // pane: what comes back on screen is this reader's own members and never the thread they
@@ -16602,7 +17414,8 @@ convApplyTint();
       renderConvView();
       if (typeof renderConvStandalone === 'function') renderConvStandalone(true);
       if (typeof hangSync === 'function') hangSync();
-      showToast(on ? 'Reading the relay’s record' : 'Reading this browser’s transcript');
+      showToast(next === 'detail' ? 'Reading the relay’s record, with what was said mid-turn'
+        : on ? 'Reading the relay’s record' : 'Reading this browser’s transcript');
     }
 
     // The agent ids the last roster ask was made for.
@@ -16682,7 +17495,7 @@ convApplyTint();
       for (const aid of aids) convLiveBucket(aid).lastFetch = now;
 
       convLiveAsked = aids.slice();
-      const payload = { type: 'conv_log', aids: aids, last: CONV_LIVE_ROWS };
+      const payload = { type: 'conv_log', aids: aids, last: CONV_LIVE_ROWS, detail: true };
       // Turns recorded before agents had ids carry none, so no `aids` query can reach them. The
       // fingerprints of the members that are live right now are asked for alongside — and a row
       // with no `aid` is drawn only against the member whose pane it names *now*, which is a fact
@@ -16813,7 +17626,7 @@ convApplyTint();
         // ceiling still at one window would throw them away before anything drew them.
         bucket.depth = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
         ws.send(JSON.stringify({ type: 'conv_log', aids: [aid],
-                                 until_id: oldest.seq, last: CONV_LIVE_ROWS }));
+                                 until_id: oldest.seq, last: CONV_LIVE_ROWS, detail: true }));
         asked++;
       }
       if (asked) convLiveAskSent(asked);
@@ -17041,10 +17854,12 @@ convApplyTint();
       // no sorting to do here at all: the pane-id filter, the `was` chain of panes a member had
       // occupied and the `wasFp` chain of buckets it had been under were all consequences of a
       // bucket being `[host, agent, cwd]`, which four claude panes in one checkout share.
+      const detail = convLiveDetailOn();
       for (const k of (keys || [])) {
         const bucket = k && convLiveCache.get(k);
         if (!bucket) continue;
         for (const t of bucket.turns) {
+          if (t.kind === 'agent_detail' && !detail) continue;
           if (t.seq && seen.has(t.seq)) continue;
           if (t.seq) seen.add(t.seq);
           turns.push({turn: t, key: k});
@@ -17077,7 +17892,7 @@ convApplyTint();
           branch: t.branch || '', commit: t.commit || '',
           commits: Array.isArray(t.commits) ? t.commits : [],
           host: t.host || 'local', cwd: t.cwd || '',
-          kind: t.kind, live: true,
+          kind: t.kind, live: true, detail: t.kind === 'agent_detail' || undefined,
         };
       }).filter(e => e.text);
     }
@@ -17505,6 +18320,7 @@ convApplyTint();
       // relay starts Commanders at all is something only this socket can say.
       if (typeof cmdReset === 'function') cmdReset();
       if (typeof ccReset === 'function') ccReset();
+      if (typeof benchReset === 'function') benchReset();
       if (typeof webchatReset === 'function') webchatReset();
       if (typeof nlmReset === 'function') nlmReset();
       if (typeof closeStart === 'function') closeStart();
@@ -17544,6 +18360,7 @@ convApplyTint();
       socket.onclose = () => {
         if (ws !== socket) return;
         stateSyncClose(socket);
+        if (typeof cmdProjectFileReset === 'function') cmdProjectFileReset();
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -17617,6 +18434,13 @@ convApplyTint();
         projects = msg.projects || [];
         render();
       }
+      else if (msg.type === 'bench') {
+        if (typeof benchReceive === 'function') benchReceive(msg);
+        if (typeof cmdRender === 'function') cmdRender();
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_open') {
+        if (typeof benchResult === 'function') benchResult(msg);
+      }
       else if (msg.type === 'start_options') {
         startOptions = msg;
         // The default Studio alias, written into the shared config document the first time a relay
@@ -17635,9 +18459,11 @@ convApplyTint();
       // as meaningful as a full one and is handled by the same branch.
       else if (msg.type === 'arb_sessions') {
         if (typeof arbReceiveSessions === 'function') arbReceiveSessions(msg);
+        if (typeof cmdRender === 'function') cmdRender();
       }
       else if (msg.type === 'arb_session') {
         if (typeof arbReceiveSession === 'function') arbReceiveSession(msg);
+        if (typeof cmdRender === 'function') cmdRender();
         // The Command Center draws arbitration sessions in the tree beside the Commanders, and
         // now starts them — so one moving changes that screen exactly as a Commander moving does.
         if (typeof ccSessionMoved === 'function') ccSessionMoved();
@@ -17662,11 +18488,17 @@ convApplyTint();
       }
       // The Commander half of the same two messages. A separate family so a client is told about
       // its own kind and no other; the presence of `cmd_sessions` is its feature gate.
+      // command.html's Project file column: one Project's PROJECT.md, answered to this client.
+      else if (msg.type === 'project_file' || msg.type === 'project_doc') {
+        if (typeof cmdProjectFileReceive === 'function') cmdProjectFileReceive(msg);
+      }
       else if (msg.type === 'cmd_sessions') {
         if (typeof cmdSessionsReceive === 'function') cmdSessionsReceive(msg);
+        if (typeof cmdRender === 'function') cmdRender();
       }
       else if (msg.type === 'cmd_session') {
         if (typeof cmdSessionReceive === 'function') cmdSessionReceive(msg);
+        if (typeof cmdRender === 'function') cmdRender();
         // The Command Center is about a whole tree, and a session moving can change which lists
         // it belongs to. Answered by asking again rather than by patching the row in place.
         if (typeof ccSessionMoved === 'function') ccSessionMoved();
@@ -17822,11 +18654,26 @@ convApplyTint();
         showToast(msg.ok ? 'Tunnel restarting — this page follows it to the new address'
                          : (msg.error || 'Tunnel restart refused'), msg.ok ? 'ok' : '');
       }
+      else if (msg.type === 'command_result' && msg.command === 'restart_herdr') {
+        const missing = msg.missing || [];
+        showToast(msg.pending ? 'Restarting herdr — agents resume in a minute or so…'
+                  : !msg.ok ? (msg.error || 'herdr restart refused')
+                  : missing.length ? `herdr restarted — not back: ${missing.join(', ')}`
+                  : 'herdr restarted — every agent is back', msg.ok && !missing.length ? 'ok' : '');
+      }
       else if (msg.type === 'tunnel') {
         followTunnel(msg.url);
       }
       else if (msg.type === 'command_result' && msg.command === 'create_project') {
         newProjectResult(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'trust_check') {
+        // The second answer to a create_project that asked for it: how each harness's folder-trust
+        // prompt in the new Project ended. `already` was never asked.
+        const late = (msg.trust || []).filter(r => r.state === 'timeout' || r.state === 'failed');
+        showToast(late.length
+          ? 'Trust not approved in ' + msg.project_id + ': ' + late.map(r => r.kind + ' ' + r.state).join(', ')
+          : 'Trust approved in ' + msg.project_id, late.length ? '' : 'ok');
       }
       else if (msg.type === 'command_result' && msg.command === 'set_slot') {
         if (!msg.ok) { showToast(msg.error || 'Could not adjust the pane'); }
@@ -17962,6 +18809,7 @@ convApplyTint();
         // brings it up.
         if (typeof arbHoldStep === 'function') arbHoldStep();
         if (typeof openNotificationPane === 'function') openNotificationPane();
+        if (typeof renderWaitingBar === 'function') renderWaitingBar();
       }
       else if (msg.type === 'agent_update') {
         const update = msg.agent;
@@ -18003,6 +18851,7 @@ convApplyTint();
         if (typeof renderQuickActions === 'function') renderQuickActions();
         if (typeof syncConvBadge === 'function') syncConvBadge();
         if (typeof syncBranchBadges === 'function') syncBranchBadges();
+        if (typeof renderWaitingBar === 'function') renderWaitingBar();
       }
       else if (msg.type === 'blocked') {
         const a = agents.find(x => x.pane_id === msg.pane_id);
@@ -18010,6 +18859,13 @@ convApplyTint();
         else agents.push({ ...msg, status: 'blocked' });
         // No chime here. The relay broadcasts the snapshot before this message, so the transition
         // into blocked has already been heard — sounding it again was two chimes for one event.
+        // A harness asking whether to trust its folder, in a pane the relay started and is waiting
+        // on: nothing else names that pane, so the notice is the way to it.
+        if (msg.trust && typeof openTerminal === 'function') {
+          const where = msg.project || (a && a.project) || 'its folder';
+          showToast(`${msg.trust} asks to trust ${where} — tap to answer`, 'info',
+            () => openTerminal(msg.pane_id, (a && a.aid) || ''));
+        }
         noteActivity(msg.pane_id);
         noteStatus(msg.pane_id, 'blocked');
         convReadTurnEnd(msg.pane_id, 'blocked');
@@ -18033,6 +18889,157 @@ convApplyTint();
         }
       }
     }
+
+  </script>
+  <script>
+    // --- Waiting bar ---
+    //
+    // The one notice that does not go away when you look. attention.js badges a pane until it is
+    // opened, which is right for news and wrong for a pane that is still stuck: a trust prompt
+    // looked at on the wrong device, or by someone interrupted, went silent everywhere while the
+    // pane sat waiting. This shows every blocked pane on every page, whatever was acked, until the
+    // pane stops waiting. See .workflow/01_concepts/2026-10-17_standing_blocked_bar.md.
+    //
+    // It sends nothing. A row opens the pane, where the person reads what is being asked and
+    // answers it; there is deliberately no accept button here, least of all for a trust prompt.
+    //
+    // A wait is one episode: the pane and the relay's `blocked_since`. Snooze is per episode and
+    // per device, hides the row and nothing else, and a snoozed wait still counts in the line, so
+    // the bar never says nothing while something waits. A pane that unblocks and blocks again is a
+    // new episode and shows at once.
+    const WAIT_SNOOZE_KEY = 'herdr_wait_snooze';
+    const WAIT_SNOOZE_MS = 10 * 60 * 1000;
+    let waitOpen = false;
+
+    function waitKey(a) {
+      return `${a.host || 'local'}|${a.pane_id}|${a.blocked_since || ''}`;
+    }
+
+    function waitSnoozes(now) {
+      let s = {};
+      try { s = JSON.parse(localStorage.getItem(WAIT_SNOOZE_KEY)) || {}; } catch (e) { s = {}; }
+      for (const k of Object.keys(s)) if (!(s[k] > now)) delete s[k];
+      return s;
+    }
+
+    // Pure: which waits to list, and how many are snoozed. The pane already on screen is left out
+    // of the list and the count — the bar must not point at the thing the reader is looking at.
+    function waitingRows(list, now, snoozes, onScreen) {
+      const waits = (list || []).filter(a => a && a.status === 'blocked' && a.pane_id !== onScreen);
+      const rows = waits.filter(a => !(snoozes[waitKey(a)] > now))
+        .sort((x, y) => (x.blocked_since || now) - (y.blocked_since || now));
+      return {rows, snoozed: waits.length - rows.length};
+    }
+
+    function waitAge(a, now) {
+      if (!a.blocked_since) return '';
+      const mins = Math.max(0, Math.floor((now - a.blocked_since) / 60000));
+      return mins < 1 ? 'just now' : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
+    }
+
+    function waitWhat(a) {
+      return a.waiting === 'trust' ? 'trust prompt — answer in the pane' : 'waiting for you';
+    }
+
+    // [the count, what the oldest wait is]. The second half is dropped on a narrow screen.
+    function waitLineParts(rows, snoozed, now) {
+      const n = rows.length + snoozed;
+      const head = `${n} waiting${snoozed ? ` · ${snoozed} snoozed` : ''}`;
+      if (!rows.length) return [head, ''];
+      const a = rows[0];
+      const age = waitAge(a, now);
+      return [head, `${a.agent || 'agent'} in ${a.project || '—'} — ${waitWhat(a)}${age ? ' · ' + age : ''}`];
+    }
+
+    function waitLine(rows, snoozed, now) {
+      return waitLineParts(rows, snoozed, now).filter(Boolean).join(' · ');
+    }
+
+    // Under whatever header is at the top of the screen, so the pill never covers its buttons:
+    // the phone's app header, or a pane's or a room's own when one is open. Pages with none at the
+    // top keep the stylesheet's place.
+    const WAIT_ANCHORS = 'body > .header, .term-header, .conv-view-head';
+    function waitTop() {
+      for (const h of document.querySelectorAll(WAIT_ANCHORS)) {
+        const r = h.getBoundingClientRect();
+        if (r.height && r.top < 8 && r.bottom < innerHeight / 3) return `${Math.round(r.bottom) + 6}px`;
+      }
+      return '';
+    }
+
+    function waitEl() {
+      let el = document.getElementById('waitBar');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'waitBar';
+      el.className = 'wait-bar';
+      el.hidden = true;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.addEventListener('click', waitClick);
+      document.body.appendChild(el);
+      return el;
+    }
+
+    function renderWaitingBar() {
+      if (typeof document === 'undefined' || !document.body) return;
+      const now = Date.now();
+      const snoozes = waitSnoozes(now);
+      const onScreen = typeof activePane === 'undefined' ? null : activePane;
+      const {rows, snoozed} = waitingRows(typeof agents === 'undefined' ? [] : agents, now, snoozes, onScreen);
+      const el = waitEl();
+      if (!rows.length && !snoozed) { el.hidden = true; waitOpen = false; return; }
+      const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+      const list = waitOpen ? `<ul class="wait-rows">${rows.map(a => `
+          <li class="wait-row">
+            <button type="button" class="wait-open" data-pane="${esc(a.pane_id)}" data-aid="${esc(a.aid || '')}">
+              <span class="wait-who">${esc(a.agent || 'agent')} · ${esc(a.project || '—')}</span>
+              <span class="wait-age">${esc(waitAge(a, now))}</span>
+              <span class="wait-what">${esc(waitWhat(a))}</span>
+            </button>
+            <button type="button" class="wait-snooze" data-key="${esc(waitKey(a))}" title="Hide for 10 minutes on this device"
+                    aria-label="Snooze ${esc(a.agent || 'agent')} in ${esc(a.project || '')} for 10 minutes">Snooze</button>
+          </li>`).join('')}</ul>` : '';
+      const [head, more] = waitLineParts(rows, snoozed, now);
+      const html = `<button type="button" class="wait-line" aria-expanded="${waitOpen}">
+          <span class="wait-dot" aria-hidden="true"></span><span class="wait-text">${esc(head)}${more
+            ? `<span class="wait-more"> · ${esc(more)}</span>` : ''}</span>
+        </button>${list}`;
+      if (el.innerHTML !== html) {
+        const focused = el.contains(document.activeElement) ? document.activeElement : null;
+        el.innerHTML = html;
+        if (focused) {
+          const next = Array.from(el.querySelectorAll('button')).find(b =>
+            b.className === focused.className && b.dataset.key === focused.dataset.key
+              && b.dataset.pane === focused.dataset.pane && b.dataset.aid === focused.dataset.aid);
+          (next || el.querySelector('.wait-line')).focus({preventScroll: true});
+        }
+      }
+      el.style.top = waitTop();
+      el.hidden = false;
+    }
+
+    function waitClick(e) {
+      const open = e.target.closest('.wait-open');
+      if (open) {
+        waitOpen = false;
+        if (typeof openTerminal === 'function') openTerminal(open.dataset.pane, open.dataset.aid || undefined);
+        renderWaitingBar();
+        return;
+      }
+      const snooze = e.target.closest('.wait-snooze');
+      if (snooze) {
+        const s = waitSnoozes(Date.now());
+        s[snooze.dataset.key] = Date.now() + WAIT_SNOOZE_MS;
+        try { localStorage.setItem(WAIT_SNOOZE_KEY, JSON.stringify(s)); } catch (err) { /* per device only */ }
+        renderWaitingBar();
+        return;
+      }
+      if (e.target.closest('.wait-line')) { waitOpen = !waitOpen; renderWaitingBar(); }
+    }
+
+    // Ages and snoozes move with the clock, not with snapshots.
+    if (typeof setInterval === 'function' && typeof document !== 'undefined') setInterval(renderWaitingBar, 30000);
 
   </script>
   <script>
@@ -18379,6 +19386,30 @@ convApplyTint();
       if (!tunnelRestartOffered()) { showToast('This relay has no tunnel to restart'); return; }
       ws.send(JSON.stringify({type: 'restart_tunnel'}));
       showToast('Restarting the tunnel…');
+    }
+
+    // Stop the local herdr server and start a clean one. Layout and pane ids come back; every
+    // process in every pane ends, and the agents herdr has a session for resume. The relay holds
+    // its poll until they are back and answers with the panes that did not return.
+    function herdrRestartOffered() {
+      return !!((typeof startOptions !== 'undefined' && startOptions) || {}).herdr_restart;
+    }
+
+    // How many local agents a restart would cut off mid-turn. Shown in the arm label, so the
+    // second tap is made knowing it — which is why that tap sends `force`.
+    function herdrWorkingCount() {
+      return (agents || []).filter(a => !a.remote && a.status === 'working').length;
+    }
+
+    function herdrRestartArmLabel() {
+      const n = herdrWorkingCount();
+      return n ? `Restart? ${n} working` : 'Restart?';
+    }
+
+    function restartHerdr() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { showToast('Not connected to the relay'); return; }
+      if (!herdrRestartOffered()) { showToast('This relay cannot restart herdr'); return; }
+      ws.send(JSON.stringify({type: 'restart_herdr', force: true}));
     }
 
   </script>
@@ -19336,6 +20367,7 @@ convApplyTint();
       const here = roots.find(p => p.id === activeProject);
       newProjectRoot = (here || roots[0]).id;
       document.getElementById('newProjectName').value = '';
+      document.getElementById('newProjectTrust').checked = true;
       setNewProjectError('');
       document.getElementById('newProjectSubmit').disabled = false;
       renderNewProjectRoots();
@@ -19366,7 +20398,8 @@ convApplyTint();
       if (!name) { setNewProjectError('Name the folder this project lives in'); return; }
       setNewProjectError('');
       document.getElementById('newProjectSubmit').disabled = true;
-      ws.send(JSON.stringify({type: 'create_project', project_id: newProjectRoot, name: name}));
+      ws.send(JSON.stringify({type: 'create_project', project_id: newProjectRoot, name: name,
+                              trust: !!document.getElementById('newProjectTrust').checked}));
     }
 
     // The roster arrives on its own `projects` broadcast, so there is nothing to add here: the
@@ -19871,6 +20904,9 @@ convApplyTint();
       const limits = [1, 2, 3, 4, 5, 6].map(n =>
         `<option value="${n}"${Number(policy('worker_limit')) === n ? ' selected' : ''}>`
         + `${n}</option>`).join('');
+      const generals = Array.from({length: 30}, (_, i) => i + 1).map(n =>
+        `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
+        + `${n}</option>`).join('');
       return '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
         + '<div class="cfg-note">What a Commander starts when it decides it needs an agent. It'
         + ' names one of these at the moment it wants that kind of agent — nothing here starts'
@@ -19879,6 +20915,8 @@ convApplyTint();
         + '<div class="cmd-def"><div class="cmd-def-fields cmd-def-policy">'
         + '<label>At most <select onchange="commanderDefaultSet(\'worker_limit\','
         + ' Number(this.value))">' + limits + '</select> workers at once</label>'
+        + '<label>The General runs at most <select onchange="commanderDefaultSet(\'general_limit\','
+        + ' Number(this.value))">' + generals + '</select> children at once</label>'
         + commanderSwitch('unattended', policy('unattended'),
                           'Start them with their own approval prompts off')
         + '</div></div>' + rows + '</div>';
@@ -20736,6 +21774,7 @@ convApplyTint();
             + ` oninput="recipeTypeId(this.value)">`))
         + recipeField('About', `<input type="text" maxlength="200" autocomplete="off"`
           + ` value="${escapeHtml(d.about || '')}" oninput="recipeType('about', this.value)">`)
+        + recipeCommanderHtml(d)
         + '<div class="start-field">Flow<div class="badge-strip">'
         + badgeHtml('hub', d.flow !== 'chain', "recipeSet('flow','hub')",
             {title: 'The Commander hands every task out and takes every report back'})
@@ -20746,6 +21785,12 @@ convApplyTint();
           ? recipeField('Hops', `<input type="number" min="1" max="20" value="${Number(d.hops) || 1}"`
             + ` onchange="recipeSet('hops', Math.max(1, Math.min(20, Number(this.value) || 1)))">`)
           : '')
+        + '<div class="start-field">Returns<div class="rcp-parts">'
+        + `<label class="rcp-check" title="On: the Commander reads the diff and checks the tests of each`
+        + ` return before reporting it up. Off: members are trusted to test and review their own work.">`
+        + `<input type="checkbox"${d.verify !== false ? ' checked' : ''}`
+        + ` onchange="recipeSet('verify', this.checked)">Commander checks each return</label>`
+        + '</div></div>'
         + recipePartsHtml(d)
         + `<div id="rcpPreviewBox">${recipePreviewInner(d)}</div>`
         + `<div class="start-field">Seats<span class="cfg-sub">${d.seats.length} of ${RECIPE_SEATS_MAX}</span></div>`
@@ -20772,6 +21817,73 @@ convApplyTint();
       // the prose did not move — most redraws are a seat being edited.
       recipePreviewDraw();
       recipePreviewAsk(d);
+    }
+
+    // Who coordinates, when Start picks no pane, and how the session is handed work by default.
+    // Either is optional: a recipe naming no Commander is started over a pane somebody picks, and
+    // one naming no delivery defers to the parent's, then pull.
+    function recipeCommanderHtml(d) {
+      const opts = recipeOptions();
+      const c = d.commander && typeof d.commander === 'object' && d.commander.kind ? d.commander : null;
+      const kinds = (opts.agents || []).slice();
+      if (c && !kinds.includes(c.kind)) kinds.push(c.kind);
+      const configs = c ? (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
+        .filter(r => r.kind === c.kind).map(r => [r.id, r.label || r.id]) : [];
+      if (c && c.config && !configs.some(x => x[0] === c.config)) configs.push([c.config, c.config]);
+      const select = (field, options, value) =>
+        `<select title="Commander ${field}" onchange="recipeCommanderSet('${field}',this.value)">`
+        + options.map(([v, label]) => `<option value="${escapeHtml(v)}"${v === value ? ' selected' : ''}>`
+          + `${escapeHtml(label)}</option>`).join('') + '</select>';
+      return '<div class="start-field">Commander<div class="cmd-def-fields">'
+        + select('kind', [['', 'a pane picked at Start']].concat(kinds.map(k => [k, k])), c ? c.kind : '')
+        + (c ? select('config', [['', 'stock']].concat(configs), c.config || '') : '')
+        + '</div><div class="cfg-note">'
+        + (c ? 'Start needs no pane: the relay starts this Commander, then the seats beside it.'
+          : 'Start asks for a running pane to be the Commander.')
+        + '</div></div>'
+        + '<div class="start-field">Delivery<div class="badge-strip">'
+        + [['', 'Default'], ['pull', 'pull'], ['push', 'push']].map(([v, label]) =>
+          badgeHtml(label, (d.delivery || '') === v, `recipeSet('delivery','${v}')`,
+            {title: v === 'push' ? 'Work is typed into the pane'
+              : v === 'pull' ? 'Work is left as a file, with a short notice'
+              : "The parent's, or pull"})).join('')
+        + '</div></div>'
+        + recipeChildrenHtml(d);
+    }
+
+    // Which children a Commander started from this recipe may start: `plain` (no recipe) and the
+    // recipes this relay offers. None ticked keeps the old rule, which is no children at all.
+    function recipeChildrenHtml(d) {
+      const ticked = Array.isArray(d.children) ? d.children : [];
+      const ids = ['plain'].concat((recipeRelayRows() || []).map(r => r.id).filter(id => id !== d.id));
+      ticked.forEach(id => { if (!ids.includes(id)) ids.push(id); });
+      return '<div class="start-field">Children<div class="badge-strip">'
+        + ids.map(id => badgeHtml(id, ticked.includes(id),
+          `recipeChildToggle('${escapeHtml(id)}')`,
+          {title: id === 'plain' ? 'A Commander with no recipe' : `A Commander running ${id}`})).join('')
+        + '</div><div class="cfg-note">'
+        + (ticked.length ? 'This Commander may start these as its children. With children ticked, '
+            + 'a hub recipe needs no seats.'
+          : 'This Commander starts no children.')
+        + '</div></div>';
+    }
+
+    function recipeChildToggle(id) {
+      if (!recipeDraft) return;
+      const list = Array.isArray(recipeDraft.children) ? recipeDraft.children : [];
+      recipeDraft.children = list.includes(id) ? list.filter(x => x !== id) : list.concat([id]);
+      drawRecipe();
+    }
+
+    function recipeCommanderSet(field, value) {
+      if (!recipeDraft) return;
+      if (field === 'kind') {
+        // A config is for one harness, and the relay refuses one named for another.
+        recipeDraft.commander = value ? {kind: value, config: ''} : null;
+      } else if (recipeDraft.commander) {
+        recipeDraft.commander.config = value;
+      }
+      drawRecipe();
     }
 
     // Typed fields record and do not redraw, for the config dialog's reason: one innerHTML write
@@ -20886,6 +21998,13 @@ convApplyTint();
                                              paste_first: recipeProseOf(d).paste_first},
                                             Array.isArray(d.prose.omit) ? {omit: d.prose.omit} : {})}
           : {}),
+        ...(d.commander && d.commander.kind
+          ? {commander: {kind: d.commander.kind, config: d.commander.config || ''}} : {}),
+        ...(d.delivery === 'pull' || d.delivery === 'push' ? {delivery: d.delivery} : {}),
+        ...(Array.isArray(d.children) && d.children.length ? {children: d.children.slice()} : {}),
+        // Not edited here: a General recipe keeps what it is through an edit of its other fields.
+        ...(d.tier === 'general' ? {tier: 'general'} : {}),
+        ...(d.verify === false ? {verify: false} : {}),
         seats: d.seats.map(s => ({name: s.name, roles: s.roles.slice(), kind: s.kind,
                                   config: s.config || '', at_start: !!s.at_start,
                                   notes: s.notes || ''})),
@@ -20958,6 +22077,129 @@ convApplyTint();
       if (!saveRecipeDoc(doc)) return;
       closeLauncherEdit();
       renderLauncher();
+    }
+
+  </script>
+  <script>
+    // A Project's bench, in the launcher: its named standing agents — "the architect of this
+    // Project" — one row per entry, live, away or not started. A press is `bench_open`, which the
+    // relay answers with the entry's room whatever it had to do: open the live pane, bring the same
+    // agent back, or start it the first time. Nothing here decides which; the relay owns the bench
+    // and this draws what it last said. See relay/bench.py.
+
+    // `{project_id: [entry]}` from the relay's `bench` message, or null when this relay sends none
+    // — its presence is the gate, the way start_options gates Start.
+    let benchProjects = null;
+    // Entries whose open is in flight, as `project_id/name`, so a row says so and a second press
+    // does not ask again. The relay would join it, but a row that does nothing visible gets pressed
+    // a third time.
+    const benchOpening = new Set();
+    const benchFolds = new Map();
+    // Projects this page was asked to show a bench for before anybody stands there. Kept across a
+    // reconnect: it is what the reader chose to look at, not what the relay said.
+    const benchShown = new Set();
+
+    function benchReset() {
+      benchProjects = null;
+      benchOpening.clear();
+      benchFolds.clear();
+    }
+
+    function benchReceive(msg) {
+      benchProjects = msg.projects || {};
+      if (typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    const BENCH_STATE = {live: 'live', away: 'away', 'not started': 'not started'};
+
+    function benchRowHtml(pid, e) {
+      const key = `${pid}/${e.name}`;
+      const opening = benchOpening.has(key);
+      const state = opening ? 'opening…' : (BENCH_STATE[e.state] || e.state || '');
+      const kind = typeof configBadge === 'function' ? configBadge(e.kind || '?', e.config) : '';
+      const title = e.state === 'live' ? 'Open its room'
+        : e.state === 'away' ? 'Bring the same agent back and open its room'
+        : 'Start it and open its room';
+      return `<button class="bench-row" data-state="${escapeHtml(e.state || '')}"`
+        + ` data-bench="${escapeHtml(key)}"${opening ? ' aria-busy="true"' : ''}`
+        + ` onclick="benchOpen('${escapeHtml(pid)}', '${escapeHtml(e.name)}')"`
+        + ` title="${escapeHtml(title)}">`
+        + '<span class="bench-dot"></span>'
+        + `<span class="bench-name">${escapeHtml(e.label || e.name)}</span>`
+        + `<span class="bench-kind">${kind}</span>`
+        + `<span class="bench-state">${escapeHtml(state)}</span>`
+        + '</button>';
+    }
+
+    // One fold per Project where somebody stands, and one picker for the rest: a relay with twenty
+    // Projects is twenty folds of "not started" otherwise. Picking a Project draws its fold, open.
+    function benchHtml() {
+      if (!benchProjects) return '';
+      const all = projects.filter(p => benchProjects[p.id] && benchProjects[p.id].length);
+      const active = p => benchShown.has(p.id) || benchProjects[p.id].some(e => e.aid
+        || benchOpening.has(`${p.id}/${e.name}`));
+      const rows = all.filter(active);
+      const rest = all.filter(p => !active(p));
+      if (!rows.length && !rest.length) return '';
+      return '<div class="bench-band">Bench</div>'
+        + rows.map(p => {
+          const entries = benchProjects[p.id];
+          const open = benchFolds.has(p.id) ? benchFolds.get(p.id) : true;
+          return `<details class="bench-project"${open ? ' open' : ''}>`
+            + `<summary onclick="benchFolds.set('${escapeHtml(p.id)}', !this.parentElement.open)">`
+            + `${escapeHtml(p.label || p.id)}</summary>`
+            + `<div class="bench-rows">${entries.map(e => benchRowHtml(p.id, e)).join('')}</div>`
+            + '</details>';
+        }).join('')
+        + (rest.length ? '<select class="bench-add" aria-label="Show the bench of another Project"'
+          + ' onchange="benchShow(this.value)">'
+          + `<option value="">${rows.length ? '+ Another Project…' : '+ Open a Project\'s bench…'}</option>`
+          + rest.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label || p.id)}</option>`).join('')
+          + '</select>' : '');
+    }
+
+    function benchShow(pid) {
+      if (!pid) return;
+      benchShown.add(pid);
+      benchFolds.set(pid, true);
+      renderLauncher();
+    }
+
+    function benchOpen(pid, name) {
+      const key = `${pid}/${name}`;
+      if (benchOpening.has(key)) return;
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was opened.'); return; }
+      benchOpening.add(key);
+      ws.send(JSON.stringify({type: 'bench_open', project_id: pid, name: name}));
+      renderLauncher();
+    }
+
+    // The answer. The room is written into the shared index by the relay in the same breath, and
+    // that document can arrive after this message does — so the open is retried for a few seconds
+    // rather than dropped on the first miss.
+    function benchResult(msg) {
+      benchOpening.delete(`${msg.project_id}/${msg.name}`);
+      renderLauncher();
+      if (!msg.ok) {
+        showToast(`${msg.name}: ${msg.error || 'not opened'}`);
+        return;
+      }
+      if (msg.briefed === false) showToast(`${msg.name} is up, but its brief did not go in — check its pane.`);
+      benchOpenRoom(msg.conversation, msg.pane_id, 20);
+    }
+
+    // Its pane when the room never arrives — a relay whose conversations document nobody has
+    // seeded writes none — because a press that opens nothing reads as a press that failed.
+    function benchOpenRoom(id, paneId, tries) {
+      if (id && readConvIndex().some(c => c.id === id)) { openConversation(id); return; }
+      if (tries > 0) {
+        const socket = ws;
+        setTimeout(() => {
+          if (ws === socket && socket.readyState === 1) benchOpenRoom(id, paneId, tries - 1);
+        }, 250);
+        return;
+      }
+      if (paneId && typeof openTerminal === 'function') openTerminal(paneId);
     }
 
   </script>
@@ -21083,6 +22325,18 @@ convApplyTint();
         && projects.some(p => p.id === spawn.project_id) && respawnRole(spawn));
     }
 
+    // The harness's own id for the session this member last ran, when it can be reopened: herdr's
+    // integration reported one and this relay knows how that harness resumes. Read off the live
+    // pane or the retired row, never the local record — a session id is the relay's to know.
+    // Which session is reopened is the relay's answer too; this only says whether to offer it.
+    function resumableSession(key) {
+      const spawn = spawnOf(key);
+      if (!canRespawn(spawn) || ((startOptions || {}).resume || []).indexOf(spawn.agent) < 0) return '';
+      const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
+      const row = agents.find(a => convMemberKey(a) === key) || rows.find(x => x.aid === key);
+      return (row && row.agent === spawn.agent && row.harness_session) || '';
+    }
+
     // A restart replaces the member it was asked for rather than joining beside it: same name,
     // same row, and the dead session's transcript copied under the new pane's key so the thread
     // reads on across the seam. D3 said a respawn is always a new member — that rule was about a
@@ -21191,7 +22445,9 @@ convApplyTint();
       return !!(a.ref && typeof convPendingRefs === 'function' && convPendingRefs().has(a.ref));
     }
 
-    function convRespawn(key) {
+    // `resume` reopens the harness's last session instead of starting a fresh one. Nothing else
+    // about the restart differs: same config, same flags, same opening words, same thread.
+    function convRespawn(key, resume) {
       const conv = loadConvIndex().find(c => c.id === convLifeConvId(key));
       const rec = (convLifeRecs() || []).find(r => r.key === key) || {};
       const spawn = spawnOf(key);
@@ -21302,6 +22558,7 @@ convApplyTint();
       // And which opening prompt it is being started with, kept by the relay against that agent —
       // so the next browser to restart it asks for the same one whether or not it watched this.
       if (startStarter) msg.starter = startStarter;
+      if (resume) msg.resume = true;
       convNotePending(conv.id, msg.ref, key, '');
       sendStart(msg);
     }
@@ -21353,7 +22610,7 @@ convApplyTint();
     // by a start, in one press — and on a member that is already paused, the start alone. One
     // control for both halves of a row's life: what it means is the same either way, and which
     // half a member is in is not a question the reader should have to answer before pressing.
-    function convRestart(key) {
+    function convRestart(key, resume) {
       if (typeof closeRestartMenu === 'function') closeRestartMenu();
       // Everything convRespawn can refuse on, asked before anything is ended. It refuses in
       // silence — a socket that is not open, a record it cannot start from — and by then the
@@ -21367,8 +22624,12 @@ convApplyTint();
       const live = agents.find(x => convMemberKey(x) === key);
       // A blocked (or just vanished) pane was not ended. Starting anyway leaves the old session
       // beside its supposed replacement, which is precisely what Restart promises not to do.
+      if (resume && !resumableSession(key)) {
+        showToast('No earlier session of this agent is on record — it was left as it is.');
+        return false;
+      }
       if (live && !endPane(live.pane_id)) return false;
-      convRespawn(key);
+      convRespawn(key, resume);
       return true;
     }
 
@@ -24844,7 +26105,9 @@ convApplyTint();
     // `COMMANDER_BUDGET` and `BUDGET_MAX` in the relay, which is the authority — these are what the
     // field offers and what it refuses to send, so a person cannot be told no by a dialog that
     // could have said so itself.
-    const CMD_LIMITS = {cmdSteps: [20, 50], cmdRuns: [12, 20], cmdMinutes: [60, 480]};
+    // [default, cap]: the cap is the relay's `BUDGET_MAX`. A lower one clamped the relay's own
+    // default budget (100 and 50) on every save and sent the clamped numbers as a change.
+    const CMD_LIMITS = {cmdSteps: [20, 200], cmdRuns: [12, 100], cmdMinutes: [60, 480]};
     // Which session the form is editing, or '' while it is a new one. Not a boolean: the rows a
     // slot offers have to exclude this session's own panes, or a Commander's own coordinator is
     // listed as taken by somebody and cannot be kept.
@@ -25093,19 +26356,18 @@ convApplyTint();
         return {key: who.aid || who.pane_id, pane: pane,
                 label: who.label || who.aid || who.pane_id};
       };
-      const emptyOr = v => (!v || v === CMD_NONE ? CMD_NONE_VALUE(rows) : v);
       const slotRows = (base, who) => {
         const row = held(who);
         return row && !base.some(r => arbSamePick(arbPickValue(r), arbPickValue(row)))
           ? base.concat([row]) : base;
       };
-      return arbPart('Commander',
+      return (live ? '' : cmdAgainHtml(conv)) + '<div id="cmdWhoPart">' + arbPart('Commander',
           arbSlot('cmdWho', slotRows(free, live && live.coordinator),
                   was ? was.cmdWho : (free[0] && arbPickValue(free[0])), false) +
           '<span class="arb-note">The pane that plans. Pick one that is running, or ' +
           '<b>+ New</b> to start one — it comes up on claude with the Commander prompt and lands ' +
           'back in this slot. It is not one of the agents below.</span>',
-          cmdSign(16) + ' ') +
+          cmdSign(16) + ' ') + '</div>' +
         '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
         ' placeholder="What this Commander owns, and when it is done.">' +
         escapeHtml(was ? was.cmdScope : '') + '</textarea></label>' +
@@ -25130,22 +26392,19 @@ convApplyTint();
           (parents.length ? '' :
             '<span class="arb-note" id="cmdParentNote" style="display:none">' +
             'A branch sits under another Commander — start one first.</span>'))) +
-        (live ? '' : cmdRecipeHtml()) +
+        (live ? '' : cmdRecipeHtml(project)) +
         (live ? '' : cmdBriefHtml()) +
-        '<div id="cmdMembersPart">' + arbPart('Agents it works with directly',
+        // A running session's roster is edited on its sheet, member by member, where a row keeps
+        // its role and a seat its holder. Slots here sent the whole roster again by pane and
+        // without roles, so a reorder or a swap could empty a seat.
+        (live ? '' : '<div id="cmdMembersPart">' + arbPart('Agents it works with directly',
           Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
-            arbSlot('cmdMember' + i,
-                    slotRows(rows, live && (live.members || [])[i]),
-                    // `cmdSetupOf` says CMD_NONE for a slot holding nobody, which is the key of
-                    // that row and not the value the picker selects by. Translated here rather
-                    // than left to fall through to the first row: that row happens to be Nobody,
-                    // and a seed that is right by accident seeds a real pane the day it moves.
-                    emptyOr(was && was['cmdMember' + i]), false)).join('') +
+            arbSlot('cmdMember' + i, rows, CMD_NONE_VALUE(rows), false)).join('') +
           '<span class="arb-note">Leave these empty unless you already know who is doing the ' +
           'work. A Commander with nobody here still plans, still holds the Project and still ' +
           'starts child sessions — what it does not do is watch anyone. Name an agent and this ' +
           'Commander writes to it itself and wakes on every turn that agent ends.</span>') +
-        '</div>' +
+        '</div>') +
         (live ? arbPart('How long it may run',
           arbLimitField('cmdSteps', 'Sends in one window', was.cmdSteps, CMD_LIMITS.cmdSteps) +
           arbLimitField('cmdRuns', 'Sends in a row with nobody joining in', was.cmdRuns,
@@ -25171,8 +26430,6 @@ convApplyTint();
         '</div>';
     }
 
-    // What the form would say about a session that is already running. The one place the wire's
-    // shape is turned into the form's, so reading it back and diffing are about the same fields.
     // What a slot holds, in the picker's own value space. A participant whose pane is not running
     // is a row with no pane, which `arbPickValue` encodes as `paused:<key>` — so a slot seeded
     // with a bare pane id would not match its own row and would fall back to the first one, which
@@ -25186,15 +26443,6 @@ convApplyTint();
       return arbPickValue({key: who.aid || who.pane_id,
                            pane: live.find(a => (who.aid && convMemberKey(a) === who.aid)
                              || (who.pane_id && a.pane_id === who.pane_id)) || null});
-    }
-
-    // A slot's value as the wire wants it: a live pane, or the stable id of an away agent. The
-    // relay can resolve the latter if it came back since this snapshot, and otherwise explicitly
-    // refuses the edit instead of quietly discharging a member nobody meant to touch.
-    function cmdParticipantOf(value) {
-      const got = arbResolvePick(value);
-      if (!got || got.key === CMD_NONE || got.pane_id === CMD_NONE) return null;
-      return got.pane_id ? {pane_id: got.pane_id} : {aid: got.key};
     }
 
     // What the form would say about a session that is already running. The one place the wire's
@@ -25213,9 +26461,6 @@ convApplyTint();
         cmdRuns: num(b.max_consecutive, CMD_LIMITS.cmdRuns),
         cmdMinutes: num(b.max_minutes, CMD_LIMITS.cmdMinutes),
       };
-      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
-        at['cmdMember' + i] = cmdPickOf((s.members || [])[i]);
-      }
       return at;
     }
 
@@ -25230,52 +26475,28 @@ convApplyTint();
         const n = parseInt((document.getElementById(id) || {}).value || '', 10);
         at[id] = String(!(n > 0) ? range[0] : Math.min(n, range[1]));
       });
-      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
-        at['cmdMember' + i] = String((document.getElementById('cmdMember' + i) || {}).value || '');
-      }
       return at;
     }
 
-    // The same form against a session that exists, and only what moved is sent. A roster edit is a
-    // replacement of the whole roster — the relay has no add and no remove — so naming `members`
-    // at all names every one of them, and naming it when nothing changed re-enrols panes that were
-    // already enrolled.
+    // The same form against a session that exists, and only what moved is sent. The roster is not
+    // on it: members are added and removed on the sheet, one at a time.
     function cmdSave() {
       const was = cmdEditWas;
       if (!cmdEditing || !was) return;
       const at = cmdReadSetup();
       const who = arbResolvePick(at.cmdWho);
       if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      const live = cmdSessions.find(x => x.id === cmdEditing);
+      if (live && (live.members || []).some(m => m.pane_id && m.pane_id === who.pane_id)) {
+        showToast('That pane is a member. Remove it first, or pick another.'); return;
+      }
       const scope = at.cmdScope.trim();
       if (!scope) { showToast('A Commander needs a scope — what it owns.'); return; }
-      const participants = [];
-      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
-        const participant = cmdParticipantOf(at['cmdMember' + i]);
-        if (participant) participants.push(participant);
-      }
-      // One string per participant, whichever way it is named, so two slots holding one agent
-      // collide whether they hold its pane or its id.
-      const idOf = p => (p.aid ? 'aid:' + p.aid : 'pane:' + p.pane_id);
-      const identities = participants.map(idOf).concat(['pane:' + who.pane_id]);
-      if (new Set(identities).size !== identities.length) {
-        showToast('Each slot needs a different pane.'); return;
-      }
       const msg = {type: 'cmd_edit', session: cmdEditing};
       if (scope !== was.cmdScope) msg.scope = scope;
       if (at.cmdWho !== was.cmdWho) msg.coordinator = {pane_id: who.pane_id};
-      // Compared as the roster the relay will hold — the participants in order, with the empty
-      // slots taken out — and never slot by slot. A roster edit announces itself to every member,
-      // so moving two of them between slots and changing nothing else must not interrupt them
-      // both to tell them the roster is what it already was.
-      const wasRoster = Array.from({length: CMD_MEMBER_SLOTS},
-                                   (_, i) => cmdParticipantOf(was['cmdMember' + i]))
-        .filter(Boolean).map(idOf);
-      const roster = participants.map(idOf);
-      if (roster.length !== wasRoster.length || roster.some((p, i) => p !== wasRoster[i])) {
-        msg.members = participants;
-      }
-      // Every key, not the ones that moved: `check_budget` fills anything a budget does not name
-      // from the defaults, so a partial budget resets the numbers it left out.
+      // Every key, not the ones that moved: the form shows all three, so all three are what the
+      // person set. The relay keeps any a budget does not name, so a partial one would do too.
       if (['cmdSteps', 'cmdRuns', 'cmdMinutes']
             .some(k => at[k] !== was[k])) {
         msg.budget = {max_steps: Number(at.cmdSteps), max_consecutive: Number(at.cmdRuns),
@@ -25369,9 +26590,19 @@ convApplyTint();
       return all.filter(r => r.recipe && !(r.problems || []).some(p => p.blocking));
     }
 
-    function cmdRecipeHtml() {
+    // The Projects a relay-started Commander may come up in: never a container, which takes no
+    // pane of its own. `project` is the one this room's agents are in, picked first.
+    function cmdOwnProjects() {
+      return (typeof projects !== 'undefined' && Array.isArray(projects) ? projects : [])
+        .filter(p => p && p.id && !p.container);
+    }
+
+    function cmdRecipeHtml(project) {
       const usable = cmdRecipes();
       if (!usable.length) return '';
+      const where = cmdOwnProjects();
+      const first = where.some(p => p.id === project) ? project
+        : (where[0] && where[0].id) || '';
       return arbPart('Recipe',
         '<label>Staff it from<select id="cmdRecipe" onchange="cmdPickRecipe()">' +
         '<option value="">No recipe — pick the agents below</option>' +
@@ -25379,7 +26610,50 @@ convApplyTint();
           escapeHtml(r.recipe.label) + '</option>').join('') +
         '</select></label>' +
         '<span class="arb-note" id="cmdRecipeNote">With a recipe, the relay starts its seats ' +
-        'before the Commander is briefed, and the Commander can staff only those seats.</span>');
+        'before the Commander is briefed, and the Commander can staff only those seats.</span>' +
+        // A recipe that names its Commander is started with one press: the relay brings the
+        // Commander up first, in this Project, and the seats beside it. Unticked is the pane
+        // picker above, as before.
+        '<div id="cmdOwnPart" hidden>' +
+        '<label class="arb-check"><input type="checkbox" id="cmdOwn" checked' +
+        ' onchange="cmdPickRecipe()"> <span id="cmdOwnLabel">The relay starts the Commander</span>' +
+        '</label>' +
+        '<div id="cmdOwnWhere">' +
+        '<label>In<select id="cmdOwnProject" onchange="cmdOwnSync()">' +
+        where.map(p => `<option value="${escapeHtml(p.id)}"${p.id === first ? ' selected' : ''}>` +
+          escapeHtml(p.label || p.id) + '</option>').join('') +
+        '</select></label>' +
+        '<label id="cmdOwnTreeRow">Worktree<input type="text" id="cmdOwnTree" maxlength="64"' +
+        ' autocapitalize="none" autocomplete="off" spellcheck="false"' +
+        ' placeholder="Optional — the main checkout when empty"></label>' +
+        '<span class="arb-note">Its seats come up in the same place.</span>' +
+        '</div></div>');
+    }
+
+    // The recipe picked, when it names a Commander this relay can start, else null.
+    function cmdOwnRecipe() {
+      const id = (document.getElementById('cmdRecipe') || {}).value || '';
+      const r = id && cmdRecipes().find(x => x.id === id);
+      return r && r.recipe.commander
+        && !(r.problems || []).some(p => /^commander(\.|$)/.test(p.path || '')) ? r : null;
+    }
+
+    // Where the relay is to start the Commander, as the wire takes it, or null when a pane is
+    // picked instead.
+    function cmdOwnStart() {
+      if (!cmdOwnRecipe() || !(document.getElementById('cmdOwn') || {}).checked) return null;
+      const project = (document.getElementById('cmdOwnProject') || {}).value || '';
+      const tree = String((document.getElementById('cmdOwnTree') || {}).value || '').trim();
+      const repo = cmdOwnProjects().some(p => p.id === project && p.repo);
+      return {project_id: project, ...(tree && repo ? {worktree: tree} : {})};
+    }
+
+    // A worktree is offered only where the Project is a git checkout: the relay refuses one
+    // anywhere else, and a field that is refused after the press is one not worth drawing.
+    function cmdOwnSync() {
+      const project = (document.getElementById('cmdOwnProject') || {}).value || '';
+      const row = document.getElementById('cmdOwnTreeRow');
+      if (row) row.hidden = !cmdOwnProjects().some(p => p.id === project && p.repo);
     }
 
     // A recipe staffs the roster, so the hand-picked slots are hidden while one is chosen rather
@@ -25389,6 +26663,21 @@ convApplyTint();
       const r = cmdRecipes().find(x => x.id === id);
       const part = document.getElementById('cmdMembersPart');
       if (part) part.hidden = !!r;
+      const own = cmdOwnRecipe();
+      const ownPart = document.getElementById('cmdOwnPart');
+      if (ownPart) ownPart.hidden = !own;
+      const starts = !!cmdOwnStart();
+      const whoPart = document.getElementById('cmdWhoPart');
+      if (whoPart) whoPart.hidden = starts;
+      const where = document.getElementById('cmdOwnWhere');
+      if (where) where.hidden = !starts;
+      const ownLabel = document.getElementById('cmdOwnLabel');
+      if (ownLabel && own) {
+        const c = own.recipe.commander;
+        ownLabel.textContent = `The relay starts the Commander: ${c.kind}` +
+          (c.config ? ` · ${c.config}` : '');
+      }
+      cmdOwnSync();
       // A recipe carries its own `prose`, so picking one changes what Default means — and only
       // what it means. An explicit choice already made is left alone. Ahead of the note below,
       // which returns early when there is no note to write: the two rows are a separate part of
@@ -25451,13 +26740,15 @@ convApplyTint();
       const tier = (document.getElementById('cmdTier') || {}).value || 'project';
       const up = !sheet ? cmdBriefOver[form] : (tier === 'project' ? null : cmdSessions.find(
         s => s.id === ((document.getElementById('cmdParent') || {}).value || '')));
-      const delivery = up && up.delivery ? up.delivery + ", its parent's" : '';
+      // The relay's order: the recipe's own, then the parent's, then pull.
+      const delivery = r && r.recipe.delivery ? `${r.recipe.delivery}, from ${r.recipe.label}`
+        : up && up.delivery ? up.delivery + ", its parent's" : '';
       if (style) return {prose: `${style}, from ${r.recipe.label}`, delivery};
       if (up) {
         return {prose: ((up.prose || {}).style || 'verbose') + ", its parent's",
                 delivery};
       }
-      return {prose: 'verbose', delivery: ''};
+      return {prose: 'verbose', delivery};
     }
 
     // Both rows' Default label, recomputed wherever one of its inputs moves: the recipe, the tier
@@ -25525,8 +26816,14 @@ convApplyTint();
       if (!conv) return;
       const scope = (document.getElementById('cmdScope') || {}).value || '';
       if (!scope.trim()) { showToast('A Commander needs a scope — what it owns.'); return; }
-      const who = arbResolvePick((document.getElementById('cmdWho') || {}).value);
-      if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      // The recipe's own Commander, started by the relay, or a pane picked here.
+      const own = cmdOwnStart();
+      if (own && !own.project_id) { showToast('Pick a Project for the Commander.'); return; }
+      const who = own ? null : arbResolvePick((document.getElementById('cmdWho') || {}).value);
+      if (!own && (!who || !who.pane_id)) {
+        showToast('Pick a live pane to be the Commander.');
+        return;
+      }
       const tier = (document.getElementById('cmdTier') || {}).value || 'project';
       const parent = tier === 'project'
         ? '' : ((document.getElementById('cmdParent') || {}).value || '');
@@ -25541,16 +26838,16 @@ convApplyTint();
         .map(p => ({pane_id: p.pane_id}));
       // Two slots naming one pane is the mistake this form can make on its own, and the relay
       // would refuse it after the press. Said here instead, where it can still be fixed.
-      const seen = new Set(members.map(m => m.pane_id).concat([who.pane_id]));
-      if (seen.size !== members.length + 1) {
+      const seen = new Set(members.map(m => m.pane_id).concat(who ? [who.pane_id] : []));
+      if (seen.size !== members.length + (who ? 1 : 0)) {
         showToast('Each slot needs a different pane.');
         return;
       }
       arbSend({
         type: 'cmd_start', conversation: conv.id, scope: scope,
-        coordinator: {pane_id: who.pane_id}, members: members,
+        coordinator: who ? {pane_id: who.pane_id} : {}, members: members,
         tier: tier, parent_session: parent, ...(recipe ? {recipe: recipe} : {}),
-        ...cmdBriefFields(),
+        ...(own || {}), ...cmdBriefFields(),
       });
       // Open until the relay answers. It used to close here, which is what left a refusal with
       // nowhere to be shown but a toast — and a recipe start is refused for things worth reading:
@@ -25558,6 +26855,32 @@ convApplyTint();
       cmdSetupStatus(recipe
         ? 'Starting the Commander and staffing its seats… this can take a minute.'
         : 'Starting the Commander…', true);
+    }
+
+    // Start again: the last Commander this room ran, as a new session holding the same seats and
+    // agents with the same settings. The relay reads all of it off the ended session, so this
+    // sends the id and nothing else. Agents that are down come back away, each restarted (or
+    // resumed) from the roster afterwards; the Commander itself has to be up first.
+    function cmdLastHere(conv) {
+      return cmdPast.find(s => s.conversation === conv.id && (s.kind || 'commander') === 'commander')
+        || null;
+    }
+
+    function cmdAgainHtml(conv) {
+      const last = cmdLastHere(conv);
+      if (!last) return '';
+      return arbPart('Start again',
+        '<span class="arb-note">The last Commander here ended. Start a new one with its scope, ' +
+        'recipe, settings and the same agents in the same seats. Agents that are down come back ' +
+        'away — restart each from the roster. Restart its Commander first if it is down. Nothing ' +
+        'it was doing carries over.</span>' +
+        '<div class="arb-go"><button type="button" class="badge pick on"' +
+        ` onclick="cmdAgain('${escapeHtml(last.id)}')">Start again</button></div>`);
+    }
+
+    function cmdAgain(id) {
+      arbSend({type: 'cmd_start', again: id});
+      cmdSetupStatus('Starting it again…', true);
     }
 
     // --- managing one ------------------------------------------------------------------------
@@ -25570,6 +26893,13 @@ convApplyTint();
     }
 
     // --- a recipe's seats --------------------------------------------------------------------
+
+    // The members holding no seat — every member, in a session with no recipe.
+    function cmdLooseMembers(s, held) {
+      return (s.members || []).filter(m => !held.has(m.id))
+        .map(m => ({member: m.id, label: m.label || m.aid || m.pane_id, role: m.role || '',
+                    state: m.pane_id ? 'live' : 'away'}));
+    }
 
     // A recipe Commander's roster as the sheet draws it: each seat with who holds it, then the
     // members holding no seat. Who holds a seat is the relay's answer — `recipe.seats[].member` —
@@ -25586,11 +26916,10 @@ convApplyTint();
         const m = x.member ? byId.get(x.member) : null;
         return {name: x.name, roles: x.roles || [], kind: x.kind, config: x.config || '',
                 member: x.member || '', label: nameOf(m), state: stateOf(m, x.away),
+                aid: (m && m.aid) || '',
                 error: (x.error && x.error.detail) || ''};
       });
-      const held = new Set(seats.map(x => x.member).filter(Boolean));
-      const extras = members.filter(m => !held.has(m.id))
-        .map(m => ({member: m.id, label: nameOf(m), role: m.role || '', state: stateOf(m, false)}));
+      const extras = cmdLooseMembers(s, new Set(seats.map(x => x.member).filter(Boolean)));
       // A chain is drawn round to its head again, because that is what the hop after the last
       // seat does; v0 recipes have one chain.
       const chain = (r.chains || [])[0] || [];
@@ -25620,18 +26949,57 @@ convApplyTint();
 
     const CMD_SEAT_MARK = {live: '●', away: '◐', empty: '○'};
 
+    function cmdMemberLine(state, name, what, who, tail) {
+      return `<div class="arb-note"><span aria-hidden="true">${CMD_SEAT_MARK[state]}</span> ` +
+        `<b>${escapeHtml(name)}</b>${what ? ' · ' + escapeHtml(what) : ''} · ` +
+        `${escapeHtml(who || '—')} · <span>${state}</span>${tail || ''}</div>`;
+    }
+
+    // Takes one member off the roster, armed, since a seat holder taken off leaves its seat empty.
+    function cmdDropHtml(s, member, label) {
+      return s.state === 'ended' || !member ? ''
+        : ` <button type="button" class="badge pick" aria-label="Remove ${escapeHtml(label || member)}"` +
+          ` data-arm-key="cmd-drop-${escapeHtml(member)}"` +
+          ` onclick="cmdDropMember(this, '${escapeHtml(member)}')">✕</button>`;
+    }
+
+    function cmdAddHtml(s) {
+      return s.state === 'ended' ? ''
+        : '<div class="arb-go"><button type="button" class="badge pick proj"' +
+          ' onclick="cmdAddOpen()">Add member</button></div>';
+    }
+
+    // The roster panel. A recipe's seats then its extras; with no recipe, every member as a row.
+    function cmdRosterHtml(s) {
+      if (s.recipe) return cmdSeatsHtml(s);
+      const rows = cmdLooseMembers(s, new Set());
+      return arbPart('Members',
+        (rows.length
+          ? rows.map(x => cmdMemberLine(x.state, x.role || 'no role', '', x.label,
+                                        cmdDropHtml(s, x.member, x.label))).join('')
+          : '<div class="arb-note">Nobody yet. The Commander plans alone until someone is ' +
+            'added, here or by its own member.add.</div>') +
+        cmdAddHtml(s));
+    }
+
     function cmdSeatsHtml(s) {
       const model = cmdSeatModel(s);
       const open = s.state !== 'ended';
-      const line = (state, name, what, who, tail) =>
-        `<div class="arb-note"><span aria-hidden="true">${CMD_SEAT_MARK[state]}</span> ` +
-        `<b>${escapeHtml(name)}</b>${what ? ' · ' + escapeHtml(what) : ''} · ` +
-        `${escapeHtml(who || '—')} · <span>${state}</span>${tail || ''}</div>`;
+      const line = cmdMemberLine;
       // Away is the seat's own agent down: Staff then restarts that agent into the same seat,
       // keeping its id, rather than starting a stranger.
       const staff = x => (open && x.state !== 'live'
         ? ` <button type="button" class="badge pick proj" onclick="cmdStaff('${escapeHtml(x.name)}')">` +
-          (x.state === 'away' ? 'Restart' : 'Staff') + '</button>' : '');
+          (x.state === 'away' ? 'Restart' : 'Staff') + '</button>' +
+          // Or back into the last session its harness ran, when herdr recorded one.
+          (x.state === 'away' && cmdSeatResumable(x)
+            ? ` <button type="button" class="badge pick proj" onclick="cmdStaff('${escapeHtml(x.name)}', true)">` +
+              'Restart original session</button>' : '') +
+          // An empty seat can also take an agent that is already up. An away one cannot: its
+          // holder keeps the seat, and Restart is how it comes back.
+          (x.state === 'empty'
+            ? ` <button type="button" class="badge pick proj" onclick="cmdSeatPickOpen('${escapeHtml(x.name)}')">` +
+              'Use running…</button>' : '') : '');
       // Changing it is the relay's re-recipe, whose first rule is a paused session — so the press
       // is offered only then, and every other rule is the relay's to refuse in its own words.
       const change = !open ? ''
@@ -25645,15 +27013,15 @@ convApplyTint();
           change) +
         arbPart('Seats', model.seats.map(x =>
           line(x.state, x.name, x.roles.join(' + ') + ' · ' + x.kind + (x.config ? ' · ' + x.config : ''),
-               x.label, staff(x)) +
+               x.label, staff(x) + cmdDropHtml(s, x.member, x.label)) +
           (x.error && x.state === 'empty'
             ? `<div class="arb-note">Could not start: ${escapeHtml(x.error)}</div>` : '')).join('')) +
         arbPart('Extras',
           (model.extras.length
-            ? model.extras.map(x => line(x.state, x.role || 'no role', '', x.label)).join('')
+            ? model.extras.map(x => line(x.state, x.role || 'no role', '', x.label,
+                                         cmdDropHtml(s, x.member, x.label))).join('')
             : '<div class="arb-note">Nobody outside the seats.</div>') +
-          (open ? '<div class="arb-go"><button type="button" class="badge pick proj"' +
-                  ' onclick="cmdAddOpen()">Add member</button></div>' : ''));
+          cmdAddHtml(s));
     }
 
     // A small form of its own for Add member's reason: the panel is redrawn by every broadcast
@@ -25696,13 +27064,83 @@ convApplyTint();
       cmdAddClose();
     }
 
+    // Whether an away holder's harness session can be reopened: the relay recorded one for that
+    // agent, under the harness the seat asks for, and knows how that harness resumes.
+    function cmdSeatResumable(x) {
+      const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
+      const row = x.aid && rows.find(r => r.aid === x.aid);
+      return !!(row && row.harness_session && row.agent === x.kind
+        && ((startOptions || {}).resume || []).indexOf(x.kind) >= 0);
+    }
+
     // The person staffs a seat. The relay starts the seat's own harness and config, or restarts
     // its away holder; the seat fills on the broadcast that follows, a few seconds later.
-    function cmdStaff(seat) {
+    function cmdStaff(seat, resume) {
       const s = cmdSessionHere();
       if (!s) return;
-      arbSend({type: 'cmd_seat', session: s.id, seat: seat});
+      arbSend(Object.assign({type: 'cmd_seat', session: s.id, seat: seat}, resume ? {resume: true} : {}));
       if (typeof showToast === 'function') showToast(`Staffing ${seat} — it comes up in a few seconds.`);
+    }
+
+    // Why this live pane cannot hold the seat, or ''. `recipes.misfit` asked early, off the facts
+    // the snapshot carries, so the picker offers only agents the relay would seat. The relay still
+    // checks at enrolment; this only spares a press it would refuse.
+    let cmdSeatPicking = '';
+
+    function cmdSeatMisfit(seat, pane) {
+      if (!pane || !pane.aid || pane.unresolved) return 'not identified yet';
+      if (pane.agent !== seat.kind) return `a ${pane.agent || 'unknown'} agent`;
+      if ((pane.config || '') !== (seat.config || '')) return `runs ${pane.config || 'the stock config'}`;
+      if ((pane.role || 'agent') !== 'agent') return `started as ${pane.role}`;
+      return '';
+    }
+
+    // The running agents that fit an empty seat: this Project's, held by no other session, and not
+    // this roster's own Commander or members.
+    function cmdSeatCandidates(s, conv, seat) {
+      const mine = new Set((s.members || []).map(m => m.aid).filter(Boolean)
+        .concat([(s.coordinator || {}).aid].filter(Boolean)));
+      const coord = (s.coordinator || {}).pane_id;
+      return arbMemberRows(conv, s.project_id, s.id)
+        .filter(r => r.pane && r.pane.pane_id !== coord && !mine.has(r.pane.aid)
+          && !cmdSeatMisfit(seat, r.pane));
+    }
+
+    // Staff a seat with an agent that is already up: `cmd_seat` naming its `aid`. A small form for
+    // Add member's reason — the panel is redrawn by every broadcast about the session.
+    function cmdSeatPickOpen(name) {
+      const s = cmdSessionHere();
+      const conv = loadConvIndex().find(c => c.id === cmdSetupConv);
+      const seat = ((s && s.recipe) || {seats: []}).seats.find(x => x.name === name);
+      if (!s || !conv || !seat) return;
+      cmdEditing = s.id;
+      cmdEditWas = null;
+      cmdSeatPicking = name;
+      const rows = cmdSeatCandidates(s, conv, seat);
+      const want = `${seat.kind}${seat.config ? ' · ' + seat.config : ''}`;
+      cmdDraw(conv, arbPart(`Staff ${name} with a running agent`,
+          (rows.length ? arbSlot('cmdSeatWho', rows, arbPickValue(rows[0]), false)
+            : `<div class="arb-note">No running agent here fits: this seat wants ${escapeHtml(want)}` +
+              ', started as a plain agent and held by no other session.</div>') +
+          `<span class="arb-note">The seat asks for ${escapeHtml(want)}. Only agents started that ` +
+          'way are offered. It keeps its history and takes the seat\'s role files from its next ' +
+          'assignment.</span>') +
+        '<div class="arb-go">' +
+        '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
+        (rows.length ? '<button type="button" class="badge pick on" onclick="cmdSeatPick()">Staff</button>' : '') +
+        '</div>', true, true);
+    }
+
+    function cmdSeatPick() {
+      const s = cmdSessions.find(x => x.id === cmdEditing);
+      const seat = cmdSeatPicking;
+      if (!s || !seat) return;
+      const pick = arbResolvePick((document.getElementById('cmdSeatWho') || {}).value);
+      const who = pick && agents.find(a => a.pane_id === pick.pane_id);
+      if (!who || !who.aid) { showToast('Pick a running agent for the seat.'); return; }
+      arbSend({type: 'cmd_seat', session: s.id, seat: seat, aid: who.aid});
+      showToast(`Staffing ${seat} with ${paneLabel(who)}.`);
+      cmdAddClose();
     }
 
     // Add member is a small form of its own rather than a row in the panel, because the panel is
@@ -25720,8 +27158,12 @@ convApplyTint();
           arbSlot('cmdAddWho', rows, rows[0] && arbPickValue(rows[0]), false) +
           '<label>Role<input id="cmdAddRole" maxlength="160" autocomplete="off"' +
           ' placeholder="writes the release notes"></label>' +
-          '<span class="arb-note">An extra, outside the recipe\'s seats. Its role is your own words ' +
-          'and may not repeat one this roster already holds. A seat is filled with Staff.</span>') +
+          (s.recipe
+            ? '<span class="arb-note">An extra, outside the recipe\'s seats. Its role is your own ' +
+              'words and may not repeat one this roster already holds. A seat is filled with ' +
+              'Staff.</span>'
+            : '<span class="arb-note">Its role is your own words: what the Commander should use ' +
+              'it for. It is named in every assignment this member is sent.</span>')) +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="cmdAddMember()">Add</button></div>',
@@ -25734,8 +27176,7 @@ convApplyTint();
     }
 
     // A roster edit replaces the whole roster, so every member is sent again with its role and the
-    // new one goes on the end. Live members by pane and away ones by id, as `cmdParticipantOf`
-    // names them, so an away member is carried rather than refused for having no pane.
+    // new one goes on the end.
     function cmdAddMember() {
       const s = cmdSessions.find(x => x.id === cmdEditing);
       if (!s) return;
@@ -25745,17 +27186,33 @@ convApplyTint();
         showToast('The Commander cannot also be a member. Pick another agent.'); return;
       }
       const role = String((document.getElementById('cmdAddRole') || {}).value || '').trim();
-      const clash = cmdRoleClash(s, role);
+      const clash = s.recipe ? cmdRoleClash(s, role) : '';
       if (clash) {
         const seat = ((s.recipe || {}).seats || []).some(x => String(x.name).toLowerCase() === clash);
         showToast(seat ? `${clash} is a seat — fill it with Staff.`
           : `“${clash}” is already held here — a recipe roster holds each role once.`);
         return;
       }
-      const keep = (s.members || []).map(m =>
-        ({...(m.pane_id ? {pane_id: m.pane_id} : {aid: m.aid}), role: m.role || ''}));
-      arbSend({type: 'cmd_edit', session: s.id, members: keep.concat([{pane_id: who.pane_id, role: role}])});
+      arbSend({type: 'cmd_edit', session: s.id,
+               members: cmdRosterOf(s).concat([{pane_id: who.pane_id, role: role}])});
       cmdAddClose();
+    }
+
+    // The roster as `cmd_edit` replaces it: every member with its role, live ones by pane and
+    // away ones by id, so an away member is carried rather than refused for having no pane.
+    function cmdRosterOf(s, without) {
+      return (s.members || []).filter(m => m.id !== without).map(m =>
+        ({...(m.pane_id ? {pane_id: m.pane_id} : {aid: m.aid}), role: m.role || ''}));
+    }
+
+    // The relay has no remove: the roster is sent again without this one.
+    function cmdDropMember(btn, member) {
+      const s = cmdSessionHere();
+      const m = s && (s.members || []).find(x => x.id === member);
+      if (!m) return;
+      armButton(btn, 'Remove?', () =>
+        arbSend({type: 'cmd_edit', session: s.id, members: cmdRosterOf(s, member)}),
+        'cmd-drop-' + member);
     }
 
     // What it is, where it sits, and the four things that can be done to it. No decisions and no
@@ -25779,17 +27236,13 @@ convApplyTint();
             ? `plan at revision ${s.agenda_rev}` + (s.agenda_at ? ', read ' + arbAgo(s.agenda_at) : '')
             : 'no plan written yet') + '</div>',
           cmdSign(16) + ' ') +
-        (s.recipe ? cmdSeatsHtml(s) : '') +
+        cmdRosterHtml(s) +
         (!s.recipe && paused && cmdRecipes().length
           ? arbPart('Recipe', '<button type="button" class="badge pick proj"' +
                     ' onclick="cmdRecipeOpen()">Change recipe</button>')
           : '') +
         (s.recipe_error
           ? arbPart('Recipe', `<div class="arb-note">Its recipe cannot be read: ${escapeHtml(s.recipe_error)}</div>`)
-          : '') +
-        (!s.recipe && s.members && s.members.length
-          ? arbPart('Its agents', '<div class="arb-note">' +
-              s.members.map(m => escapeHtml(m.label || m.pane_id)).join(', ') + '</div>')
           : '') +
         '<div class="arb-go">' +
         (at ? `<button type="button" class="badge pick proj" onclick="cmdOpenPane('${escapeHtml(at)}')">` +
@@ -28847,6 +30300,15 @@ convApplyTint();
             + ' title="Restart the relay in place — agents, panes and the tunnel keep running"'
             + ' aria-label="Reboot the relay">Reboot Relay</button>'
           : '')
+        // herdr itself: unlike the two above, this one ends what runs in the panes. The arm label
+        // counts the agents it would cut off mid-turn.
+        + (typeof herdrRestartOffered === 'function' && herdrRestartOffered()
+          ? '<button class="section-action" data-arm-key="restart-herdr"'
+            + ' onclick="armButton(this, herdrRestartArmLabel(), restartHerdr, \'restart-herdr\')"'
+            + ' title="Stop and start the herdr server — the layout comes back and agents resume'
+            + ' their sessions, but every running process and turn in progress ends"'
+            + ' aria-label="Restart herdr">Restart herdr</button>'
+          : '')
         + '<button class="section-action" onclick="openLauncherNew()"'
         + ' title="Add a tile" aria-label="Add a launcher tile">+ New</button>'
         + '</div>'
@@ -28861,6 +30323,9 @@ convApplyTint();
           ? groups.map(g => `<div class="launcher-band">${escapeHtml(g.label)}</div>`
             + g.tiles.map(launcherTileHtml).join('')).join('')
           : tiles.map(launcherTileHtml).join(''))
+        // The Project's standing agents, after the tiles: a tile starts something new, and a bench
+        // row opens the same agent every time. See bench.js.
+        + (typeof benchHtml === 'function' ? benchHtml() : '')
         // Under the tiles and inside the same section, because it is the launcher's own answer to
         // "what can this press start" — not a seventh section with a tab of its own.
         + (typeof agentConfigsHtml === 'function' ? agentConfigsHtml() : '')
@@ -29150,7 +30615,11 @@ convApplyTint();
     // key onto the new pane, and opens the thread.
     function launcherBotContinue(tile, conv, held) {
       const member = (tile.members || [])[0] || {};
-      const key = held.key;
+      const key = held.aid || held.key;
+      if (typeof convMemberPending === 'function' && convMemberPending(conv.id, key)) {
+        showSpawnStatus('A restart of this member is already on its way.', 'busy');
+        return true;
+      }
       // Named before the send and written down before that: the answer to a start is what a reload
       // loses, and the note is what a tab coming back finds the pane by. Same mechanism, same
       // two-minute window, as Restart in a conversation.
@@ -29161,6 +30630,14 @@ convApplyTint();
       // so a permanent room fills with strangers and the record can no longer say whose turns the
       // months behind it were. The same field the conversation's own Restart sends.
       if (held.aid) msg.aid = held.aid;
+      // And its own conversation with it, where the harness can reopen one: a bot is the agent
+      // somebody comes back to, so what it said last time is the point of pressing it rather than
+      // a fresh session wearing its name. Only for the harness the tile still names — the relay
+      // refuses a resume across harnesses — and only where a session was ever recorded.
+      const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
+      const was = held.aid && rows.find(r => r.aid === held.aid);
+      if (was && was.harness_session && was.agent === msg.name
+          && ((startOptions || {}).resume || []).indexOf(msg.name) >= 0) msg.resume = true;
       startIntent = {conv: conv.id, replace: key, ref: ref};
       // Nothing is said to it. A bot is a room the user comes back to, and an opening prompt typed
       // at every press would be the one line in the thread nobody wrote.
@@ -30876,6 +32353,9 @@ convApplyTint();
           if (!docsArrived) out.push(Object.assign({}, t, {state: 'pending'}));
           else if ((convs || []).some(c => c.id === t.key)) out.push(Object.assign({}, t, {state: 'live'}));
         }
+        // A Project's PROJECT.md, opened from command.html's rail. Read from disk on demand, so
+        // there is nothing in a snapshot to check it against: kept as it was opened.
+        else if (t.kind === 'project') out.push(Object.assign({}, t, {state: 'live'}));
       }
       return out;
     }
@@ -30887,7 +32367,7 @@ convApplyTint();
       if (hidden) return 0;
       // Event-driven: a room is written by conv_live.js as messages arrive. There is no pane to
       // read and a read would spawn herdr for nothing.
-      if (!column || column.kind === 'conversation') return 0;
+      if (!column || column.kind === 'conversation' || column.kind === 'project') return 0;
       return focused ? 3000 : 9000;
     }
 
@@ -30899,7 +32379,7 @@ convApplyTint();
     // hides what does not apply, so this is the only place the three are told apart — spec §7.
     // A column with no tab has no composer at all: there is nothing to send to.
     function deskComposerShape(tab) {
-      if (!tab) return null;
+      if (!tab || tab.kind === 'project') return null;
       if (tab.kind === 'conversation') return 'conversation';
       if (tab.kind === 'terminal') return 'terminal';
       return 'pane';
@@ -30948,6 +32428,7 @@ convApplyTint();
       if (kind === 'terminal') {
         return typeof shellGlyph === 'function' ? shellGlyph() : '';
       }
+      if (kind === 'project') return '<span class="desk-kind-glyph" aria-hidden="true">📄</span>';
       return typeof paneGlyph === 'function' ? paneGlyph(pane || {agent: 'x'}) : '';
     }
 
@@ -31309,8 +32790,13 @@ convApplyTint();
       const live = typeof convLiveOn === 'function' && convLiveOn();
       const liveBtn = on('live', conv);
       if (liveBtn) {
+        const detail = typeof convLiveDetailOn === 'function' && convLiveDetailOn();
         liveBtn.classList.toggle('live', live);
+        liveBtn.classList.toggle('grouped', detail);
         liveBtn.setAttribute('aria-pressed', String(live));
+        liveBtn.title = detail ? 'Reading the relay’s record, with what was said mid-turn — click for this browser’s transcript'
+          : live ? 'Reading the relay’s record — click to add what was said mid-turn'
+          : 'Read the relay’s record';
       }
       const commitsBtn = on('commits', conv && live);
       if (commitsBtn) {
@@ -31565,6 +33051,8 @@ convApplyTint();
       deskRenderColumns();
       deskRenderTabs();
       deskRenderRoster();
+      const tab = deskTabFor(deskColumns[next].tabKey);
+      if (tab && tab.kind === 'project') deskReadColumn(next, true);
     }
 
     // The pane a tab names, or null when it names one that is not in the snapshot. A pane tab is
@@ -31668,6 +33156,11 @@ convApplyTint();
       const col = deskColumns[i];
       if (!col) return;
       const tab = deskTabFor(col.tabKey);
+      // A Project file is read from the relay's disk, not from a pane.
+      if (tab && tab.kind === 'project') {
+        if (typeof cmdAskProjectFile === 'function') cmdAskProjectFile(tab.key, true);
+        return;
+      }
       const pane = deskPaneOfTab(tab);
       if (!pane) return;
       if (!force && col.lines > POLL_MAX_LINES) return;   // a deep read is not re-fetched on a timer
@@ -31814,7 +33307,11 @@ convApplyTint();
         const key = deskTabKey(t.kind, t.key);
         if (seen.has(key) || (!force && closed.has(key))) return;
         seen.add(key);
-        out.push({kind: t.kind, key: t.key, label: t.label});
+        // A Project file's name is its key's, read now rather than as it was stored: it names the
+        // Project the tab stays on, and a pin saved before that rule still carries the old name.
+        const label = t.kind === 'project' && typeof cmdTabLabel === 'function'
+          ? cmdTabLabel(t.key, typeof projects !== 'undefined' ? projects : []) : t.label;
+        out.push({kind: t.kind, key: t.key, label: label});
       };
       deskTabPins.forEach(p => add(p, true));
       deskConvTabs(conv).forEach(t => add(t));
@@ -32612,6 +34109,10 @@ convApplyTint();
         {label: 'Restart', arm: 'Restart?', disabled: !again || !convId,
          hint: again && convId ? note : 'nothing on record to start again',
          run: () => convRestart(aid)},
+        again && convId && resumableSession(aid) &&
+          {label: 'Restart original session', arm: 'Reopen it?',
+           hint: 'the harness reopens its last conversation',
+           run: () => convRestart(aid, true)},
         startOptions && convId &&
           {label: 'Restart as\u2026', arm: 'Restart as?',
            hint: 'opens the Start dialog', run: () => convStartAs(aid)},
@@ -35506,6 +37007,13 @@ convApplyTint();
                         hint: 'a new tunnel, the relay untouched — this page follows the address',
                         run: () => { deskCloseOverlay(); restartTunnel(); }});
       }
+      if (typeof herdrRestartOffered === 'function' && herdrRestartOffered()) {
+        const n = herdrWorkingCount();
+        relayRows.push({label: 'Restart herdr', danger: true,
+                        arm: n ? `Restart herdr? ${n} agent(s) working` : 'Restart herdr?',
+                        hint: 'layout and sessions come back — running processes and turns end',
+                        run: () => { deskCloseOverlay(); restartHerdr(); }});
+      }
       if (relayRows.length) push('Relay', relayRows);
       return out;
     }
@@ -36212,6 +37720,1155 @@ convApplyTint();
 
   </script>
   <script>
+    // command.html: the Projects page. It is desktop.html served under another name — the same
+    // columns, strip, composers, pins and menus — with the sidebar's two lists swapped for two of
+    // this file's: the Projects rail, and the Agents panel for the Project selected in it. See
+    // .workflow/02_architecture/2026-10-12_command_page_proposal.md.
+    //
+    // Dormant on desktop.html: `cmdBoot` and `cmdRender` return at once unless the address ends
+    // in command.html. The Project file tab kind is the exception and works on both pages, since a
+    // pinned tab follows the reader from one to the other.
+
+    // --- command page (pure) ---
+
+    // Which Project a member row of the `conversations` document belongs to. A live pane's
+    // `project_id` is the relay's own answer and wins; a stored row names its Project by the
+    // directory it was started in (`project`, an id on relay-written rows or a legacy label).
+    function cmdMemberProject(m, panes, projs) {
+      const live = m && m.aid ? (panes || []).find(p => p.aid === m.aid) : null;
+      if (live) return live.project_id || '';
+      if (m && m.project_id && projs.some(p => p.id === m.project_id)) return m.project_id;
+      const name = (m && m.project) || '';
+      if (!name) return '';
+      const hit = projs.find(p => p.id === name) || projs.find(p => p.label === name);
+      return hit ? hit.id : '';
+    }
+
+    // Every Project a room belongs to: any its members name, the Project of a Commander over it,
+    // and a bench room's own. A room holding agents of two Projects is in both.
+    function cmdRoomProjects(conv, panes, projs, sessions) {
+      const out = new Set();
+      const id = String(conv.id || '');
+      if (id.startsWith('c_bench_') && projs.some(p => p.id === id.slice(8))) out.add(id.slice(8));
+      for (const s of sessions || []) {
+        if (s.conversation === id && s.project_id && s.tier !== 'general') out.add(s.project_id);
+      }
+      for (const m of conv.members || []) {
+        const p = cmdMemberProject(m, panes, projs);
+        if (p) out.add(p);
+      }
+      return out;
+    }
+
+    // `{pid: [room]}`, with the rooms that name no Project under ''. Rooms of web providers are
+    // left out, as on desktop.html.
+    function cmdRoomsByProject(convs, panes, projs, sessions) {
+      const out = new Map();
+      for (const c of convs || []) {
+        if (c.webchat || (typeof convKindOf === 'function' && convKindOf(c) === 'providers')) continue;
+        const pids = cmdRoomProjects(c, panes, projs, sessions);
+        if (!pids.size) pids.add('');
+        for (const pid of pids) {
+          if (!out.has(pid)) out.set(pid, []);
+          out.get(pid).push(c);
+        }
+      }
+      return out;
+    }
+
+    function cmdRoomLive(conv, panes) {
+      return (conv.members || []).some(m => m.aid && (panes || []).some(p => p.aid === m.aid));
+    }
+
+    // When a room was last worked in: its members' newest `seen`, then when it was made.
+    function cmdRoomSeen(conv) {
+      let newest = 0;
+      for (const m of (conv && conv.members) || []) newest = Math.max(newest, Number(m.seen) || 0);
+      return newest || Number(conv && conv.created) || 0;
+    }
+
+    // A Commander's last activity: its coordinator's newest turn in the record, else its room's.
+    function cmdSessionSeen(s, convs, held) {
+      const aid = s.coordinator && s.coordinator.aid;
+      const row = aid && held && held[aid];
+      if (row && Number(row[1])) return Number(row[1]);
+      const room = (convs || []).find(c => c.id === s.conversation);
+      return room ? cmdRoomSeen(room) : 0;
+    }
+
+    // The open Commanders drawn as cards for one Project, last active first, each carrying its
+    // children. A child of an open Commander is drawn inside that Commander's tree and nowhere
+    // else — whichever Project it runs in. A child of the General is a card of its own Project:
+    // the General is drawn on its own tab. Returns `{cards, all}`: `all` is every open Commander
+    // of the Project, nested or not, which is what "last active" is chosen from.
+    function cmdCommanders(sessions, pid, convs, held) {
+      const open = (sessions || []).filter(s => s.state !== 'ended' && s.kind !== 'arbitration');
+      const byId = new Map(open.map(s => [s.id, s]));
+      const nested = s => {
+        const parent = byId.get(s.parent_session);
+        return !!parent && parent.tier !== 'general';
+      };
+      const seen = s => cmdSessionSeen(s, convs, held);
+      const order = list => list.slice().sort((a, b) => seen(b) - seen(a) || (a.id < b.id ? -1 : 1));
+      const node = (s, path) => ({
+        session: s,
+        children: path.has(s.id) ? [] : order(open.filter(c => c.parent_session === s.id))
+          .map(c => node(c, new Set(path).add(s.id))),
+      });
+      const all = order(open.filter(s => s.project_id === pid && s.tier !== 'general'));
+      return {cards: all.filter(s => !nested(s)).map(s => node(s, new Set())), all: all};
+    }
+
+    // The General, and every open Commander it started, across Projects.
+    function cmdGeneral(sessions) {
+      const open = (sessions || []).filter(s => s.state !== 'ended');
+      const general = open.find(s => s.tier === 'general');
+      if (!general) return null;
+      const kids = id => open.filter(s => s.parent_session === id)
+        .map(s => ({session: s, children: kids(s.id)}));
+      return {session: general, children: kids(general.id)};
+    }
+
+    // Ended Commanders of one Project, newest first. `cmd_sessions.past` rows may carry nothing but
+    // `{id, kind, state, parent_session, conversation}`, so one with no `project_id` is placed by
+    // its room. A room an open Commander now stands over is that Commander's card instead.
+    function cmdEnded(past, pid, roomsOfPid, openSessions) {
+      const rooms = new Set((roomsOfPid || []).map(c => c.id));
+      const busy = new Set((openSessions || []).map(s => s.conversation));
+      const done = new Set();
+      return (past || []).filter(s => {
+        if (s.tier === 'general' || busy.has(s.conversation) || done.has(s.conversation)) return false;
+        const mine = s.project_id ? s.project_id === pid : rooms.has(s.conversation);
+        if (mine) done.add(s.conversation);
+        return mine;
+      });
+    }
+
+    // This Project's live agents that nothing holds: no open session seats them, no bench entry
+    // names them, and no named room has them as a member. A room the recorder filed on its own
+    // does not count — every agent has one.
+    function cmdAvailable(pid, data) {
+      const held = new Set(), heldPanes = new Set();
+      const hold = p => {
+        if (p && p.aid) held.add(p.aid);
+        else if (p && p.pane_id) heldPanes.add(p.pane_id);
+      };
+      for (const s of (data.sessions || []).concat(data.arbitrations || [])) {
+        if (s.state === 'ended') continue;
+        hold(s.coordinator || s.arbitrator);
+        for (const m of Object.values(s.members || {})) hold(m);
+      }
+      for (const entries of Object.values(data.bench || {})) for (const e of entries) hold(e);
+      for (const c of data.convs || []) {
+        if (c.auto) continue;
+        for (const m of c.members || []) hold(m);
+      }
+      return (data.panes || []).filter(p => p.aid && !p.unresolved && p.project_id === pid
+        && !held.has(p.aid) && !heldPanes.has(p.pane_id));
+    }
+
+    // What the Agents panel lists for one Project. Every room appears once: as a Commander's card,
+    // the bench card, a line under Ended Commanders, or a line under Rooms.
+    function cmdProjectView(pid, data, toggles) {
+      const convs = data.convs || [];
+      const panes = data.panes || [];
+      const sessions = data.sessions || [];
+      const rooms = cmdRoomsByProject(convs, panes, data.projs || [], sessions).get(pid) || [];
+      const cmd = cmdCommanders(sessions, pid, convs, data.held);
+      const open = sessions.filter(s => s.state !== 'ended');
+      const ended = toggles.ended ? cmdEnded(data.past, pid, rooms, open) : [];
+      const taken = new Set(open.map(s => s.conversation));
+      for (const s of ended) taken.add(s.conversation);
+      const bench = 'c_bench_' + pid;
+      if (toggles.bench) taken.add(bench);
+      const rest = rooms.filter(c => !taken.has(c.id))
+        .map(c => ({conv: c, live: cmdRoomLive(c, panes), seen: cmdRoomSeen(c)}))
+        .filter(r => (toggles.deadRooms || r.live) && (toggles.autoRooms || !cmdRoomAuto(r.conv)))
+        .sort((a, b) => b.seen - a.seen || (a.conv.id < b.conv.id ? -1 : 1));
+      return {cards: cmd.cards, last: cmd.all[0] || null, rooms: rest, ended: ended,
+        bench: convs.find(c => c.id === bench) || null,
+        available: pid && toggles.available ? cmdAvailable(pid, data) : []};
+    }
+
+    // The rail: one row per Project, and Unplaced last when anything is.
+    function cmdRailRows(projs, panes, roomsBy, toggles) {
+      const rows = projs.map(p => ({id: p.id, label: p.label || p.id,
+        live: (panes || []).some(a => a.project_id === p.id)}))
+        .filter(r => !toggles.onlyLive || r.live);
+      const loose = (roomsBy.get('') || []).filter(c => toggles.autoRooms || !cmdRoomAuto(c));
+      if (toggles.unplaced && loose.length) {
+        rows.push({id: '', label: 'Unplaced', live: loose.some(c => cmdRoomLive(c, panes)),
+          unplaced: true});
+      }
+      return rows;
+    }
+
+    // A room the recorder filed on its own until somebody names it. Hidden by default: the rooms
+    // worth listing are the ones a person named.
+    function cmdRoomAuto(conv) {
+      return !!(conv && conv.auto);
+    }
+
+    const CMD_TOGGLE_DEFAULTS = {
+      onlyLive: false, unplaced: true, icons: true,
+      deadRooms: true, autoRooms: false, ended: true, bench: true, available: true, members: true,
+      recipe: true,
+      unfold: false, compact: false,
+    };
+
+    // Stored toggles over the defaults, keeping only booleans this page knows about.
+    function cmdTogglesFrom(raw) {
+      const out = Object.assign({}, CMD_TOGGLE_DEFAULTS);
+      for (const k of Object.keys(out)) if (raw && typeof raw[k] === 'boolean') out[k] = raw[k];
+      return out;
+    }
+
+    // A row's ` · key:value` tail: `plan:` the one document it is worked from, `see:` the others,
+    // anything else kept by name. A part that is not `key:value` is still the row's words.
+    function cmdRowProps(text) {
+      const [head, ...parts] = text.split(' · ');
+      const out = {text: head, see: [], props: {}};
+      for (const part of parts) {
+        const m = /^([a-z][\w-]*):\s*(\S.*)$/s.exec(part.trim());
+        if (!m) out.text += ' · ' + part;
+        else if (m[1] === 'plan') out.plan = m[2];
+        else if (m[1] === 'see') out.see.push(...m[2].split(',').map(x => x.trim()).filter(Boolean));
+        else { out.props[m[1]] = m[2]; out.text += ' · ' + part; }
+      }
+      return out;
+    }
+
+    // PROJECT.md, read for the Roadmap view. The format is AGENTS.md's "The Project file":
+    // `## Roadmap` → `### Category` → `- F1 name — line`, and `## Phases` → `### P1 name` →
+    // `- [ ] S1 F1 slice` (or a legacy `T1`), a finished phase collapsed to
+    // `### P1 name ✓ date · n tasks · F1 n`. relay/project_cli.py reads the same rows, and both are
+    // tested against tests/fixtures/project_map.md. What does not match is left out of this view,
+    // never guessed at; the Phases view is the file.
+    function cmdParseProjectFile(text) {
+      const out = {categories: [], phases: [], backlog: []};
+      let section = '', category = null, phase = null, fence = null;
+      for (const raw of String(text || '').split('\n')) {
+        const line = raw.replace(/\s+$/, '');
+        const mark = /^ {0,3}(`{3,}|~{3,})(.*)$/s.exec(line);
+        if (fence) {
+          if (mark && mark[1][0] === fence[0] && mark[1].length >= fence.length && !mark[2].trim()) fence = null;
+          continue;
+        }
+        if (mark && (mark[1][0] !== '`' || !mark[2].includes('`'))) { fence = mark[1]; continue; }
+        let m;
+        if ((m = /^##\s+(.+)$/s.exec(line))) {
+          section = m[1].trim().toLowerCase();
+          category = phase = null;
+          continue;
+        }
+        if ((m = /^###\s+(.+)$/s.exec(line))) {
+          const head = m[1].trim();
+          if (section === 'roadmap') {
+            category = {name: head, features: []};
+            out.categories.push(category);
+          } else if (section === 'phases') {
+            const p = /^(P\d+)\s+(.*)$/s.exec(head);
+            const [name, tail] = (p ? p[2] : head).split(/\s*✓\s*/);
+            phase = {id: p ? p[1] : '', name: name.trim(), collapsed: tail !== undefined,
+              total: 0, counts: {}, tasks: []};
+            if (tail !== undefined) {
+              const total = /(\d+)\s+(tasks?|slices?)/.exec(tail);
+              phase.total = total ? Number(total[1]) : 0;
+              phase.unit = total ? total[2] : 'tasks';
+              for (const c of tail.matchAll(/\b(F\d+)\s+(\d+)/g)) phase.counts[c[1]] = Number(c[2]);
+            }
+            out.phases.push(phase);
+          }
+          continue;
+        }
+        if (section === 'roadmap' && (m = /^\s*[-*]\s+(F\d+)\s+(.*)$/s.exec(line))) {
+          const row = cmdRowProps(m[2]);
+          const [name, ...rest] = row.text.split(/\s+—\s+/);
+          if (!category) { category = {name: '', features: []}; out.categories.push(category); }
+          category.features.push({id: m[1], name: name.trim(), line: rest.join(' — ').trim(),
+            see: row.see});
+          continue;
+        }
+        if ((m = /^\s*[-*]\s+\[([ ~xX-])\]\s+([ST]\d+)\s+(\S.*)$/s.exec(line))) {
+          const status = {' ': 'todo', '~': 'doing', x: 'done', X: 'done', '-': 'dropped'}[m[1]];
+          const row = cmdRowProps(m[3]);
+          const words = row.text.split(/\s+/);
+          const task = {status: status, id: m[2], features: [], text: '', see: row.see,
+            props: row.props};
+          if (row.plan) task.plan = row.plan;
+          while (words.length && /^F\d+,?$/.test(words[0])) task.features.push(words.shift().replace(',', ''));
+          task.text = words.join(' ');
+          if (section === 'phases' && phase) { task.phase = phase.id; phase.tasks.push(task); }
+          else if (section === 'backlog') { task.phase = 'backlog'; out.backlog.push(task); }
+        }
+      }
+      return out;
+    }
+
+    // The Roadmap view's model: each feature with the tasks naming it, and how many of them are
+    // done. Legacy summaries are displayed separately, never counted as slice rows.
+    function cmdRoadmap(doc) {
+      const tasks = doc.phases.flatMap(p => p.tasks).concat(doc.backlog);
+      const known = new Set(doc.categories.flatMap(c => c.features.map(f => f.id)));
+      const feature = f => {
+        const mine = tasks.filter(t => t.features.includes(f.id));
+        const closed = doc.phases.filter(p => p.collapsed && !p.tasks.length && p.counts[f.id])
+          .map(p => ({phase: p.id, count: p.counts[f.id], unit: p.unit || 'tasks'}));
+        const live = mine.filter(t => t.status !== 'dropped');
+        return Object.assign({}, f, {tasks: mine, closed: closed,
+          done: live.filter(t => t.status === 'done').length, total: live.length});
+      };
+      return {
+        categories: doc.categories.map(c => ({name: c.name, features: c.features.map(feature)})),
+        // Tasks naming no feature the roadmap lists — or none at all — so nothing is unreachable.
+        loose: tasks.filter(t => !t.features.length || t.features.some(f => !known.has(f))),
+      };
+    }
+
+    // The phase focus mode is about: the first phase with a slice under way, else the first with one
+    // still to do. '' when every phase is finished.
+    function cmdFocusPhase(doc) {
+      const open = s => p => p.tasks.some(t => t.status === s);
+      const p = doc.phases.find(open('doing')) || doc.phases.find(open('todo'));
+      return p ? p.id : '';
+    }
+
+    // The file cut at each `### P#` heading under `## Phases`, so the Text view can wrap a phase and
+    // grey it. A heading inside a fence is not a cut; every chunk is still Markdown on its own.
+    function cmdTextChunks(text) {
+      const out = [{phase: '', lines: []}];
+      let section = '', fence = null;
+      for (const line of String(text || '').split('\n')) {
+        const mark = /^ {0,3}(`{3,}|~{3,})(.*)$/s.exec(line);
+        if (fence) {
+          if (mark && mark[1][0] === fence[0] && mark[1].length >= fence.length && !mark[2].trim()) fence = null;
+        } else if (mark && (mark[1][0] !== '`' || !mark[2].includes('`'))) fence = mark[1];
+        else if (/^##\s/.test(line)) {
+          section = line.replace(/^##\s+/, '').trim().toLowerCase();
+          out.push({phase: '', lines: []});
+        } else if (section === 'phases' && /^###\s/.test(line)) {
+          const p = /^###\s+(P\d+)\b/.exec(line);
+          out.push({phase: p ? p[1] : '', lines: []});
+        }
+        out[out.length - 1].lines.push(line);
+      }
+      return out.filter(c => c.lines.length).map(c => ({phase: c.phase, text: c.lines.join('\n')}));
+    }
+
+    // Which open Commanders of a Project name a slice in their scope, as `{S6: [session…]}`.
+    // Navigation only: a scope naming a slice claims nothing about it.
+    function cmdMentions(sessions, pid) {
+      const out = {};
+      for (const s of cmdCommanders(sessions, pid, [], {}).all) {
+        for (const id of new Set(String(s.scope || '').match(/\b[ST]\d+\b/g) || [])) {
+          (out[id] = out[id] || []).push(s);
+        }
+      }
+      return out;
+    }
+
+    // A `project` tab's key: a Project id for its PROJECT.md, or `["<id>", "<path>"]` for a document
+    // its map links to. The JSON form cannot be a Project id, so the two never collide.
+    function cmdDocKey(pid, path) { return JSON.stringify([pid, path]); }
+    function cmdTabDoc(key) {
+      if (typeof key === 'string' && key[0] === '[') {
+        try {
+          const parts = JSON.parse(key);
+          if (Array.isArray(parts) && parts.length === 2
+            && parts.every(p => typeof p === 'string') && cmdDocKey(...parts) === key) {
+            return {pid: parts[0], path: parts[1]};
+          }
+        } catch (e) { /* not a document key */ }
+      }
+      return {pid: key, path: null};
+    }
+
+    // A `project` tab's name. The column stays on the Project it was opened for and never follows
+    // the rail's selection — the tab is keyed by that Project, desktop.html has no rail to follow,
+    // and two of them side by side is the reason to open a second — so the name leads with the
+    // Project: two open at once were otherwise two tabs reading `PROJECT.m…`. Derived from the
+    // key on every paint, so a tab saved under an older name, or a Project relabelled, reads right.
+    function cmdTabLabel(key, projs) {
+      const doc = cmdTabDoc(key);
+      const p = (projs || []).find(x => x.id === doc.pid);
+      const file = doc.path === null ? 'PROJECT.md' : (String(doc.path).split('/').pop() || doc.path);
+      return (p ? p.label : doc.pid) + ' · ' + file;
+    }
+
+    // --- end command page (pure) ---
+
+    const CMD_PAGE = typeof location !== 'undefined' && /command\.html$/.test(location.pathname);
+    const CMD_TOGGLES_KEY = 'herdr_cmd_toggles';
+    const CMD_PROJECT_KEY = 'herdr_cmd_project';
+    const CMD_PF_VIEW_KEY = 'herdr_cmd_pf_view';
+    const CMD_PF_FOCUS_KEY = 'herdr_cmd_pf_focus';
+    const CMD_RAIL_W_KEY = 'herdr_cmd_rail_w';
+
+    function cmdStoreGet(key) {
+      try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+    function cmdStoreSet(key, value) {
+      try { localStorage.setItem(key, value); } catch (e) { /* private window: this visit only */ }
+    }
+
+    let cmdToggles = cmdTogglesFrom((() => {
+      try { return JSON.parse(cmdStoreGet(CMD_TOGGLES_KEY) || '{}'); } catch (e) { return {}; }
+    })());
+    // The selected Project; '' is Unplaced, null is nothing chosen yet.
+    let cmdSelected = cmdStoreGet(CMD_PROJECT_KEY);
+    let cmdTab = 'agents';
+    const cmdFolds = new Map();
+    let cmdEndedOpen = false;
+    let cmdAvailableOpen = false;
+
+    function cmdToggle(name) {
+      cmdToggles[name] = !cmdToggles[name];
+      if (name === 'unfold') cmdFolds.clear();
+      cmdStoreSet(CMD_TOGGLES_KEY, JSON.stringify(cmdToggles));
+      cmdRender();
+    }
+
+    // --- the Project file column ---
+
+    // `{key: {text, mtime, missing, error, at}}` by tab key, what the relay last said, and which are
+    // in flight. A key is a Project id for its PROJECT.md or `cmdDocKey` for a linked document.
+    const cmdFiles = new Map();
+    const cmdFileAsking = new Set();
+    // Re-asked at most this often by a repaint; the refresh button and a focus change force it.
+    const CMD_FILE_FRESH_MS = 30000;
+
+    function cmdProjectFileReset() {
+      cmdFileAsking.clear();
+      for (const held of cmdFiles.values()) held.at = 0;
+    }
+
+    function cmdAskProjectFile(key, force) {
+      if (!key || cmdFileAsking.has(key)) return;
+      const held = cmdFiles.get(key);
+      if (!force && held && Date.now() - held.at < CMD_FILE_FRESH_MS) return;
+      if (typeof ws === 'undefined' || !ws || ws.readyState !== 1) return;
+      cmdFileAsking.add(key);
+      const doc = cmdTabDoc(key);
+      ws.send(JSON.stringify(doc.path === null ? {type: 'project_file', project_id: doc.pid}
+        : {type: 'project_doc', project_id: doc.pid, path: doc.path}));
+    }
+
+    function cmdProjectFileReceive(msg) {
+      const key = msg.type === 'project_doc' ? cmdDocKey(msg.project_id, msg.path) : msg.project_id;
+      cmdFileAsking.delete(key);
+      cmdFiles.set(key, {text: msg.text, mtime: msg.mtime, missing: !!msg.missing,
+        error: msg.error || '', at: Date.now()});
+      if (typeof deskRenderColumns === 'function') deskRenderColumns();
+    }
+
+    // `phases` is what the Text view was called before there were four.
+    const CMD_PF_VIEWS = ['tree', 'table', 'roadmap', 'text'];
+    function cmdPfView() {
+      const v = cmdStoreGet(CMD_PF_VIEW_KEY);
+      return CMD_PF_VIEWS.includes(v) ? v : 'text';
+    }
+
+    function cmdPfSetView(view, button) {
+      const body = button && button.closest('.desk-pane-body');
+      cmdStoreSet(CMD_PF_VIEW_KEY, CMD_PF_VIEWS.includes(view) ? view : 'text');
+      if (typeof deskRenderColumns === 'function') deskRenderColumns();
+      if (body) body.querySelector('.cmd-pf-views [aria-pressed="true"]')?.focus({preventScroll: true});
+      if (cmdPfFocus()) cmdPfScrollToFocus(body);
+    }
+
+    function cmdPfFocus() { return cmdStoreGet(CMD_PF_FOCUS_KEY) === '1'; }
+
+    // Focus greys every phase but the one under way, and scrolls to it once — on the press, never
+    // on a later repaint, which would take the column away from whoever is reading elsewhere in it.
+    function cmdPfToggleFocus(button) {
+      const body = button && button.closest('.desk-pane-body');
+      const on = !cmdPfFocus();
+      cmdStoreSet(CMD_PF_FOCUS_KEY, on ? '1' : '0');
+      if (typeof deskRenderColumns === 'function') deskRenderColumns();
+      if (body) body.querySelector('.cmd-pf-focus')?.focus({preventScroll: true});
+      if (on) cmdPfScrollToFocus(body);
+    }
+
+    function cmdPfScrollToFocus(source) {
+      const body = source || document.querySelector(`.mock-pane[data-col="${typeof deskFocus === 'undefined' ? 0 : deskFocus}"] .desk-pane-body`);
+      const pf = body && body.querySelector('.cmd-pf[data-focus-mode]');
+      const el = pf && pf.querySelector('[data-focus="1"]');
+      if (!el) return;
+      body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top
+        - pf.querySelector('.cmd-pf-head').getBoundingClientRect().height;
+    }
+
+    function cmdPfRefresh(pid) {
+      cmdAskProjectFile(pid, true);
+      if (typeof deskRenderColumns === 'function') deskRenderColumns();
+    }
+
+    // A drawn box rather than a glyph, so done is a green tick in every theme and font.
+    const CMD_TASK_MARK = {todo: '', doing: '', done: '✓', dropped: '✕'};
+    function cmdMark(status) {
+      const s = CMD_TASK_MARK[status] === undefined ? 'todo' : status;
+      return `<span class="cmd-task-mark cmd-check" data-status="${s}" role="img" aria-label="${s}">${CMD_TASK_MARK[s]}</span>`;
+    }
+
+    // A linked document, by its last path component; the whole path is the tooltip, and a press
+    // opens it read-only in a column. The relay decides which paths it will read.
+    function cmdDocChip(pid, path, primary) {
+      const name = String(path).split('/').pop() || path;
+      const args = escapeHtml(JSON.stringify(pid) + ',' + JSON.stringify(String(path)));
+      return `<button class="cmd-doc${primary ? ' plan' : ''}" title="${escapeHtml(path)}"`
+        + ` onclick="cmdOpenDoc(${args})">${primary ? '📄 ' : ''}${escapeHtml(name)}</button>`;
+    }
+
+    function cmdTaskHtml(t, mentions, pid, attrs) {
+      const by = (mentions && t.id && mentions[t.id]) || [];
+      const convs = typeof readConvIndex === 'function' ? readConvIndex() : [];
+      return `<li class="cmd-task" data-status="${t.status}"${attrs || ''}>`
+        + cmdMark(t.status)
+        + (t.id ? `<span class="cmd-task-id">${escapeHtml(t.id)}</span>` : '')
+        + (t.phase ? `<span class="cmd-task-phase">${escapeHtml(t.phase)}</span>` : '')
+        + `<span class="cmd-task-text">${escapeHtml(t.text)}`
+        + (t.plan ? cmdDocChip(pid, t.plan, true) : '')
+        + (t.see || []).map(p => cmdDocChip(pid, p)).join('')
+        + by.map(s => `<button class="cmd-mention" title="Open the room of the Commander whose scope names ${escapeHtml(t.id)}"`
+          + ` onclick="cmdOpenRoom(${escapeHtml(JSON.stringify(s.conversation || ''))})">`
+          + `mentioned by ${escapeHtml(cmdRoomName(s.conversation, convs))}</button>`).join('')
+        + '</span></li>';
+    }
+
+    function cmdRoadmapHtml(text, pid, focus) {
+      const map = cmdRoadmap(cmdParseProjectFile(text));
+      const mentions = cmdMentions(typeof cmdSessions !== 'undefined' ? cmdSessions : [], pid);
+      const task = t => cmdTaskHtml(t, mentions, pid, cmdFocusAttr(focus === undefined ? null : focus, t.phase));
+      if (!map.categories.length && !map.loose.length) {
+        return '<p class="desk-empty">No roadmap in this file yet. The Roadmap view reads '
+          + '<code>## Roadmap</code> and the tasks under <code>## Phases</code>.</p>';
+      }
+      const feature = f => `<details class="cmd-feature"${f.total && f.done < f.total ? ' open' : ''}>`
+        + `<summary><span class="cmd-feature-id">${escapeHtml(f.id)}</span>`
+        + `<span class="cmd-feature-name">${escapeHtml(f.name)}</span>`
+        + `<span class="cmd-feature-count">${f.total ? f.done + '/' + f.total : 'no slices'}</span></summary>`
+        + (f.line || f.see.length ? `<div class="cmd-feature-line">${f.line ? markdownHtml(f.line) : ''}`
+          + f.see.map(p => cmdDocChip(pid, p)).join('') + '</div>' : '')
+        + '<ul class="cmd-tasks">'
+        + f.closed.map(c => '<li class="cmd-task cmd-legacy">'
+          + `<span class="cmd-task-phase">${escapeHtml(c.phase)}</span>`
+          + `<span class="cmd-task-text">${c.count} ${escapeHtml(c.unit)}, legacy summary</span></li>`).join('')
+        + f.tasks.map(task).join('') + '</ul></details>';
+      return map.categories.map(c => '<section class="cmd-category">'
+        + (c.name ? `<h3>${escapeHtml(c.name)}</h3>` : '') + c.features.map(feature).join('')
+        + '</section>').join('')
+        + (map.loose.length ? '<section class="cmd-category"><h3>No feature on the roadmap</h3>'
+          + `<ul class="cmd-tasks">${map.loose.map(task).join('')}</ul></section>` : '');
+    }
+
+    // What focus mode says about one phase: nothing when it is off, else focused or greyed.
+    function cmdFocusAttr(focus, phase) {
+      if (focus === null) return '';
+      return phase === focus ? ' data-focus="1"' : ' data-dim="1"';
+    }
+
+    function cmdProgressHtml(done, total) {
+      const pct = total ? Math.round(100 * done / total) : 0;
+      return `<span class="cmd-progress" title="${done} of ${total} done">`
+        + `<span class="cmd-progress-bar"><span style="width:${pct}%"></span></span>`
+        + `<span class="cmd-progress-n">${done}/${total}</span></span>`;
+    }
+
+    // Tree: a fold per phase, its slices under it, the Backlog last. A finished, collapsed phase is
+    // one line saying how many it held.
+    function cmdTreeHtml(doc, pid, focus) {
+      const mentions = cmdMentions(typeof cmdSessions !== 'undefined' ? cmdSessions : [], pid);
+      const node = (id, name, tasks, collapsed, total) => {
+        const live = tasks.filter(t => t.status !== 'dropped');
+        const done = collapsed ? total : live.filter(t => t.status === 'done').length;
+        const all = collapsed ? total : live.length;
+        const key = JSON.stringify(['project', pid, id]);
+        const open = cmdFolds.has(key) ? cmdFolds.get(key) : !collapsed && live.some(t => t.status !== 'done');
+        return `<details class="cmd-tree-phase"${open ? ' open' : ''}${cmdFocusAttr(focus, id)}`
+          + ` ontoggle="cmdFolds.set(${escapeHtml(JSON.stringify(key))},this.open)"`
+          + ` data-done="${all && done === all ? 1 : 0}">`
+          + `<summary><span class="cmd-tree-caret" aria-hidden="true"></span>`
+          + (id && id !== 'backlog' ? `<span class="cmd-tree-id">${escapeHtml(id)}</span>` : '')
+          + `<span class="cmd-tree-name">${escapeHtml(name)}</span>`
+          + (collapsed ? '<span class="cmd-tree-closed">✓ collapsed</span>' : '')
+          + cmdProgressHtml(done, all) + '</summary>'
+          + (tasks.length ? '<ul class="cmd-tasks">' + tasks.map(t => cmdTaskHtml(
+            Object.assign({}, t, {phase: ''}), mentions, pid)).join('') + '</ul>' : '')
+          + '</details>';
+      };
+      const phases = doc.phases.map(p => node(p.id, p.name, p.tasks, p.collapsed && !p.tasks.length, p.total));
+      if (doc.backlog.length) phases.push(node('backlog', 'Backlog', doc.backlog, false, 0));
+      return phases.length ? `<div class="cmd-pf-tree">${phases.join('')}</div>`
+        : '<p class="desk-empty">No phases in this file yet.</p>';
+    }
+
+    // Table: every slice as one row, in file order, the Backlog last.
+    function cmdTableHtml(doc, pid, focus) {
+      const tasks = doc.phases.flatMap(p => p.tasks).concat(doc.backlog);
+      if (!tasks.length) return '<p class="desk-empty">No slices in this file yet.</p>';
+      const mentions = cmdMentions(typeof cmdSessions !== 'undefined' ? cmdSessions : [], pid);
+      const row = t => `<tr data-status="${t.status}"${cmdFocusAttr(focus, t.phase)}>`
+        + `<td>${cmdMark(t.status)}</td>`
+        + `<td class="cmd-table-id">${escapeHtml(t.id)}</td>`
+        + `<td class="cmd-table-phase">${escapeHtml(t.phase === 'backlog' ? 'Backlog' : t.phase || '')}</td>`
+        + `<td class="cmd-table-features">${t.features.map(f => `<span class="cmd-feature-tag">${escapeHtml(f)}</span>`).join('')}</td>`
+        + `<td class="cmd-table-text">${escapeHtml(t.text)}`
+        + (mentions[t.id] ? ` <span class="cmd-table-by">· ${mentions[t.id].length} Commander</span>` : '')
+        + '</td>'
+        + `<td class="cmd-table-links">${t.plan ? cmdDocChip(pid, t.plan, true) : ''}`
+        + (t.see || []).map(x => cmdDocChip(pid, x)).join('') + '</td></tr>';
+      return '<div class="cmd-table-wrap"><table class="cmd-table"><thead><tr>'
+        + '<th aria-label="Status"></th><th>Slice</th><th>Phase</th><th>Features</th><th>What</th><th>Links</th>'
+        + `</tr></thead><tbody>${tasks.map(row).join('')}</tbody></table></div>`;
+    }
+
+    // Text: the file as Markdown, a section per phase so focus can grey the others, and the
+    // checkboxes Markdown leaves as `[x]` drawn as the other views draw them.
+    function cmdTextHtml(text, focus) {
+      const marks = {' ': 'todo', '~': 'doing', x: 'done', X: 'done', '-': 'dropped'};
+      return cmdTextChunks(text).map(c => {
+        const html = markdownHtml(c.text).replace(/<li>\[([ ~xX-])\]\s*/g,
+          (_all, m) => `<li class="cmd-md-task" data-status="${marks[m]}">${cmdMark(marks[m])}`);
+        return c.phase ? `<section class="cmd-md-phase"${cmdFocusAttr(focus, c.phase)}>${html}</section>` : html;
+      }).join('');
+    }
+
+    // A linked document, drawn read-only: no views, only the path, when it was edited and ↻.
+    function cmdDocHtml(key, doc) {
+      const held = cmdFiles.get(key);
+      const when = held && held.mtime && typeof fmtAgo === 'function'
+        ? `<span class="cmd-pf-when">edited ${escapeHtml(fmtAgo(new Date(held.mtime)))}</span>` : '';
+      const head = `<div class="cmd-pf-head"><code class="cmd-pf-path">${escapeHtml(doc.path)}</code>${when}`
+        + `<span class="cmd-pf-tools"><button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"`
+        + ` onclick="cmdPfRefresh(${escapeHtml(JSON.stringify(key))})">↻</button></span></div>`;
+      let body;
+      if (!held) body = '<p class="desk-empty">Reading…</p>';
+      else if (held.missing) body = '<p class="desk-empty">There is no such file in this Project.</p>';
+      else if (held.error) {
+        body = `<p class="desk-empty">This document could not be read: ${escapeHtml(
+          {unknown_project: 'this relay knows no such Project', remote: 'the Project is on another host',
+            bad_path: 'only Markdown under .workflow/ or docs/, and the root README.md, can be opened here',
+            unreadable: 'the relay could not open it — its log says why'}[held.error] || held.error)}.</p>`;
+      } else body = `<div class="cmd-pf-md">${markdownHtml(held.text)}</div>`;
+      return `<div class="cmd-pf" data-view="doc">${head}<div class="cmd-pf-body">${body}</div></div>`;
+    }
+
+    function cmdProjectHtml(key) {
+      const doc = cmdTabDoc(key);
+      if (doc.path !== null) return cmdDocHtml(key, doc);
+      const pid = key;
+      const held = cmdFiles.get(pid);
+      const view = cmdPfView();
+      const q = escapeHtml(JSON.stringify(pid));
+      const btn = (v, label) => `<button class="cmd-pf-btn" aria-pressed="${view === v}"`
+        + ` onclick="cmdPfSetView('${v}',this)">${label}</button>`;
+      const focusOn = cmdPfFocus();
+      const when = held && held.mtime && typeof fmtAgo === 'function'
+        ? `<span class="cmd-pf-when">edited ${escapeHtml(fmtAgo(new Date(held.mtime)))}</span>` : '';
+      // The column's own header already names the file and the Project.
+      const head = `<div class="cmd-pf-head">${when}`
+        + '<span class="cmd-pf-tools"><span class="cmd-pf-views" role="group" aria-label="View">'
+        + btn('tree', 'Tree') + btn('table', 'Table') + btn('roadmap', 'Roadmap') + btn('text', 'Text')
+        + '</span>'
+        + `<button class="cmd-pf-btn cmd-pf-focus" aria-pressed="${focusOn}" onclick="cmdPfToggleFocus(this)"`
+        + ' title="Grey every phase but the one under way, and scroll to it">◎ Focus</button>'
+        + `<button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"`
+        + ` onclick="cmdPfRefresh(${q})">↻</button></span></div>`;
+      let body;
+      if (!held) body = '<p class="desk-empty">Reading PROJECT.md…</p>';
+      else if (held.missing) body = '<p class="desk-empty">This Project has no PROJECT.md.</p>';
+      else if (held.error) {
+        body = `<p class="desk-empty">PROJECT.md could not be read: ${escapeHtml(
+          {unknown_project: 'this relay knows no such Project', remote: 'the Project is on another host',
+            unreadable: 'the relay could not open it — its log says why'}[held.error] || held.error)}.</p>`;
+      } else {
+        const doc = cmdParseProjectFile(held.text);
+        const focus = focusOn ? cmdFocusPhase(doc) || null : null;
+        body = view === 'roadmap' ? cmdRoadmapHtml(held.text, pid, focus)
+          : view === 'tree' ? cmdTreeHtml(doc, pid, focus)
+            : view === 'table' ? cmdTableHtml(doc, pid, focus)
+              : `<div class="cmd-pf-md">${cmdTextHtml(held.text, focus)}</div>`;
+      }
+      return `<div class="cmd-pf" data-view="${view}"${focusOn ? ' data-focus-mode="1"' : ''}>`
+        + `${head}<div class="cmd-pf-body">${body}</div></div>`;
+    }
+
+    // --- the sidebar ---
+
+    function cmdData() {
+      return {
+        convs: typeof readConvIndex === 'function' ? readConvIndex() : [],
+        panes: typeof agents !== 'undefined' ? agents : [],
+        projs: typeof projects !== 'undefined' ? projects : [],
+        sessions: typeof cmdSessions !== 'undefined' ? cmdSessions : [],
+        arbitrations: typeof arbSessions !== 'undefined' ? arbSessions : [],
+        past: typeof cmdPast !== 'undefined' ? cmdPast : [],
+        bench: typeof benchProjects !== 'undefined' && benchProjects ? benchProjects : {},
+        held: typeof convActivityHeld === 'function' ? (convActivityHeld().items || {}) : {},
+      };
+    }
+
+    function cmdDot(color, says, hollow) {
+      return `<span class="mock-dot cmd-dot${hollow ? ' ended' : ''}" style="background:${color}"`
+        + ` role="img" title="${escapeHtml(says)}" aria-label="${escapeHtml(says)}"></span>`;
+    }
+
+    const CMD_STATE_COLOR = {running: 'var(--dot-live)', paused: 'var(--dot-quiet)',
+      ended: 'var(--dot-cold)'};
+
+    function cmdQuiet(at) {
+      return at && typeof fmtAgo === 'function' ? fmtAgo(new Date(at)) : '';
+    }
+
+    function cmdRailHtml(data) {
+      const rows = cmdRailRows(data.projs, data.panes,
+        cmdRoomsByProject(data.convs, data.panes, data.projs, data.sessions), cmdToggles);
+      if (!rows.length) {
+        return '<div class="mock-space"><div><small>'
+          + (data.projs.length ? 'nothing live — see ⋯' : 'no Projects on this relay') + '</small></div></div>';
+      }
+      const bench = typeof benchProjects !== 'undefined' && benchProjects ? benchProjects : {};
+      return rows.map(r => {
+        const id = escapeHtml(r.id);
+        const icons = r.unplaced || !cmdToggles.icons ? '' : '<span class="cmd-rail-icons">'
+          + (cmdCommanders(data.sessions, r.id, data.convs, data.held).all.length
+            ? `<button class="cmd-icon" data-act="cmd" title="Open the last active Commander's room"`
+              + ` aria-label="Commander">⌘</button>` : '')
+          + (bench[r.id] ? `<button class="cmd-icon" data-act="bench" title="Open the bench room"`
+            + ` aria-label="Bench">🏛</button>` : '')
+          + `<button class="cmd-icon" data-act="file" title="Open PROJECT.md · double click: a column of its own"`
+          + ` aria-label="Project file">📄</button></span>`;
+        return `<div class="cmd-rail-row${r.id === cmdSelected ? ' sel' : ''}" data-pid="${id}"`
+          + ` role="button" tabindex="0" aria-pressed="${r.id === cmdSelected}">`
+          + '<span class="cmd-rail-line">'
+          + cmdDot(r.live ? 'var(--dot-live)' : 'var(--dot-cold)', r.live ? 'live' : 'nothing running', !r.live)
+          + `<span class="cmd-rail-name">${escapeHtml(r.label)}</span></span>${icons}</div>`;
+      }).join('');
+    }
+
+    // One badge per agent on a card: its dot, its harness, and its role. A press opens the room
+    // with the composer addressed to it; a hollow dot is a member whose agent is not up.
+    function cmdBadgeHtml(room, m, panes) {
+      const pane = m.aid ? panes.find(p => p.aid === m.aid) : null;
+      const away = !pane;
+      const dot = cmdDot(pane ? statusColor(pane) : 'var(--dot-cold)',
+        pane ? (pane.status || 'idle') : 'away', away);
+      const kind = pane && typeof paneBadge === 'function' ? paneBadge(pane, false) : agentBadge(m.agent || '?');
+      return `<button class="cmd-badge" data-room="${escapeHtml(room || '')}" data-aid="${escapeHtml(m.aid || '')}"`
+        + ` title="${escapeHtml(m.label || m.role || m.aid || '')}">${dot}${kind}`
+        + `<span class="cmd-badge-role">${escapeHtml(m.role || m.label || '')}</span></button>`;
+    }
+
+    function cmdRoomName(id, convs) {
+      const c = convs.find(x => x.id === id);
+      return (c && c.name) || id || '—';
+    }
+
+    function cmdCardHtml(node, data, depth) {
+      const s = node.session;
+      const room = s.conversation || '';
+      const members = Object.values(s.members || {});
+      const fold = cmdFolds.has(s.id) ? cmdFolds.get(s.id) : cmdToggles.unfold;
+      const hasTree = members.length || node.children.length;
+      const caret = hasTree ? `<button class="cmd-caret" data-fold="${escapeHtml(s.id)}"`
+        + ` aria-expanded="${fold}" aria-label="${fold ? 'Fold' : 'Unfold'} its tree">${fold ? '▾' : '▸'}</button>`
+        : '<span class="cmd-caret-gap"></span>';
+      const coord = s.coordinator && s.coordinator.aid
+        ? cmdBadgeHtml(room, {aid: s.coordinator.aid, role: 'commander'}, data.panes) : '';
+      const general = s.tier === 'general' ? '<span class="cmd-general">★</span>' : '';
+      const head = `<div class="cmd-card-head" data-room="${escapeHtml(room)}" role="button" tabindex="0">${caret}`
+        + cmdDot(CMD_STATE_COLOR[s.state] || 'var(--dot-cold)', s.state || '', s.state === 'ended')
+        + `${general}<span class="cmd-card-name">${escapeHtml(cmdRoomName(room, data.convs))}</span>`
+        + `<span class="cmd-card-state">${escapeHtml(s.state || '')}</span></div>`;
+      const row2 = cmdToggles.members && !cmdToggles.compact
+        ? `<div class="cmd-card-badges">${coord}${members.map(m => cmdBadgeHtml(room, m, data.panes)).join('')}</div>`
+        : '';
+      const recipe = s.recipe && s.recipe.label && cmdToggles.recipe && !cmdToggles.compact
+        ? `<div class="cmd-card-recipe">recipe · ${escapeHtml(s.recipe.label)}</div>` : '';
+      const tree = fold && hasTree ? '<div class="cmd-tree">'
+        + members.map(m => `<div class="cmd-tree-row">${cmdBadgeHtml(room, m, data.panes)}`
+          + `<span class="cmd-tree-label">${escapeHtml(m.label || '')}</span></div>`).join('')
+        + node.children.map(c => cmdCardHtml(c, data, depth + 1)).join('') + '</div>' : '';
+      return `<div class="cmd-card${depth ? ' cmd-card-child' : ''}" data-session="${escapeHtml(s.id)}">`
+        + head + row2 + recipe + tree + '</div>';
+    }
+
+    // `again` is the room's last ended Commander, which marks the line and is what Start again
+    // on its menu sends.
+    function cmdRoomLineHtml(conv, live, seen, again) {
+      return `<div class="cmd-room" data-room="${escapeHtml(conv.id)}"`
+        + (again ? ` data-again="${escapeHtml(again)}"` : '') + ' role="button" tabindex="0">'
+        + cmdDot(live ? 'var(--dot-live)' : 'var(--dot-cold)', live ? 'live' : 'nothing running', !live)
+        + (again ? '<span class="cmd-room-mark" title="A Commander ran here" aria-label="A Commander ran here">⌘</span>' : '')
+        + `<span class="cmd-room-name">${escapeHtml(conv.name || conv.id)}</span>`
+        + (live ? '' : `<span class="cmd-room-quiet">${escapeHtml(cmdQuiet(seen))}</span>`) + '</div>';
+    }
+
+    function cmdBenchHtml(pid, view, data) {
+      const entries = typeof benchProjects !== 'undefined' && benchProjects ? (benchProjects[pid] || []) : [];
+      if (!entries.length && !view.bench) return '';
+      const room = 'c_bench_' + pid;
+      const badges = entries.map(e => {
+        const pane = e.aid ? data.panes.find(p => p.aid === e.aid) : null;
+        const dot = cmdDot(pane ? statusColor(pane) : 'var(--dot-cold)', e.state || '', !pane);
+        const kind = typeof configBadge === 'function' ? configBadge(e.kind || '?', e.config) : agentBadge(e.kind || '?');
+        return `<button class="cmd-badge" data-bench="${escapeHtml(e.name)}" data-aid="${escapeHtml(pane ? e.aid : '')}"`
+          + ` data-room="${escapeHtml(room)}" title="${escapeHtml(pane ? 'Open its room'
+            : 'Press twice: start or bring it back')}">${dot}${kind}`
+          + `<span class="cmd-badge-role">${escapeHtml(e.label || e.name)}</span></button>`;
+      }).join('');
+      return `<div class="cmd-card cmd-bench" data-session="">`
+        + `<div class="cmd-card-head" data-room="${escapeHtml(view.bench ? room : '')}">`
+        + '<span class="cmd-caret-gap"></span><span class="cmd-bench-mark">🏛</span>'
+        + '<span class="cmd-card-name">bench</span></div>'
+        + (cmdToggles.compact ? '' : `<div class="cmd-card-badges">${badges}</div>`) + '</div>';
+    }
+
+    function cmdAgentsHtml(data) {
+      if (cmdSelected === null || (cmdSelected && !data.projs.some(p => p.id === cmdSelected))) {
+        return '<div class="mock-space"><div><small>pick a Project on the left</small></div></div>';
+      }
+      const pid = cmdSelected;
+      const view = cmdProjectView(pid, data, cmdToggles);
+      const band = label => `<div class="cmd-band">${label}</div>`;
+      const parts = [];
+      if (pid) {
+        parts.push(view.cards.map(n => cmdCardHtml(n, data, 0)).join('')
+          || '<div class="cmd-none">No Commander running in this Project.</div>');
+        if (cmdToggles.bench) parts.push(cmdBenchHtml(pid, view, data));
+      }
+      if (view.rooms.length) {
+        parts.push(band(pid ? 'rooms' : 'rooms naming no Project')
+          + view.rooms.map(r => cmdRoomLineHtml(r.conv, r.live, r.seen, cmdLastEnded(data, r.conv.id))).join(''));
+      }
+      if (view.ended.length) {
+        parts.push(`<details class="cmd-ended"${cmdEndedOpen ? ' open' : ''}>`
+          + `<summary class="cmd-band">ended Commanders (${view.ended.length})</summary>`
+          + view.ended.map(s => {
+            const conv = data.convs.find(c => c.id === s.conversation);
+            return conv ? cmdRoomLineHtml(conv, cmdRoomLive(conv, data.panes), cmdRoomSeen(conv), s.id)
+              : `<div class="cmd-room cmd-room-gone">${escapeHtml(s.conversation || s.id)}</div>`;
+          }).join('') + '</details>');
+      }
+      if (view.available.length) {
+        parts.push(`<details class="cmd-available"${cmdAvailableOpen ? ' open' : ''}>`
+          + `<summary class="cmd-band">available agents (${view.available.length})</summary>`
+          + '<div class="cmd-card-badges">' + view.available.map(p => {
+            const kind = typeof paneBadge === 'function' ? paneBadge(p, false) : agentBadge(p.agent || '?');
+            const label = typeof paneLabel === 'function' ? paneLabel(p) : (p.name || p.aid);
+            return `<button class="cmd-badge" data-pane="${escapeHtml(p.aid)}" title="Open its terminal">`
+              + cmdDot(statusColor(p), p.status || 'idle', false) + kind
+              + `<span class="cmd-badge-role">${escapeHtml(label)}</span></button>`;
+          }).join('') + '</div></details>');
+      }
+      return parts.join('');
+    }
+
+    // The newest ended Commander over a room, or ''.
+    function cmdLastEnded(data, room) {
+      const s = (data.past || []).find(x => x.conversation === room && (x.kind || 'commander') === 'commander');
+      return s ? s.id : '';
+    }
+
+    function cmdGeneralHtml(data) {
+      const tree = cmdGeneral(data.sessions);
+      if (!tree) return '<div class="mock-space"><div><small>no General is running</small></div></div>';
+      return cmdCardHtml(tree, data, 0);
+    }
+
+    function cmdRender() {
+      if (!CMD_PAGE) return;
+      const rail = document.getElementById('cmdRailRows');
+      const panel = document.getElementById('cmdAgentRows');
+      if (!rail || !panel) return;
+      const data = cmdData();
+      document.getElementById('desk').classList.toggle('cmd-compact', cmdToggles.compact);
+      paintList(rail, cmdRailHtml(data));
+      paintList(panel, cmdTab === 'general' ? cmdGeneralHtml(data) : cmdAgentsHtml(data));
+      for (const b of document.querySelectorAll('#cmdAgents [data-cmd-tab]')) {
+        b.setAttribute('aria-selected', String(b.dataset.cmdTab === cmdTab));
+      }
+    }
+
+    // --- opening things ---
+
+    function cmdOpenRoom(id, split, aid) {
+      const conv = id && readConvIndex().find(c => c.id === id);
+      if (!conv) { showToast('That room is not in the conversation index yet.'); return; }
+      if (aid) deskTargets.set(id, aid);
+      deskSelectConv(id);
+      if (split) deskOpenSplit('conversation', id, conv.name || id);
+      else deskOpen('conversation', id, conv.name || id);
+    }
+
+    function cmdOpenFile(pid, split) {
+      const label = cmdTabLabel(pid, projects);
+      if (split) deskOpenSplit('project', pid, label);
+      else deskOpen('project', pid, label);
+      cmdAskProjectFile(pid, true);
+    }
+
+    function cmdOpenDoc(pid, path, split) {
+      const key = cmdDocKey(pid, path);
+      const label = cmdTabLabel(key, typeof projects !== 'undefined' ? projects : []);
+      if (split) deskOpenSplit('project', key, label);
+      else deskOpen('project', key, label);
+      cmdAskProjectFile(key, true);
+    }
+
+    function cmdSelect(pid) {
+      if (cmdSelected === pid) return;
+      cmdSelected = pid;
+      cmdStoreSet(CMD_PROJECT_KEY, pid);
+      cmdRender();
+    }
+
+    // The bench: a live entry opens its room; one that is not up is started or brought back, which
+    // is a process starting — so it takes a second press.
+    function cmdBench(btn, pid, name) {
+      const entries = (typeof benchProjects !== 'undefined' && benchProjects && benchProjects[pid]) || [];
+      const e = entries.find(x => x.name === name);
+      const pane = e && e.aid ? agents.find(p => p.aid === e.aid) : null;
+      if (pane && readConvIndex().some(c => c.id === 'c_bench_' + pid)) {
+        cmdOpenRoom('c_bench_' + pid, false, e.aid);
+        return;
+      }
+      armButton(btn, '?', () => benchOpen(pid, name), `cmd-bench:${pid}/${name}`);
+    }
+
+    // The General's room, with `@<Project> ` in an empty draft when a Project is selected.
+    function cmdOpenGeneral(split) {
+      const tree = cmdGeneral(cmdSessions);
+      if (!tree || !tree.session.conversation) return;
+      const id = tree.session.conversation;
+      const p = cmdSelected && projects.find(x => x.id === cmdSelected);
+      const key = deskTabKey('conversation', id);
+      if (p && !(deskDrafts.get(key) || '').trim()) deskDrafts.set(key, '@' + p.label + ' ');
+      cmdOpenRoom(id, split);
+      // A composer already holding this tab keeps its own textarea, which the map does not reach.
+      for (const root of document.querySelectorAll('.desk-composer[data-key]')) {
+        if (root.dataset.key !== key) continue;
+        const input = deskRole(root, 'input');
+        if (input && !input.value.trim() && deskDrafts.get(key)) input.value = deskDrafts.get(key);
+      }
+    }
+
+    function cmdClick(e, split) {
+      const t = e.target;
+      const fold = t.closest('[data-fold]');
+      if (fold) {
+        if (split) return;
+        const id = fold.dataset.fold;
+        cmdFolds.set(id, !(cmdFolds.has(id) ? cmdFolds.get(id) : cmdToggles.unfold));
+        cmdRender();
+        return;
+      }
+      const row = t.closest('.cmd-rail-row');
+      if (row) {
+        const pid = row.dataset.pid;
+        cmdSelect(pid);
+        const act = t.closest('[data-act]');
+        if (!act) return;
+        if (act.dataset.act === 'file') cmdOpenFile(pid, split);
+        else if (act.dataset.act === 'bench') {
+          if (!split) cmdBench(document.querySelector('#cmdRailRows .sel [data-act="bench"]') || act,
+                               pid, 'architect');
+        } else if (act.dataset.act === 'cmd') {
+          const last = cmdProjectView(pid, cmdData(), cmdToggles).last;
+          if (last) cmdOpenRoom(last.conversation, split);
+          else if (!split) showToast('No Commander is running in this Project.');
+        }
+        return;
+      }
+      const badge = t.closest('.cmd-badge');
+      if (badge && badge.dataset.pane) {
+        const pane = agents.find(p => p.aid === badge.dataset.pane);
+        if (!pane) return;
+        const label = typeof paneLabel === 'function' ? paneLabel(pane) : pane.aid;
+        if (split) deskOpenSplit('pane', pane.aid, label);
+        else deskOpen('pane', pane.aid, label);
+        return;
+      }
+      if (badge && badge.dataset.bench !== undefined && !badge.dataset.aid) {
+        if (!split) cmdBench(badge, cmdSelected, badge.dataset.bench);
+        return;
+      }
+      const at = t.closest('[data-room]');
+      if (!at || !at.dataset.room) return;
+      const general = cmdGeneral(cmdSessions);
+      if (cmdTab === 'general' && general && at.dataset.room === general.session.conversation && !badge) {
+        cmdOpenGeneral(split);
+        return;
+      }
+      cmdOpenRoom(at.dataset.room, split, badge ? badge.dataset.aid : '');
+    }
+
+    // --- the context menus ---
+
+    function cmdCheck(name, label) {
+      return {label: (cmdToggles[name] ? '✓ ' : '   ') + label, run: () => cmdToggle(name)};
+    }
+
+    function cmdRailMenu(e) {
+      const row = e.target.closest('.cmd-rail-row');
+      const pid = row ? row.dataset.pid : '';
+      const items = [];
+      if (row && pid) {
+        const view = cmdProjectView(pid, cmdData(), cmdToggles);
+        items.push({label: row.querySelector('.cmd-rail-name').textContent});
+        items.push({label: 'Open in a column of its own', disabled: !view.last,
+          hint: view.last ? cmdRoomName(view.last.conversation, readConvIndex()) : 'no Commander',
+          run: () => cmdOpenRoom(view.last.conversation, true)});
+        items.push({label: 'Open Project file', run: () => cmdOpenFile(pid, false)});
+        items.push('sep');
+      }
+      items.push(cmdCheck('onlyLive', 'Only Projects with something live'));
+      items.push(cmdCheck('unplaced', 'Show Unplaced'));
+      items.push(cmdCheck('icons', 'Show icon row'));
+      deskMenuOpen(e.clientX, e.clientY, items);
+    }
+
+    function cmdAgentsMenu(e) {
+      const at = e.target.closest('.cmd-room, .cmd-card-head');
+      const room = at && at.dataset.room;
+      let items = room && typeof deskConvItems === 'function' ? deskConvItems(room) : [];
+      const again = at && at.dataset.again;
+      if (again && !cmdSessions.concat(typeof arbSessions !== 'undefined' ? arbSessions : [])
+        .some(s => s.conversation === room && s.state !== 'ended')) {
+        items = [{label: 'Start its last Commander again', arm: 'Start it again?',
+          hint: 'same scope, recipe, settings and seats; nothing it was doing carries over',
+          run: () => arbSend({type: 'cmd_start', again: again})}].concat(items.length ? ['sep'] : [], items);
+      }
+      if (items.length) items = items.concat(['sep']);
+      items = items.concat([
+        cmdCheck('deadRooms', 'Show dead rooms'),
+        cmdCheck('autoRooms', 'Show unnamed (auto) rooms'),
+        cmdCheck('ended', 'Show ended Commanders'),
+        cmdCheck('bench', 'Show the bench'),
+        cmdCheck('available', 'Show available agents'),
+        cmdCheck('members', 'Show members on cards'),
+        cmdCheck('recipe', 'Show recipe'),
+        cmdCheck('unfold', 'Unfold Commander trees'),
+        cmdCheck('compact', 'Compact'),
+      ]);
+      deskMenuOpen(e.clientX, e.clientY, items);
+    }
+
+    // The boundary between the rail and the Agents panel. Stored as a share of the sidebar, so a
+    // width chosen on a wide screen means the same split on a narrow one.
+    function cmdSetRailW(box, pct) {
+      const v = Number(pct);
+      box.querySelector('#cmdRailGrip').setAttribute('aria-valuenow',
+        String(Number.isFinite(v) ? Math.round(Math.max(15, Math.min(80, v)) * 10) / 10 : 40));
+      if (!Number.isFinite(v)) {
+        box.style.removeProperty('--cmd-rail-w');
+        cmdStoreSet(CMD_RAIL_W_KEY, '');
+        return;
+      }
+      const w = Math.max(15, Math.min(80, v));
+      box.style.setProperty('--cmd-rail-w', w + '%');
+      cmdStoreSet(CMD_RAIL_W_KEY, String(Math.round(w * 10) / 10));
+    }
+
+    function cmdBindRailGrip(box) {
+      const grip = box.querySelector('#cmdRailGrip');
+      const rail = box.querySelector('#cmdRail');
+      const held = Number(cmdStoreGet(CMD_RAIL_W_KEY));
+      if (held) cmdSetRailW(box, held);
+      const pctOf = px => 100 * px / box.getBoundingClientRect().width;
+      grip.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || grip.classList.contains('dragging')) return;
+        e.preventDefault();
+        const x0 = e.clientX, w0 = rail.getBoundingClientRect().width;
+        const move = ev => { if (ev.pointerId === e.pointerId) cmdSetRailW(box, pctOf(w0 + ev.clientX - x0)); };
+        const up = () => {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          document.removeEventListener('pointercancel', up);
+          window.removeEventListener('blur', up);
+          document.body.classList.remove('desk-resizing');
+          grip.classList.remove('dragging');
+        };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+        window.addEventListener('blur', up);
+        document.body.classList.add('desk-resizing');
+        grip.classList.add('dragging');
+      });
+      grip.addEventListener('dblclick', e => { e.preventDefault(); cmdSetRailW(box, NaN); });
+      grip.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); cmdSetRailW(box, NaN); return; }
+        const step = e.key === 'ArrowLeft' ? -2 : e.key === 'ArrowRight' ? 2 : 0;
+        if (!step) return;
+        e.preventDefault();
+        cmdSetRailW(box, pctOf(rail.getBoundingClientRect().width) + step);
+      });
+    }
+
+    // --- boot ---
+
+    function cmdBoot() {
+      if (!CMD_PAGE) return;
+      const desk = document.getElementById('desk');
+      const side = desk && desk.querySelector('.mock-sidebar');
+      if (!side) return;
+      desk.classList.add('cmd-page');
+      for (const id of ['deskConvs', 'deskSideDrag', 'deskRoster']) {
+        const el = document.getElementById(id);
+        if (el) el.hidden = true;
+      }
+      const box = document.createElement('div');
+      box.className = 'cmd-side';
+      box.innerHTML = '<div class="cmd-rail" id="cmdRail">'
+        + '<div class="mock-sidebar-title"><span>projects</span></div>'
+        + '<div class="cmd-rows" id="cmdRailRows"></div></div>'
+        + '<div class="cmd-rail-grip" id="cmdRailGrip" role="separator" aria-orientation="vertical"'
+        + ' aria-label="Resize the Projects rail" aria-controls="cmdRail" aria-valuemin="15"'
+        + ' aria-valuemax="80" aria-valuenow="40" tabindex="0"'
+        + ' title="Drag or use arrow keys to resize · Enter or double click to reset"></div>'
+        + '<div class="cmd-agents" id="cmdAgents">'
+        + '<div class="cmd-tabs" role="tablist">'
+        + '<button role="tab" data-cmd-tab="agents" aria-selected="true">Agents</button>'
+        + '<button role="tab" data-cmd-tab="general" aria-selected="false">★ General</button></div>'
+        + '<div class="cmd-rows" id="cmdAgentRows"></div></div>';
+      const launch = document.getElementById('deskLauncherOpen');
+      side.insertBefore(box, launch ? launch.nextSibling : side.firstChild);
+      cmdBindRailGrip(box);
+
+      // Single click opens in the focused column, double click in a column of its own — the
+      // desktop sidebar's two gestures. A double click is two clicks first, so the split follows
+      // an open, which is what the sidebar does too.
+      for (const id of ['cmdRailRows', 'cmdAgentRows']) {
+        const el = document.getElementById(id);
+        el.addEventListener('click', e => cmdClick(e, false));
+        el.addEventListener('dblclick', e => cmdClick(e, true));
+        el.addEventListener('keydown', e => {
+          if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) {
+            e.preventDefault();
+            cmdClick(e, false);
+          }
+        });
+      }
+      document.getElementById('cmdRail').addEventListener('contextmenu', e => {
+        e.preventDefault();
+        cmdRailMenu(e);
+      });
+      document.getElementById('cmdAgents').addEventListener('contextmenu', e => {
+        e.preventDefault();
+        cmdAgentsMenu(e);
+      });
+      document.getElementById('cmdAgents').addEventListener('toggle', e => {
+        if (e.target.classList && e.target.classList.contains('cmd-ended')) cmdEndedOpen = e.target.open;
+        if (e.target.classList && e.target.classList.contains('cmd-available')) cmdAvailableOpen = e.target.open;
+      }, true);
+      for (const b of document.querySelectorAll('#cmdAgents [data-cmd-tab]')) {
+        b.addEventListener('click', () => { cmdTab = b.dataset.cmdTab; cmdRender(); });
+      }
+    }
+
+  </script>
+  <script>
     // Boot, and the render everything else funnels through.
     //
     // This is the only file on the page that runs anything at load time, which is why it is the last
@@ -36237,6 +38894,8 @@ convApplyTint();
       // from here rather than from the start_options branch itself, because net.js answers that
       // message with render() and this is what render() means on this page.
       deskRenderStart();
+      // command.html's rail and Agents panel. Dormant on desktop.html.
+      if (typeof cmdRender === 'function') cmdRender();
       // The tab, which is the one surface this page has when nobody is looking at it: a window of
       // five columns is behind another window as easily as a phone is in a pocket.
       syncBrowserTab();
@@ -36496,6 +39155,10 @@ convApplyTint();
         // rendered as part of it.
         if (typeof convSyncBadges === 'function') convSyncBadges(body);
         deskPaintWorking(frame, i, conv);
+      } else if (tab.kind === 'project') {
+        moved = draw(typeof cmdProjectHtml === 'function' ? cmdProjectHtml(tab.key)
+          : '<p class="desk-empty">This page cannot draw a Project file.</p>');
+        if (typeof cmdAskProjectFile === 'function') cmdAskProjectFile(tab.key, false);
       } else {
         const pane = deskPaneOfTab(tab);
         if (!pane) {
@@ -36508,7 +39171,9 @@ convApplyTint();
       // `moved` is not asked about a switch: two tabs can draw identical markup — two idle shells
       // at the same prompt, two rooms with nothing said in them — and a column arriving at the
       // second one would keep the first one's scroll for want of a repaint.
-      if (atBottom && (moved || switched)) body.scrollTop = body.scrollHeight;
+      // A Project file is a document and is read from the top, not followed like a stream.
+      if (tab.kind === 'project') { if (switched) body.scrollTop = 0; }
+      else if (atBottom && (moved || switched)) body.scrollTop = body.scrollHeight;
       deskHangSync(i);
     }
 
@@ -36549,6 +39214,10 @@ convApplyTint();
         const uniq = f => Array.from(new Set(values.map(v => v[f]).filter(Boolean)));
         badges = uniq('project').map(proj).join('')
           + memberKindBadges((conv && conv.members) || [], agents).join('');
+      } else if (tab && tab.kind === 'project') {
+        const pid = typeof cmdTabDoc === 'function' ? cmdTabDoc(tab.key).pid : tab.key;
+        const p = (typeof projects !== 'undefined' ? projects : []).find(x => x.id === pid);
+        badges = proj(p ? p.label : pid);
       } else if (tab) {
         const pane = deskPaneOfTab(tab);
         // A shell is not a harness and has none to name — the tab's own glyph already says it is a
@@ -36587,7 +39256,11 @@ convApplyTint();
       // is looking at.
       const idOf = () => {
         if (!tab) return '';
-        if (tab.kind === 'conversation') return tab.key;
+        if (tab.kind === 'project' && typeof cmdTabDoc === 'function') {
+          const doc = cmdTabDoc(tab.key);
+          return doc.path === null ? doc.pid : doc.path;
+        }
+        if (tab.kind === 'conversation' || tab.kind === 'project') return tab.key;
         const pane = deskPaneOfTab(tab);
         return pane ? (pane.aid || pane.pane_id || '') : '';
       };
@@ -36861,6 +39534,8 @@ convApplyTint();
       deskBindCommand();
       deskLoadSizes();
       deskBindGrips();
+      // command.html: swap the sidebar for the rail and the Agents panel. Nothing on desktop.html.
+      if (typeof cmdBoot === 'function') cmdBoot();
 
       // Pins, and one record per room. The columns are not stored: they are derived from those
       // two plus which room is selected, so restoring them would be storing the same fact twice

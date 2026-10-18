@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-08">
+  <meta name="app-built" content="2026-10-18">
   <title>herdr-remote &mdash; projects</title>
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='3'%20y='3.5'%20width='4'%20height='9'%20rx='1'%20fill='%237aa2f7'/%3E%3Crect%20x='8.5'%20y='3.5'%20width='4.5'%20height='5.5'%20rx='1'%20fill='%239ece6a'/%3E%3C/svg%3E">
@@ -3178,6 +3178,76 @@
 }
 
   </style>
+  <style>
+/* The waiting bar (waiting_bar.js): a pill pinned to the top centre of every page, over the page
+   rather than in its flow, so no page's layout has to make room for it. Red and still — the badges
+   already blink, and a bar that blinks for an hour is noise. */
+.wait-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  font: 12px/1.3 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+}
+.wait-bar button { font: inherit; color: inherit; cursor: pointer; }
+@media (max-width: 520px) { .wait-more { display: none; } }
+.wait-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 4px 12px;
+  border: 1px solid var(--red);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+.wait-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wait-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+.wait-rows {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px;
+  width: min(420px, calc(100vw - 24px));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.wait-row { display: flex; align-items: stretch; gap: 4px; }
+.wait-row + .wait-row { border-top: 1px solid var(--border); }
+.wait-open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+.wait-open:hover, .wait-snooze:hover { background: var(--border); }
+.wait-who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wait-age { color: var(--muted); }
+.wait-what { grid-column: 1 / -1; color: var(--red); }
+.wait-snooze {
+  flex: none;
+  align-self: center;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+}
+.wait-bar .wait-snooze { color: var(--muted); }
+
+  </style>
 </head>
 
 <body>
@@ -4269,9 +4339,20 @@
     // Moved here from shortcuts.js so net.js can reach it. The dispatch reports what the relay
     // refused in eight places, and a page that cannot say so has no business holding a socket.
     let toastTimer = null;
-    function showToast(text, kind) {
+    // `onTap` makes the toast a button for as long as it is up: the one place a notice about a pane
+    // is also the way to it.
+    function showToast(text, kind, onTap) {
       const el = document.getElementById('toast');
       el.textContent = text;
+      el.onclick = onTap ? () => { el.style.display = 'none'; onTap(); } : null;
+      el.setAttribute('role', onTap ? 'button' : 'status');
+      if (onTap) el.setAttribute('tabindex', '0');
+      else el.removeAttribute('tabindex');
+      el.onkeydown = onTap ? e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+      } : null;
+      el.style.cursor = onTap ? 'pointer' : '';
+      el.style.pointerEvents = onTap ? 'auto' : '';  // its stack passes taps through
       // Three kinds, and the default is the loud one: a toast with no kind is something that went
       // wrong, which is what most of them are. `ok` is the other end — a send that landed — and it
       // is a colour rather than only a ✓ because the tick is 8px of a line read at arm's length.
@@ -4279,7 +4360,7 @@
         : kind === 'info' ? 'var(--border)' : 'var(--red)';
       el.style.display = 'block';
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+      toastTimer = setTimeout(() => { el.style.display = 'none'; }, onTap ? 15000 : 5000);
       if (window.cue && kind !== 'info' && kind !== 'ok') cue('error');
     }
 
@@ -4427,7 +4508,19 @@
       const badge = agentBadge((row && row.label) || pane.agent, pane.agent,
                                row ? colorVar(row.color) : '');
       const arb = mark && typeof arbMark === 'function' ? arbMark(pane) : '';
-      return badge && arb ? badge + arb : badge;
+      // The bench name is not one of the marks `mark` turns off: those rows draw the arbitrator
+      // their own way, and nothing else says which standing agent this is.
+      return badge ? badge + arb + benchMark(pane) : badge;
+    }
+
+    // `architect · <Project>`: which bench entry this agent is, as the relay's snapshot says.
+    function benchMark(pane) {
+      const b = pane && pane.bench;
+      if (!b || !b.name) return '';
+      const p = projects.find(x => x.id === b.project_id);
+      const where = (p && p.label) || b.project_id || '';
+      return ` <span class="badge bench" title="On the bench of ${escapeHtml(where)}">`
+        + `${escapeHtml(b.name)} · ${escapeHtml(where)}</span>`;
     }
 
     // A recorded kind, upgraded to the alias when the pane it names is live and was started under
@@ -9637,6 +9730,9 @@ function convWebModeOf(conv) {
       // in the one it was started for.
       const fresh = agents.filter(a => convMemberKey(a) && !had.has(convMemberKey(a))
         && profileFor(a.agent)
+        // A folder-trust check's pane is closed the moment it is answered: a room for it would be
+        // a thread of nothing that outlives it.
+        && !String(a.ref || '').startsWith('trust-')
         && !(typeof convStartClaimed === 'function' && convStartClaimed(a)));
       if (!fresh.length) return;
       const items = loadConvIndex();
@@ -10102,13 +10198,25 @@ function convWebModeOf(conv) {
       showToast('Forgot the kept copy of the relay’s record');
     }
 
-    function convLiveOn() {
-      try { return localStorage.getItem(CONV_LIVE_KEY) === 'on'; } catch (e) { return false; }
+    // Three states: this browser's transcript (`off`), the relay's record (`on`), and the record
+    // with its `agent_detail` rows (`detail`) -- what a Claude pane said mid-turn and lost from its
+    // window before the turn ended. Those rows are always fetched and only drawn in `detail`, so
+    // switching it costs no ask.
+    function convLiveState() {
+      try {
+        const v = localStorage.getItem(CONV_LIVE_KEY);
+        return v === 'on' || v === 'detail' ? v : 'off';
+      } catch (e) { return 'off'; }
     }
 
+    function convLiveOn() { return convLiveState() !== 'off'; }
+
+    function convLiveDetailOn() { return convLiveState() === 'detail'; }
+
     function toggleConvLive() {
-      const on = !convLiveOn();
-      try { localStorage.setItem(CONV_LIVE_KEY, on ? 'on' : 'off'); }
+      const next = { off: 'on', on: 'detail', detail: 'off' }[convLiveState()];
+      const on = next !== 'off';
+      try { localStorage.setItem(CONV_LIVE_KEY, next); }
       catch (e) { /* private mode: this session only */ }
       // Kept rather than dropped, now that a row belongs to a bucket and a bucket belongs to a
       // pane: what comes back on screen is this reader's own members and never the thread they
@@ -10119,7 +10227,8 @@ function convWebModeOf(conv) {
       renderConvView();
       if (typeof renderConvStandalone === 'function') renderConvStandalone(true);
       if (typeof hangSync === 'function') hangSync();
-      showToast(on ? 'Reading the relay’s record' : 'Reading this browser’s transcript');
+      showToast(next === 'detail' ? 'Reading the relay’s record, with what was said mid-turn'
+        : on ? 'Reading the relay’s record' : 'Reading this browser’s transcript');
     }
 
     // The agent ids the last roster ask was made for.
@@ -10199,7 +10308,7 @@ function convWebModeOf(conv) {
       for (const aid of aids) convLiveBucket(aid).lastFetch = now;
 
       convLiveAsked = aids.slice();
-      const payload = { type: 'conv_log', aids: aids, last: CONV_LIVE_ROWS };
+      const payload = { type: 'conv_log', aids: aids, last: CONV_LIVE_ROWS, detail: true };
       // Turns recorded before agents had ids carry none, so no `aids` query can reach them. The
       // fingerprints of the members that are live right now are asked for alongside — and a row
       // with no `aid` is drawn only against the member whose pane it names *now*, which is a fact
@@ -10330,7 +10439,7 @@ function convWebModeOf(conv) {
         // ceiling still at one window would throw them away before anything drew them.
         bucket.depth = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
         ws.send(JSON.stringify({ type: 'conv_log', aids: [aid],
-                                 until_id: oldest.seq, last: CONV_LIVE_ROWS }));
+                                 until_id: oldest.seq, last: CONV_LIVE_ROWS, detail: true }));
         asked++;
       }
       if (asked) convLiveAskSent(asked);
@@ -10558,10 +10667,12 @@ function convWebModeOf(conv) {
       // no sorting to do here at all: the pane-id filter, the `was` chain of panes a member had
       // occupied and the `wasFp` chain of buckets it had been under were all consequences of a
       // bucket being `[host, agent, cwd]`, which four claude panes in one checkout share.
+      const detail = convLiveDetailOn();
       for (const k of (keys || [])) {
         const bucket = k && convLiveCache.get(k);
         if (!bucket) continue;
         for (const t of bucket.turns) {
+          if (t.kind === 'agent_detail' && !detail) continue;
           if (t.seq && seen.has(t.seq)) continue;
           if (t.seq) seen.add(t.seq);
           turns.push({turn: t, key: k});
@@ -10594,7 +10705,7 @@ function convWebModeOf(conv) {
           branch: t.branch || '', commit: t.commit || '',
           commits: Array.isArray(t.commits) ? t.commits : [],
           host: t.host || 'local', cwd: t.cwd || '',
-          kind: t.kind, live: true,
+          kind: t.kind, live: true, detail: t.kind === 'agent_detail' || undefined,
         };
       }).filter(e => e.text);
     }
@@ -11022,6 +11133,7 @@ function convWebModeOf(conv) {
       // relay starts Commanders at all is something only this socket can say.
       if (typeof cmdReset === 'function') cmdReset();
       if (typeof ccReset === 'function') ccReset();
+      if (typeof benchReset === 'function') benchReset();
       if (typeof webchatReset === 'function') webchatReset();
       if (typeof nlmReset === 'function') nlmReset();
       if (typeof closeStart === 'function') closeStart();
@@ -11061,6 +11173,7 @@ function convWebModeOf(conv) {
       socket.onclose = () => {
         if (ws !== socket) return;
         stateSyncClose(socket);
+        if (typeof cmdProjectFileReset === 'function') cmdProjectFileReset();
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -11134,6 +11247,13 @@ function convWebModeOf(conv) {
         projects = msg.projects || [];
         render();
       }
+      else if (msg.type === 'bench') {
+        if (typeof benchReceive === 'function') benchReceive(msg);
+        if (typeof cmdRender === 'function') cmdRender();
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_open') {
+        if (typeof benchResult === 'function') benchResult(msg);
+      }
       else if (msg.type === 'start_options') {
         startOptions = msg;
         // The default Studio alias, written into the shared config document the first time a relay
@@ -11152,9 +11272,11 @@ function convWebModeOf(conv) {
       // as meaningful as a full one and is handled by the same branch.
       else if (msg.type === 'arb_sessions') {
         if (typeof arbReceiveSessions === 'function') arbReceiveSessions(msg);
+        if (typeof cmdRender === 'function') cmdRender();
       }
       else if (msg.type === 'arb_session') {
         if (typeof arbReceiveSession === 'function') arbReceiveSession(msg);
+        if (typeof cmdRender === 'function') cmdRender();
         // The Command Center draws arbitration sessions in the tree beside the Commanders, and
         // now starts them — so one moving changes that screen exactly as a Commander moving does.
         if (typeof ccSessionMoved === 'function') ccSessionMoved();
@@ -11179,11 +11301,17 @@ function convWebModeOf(conv) {
       }
       // The Commander half of the same two messages. A separate family so a client is told about
       // its own kind and no other; the presence of `cmd_sessions` is its feature gate.
+      // command.html's Project file column: one Project's PROJECT.md, answered to this client.
+      else if (msg.type === 'project_file' || msg.type === 'project_doc') {
+        if (typeof cmdProjectFileReceive === 'function') cmdProjectFileReceive(msg);
+      }
       else if (msg.type === 'cmd_sessions') {
         if (typeof cmdSessionsReceive === 'function') cmdSessionsReceive(msg);
+        if (typeof cmdRender === 'function') cmdRender();
       }
       else if (msg.type === 'cmd_session') {
         if (typeof cmdSessionReceive === 'function') cmdSessionReceive(msg);
+        if (typeof cmdRender === 'function') cmdRender();
         // The Command Center is about a whole tree, and a session moving can change which lists
         // it belongs to. Answered by asking again rather than by patching the row in place.
         if (typeof ccSessionMoved === 'function') ccSessionMoved();
@@ -11339,11 +11467,26 @@ function convWebModeOf(conv) {
         showToast(msg.ok ? 'Tunnel restarting — this page follows it to the new address'
                          : (msg.error || 'Tunnel restart refused'), msg.ok ? 'ok' : '');
       }
+      else if (msg.type === 'command_result' && msg.command === 'restart_herdr') {
+        const missing = msg.missing || [];
+        showToast(msg.pending ? 'Restarting herdr — agents resume in a minute or so…'
+                  : !msg.ok ? (msg.error || 'herdr restart refused')
+                  : missing.length ? `herdr restarted — not back: ${missing.join(', ')}`
+                  : 'herdr restarted — every agent is back', msg.ok && !missing.length ? 'ok' : '');
+      }
       else if (msg.type === 'tunnel') {
         followTunnel(msg.url);
       }
       else if (msg.type === 'command_result' && msg.command === 'create_project') {
         newProjectResult(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'trust_check') {
+        // The second answer to a create_project that asked for it: how each harness's folder-trust
+        // prompt in the new Project ended. `already` was never asked.
+        const late = (msg.trust || []).filter(r => r.state === 'timeout' || r.state === 'failed');
+        showToast(late.length
+          ? 'Trust not approved in ' + msg.project_id + ': ' + late.map(r => r.kind + ' ' + r.state).join(', ')
+          : 'Trust approved in ' + msg.project_id, late.length ? '' : 'ok');
       }
       else if (msg.type === 'command_result' && msg.command === 'set_slot') {
         if (!msg.ok) { showToast(msg.error || 'Could not adjust the pane'); }
@@ -11479,6 +11622,7 @@ function convWebModeOf(conv) {
         // brings it up.
         if (typeof arbHoldStep === 'function') arbHoldStep();
         if (typeof openNotificationPane === 'function') openNotificationPane();
+        if (typeof renderWaitingBar === 'function') renderWaitingBar();
       }
       else if (msg.type === 'agent_update') {
         const update = msg.agent;
@@ -11520,6 +11664,7 @@ function convWebModeOf(conv) {
         if (typeof renderQuickActions === 'function') renderQuickActions();
         if (typeof syncConvBadge === 'function') syncConvBadge();
         if (typeof syncBranchBadges === 'function') syncBranchBadges();
+        if (typeof renderWaitingBar === 'function') renderWaitingBar();
       }
       else if (msg.type === 'blocked') {
         const a = agents.find(x => x.pane_id === msg.pane_id);
@@ -11527,6 +11672,13 @@ function convWebModeOf(conv) {
         else agents.push({ ...msg, status: 'blocked' });
         // No chime here. The relay broadcasts the snapshot before this message, so the transition
         // into blocked has already been heard — sounding it again was two chimes for one event.
+        // A harness asking whether to trust its folder, in a pane the relay started and is waiting
+        // on: nothing else names that pane, so the notice is the way to it.
+        if (msg.trust && typeof openTerminal === 'function') {
+          const where = msg.project || (a && a.project) || 'its folder';
+          showToast(`${msg.trust} asks to trust ${where} — tap to answer`, 'info',
+            () => openTerminal(msg.pane_id, (a && a.aid) || ''));
+        }
         noteActivity(msg.pane_id);
         noteStatus(msg.pane_id, 'blocked');
         convReadTurnEnd(msg.pane_id, 'blocked');
@@ -11550,6 +11702,157 @@ function convWebModeOf(conv) {
         }
       }
     }
+
+  </script>
+  <script>
+    // --- Waiting bar ---
+    //
+    // The one notice that does not go away when you look. attention.js badges a pane until it is
+    // opened, which is right for news and wrong for a pane that is still stuck: a trust prompt
+    // looked at on the wrong device, or by someone interrupted, went silent everywhere while the
+    // pane sat waiting. This shows every blocked pane on every page, whatever was acked, until the
+    // pane stops waiting. See .workflow/01_concepts/2026-10-17_standing_blocked_bar.md.
+    //
+    // It sends nothing. A row opens the pane, where the person reads what is being asked and
+    // answers it; there is deliberately no accept button here, least of all for a trust prompt.
+    //
+    // A wait is one episode: the pane and the relay's `blocked_since`. Snooze is per episode and
+    // per device, hides the row and nothing else, and a snoozed wait still counts in the line, so
+    // the bar never says nothing while something waits. A pane that unblocks and blocks again is a
+    // new episode and shows at once.
+    const WAIT_SNOOZE_KEY = 'herdr_wait_snooze';
+    const WAIT_SNOOZE_MS = 10 * 60 * 1000;
+    let waitOpen = false;
+
+    function waitKey(a) {
+      return `${a.host || 'local'}|${a.pane_id}|${a.blocked_since || ''}`;
+    }
+
+    function waitSnoozes(now) {
+      let s = {};
+      try { s = JSON.parse(localStorage.getItem(WAIT_SNOOZE_KEY)) || {}; } catch (e) { s = {}; }
+      for (const k of Object.keys(s)) if (!(s[k] > now)) delete s[k];
+      return s;
+    }
+
+    // Pure: which waits to list, and how many are snoozed. The pane already on screen is left out
+    // of the list and the count — the bar must not point at the thing the reader is looking at.
+    function waitingRows(list, now, snoozes, onScreen) {
+      const waits = (list || []).filter(a => a && a.status === 'blocked' && a.pane_id !== onScreen);
+      const rows = waits.filter(a => !(snoozes[waitKey(a)] > now))
+        .sort((x, y) => (x.blocked_since || now) - (y.blocked_since || now));
+      return {rows, snoozed: waits.length - rows.length};
+    }
+
+    function waitAge(a, now) {
+      if (!a.blocked_since) return '';
+      const mins = Math.max(0, Math.floor((now - a.blocked_since) / 60000));
+      return mins < 1 ? 'just now' : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
+    }
+
+    function waitWhat(a) {
+      return a.waiting === 'trust' ? 'trust prompt — answer in the pane' : 'waiting for you';
+    }
+
+    // [the count, what the oldest wait is]. The second half is dropped on a narrow screen.
+    function waitLineParts(rows, snoozed, now) {
+      const n = rows.length + snoozed;
+      const head = `${n} waiting${snoozed ? ` · ${snoozed} snoozed` : ''}`;
+      if (!rows.length) return [head, ''];
+      const a = rows[0];
+      const age = waitAge(a, now);
+      return [head, `${a.agent || 'agent'} in ${a.project || '—'} — ${waitWhat(a)}${age ? ' · ' + age : ''}`];
+    }
+
+    function waitLine(rows, snoozed, now) {
+      return waitLineParts(rows, snoozed, now).filter(Boolean).join(' · ');
+    }
+
+    // Under whatever header is at the top of the screen, so the pill never covers its buttons:
+    // the phone's app header, or a pane's or a room's own when one is open. Pages with none at the
+    // top keep the stylesheet's place.
+    const WAIT_ANCHORS = 'body > .header, .term-header, .conv-view-head';
+    function waitTop() {
+      for (const h of document.querySelectorAll(WAIT_ANCHORS)) {
+        const r = h.getBoundingClientRect();
+        if (r.height && r.top < 8 && r.bottom < innerHeight / 3) return `${Math.round(r.bottom) + 6}px`;
+      }
+      return '';
+    }
+
+    function waitEl() {
+      let el = document.getElementById('waitBar');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'waitBar';
+      el.className = 'wait-bar';
+      el.hidden = true;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.addEventListener('click', waitClick);
+      document.body.appendChild(el);
+      return el;
+    }
+
+    function renderWaitingBar() {
+      if (typeof document === 'undefined' || !document.body) return;
+      const now = Date.now();
+      const snoozes = waitSnoozes(now);
+      const onScreen = typeof activePane === 'undefined' ? null : activePane;
+      const {rows, snoozed} = waitingRows(typeof agents === 'undefined' ? [] : agents, now, snoozes, onScreen);
+      const el = waitEl();
+      if (!rows.length && !snoozed) { el.hidden = true; waitOpen = false; return; }
+      const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+      const list = waitOpen ? `<ul class="wait-rows">${rows.map(a => `
+          <li class="wait-row">
+            <button type="button" class="wait-open" data-pane="${esc(a.pane_id)}" data-aid="${esc(a.aid || '')}">
+              <span class="wait-who">${esc(a.agent || 'agent')} · ${esc(a.project || '—')}</span>
+              <span class="wait-age">${esc(waitAge(a, now))}</span>
+              <span class="wait-what">${esc(waitWhat(a))}</span>
+            </button>
+            <button type="button" class="wait-snooze" data-key="${esc(waitKey(a))}" title="Hide for 10 minutes on this device"
+                    aria-label="Snooze ${esc(a.agent || 'agent')} in ${esc(a.project || '')} for 10 minutes">Snooze</button>
+          </li>`).join('')}</ul>` : '';
+      const [head, more] = waitLineParts(rows, snoozed, now);
+      const html = `<button type="button" class="wait-line" aria-expanded="${waitOpen}">
+          <span class="wait-dot" aria-hidden="true"></span><span class="wait-text">${esc(head)}${more
+            ? `<span class="wait-more"> · ${esc(more)}</span>` : ''}</span>
+        </button>${list}`;
+      if (el.innerHTML !== html) {
+        const focused = el.contains(document.activeElement) ? document.activeElement : null;
+        el.innerHTML = html;
+        if (focused) {
+          const next = Array.from(el.querySelectorAll('button')).find(b =>
+            b.className === focused.className && b.dataset.key === focused.dataset.key
+              && b.dataset.pane === focused.dataset.pane && b.dataset.aid === focused.dataset.aid);
+          (next || el.querySelector('.wait-line')).focus({preventScroll: true});
+        }
+      }
+      el.style.top = waitTop();
+      el.hidden = false;
+    }
+
+    function waitClick(e) {
+      const open = e.target.closest('.wait-open');
+      if (open) {
+        waitOpen = false;
+        if (typeof openTerminal === 'function') openTerminal(open.dataset.pane, open.dataset.aid || undefined);
+        renderWaitingBar();
+        return;
+      }
+      const snooze = e.target.closest('.wait-snooze');
+      if (snooze) {
+        const s = waitSnoozes(Date.now());
+        s[snooze.dataset.key] = Date.now() + WAIT_SNOOZE_MS;
+        try { localStorage.setItem(WAIT_SNOOZE_KEY, JSON.stringify(s)); } catch (err) { /* per device only */ }
+        renderWaitingBar();
+        return;
+      }
+      if (e.target.closest('.wait-line')) { waitOpen = !waitOpen; renderWaitingBar(); }
+    }
+
+    // Ages and snoozes move with the clock, not with snapshots.
+    if (typeof setInterval === 'function' && typeof document !== 'undefined') setInterval(renderWaitingBar, 30000);
 
   </script>
   <script>
@@ -12478,6 +12781,7 @@ function convWebModeOf(conv) {
       const here = roots.find(p => p.id === activeProject);
       newProjectRoot = (here || roots[0]).id;
       document.getElementById('newProjectName').value = '';
+      document.getElementById('newProjectTrust').checked = true;
       setNewProjectError('');
       document.getElementById('newProjectSubmit').disabled = false;
       renderNewProjectRoots();
@@ -12508,7 +12812,8 @@ function convWebModeOf(conv) {
       if (!name) { setNewProjectError('Name the folder this project lives in'); return; }
       setNewProjectError('');
       document.getElementById('newProjectSubmit').disabled = true;
-      ws.send(JSON.stringify({type: 'create_project', project_id: newProjectRoot, name: name}));
+      ws.send(JSON.stringify({type: 'create_project', project_id: newProjectRoot, name: name,
+                              trust: !!document.getElementById('newProjectTrust').checked}));
     }
 
     // The roster arrives on its own `projects` broadcast, so there is nothing to add here: the
@@ -13013,6 +13318,9 @@ function convWebModeOf(conv) {
       const limits = [1, 2, 3, 4, 5, 6].map(n =>
         `<option value="${n}"${Number(policy('worker_limit')) === n ? ' selected' : ''}>`
         + `${n}</option>`).join('');
+      const generals = Array.from({length: 30}, (_, i) => i + 1).map(n =>
+        `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
+        + `${n}</option>`).join('');
       return '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
         + '<div class="cfg-note">What a Commander starts when it decides it needs an agent. It'
         + ' names one of these at the moment it wants that kind of agent — nothing here starts'
@@ -13021,6 +13329,8 @@ function convWebModeOf(conv) {
         + '<div class="cmd-def"><div class="cmd-def-fields cmd-def-policy">'
         + '<label>At most <select onchange="commanderDefaultSet(\'worker_limit\','
         + ' Number(this.value))">' + limits + '</select> workers at once</label>'
+        + '<label>The General runs at most <select onchange="commanderDefaultSet(\'general_limit\','
+        + ' Number(this.value))">' + generals + '</select> children at once</label>'
         + commanderSwitch('unattended', policy('unattended'),
                           'Start them with their own approval prompts off')
         + '</div></div>' + rows + '</div>';
@@ -16629,7 +16939,9 @@ function convWebModeOf(conv) {
     // `COMMANDER_BUDGET` and `BUDGET_MAX` in the relay, which is the authority — these are what the
     // field offers and what it refuses to send, so a person cannot be told no by a dialog that
     // could have said so itself.
-    const CMD_LIMITS = {cmdSteps: [20, 50], cmdRuns: [12, 20], cmdMinutes: [60, 480]};
+    // [default, cap]: the cap is the relay's `BUDGET_MAX`. A lower one clamped the relay's own
+    // default budget (100 and 50) on every save and sent the clamped numbers as a change.
+    const CMD_LIMITS = {cmdSteps: [20, 200], cmdRuns: [12, 100], cmdMinutes: [60, 480]};
     // Which session the form is editing, or '' while it is a new one. Not a boolean: the rows a
     // slot offers have to exclude this session's own panes, or a Commander's own coordinator is
     // listed as taken by somebody and cannot be kept.
@@ -16878,19 +17190,18 @@ function convWebModeOf(conv) {
         return {key: who.aid || who.pane_id, pane: pane,
                 label: who.label || who.aid || who.pane_id};
       };
-      const emptyOr = v => (!v || v === CMD_NONE ? CMD_NONE_VALUE(rows) : v);
       const slotRows = (base, who) => {
         const row = held(who);
         return row && !base.some(r => arbSamePick(arbPickValue(r), arbPickValue(row)))
           ? base.concat([row]) : base;
       };
-      return arbPart('Commander',
+      return (live ? '' : cmdAgainHtml(conv)) + '<div id="cmdWhoPart">' + arbPart('Commander',
           arbSlot('cmdWho', slotRows(free, live && live.coordinator),
                   was ? was.cmdWho : (free[0] && arbPickValue(free[0])), false) +
           '<span class="arb-note">The pane that plans. Pick one that is running, or ' +
           '<b>+ New</b> to start one — it comes up on claude with the Commander prompt and lands ' +
           'back in this slot. It is not one of the agents below.</span>',
-          cmdSign(16) + ' ') +
+          cmdSign(16) + ' ') + '</div>' +
         '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
         ' placeholder="What this Commander owns, and when it is done.">' +
         escapeHtml(was ? was.cmdScope : '') + '</textarea></label>' +
@@ -16915,22 +17226,19 @@ function convWebModeOf(conv) {
           (parents.length ? '' :
             '<span class="arb-note" id="cmdParentNote" style="display:none">' +
             'A branch sits under another Commander — start one first.</span>'))) +
-        (live ? '' : cmdRecipeHtml()) +
+        (live ? '' : cmdRecipeHtml(project)) +
         (live ? '' : cmdBriefHtml()) +
-        '<div id="cmdMembersPart">' + arbPart('Agents it works with directly',
+        // A running session's roster is edited on its sheet, member by member, where a row keeps
+        // its role and a seat its holder. Slots here sent the whole roster again by pane and
+        // without roles, so a reorder or a swap could empty a seat.
+        (live ? '' : '<div id="cmdMembersPart">' + arbPart('Agents it works with directly',
           Array.from({length: CMD_MEMBER_SLOTS}, (_, i) =>
-            arbSlot('cmdMember' + i,
-                    slotRows(rows, live && (live.members || [])[i]),
-                    // `cmdSetupOf` says CMD_NONE for a slot holding nobody, which is the key of
-                    // that row and not the value the picker selects by. Translated here rather
-                    // than left to fall through to the first row: that row happens to be Nobody,
-                    // and a seed that is right by accident seeds a real pane the day it moves.
-                    emptyOr(was && was['cmdMember' + i]), false)).join('') +
+            arbSlot('cmdMember' + i, rows, CMD_NONE_VALUE(rows), false)).join('') +
           '<span class="arb-note">Leave these empty unless you already know who is doing the ' +
           'work. A Commander with nobody here still plans, still holds the Project and still ' +
           'starts child sessions — what it does not do is watch anyone. Name an agent and this ' +
           'Commander writes to it itself and wakes on every turn that agent ends.</span>') +
-        '</div>' +
+        '</div>') +
         (live ? arbPart('How long it may run',
           arbLimitField('cmdSteps', 'Sends in one window', was.cmdSteps, CMD_LIMITS.cmdSteps) +
           arbLimitField('cmdRuns', 'Sends in a row with nobody joining in', was.cmdRuns,
@@ -16956,8 +17264,6 @@ function convWebModeOf(conv) {
         '</div>';
     }
 
-    // What the form would say about a session that is already running. The one place the wire's
-    // shape is turned into the form's, so reading it back and diffing are about the same fields.
     // What a slot holds, in the picker's own value space. A participant whose pane is not running
     // is a row with no pane, which `arbPickValue` encodes as `paused:<key>` — so a slot seeded
     // with a bare pane id would not match its own row and would fall back to the first one, which
@@ -16971,15 +17277,6 @@ function convWebModeOf(conv) {
       return arbPickValue({key: who.aid || who.pane_id,
                            pane: live.find(a => (who.aid && convMemberKey(a) === who.aid)
                              || (who.pane_id && a.pane_id === who.pane_id)) || null});
-    }
-
-    // A slot's value as the wire wants it: a live pane, or the stable id of an away agent. The
-    // relay can resolve the latter if it came back since this snapshot, and otherwise explicitly
-    // refuses the edit instead of quietly discharging a member nobody meant to touch.
-    function cmdParticipantOf(value) {
-      const got = arbResolvePick(value);
-      if (!got || got.key === CMD_NONE || got.pane_id === CMD_NONE) return null;
-      return got.pane_id ? {pane_id: got.pane_id} : {aid: got.key};
     }
 
     // What the form would say about a session that is already running. The one place the wire's
@@ -16998,9 +17295,6 @@ function convWebModeOf(conv) {
         cmdRuns: num(b.max_consecutive, CMD_LIMITS.cmdRuns),
         cmdMinutes: num(b.max_minutes, CMD_LIMITS.cmdMinutes),
       };
-      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
-        at['cmdMember' + i] = cmdPickOf((s.members || [])[i]);
-      }
       return at;
     }
 
@@ -17015,52 +17309,28 @@ function convWebModeOf(conv) {
         const n = parseInt((document.getElementById(id) || {}).value || '', 10);
         at[id] = String(!(n > 0) ? range[0] : Math.min(n, range[1]));
       });
-      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
-        at['cmdMember' + i] = String((document.getElementById('cmdMember' + i) || {}).value || '');
-      }
       return at;
     }
 
-    // The same form against a session that exists, and only what moved is sent. A roster edit is a
-    // replacement of the whole roster — the relay has no add and no remove — so naming `members`
-    // at all names every one of them, and naming it when nothing changed re-enrols panes that were
-    // already enrolled.
+    // The same form against a session that exists, and only what moved is sent. The roster is not
+    // on it: members are added and removed on the sheet, one at a time.
     function cmdSave() {
       const was = cmdEditWas;
       if (!cmdEditing || !was) return;
       const at = cmdReadSetup();
       const who = arbResolvePick(at.cmdWho);
       if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      const live = cmdSessions.find(x => x.id === cmdEditing);
+      if (live && (live.members || []).some(m => m.pane_id && m.pane_id === who.pane_id)) {
+        showToast('That pane is a member. Remove it first, or pick another.'); return;
+      }
       const scope = at.cmdScope.trim();
       if (!scope) { showToast('A Commander needs a scope — what it owns.'); return; }
-      const participants = [];
-      for (let i = 0; i < CMD_MEMBER_SLOTS; i++) {
-        const participant = cmdParticipantOf(at['cmdMember' + i]);
-        if (participant) participants.push(participant);
-      }
-      // One string per participant, whichever way it is named, so two slots holding one agent
-      // collide whether they hold its pane or its id.
-      const idOf = p => (p.aid ? 'aid:' + p.aid : 'pane:' + p.pane_id);
-      const identities = participants.map(idOf).concat(['pane:' + who.pane_id]);
-      if (new Set(identities).size !== identities.length) {
-        showToast('Each slot needs a different pane.'); return;
-      }
       const msg = {type: 'cmd_edit', session: cmdEditing};
       if (scope !== was.cmdScope) msg.scope = scope;
       if (at.cmdWho !== was.cmdWho) msg.coordinator = {pane_id: who.pane_id};
-      // Compared as the roster the relay will hold — the participants in order, with the empty
-      // slots taken out — and never slot by slot. A roster edit announces itself to every member,
-      // so moving two of them between slots and changing nothing else must not interrupt them
-      // both to tell them the roster is what it already was.
-      const wasRoster = Array.from({length: CMD_MEMBER_SLOTS},
-                                   (_, i) => cmdParticipantOf(was['cmdMember' + i]))
-        .filter(Boolean).map(idOf);
-      const roster = participants.map(idOf);
-      if (roster.length !== wasRoster.length || roster.some((p, i) => p !== wasRoster[i])) {
-        msg.members = participants;
-      }
-      // Every key, not the ones that moved: `check_budget` fills anything a budget does not name
-      // from the defaults, so a partial budget resets the numbers it left out.
+      // Every key, not the ones that moved: the form shows all three, so all three are what the
+      // person set. The relay keeps any a budget does not name, so a partial one would do too.
       if (['cmdSteps', 'cmdRuns', 'cmdMinutes']
             .some(k => at[k] !== was[k])) {
         msg.budget = {max_steps: Number(at.cmdSteps), max_consecutive: Number(at.cmdRuns),
@@ -17154,9 +17424,19 @@ function convWebModeOf(conv) {
       return all.filter(r => r.recipe && !(r.problems || []).some(p => p.blocking));
     }
 
-    function cmdRecipeHtml() {
+    // The Projects a relay-started Commander may come up in: never a container, which takes no
+    // pane of its own. `project` is the one this room's agents are in, picked first.
+    function cmdOwnProjects() {
+      return (typeof projects !== 'undefined' && Array.isArray(projects) ? projects : [])
+        .filter(p => p && p.id && !p.container);
+    }
+
+    function cmdRecipeHtml(project) {
       const usable = cmdRecipes();
       if (!usable.length) return '';
+      const where = cmdOwnProjects();
+      const first = where.some(p => p.id === project) ? project
+        : (where[0] && where[0].id) || '';
       return arbPart('Recipe',
         '<label>Staff it from<select id="cmdRecipe" onchange="cmdPickRecipe()">' +
         '<option value="">No recipe — pick the agents below</option>' +
@@ -17164,7 +17444,50 @@ function convWebModeOf(conv) {
           escapeHtml(r.recipe.label) + '</option>').join('') +
         '</select></label>' +
         '<span class="arb-note" id="cmdRecipeNote">With a recipe, the relay starts its seats ' +
-        'before the Commander is briefed, and the Commander can staff only those seats.</span>');
+        'before the Commander is briefed, and the Commander can staff only those seats.</span>' +
+        // A recipe that names its Commander is started with one press: the relay brings the
+        // Commander up first, in this Project, and the seats beside it. Unticked is the pane
+        // picker above, as before.
+        '<div id="cmdOwnPart" hidden>' +
+        '<label class="arb-check"><input type="checkbox" id="cmdOwn" checked' +
+        ' onchange="cmdPickRecipe()"> <span id="cmdOwnLabel">The relay starts the Commander</span>' +
+        '</label>' +
+        '<div id="cmdOwnWhere">' +
+        '<label>In<select id="cmdOwnProject" onchange="cmdOwnSync()">' +
+        where.map(p => `<option value="${escapeHtml(p.id)}"${p.id === first ? ' selected' : ''}>` +
+          escapeHtml(p.label || p.id) + '</option>').join('') +
+        '</select></label>' +
+        '<label id="cmdOwnTreeRow">Worktree<input type="text" id="cmdOwnTree" maxlength="64"' +
+        ' autocapitalize="none" autocomplete="off" spellcheck="false"' +
+        ' placeholder="Optional — the main checkout when empty"></label>' +
+        '<span class="arb-note">Its seats come up in the same place.</span>' +
+        '</div></div>');
+    }
+
+    // The recipe picked, when it names a Commander this relay can start, else null.
+    function cmdOwnRecipe() {
+      const id = (document.getElementById('cmdRecipe') || {}).value || '';
+      const r = id && cmdRecipes().find(x => x.id === id);
+      return r && r.recipe.commander
+        && !(r.problems || []).some(p => /^commander(\.|$)/.test(p.path || '')) ? r : null;
+    }
+
+    // Where the relay is to start the Commander, as the wire takes it, or null when a pane is
+    // picked instead.
+    function cmdOwnStart() {
+      if (!cmdOwnRecipe() || !(document.getElementById('cmdOwn') || {}).checked) return null;
+      const project = (document.getElementById('cmdOwnProject') || {}).value || '';
+      const tree = String((document.getElementById('cmdOwnTree') || {}).value || '').trim();
+      const repo = cmdOwnProjects().some(p => p.id === project && p.repo);
+      return {project_id: project, ...(tree && repo ? {worktree: tree} : {})};
+    }
+
+    // A worktree is offered only where the Project is a git checkout: the relay refuses one
+    // anywhere else, and a field that is refused after the press is one not worth drawing.
+    function cmdOwnSync() {
+      const project = (document.getElementById('cmdOwnProject') || {}).value || '';
+      const row = document.getElementById('cmdOwnTreeRow');
+      if (row) row.hidden = !cmdOwnProjects().some(p => p.id === project && p.repo);
     }
 
     // A recipe staffs the roster, so the hand-picked slots are hidden while one is chosen rather
@@ -17174,6 +17497,21 @@ function convWebModeOf(conv) {
       const r = cmdRecipes().find(x => x.id === id);
       const part = document.getElementById('cmdMembersPart');
       if (part) part.hidden = !!r;
+      const own = cmdOwnRecipe();
+      const ownPart = document.getElementById('cmdOwnPart');
+      if (ownPart) ownPart.hidden = !own;
+      const starts = !!cmdOwnStart();
+      const whoPart = document.getElementById('cmdWhoPart');
+      if (whoPart) whoPart.hidden = starts;
+      const where = document.getElementById('cmdOwnWhere');
+      if (where) where.hidden = !starts;
+      const ownLabel = document.getElementById('cmdOwnLabel');
+      if (ownLabel && own) {
+        const c = own.recipe.commander;
+        ownLabel.textContent = `The relay starts the Commander: ${c.kind}` +
+          (c.config ? ` · ${c.config}` : '');
+      }
+      cmdOwnSync();
       // A recipe carries its own `prose`, so picking one changes what Default means — and only
       // what it means. An explicit choice already made is left alone. Ahead of the note below,
       // which returns early when there is no note to write: the two rows are a separate part of
@@ -17236,13 +17574,15 @@ function convWebModeOf(conv) {
       const tier = (document.getElementById('cmdTier') || {}).value || 'project';
       const up = !sheet ? cmdBriefOver[form] : (tier === 'project' ? null : cmdSessions.find(
         s => s.id === ((document.getElementById('cmdParent') || {}).value || '')));
-      const delivery = up && up.delivery ? up.delivery + ", its parent's" : '';
+      // The relay's order: the recipe's own, then the parent's, then pull.
+      const delivery = r && r.recipe.delivery ? `${r.recipe.delivery}, from ${r.recipe.label}`
+        : up && up.delivery ? up.delivery + ", its parent's" : '';
       if (style) return {prose: `${style}, from ${r.recipe.label}`, delivery};
       if (up) {
         return {prose: ((up.prose || {}).style || 'verbose') + ", its parent's",
                 delivery};
       }
-      return {prose: 'verbose', delivery: ''};
+      return {prose: 'verbose', delivery};
     }
 
     // Both rows' Default label, recomputed wherever one of its inputs moves: the recipe, the tier
@@ -17310,8 +17650,14 @@ function convWebModeOf(conv) {
       if (!conv) return;
       const scope = (document.getElementById('cmdScope') || {}).value || '';
       if (!scope.trim()) { showToast('A Commander needs a scope — what it owns.'); return; }
-      const who = arbResolvePick((document.getElementById('cmdWho') || {}).value);
-      if (!who || !who.pane_id) { showToast('Pick a live pane to be the Commander.'); return; }
+      // The recipe's own Commander, started by the relay, or a pane picked here.
+      const own = cmdOwnStart();
+      if (own && !own.project_id) { showToast('Pick a Project for the Commander.'); return; }
+      const who = own ? null : arbResolvePick((document.getElementById('cmdWho') || {}).value);
+      if (!own && (!who || !who.pane_id)) {
+        showToast('Pick a live pane to be the Commander.');
+        return;
+      }
       const tier = (document.getElementById('cmdTier') || {}).value || 'project';
       const parent = tier === 'project'
         ? '' : ((document.getElementById('cmdParent') || {}).value || '');
@@ -17326,16 +17672,16 @@ function convWebModeOf(conv) {
         .map(p => ({pane_id: p.pane_id}));
       // Two slots naming one pane is the mistake this form can make on its own, and the relay
       // would refuse it after the press. Said here instead, where it can still be fixed.
-      const seen = new Set(members.map(m => m.pane_id).concat([who.pane_id]));
-      if (seen.size !== members.length + 1) {
+      const seen = new Set(members.map(m => m.pane_id).concat(who ? [who.pane_id] : []));
+      if (seen.size !== members.length + (who ? 1 : 0)) {
         showToast('Each slot needs a different pane.');
         return;
       }
       arbSend({
         type: 'cmd_start', conversation: conv.id, scope: scope,
-        coordinator: {pane_id: who.pane_id}, members: members,
+        coordinator: who ? {pane_id: who.pane_id} : {}, members: members,
         tier: tier, parent_session: parent, ...(recipe ? {recipe: recipe} : {}),
-        ...cmdBriefFields(),
+        ...(own || {}), ...cmdBriefFields(),
       });
       // Open until the relay answers. It used to close here, which is what left a refusal with
       // nowhere to be shown but a toast — and a recipe start is refused for things worth reading:
@@ -17343,6 +17689,32 @@ function convWebModeOf(conv) {
       cmdSetupStatus(recipe
         ? 'Starting the Commander and staffing its seats… this can take a minute.'
         : 'Starting the Commander…', true);
+    }
+
+    // Start again: the last Commander this room ran, as a new session holding the same seats and
+    // agents with the same settings. The relay reads all of it off the ended session, so this
+    // sends the id and nothing else. Agents that are down come back away, each restarted (or
+    // resumed) from the roster afterwards; the Commander itself has to be up first.
+    function cmdLastHere(conv) {
+      return cmdPast.find(s => s.conversation === conv.id && (s.kind || 'commander') === 'commander')
+        || null;
+    }
+
+    function cmdAgainHtml(conv) {
+      const last = cmdLastHere(conv);
+      if (!last) return '';
+      return arbPart('Start again',
+        '<span class="arb-note">The last Commander here ended. Start a new one with its scope, ' +
+        'recipe, settings and the same agents in the same seats. Agents that are down come back ' +
+        'away — restart each from the roster. Restart its Commander first if it is down. Nothing ' +
+        'it was doing carries over.</span>' +
+        '<div class="arb-go"><button type="button" class="badge pick on"' +
+        ` onclick="cmdAgain('${escapeHtml(last.id)}')">Start again</button></div>`);
+    }
+
+    function cmdAgain(id) {
+      arbSend({type: 'cmd_start', again: id});
+      cmdSetupStatus('Starting it again…', true);
     }
 
     // --- managing one ------------------------------------------------------------------------
@@ -17355,6 +17727,13 @@ function convWebModeOf(conv) {
     }
 
     // --- a recipe's seats --------------------------------------------------------------------
+
+    // The members holding no seat — every member, in a session with no recipe.
+    function cmdLooseMembers(s, held) {
+      return (s.members || []).filter(m => !held.has(m.id))
+        .map(m => ({member: m.id, label: m.label || m.aid || m.pane_id, role: m.role || '',
+                    state: m.pane_id ? 'live' : 'away'}));
+    }
 
     // A recipe Commander's roster as the sheet draws it: each seat with who holds it, then the
     // members holding no seat. Who holds a seat is the relay's answer — `recipe.seats[].member` —
@@ -17371,11 +17750,10 @@ function convWebModeOf(conv) {
         const m = x.member ? byId.get(x.member) : null;
         return {name: x.name, roles: x.roles || [], kind: x.kind, config: x.config || '',
                 member: x.member || '', label: nameOf(m), state: stateOf(m, x.away),
+                aid: (m && m.aid) || '',
                 error: (x.error && x.error.detail) || ''};
       });
-      const held = new Set(seats.map(x => x.member).filter(Boolean));
-      const extras = members.filter(m => !held.has(m.id))
-        .map(m => ({member: m.id, label: nameOf(m), role: m.role || '', state: stateOf(m, false)}));
+      const extras = cmdLooseMembers(s, new Set(seats.map(x => x.member).filter(Boolean)));
       // A chain is drawn round to its head again, because that is what the hop after the last
       // seat does; v0 recipes have one chain.
       const chain = (r.chains || [])[0] || [];
@@ -17405,18 +17783,57 @@ function convWebModeOf(conv) {
 
     const CMD_SEAT_MARK = {live: '●', away: '◐', empty: '○'};
 
+    function cmdMemberLine(state, name, what, who, tail) {
+      return `<div class="arb-note"><span aria-hidden="true">${CMD_SEAT_MARK[state]}</span> ` +
+        `<b>${escapeHtml(name)}</b>${what ? ' · ' + escapeHtml(what) : ''} · ` +
+        `${escapeHtml(who || '—')} · <span>${state}</span>${tail || ''}</div>`;
+    }
+
+    // Takes one member off the roster, armed, since a seat holder taken off leaves its seat empty.
+    function cmdDropHtml(s, member, label) {
+      return s.state === 'ended' || !member ? ''
+        : ` <button type="button" class="badge pick" aria-label="Remove ${escapeHtml(label || member)}"` +
+          ` data-arm-key="cmd-drop-${escapeHtml(member)}"` +
+          ` onclick="cmdDropMember(this, '${escapeHtml(member)}')">✕</button>`;
+    }
+
+    function cmdAddHtml(s) {
+      return s.state === 'ended' ? ''
+        : '<div class="arb-go"><button type="button" class="badge pick proj"' +
+          ' onclick="cmdAddOpen()">Add member</button></div>';
+    }
+
+    // The roster panel. A recipe's seats then its extras; with no recipe, every member as a row.
+    function cmdRosterHtml(s) {
+      if (s.recipe) return cmdSeatsHtml(s);
+      const rows = cmdLooseMembers(s, new Set());
+      return arbPart('Members',
+        (rows.length
+          ? rows.map(x => cmdMemberLine(x.state, x.role || 'no role', '', x.label,
+                                        cmdDropHtml(s, x.member, x.label))).join('')
+          : '<div class="arb-note">Nobody yet. The Commander plans alone until someone is ' +
+            'added, here or by its own member.add.</div>') +
+        cmdAddHtml(s));
+    }
+
     function cmdSeatsHtml(s) {
       const model = cmdSeatModel(s);
       const open = s.state !== 'ended';
-      const line = (state, name, what, who, tail) =>
-        `<div class="arb-note"><span aria-hidden="true">${CMD_SEAT_MARK[state]}</span> ` +
-        `<b>${escapeHtml(name)}</b>${what ? ' · ' + escapeHtml(what) : ''} · ` +
-        `${escapeHtml(who || '—')} · <span>${state}</span>${tail || ''}</div>`;
+      const line = cmdMemberLine;
       // Away is the seat's own agent down: Staff then restarts that agent into the same seat,
       // keeping its id, rather than starting a stranger.
       const staff = x => (open && x.state !== 'live'
         ? ` <button type="button" class="badge pick proj" onclick="cmdStaff('${escapeHtml(x.name)}')">` +
-          (x.state === 'away' ? 'Restart' : 'Staff') + '</button>' : '');
+          (x.state === 'away' ? 'Restart' : 'Staff') + '</button>' +
+          // Or back into the last session its harness ran, when herdr recorded one.
+          (x.state === 'away' && cmdSeatResumable(x)
+            ? ` <button type="button" class="badge pick proj" onclick="cmdStaff('${escapeHtml(x.name)}', true)">` +
+              'Restart original session</button>' : '') +
+          // An empty seat can also take an agent that is already up. An away one cannot: its
+          // holder keeps the seat, and Restart is how it comes back.
+          (x.state === 'empty'
+            ? ` <button type="button" class="badge pick proj" onclick="cmdSeatPickOpen('${escapeHtml(x.name)}')">` +
+              'Use running…</button>' : '') : '');
       // Changing it is the relay's re-recipe, whose first rule is a paused session — so the press
       // is offered only then, and every other rule is the relay's to refuse in its own words.
       const change = !open ? ''
@@ -17430,15 +17847,15 @@ function convWebModeOf(conv) {
           change) +
         arbPart('Seats', model.seats.map(x =>
           line(x.state, x.name, x.roles.join(' + ') + ' · ' + x.kind + (x.config ? ' · ' + x.config : ''),
-               x.label, staff(x)) +
+               x.label, staff(x) + cmdDropHtml(s, x.member, x.label)) +
           (x.error && x.state === 'empty'
             ? `<div class="arb-note">Could not start: ${escapeHtml(x.error)}</div>` : '')).join('')) +
         arbPart('Extras',
           (model.extras.length
-            ? model.extras.map(x => line(x.state, x.role || 'no role', '', x.label)).join('')
+            ? model.extras.map(x => line(x.state, x.role || 'no role', '', x.label,
+                                         cmdDropHtml(s, x.member, x.label))).join('')
             : '<div class="arb-note">Nobody outside the seats.</div>') +
-          (open ? '<div class="arb-go"><button type="button" class="badge pick proj"' +
-                  ' onclick="cmdAddOpen()">Add member</button></div>' : ''));
+          cmdAddHtml(s));
     }
 
     // A small form of its own for Add member's reason: the panel is redrawn by every broadcast
@@ -17481,13 +17898,83 @@ function convWebModeOf(conv) {
       cmdAddClose();
     }
 
+    // Whether an away holder's harness session can be reopened: the relay recorded one for that
+    // agent, under the harness the seat asks for, and knows how that harness resumes.
+    function cmdSeatResumable(x) {
+      const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
+      const row = x.aid && rows.find(r => r.aid === x.aid);
+      return !!(row && row.harness_session && row.agent === x.kind
+        && ((startOptions || {}).resume || []).indexOf(x.kind) >= 0);
+    }
+
     // The person staffs a seat. The relay starts the seat's own harness and config, or restarts
     // its away holder; the seat fills on the broadcast that follows, a few seconds later.
-    function cmdStaff(seat) {
+    function cmdStaff(seat, resume) {
       const s = cmdSessionHere();
       if (!s) return;
-      arbSend({type: 'cmd_seat', session: s.id, seat: seat});
+      arbSend(Object.assign({type: 'cmd_seat', session: s.id, seat: seat}, resume ? {resume: true} : {}));
       if (typeof showToast === 'function') showToast(`Staffing ${seat} — it comes up in a few seconds.`);
+    }
+
+    // Why this live pane cannot hold the seat, or ''. `recipes.misfit` asked early, off the facts
+    // the snapshot carries, so the picker offers only agents the relay would seat. The relay still
+    // checks at enrolment; this only spares a press it would refuse.
+    let cmdSeatPicking = '';
+
+    function cmdSeatMisfit(seat, pane) {
+      if (!pane || !pane.aid || pane.unresolved) return 'not identified yet';
+      if (pane.agent !== seat.kind) return `a ${pane.agent || 'unknown'} agent`;
+      if ((pane.config || '') !== (seat.config || '')) return `runs ${pane.config || 'the stock config'}`;
+      if ((pane.role || 'agent') !== 'agent') return `started as ${pane.role}`;
+      return '';
+    }
+
+    // The running agents that fit an empty seat: this Project's, held by no other session, and not
+    // this roster's own Commander or members.
+    function cmdSeatCandidates(s, conv, seat) {
+      const mine = new Set((s.members || []).map(m => m.aid).filter(Boolean)
+        .concat([(s.coordinator || {}).aid].filter(Boolean)));
+      const coord = (s.coordinator || {}).pane_id;
+      return arbMemberRows(conv, s.project_id, s.id)
+        .filter(r => r.pane && r.pane.pane_id !== coord && !mine.has(r.pane.aid)
+          && !cmdSeatMisfit(seat, r.pane));
+    }
+
+    // Staff a seat with an agent that is already up: `cmd_seat` naming its `aid`. A small form for
+    // Add member's reason — the panel is redrawn by every broadcast about the session.
+    function cmdSeatPickOpen(name) {
+      const s = cmdSessionHere();
+      const conv = loadConvIndex().find(c => c.id === cmdSetupConv);
+      const seat = ((s && s.recipe) || {seats: []}).seats.find(x => x.name === name);
+      if (!s || !conv || !seat) return;
+      cmdEditing = s.id;
+      cmdEditWas = null;
+      cmdSeatPicking = name;
+      const rows = cmdSeatCandidates(s, conv, seat);
+      const want = `${seat.kind}${seat.config ? ' · ' + seat.config : ''}`;
+      cmdDraw(conv, arbPart(`Staff ${name} with a running agent`,
+          (rows.length ? arbSlot('cmdSeatWho', rows, arbPickValue(rows[0]), false)
+            : `<div class="arb-note">No running agent here fits: this seat wants ${escapeHtml(want)}` +
+              ', started as a plain agent and held by no other session.</div>') +
+          `<span class="arb-note">The seat asks for ${escapeHtml(want)}. Only agents started that ` +
+          'way are offered. It keeps its history and takes the seat\'s role files from its next ' +
+          'assignment.</span>') +
+        '<div class="arb-go">' +
+        '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
+        (rows.length ? '<button type="button" class="badge pick on" onclick="cmdSeatPick()">Staff</button>' : '') +
+        '</div>', true, true);
+    }
+
+    function cmdSeatPick() {
+      const s = cmdSessions.find(x => x.id === cmdEditing);
+      const seat = cmdSeatPicking;
+      if (!s || !seat) return;
+      const pick = arbResolvePick((document.getElementById('cmdSeatWho') || {}).value);
+      const who = pick && agents.find(a => a.pane_id === pick.pane_id);
+      if (!who || !who.aid) { showToast('Pick a running agent for the seat.'); return; }
+      arbSend({type: 'cmd_seat', session: s.id, seat: seat, aid: who.aid});
+      showToast(`Staffing ${seat} with ${paneLabel(who)}.`);
+      cmdAddClose();
     }
 
     // Add member is a small form of its own rather than a row in the panel, because the panel is
@@ -17505,8 +17992,12 @@ function convWebModeOf(conv) {
           arbSlot('cmdAddWho', rows, rows[0] && arbPickValue(rows[0]), false) +
           '<label>Role<input id="cmdAddRole" maxlength="160" autocomplete="off"' +
           ' placeholder="writes the release notes"></label>' +
-          '<span class="arb-note">An extra, outside the recipe\'s seats. Its role is your own words ' +
-          'and may not repeat one this roster already holds. A seat is filled with Staff.</span>') +
+          (s.recipe
+            ? '<span class="arb-note">An extra, outside the recipe\'s seats. Its role is your own ' +
+              'words and may not repeat one this roster already holds. A seat is filled with ' +
+              'Staff.</span>'
+            : '<span class="arb-note">Its role is your own words: what the Commander should use ' +
+              'it for. It is named in every assignment this member is sent.</span>')) +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="cmdAddMember()">Add</button></div>',
@@ -17519,8 +18010,7 @@ function convWebModeOf(conv) {
     }
 
     // A roster edit replaces the whole roster, so every member is sent again with its role and the
-    // new one goes on the end. Live members by pane and away ones by id, as `cmdParticipantOf`
-    // names them, so an away member is carried rather than refused for having no pane.
+    // new one goes on the end.
     function cmdAddMember() {
       const s = cmdSessions.find(x => x.id === cmdEditing);
       if (!s) return;
@@ -17530,17 +18020,33 @@ function convWebModeOf(conv) {
         showToast('The Commander cannot also be a member. Pick another agent.'); return;
       }
       const role = String((document.getElementById('cmdAddRole') || {}).value || '').trim();
-      const clash = cmdRoleClash(s, role);
+      const clash = s.recipe ? cmdRoleClash(s, role) : '';
       if (clash) {
         const seat = ((s.recipe || {}).seats || []).some(x => String(x.name).toLowerCase() === clash);
         showToast(seat ? `${clash} is a seat — fill it with Staff.`
           : `“${clash}” is already held here — a recipe roster holds each role once.`);
         return;
       }
-      const keep = (s.members || []).map(m =>
-        ({...(m.pane_id ? {pane_id: m.pane_id} : {aid: m.aid}), role: m.role || ''}));
-      arbSend({type: 'cmd_edit', session: s.id, members: keep.concat([{pane_id: who.pane_id, role: role}])});
+      arbSend({type: 'cmd_edit', session: s.id,
+               members: cmdRosterOf(s).concat([{pane_id: who.pane_id, role: role}])});
       cmdAddClose();
+    }
+
+    // The roster as `cmd_edit` replaces it: every member with its role, live ones by pane and
+    // away ones by id, so an away member is carried rather than refused for having no pane.
+    function cmdRosterOf(s, without) {
+      return (s.members || []).filter(m => m.id !== without).map(m =>
+        ({...(m.pane_id ? {pane_id: m.pane_id} : {aid: m.aid}), role: m.role || ''}));
+    }
+
+    // The relay has no remove: the roster is sent again without this one.
+    function cmdDropMember(btn, member) {
+      const s = cmdSessionHere();
+      const m = s && (s.members || []).find(x => x.id === member);
+      if (!m) return;
+      armButton(btn, 'Remove?', () =>
+        arbSend({type: 'cmd_edit', session: s.id, members: cmdRosterOf(s, member)}),
+        'cmd-drop-' + member);
     }
 
     // What it is, where it sits, and the four things that can be done to it. No decisions and no
@@ -17564,17 +18070,13 @@ function convWebModeOf(conv) {
             ? `plan at revision ${s.agenda_rev}` + (s.agenda_at ? ', read ' + arbAgo(s.agenda_at) : '')
             : 'no plan written yet') + '</div>',
           cmdSign(16) + ' ') +
-        (s.recipe ? cmdSeatsHtml(s) : '') +
+        cmdRosterHtml(s) +
         (!s.recipe && paused && cmdRecipes().length
           ? arbPart('Recipe', '<button type="button" class="badge pick proj"' +
                     ' onclick="cmdRecipeOpen()">Change recipe</button>')
           : '') +
         (s.recipe_error
           ? arbPart('Recipe', `<div class="arb-note">Its recipe cannot be read: ${escapeHtml(s.recipe_error)}</div>`)
-          : '') +
-        (!s.recipe && s.members && s.members.length
-          ? arbPart('Its agents', '<div class="arb-note">' +
-              s.members.map(m => escapeHtml(m.label || m.pane_id)).join(', ') + '</div>')
           : '') +
         '<div class="arb-go">' +
         (at ? `<button type="button" class="badge pick proj" onclick="cmdOpenPane('${escapeHtml(at)}')">` +
