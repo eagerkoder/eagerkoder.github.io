@@ -2030,6 +2030,14 @@
       background: none;
       border-style: dashed;
     }
+
+    /* What a pane said mid-turn — the relay's `agent_detail` rows, and the live draft — in grey, so
+       a thread read in detail still shows at a glance which bubbles are the turn's settled answer.
+       Mixed from the theme's own two text colours rather than one grey, so it reads on every theme. */
+    .conv-msg.detail,
+    .conv-slot {
+      color: color-mix(in srgb, var(--text) 55%, var(--muted));
+    }
     .conv-state {
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -11722,7 +11730,9 @@
     // is the only thing it shares with `Update(web/index.html)`. The space in front of the bracket
     // is what a sentence has and a call does not; the capitals are what `Web Search(` needs and
     // "Merged into main" fails on.
-    const CLAUDE_TOOL = /^[A-Z][A-Za-z0-9_-]*(?: [A-Z][A-Za-z0-9_-]*){0,3}\(\S/;
+    // A call occupies its header line; `Python(3.13) works here.` is prose.
+    // Unclosed is a header too: a long `Bash(` command wraps, and its first line has no `)`.
+    const CLAUDE_TOOL = /^[A-Z][A-Za-z0-9_-]*(?: [A-Z][A-Za-z0-9_-]*){0,3}\((?:[^()]|\([^()]*\))*(?:\)\s*)?$/;
 
     // devin's shapes, named because the profile and the three helpers below share them and a
     // pattern written twice is a pattern that drifts. Each is anchored at exactly one space rather
@@ -12720,9 +12730,57 @@ function convWebModeOf(conv) {
         i = j + 1;
       }
       return found.sort((a, b) => a.at[0] - b.at[0])
-        .map(m => ({ who: m.who, text: convText(rows, m.at) }))
+        .map(m => ({ who: m.who, text: convClean(m.who, convText(rows, m.at), agent) }))
         // The empty composer at the foot of a live pane is a prompt line with nothing typed on it.
         .filter(m => m.text);
+    }
+
+    // Claude's own chrome, as it lands inside a message when the block reading misses its edge —
+    // most often the glyph of a running tool call, which Claude blinks: a read on the blank half
+    // sees `  Bash(...)` as one more line of the message above. A pass over what was captured,
+    // before anything records or drafts it. Ported from `clean_message` in relay/pane_summary.py;
+    // the call header is summary_detect.js's `CLAUDE_TOOL`.
+    const CONV_CLAUDE_RESULT = /^\s*⎿  \S|^\s*… \+\d+ lines? \(ctrl\+\w to expand\)/;
+    const CONV_CLAUDE_BANNER = /^\s*[\u2580-\u259f]/;
+    const CONV_CLAUDE_QUEUE = /^\s*(?:ctrl\+enter to send now|Press up to edit queued messages)\s*$/;
+
+    // Keep prose before a call or result, even without a blank separator.
+    function convClean(who, text, agent) {
+      if (agent !== 'claude' || !text) return text;
+      if (who === 'user') {
+        return text.split('\n').filter(l => !CONV_CLAUDE_QUEUE.test(l)).join('\n').trim();
+      }
+      const kept = [];
+      let fence = '';
+      for (const para of text.split(/\n[ \t]*\n/)) {
+        let lines = para.split('\n');
+        let quoted = !!fence;
+        for (const line of lines) {
+          const mark = line.trimStart().slice(0, 3);
+          if (mark === '```' || mark === '~~~') {
+            quoted = true;
+            if (!fence) fence = mark;
+            else if (fence === mark) fence = '';
+          }
+        }
+        if (quoted) {
+          kept.push(para);  // A fenced example of chrome is still something the agent said.
+          continue;
+        }
+        if (lines.some(l => CONV_CLAUDE_BANNER.test(l) && l.includes('Claude Code v'))) {
+          lines = lines.filter(l => !CONV_CLAUDE_BANNER.test(l));
+        }
+        for (let i = 0; i < lines.length; i++) {
+          if (CLAUDE_TOOL.test(lines[i].trim())) { lines = lines.slice(0, i); break; }
+          if (CONV_CLAUDE_RESULT.test(lines[i])) {
+            // A folded output can start above its glyph, with no call header left in view.
+            lines = lines[i].trimStart().startsWith('… +') ? [] : lines.slice(0, i);
+            break;
+          }
+        }
+        if (lines.length) kept.push(lines.join('\n'));
+      }
+      return kept.join('\n\n').trim();
     }
 
     function convEntry(m, seen, extra) {
@@ -14369,7 +14427,8 @@ function convWebModeOf(conv) {
         add = turnEntries(body, held.entries, now, found ? 0 : end, found);
         if (add.length) held.lastTurn = end;
       }
-      convNoteDraft(key, working ? fresh[fresh.length - 1] : null, a, now);
+      convNoteDraft(key, working ? fresh : null, held.entries, now,
+        (statusAt[a.pane_id] || {}).working || 0);
       // The watermark moves on the read, not on what the read produced: a deeper window that added
       // nothing has still been recorded from, and asking it again would add nothing again.
       if (deep || held.backfilled) held.depth = Math.max(held.depth || 0, rows.length);
@@ -14419,15 +14478,55 @@ function convWebModeOf(conv) {
       if (convThreadShows(key)) renderConvView();
     }
 
-    // What the pane is saying right now, held per member and never written down. It is the block
-    // above a working composer, and it is replaced whole on every read — which is why it costs no
-    // matching at all: the transcript is what has to be reconciled, and this is not in it.
+    // What the pane is saying right now, held per member and never written down: every block the
+    // agent has written this turn, in order. A turn that narrates, runs a tool and narrates again
+    // used to show only its newest block, the earlier ones gone from the slot the moment the next
+    // began. Gathered across reads rather than re-parsed from each, because a long turn scrolls
+    // its first blocks out of the read window before it ends. Dropped when the turn ends — the
+    // record then has the final message, and that is what replaces it.
     const convDrafts = new Map();
+    const CONV_DRAFT_MAX = 50;   // blocks a turn keeps, oldest dropped first
 
-    function convNoteDraft(key, m, a, now) {
-      if (!m || m.who !== 'agent') { convDrafts.delete(key); return; }
-      convDrafts.set(key, convEntry(m, now, { at: now, at_src: 'read', draft: true,
-        label: paneLabel(a) || '', agent: a.agent || '', pane_id: a.pane_id }));
+    // `msgs` is the whole window as parsed, or null when the pane is not working. This turn is
+    // what follows the newest prompt in it; a window with no prompt in it is a turn longer than
+    // the window, and still the turn already held.
+    function convNoteDraft(key, msgs, recorded, now, started = 0) {
+      if (!msgs) { convDrafts.delete(key); return; }
+      let at = msgs.length;
+      while (at > 0 && msgs[at - 1].who !== 'user') at--;
+      const prompt = at ? msgs[at - 1].text : null;
+      let held = convDrafts.get(key);
+      if (!held || held.started !== started || (prompt !== null && prompt !== held.prompt)) {
+        held = { prompt: prompt, started: started, blocks: [] };
+        convDrafts.set(key, held);
+      }
+      // With no prompt in sight, the window can still hold turns that already ended, and those are
+      // in the record: a block the record already has is not this turn's.
+      const settled = prompt === null
+        ? new Set((recorded || []).slice(-200).map(e => convDraftNorm(e.text))) : null;
+      for (const m of msgs.slice(at)) {
+        if (m.who === 'agent' && !(settled && settled.has(convDraftNorm(m.text)))) {
+          convDraftMerge(held.blocks, m.text);
+        }
+      }
+      if (held.blocks.length > CONV_DRAFT_MAX) held.blocks.splice(0, held.blocks.length - CONV_DRAFT_MAX);
+      held.at = now;
+      held.text = held.blocks.map(b => b.text).join('\n\n');
+    }
+
+    // One block into the turn's list. The newest block is the one still being written, so a read
+    // that finds it longer replaces it; a block already held is the same block read again, wrapped
+    // differently or not; anything else is the next block. Compared with whitespace folded, because
+    // a pane re-wraps on every resize.
+    function convDraftNorm(text) { return (text || '').replace(/\s+/g, ' ').trim(); }
+
+    function convDraftMerge(blocks, text) {
+      const norm = convDraftNorm(text);
+      if (!norm) return;
+      const last = blocks[blocks.length - 1];
+      if (last && norm.startsWith(last.norm)) { last.norm = norm; last.text = text.trim(); return; }
+      if (blocks.some(b => b.norm === norm || b.norm.startsWith(norm))) return;
+      blocks.push({ norm: norm, text: text.trim() });
     }
 
     // A prompt this app sent needs no reading back: the text is exact, the time is exact, and its
@@ -16819,7 +16918,7 @@ function markdownHtml(source) {
         // `live` is the bubble an answer is arriving into. It is what lights the repairs and what
         // makes the bubble collapse to its first lines while it fills — see `conv-clamped`.
         return rule + git.before +
-          `<div class="conv-msg${user ? ' user' : ''}${side}${state}` +
+          `<div class="conv-msg${user ? ' user' : ''}${side}${state}${e.detail ? ' detail' : ''}` +
           `${foreign ? ' foreign' : ''}${streaming ? ' live' : ''}${ask ? ' conv-qa' : ''}` +
           `${group ? ' conv-group' : ''}${open ? ' conv-open' : ''}"` +
           `${gkey ? ` data-group="${escapeHtml(gkey)}"` : ''}` +
@@ -16952,6 +17051,29 @@ function markdownHtml(source) {
       last.classList.remove('found');
       void last.offsetWidth;   // restart the animation when the same bubble is asked for twice
       last.classList.add('found');
+    }
+
+    // --- following the newest message ---
+    //
+    // Whether a thread follows its newest message is the reader's choice, made by scrolling, and
+    // not a fact about where the box happens to stand. Read off the position, it was lost to
+    // anything that made the box shorter under a reader who never touched it — the composer
+    // opening, the keyboard, a phone's toolbar coming back — and from then on every poll read the
+    // gap as "scrolled up" and the thread stopped following for good. So the flag moves on the
+    // box's own scroll events (the reader's, or this page putting it at the end), and a resize or
+    // an image arriving puts a thread that is following back at its end. One per box, made on
+    // first use, following until the reader scrolls away.
+    function convFollow(box) {
+      if (!box) return {on: true};
+      if (box._convFollow) return box._convFollow;
+      const f = box._convFollow = {on: true};
+      box.addEventListener('scroll', () => {
+        f.on = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+      }, {passive: true});
+      const stick = () => { if (f.on) box.scrollTop = box.scrollHeight; };
+      if (typeof ResizeObserver === 'function') new ResizeObserver(stick).observe(box);
+      box.addEventListener('load', stick, true);   // `load` does not bubble; capture sees an <img>
+      return f;
     }
 
     // --- the standing draft slot ---
@@ -39123,10 +39245,15 @@ convApplyTint();
       // reader who had scrolled up in the pane they were reading opened the next one part way up a
       // document they have never seen, which for a terminal is the middle of an old turn. What is
       // wanted on arrival is always the newest end.
+      //
+      // "At the bottom" is what the reader last did, not where the box stands (`convFollow`): a
+      // column made shorter by the composer or the window would otherwise stop following for good.
       const switched = body.dataset.tab !== col.tabKey;
       body.dataset.tab = col.tabKey || '';
-      const atBottom = switched
-        || body.scrollHeight - body.scrollTop - body.clientHeight < 24;
+      const follow = convFollow(body);
+      // A Project file is read from the top, so a resize must not carry it to the end.
+      if (switched) follow.on = !tab || tab.kind !== 'project';
+      const atBottom = switched || follow.on;
 
       // Written only when it changed. The poll redraws every column three times a minute, and a
       // thread rewritten from identical markup throws away the reader's selection, restarts every
