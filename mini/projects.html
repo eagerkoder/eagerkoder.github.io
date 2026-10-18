@@ -10278,11 +10278,13 @@ function convWebModeOf(conv) {
       } catch (e) { /* nothing to do about it, and nothing lost that cannot be re-read */ }
     }
 
-    // The Settings button. Confirmed, because it is a delete — and worded as what it costs, which
-    // is nothing except where the relay has pruned what this browser still had.
-    async function forgetLiveRecord() {
-      if (!confirm('Forget the relay record kept on this device? It is read again the next time a '
-        + 'thread is opened, except for anything the relay has since pruned.')) return;
+    // The Settings button. Armed, because it is a delete; the hint under the button says what it
+    // costs, which is nothing except where the relay has pruned what this browser still had.
+    function forgetLiveRecord(btn) {
+      armButton(btn, '', forgetLiveRecordNow);
+    }
+
+    async function forgetLiveRecordNow() {
       await convLiveForget();
       if (typeof renderConvView === 'function') renderConvView();
       if (typeof renderConvAnalytics === 'function') renderConvAnalytics();
@@ -13789,14 +13791,19 @@ function convWebModeOf(conv) {
 
     // `key` is for a control whose enclosing card is redrawn by the poll. Its element changes,
     // but its action does not; matching that action lets the second tap reach the same arm.
+    // The button keeps its words: the drain behind them is the whole signal. A `label` is a note
+    // for what the button cannot say in its own words — "Every tab on this profile closes" — and
+    // shows as a toast on the first tap, never in place of the button's text.
     function armButton(btn, label, run, key) {
       if ((key && armedKey === key) || (!key && armedEl === btn)) { disarmButton(); run(); return; }
       disarmButton();
       armedEl = btn;
       armedKey = key || '';
-      btn.dataset.armLabel = btn.textContent;
       btn.dataset.armed = '1';
-      btn.textContent = label;
+      // The drain is drawn off `.arm-btn`, so a button whose markup never asked for it gets it for
+      // as long as it is armed — every armed button looks armed, whichever render drew it.
+      if (!btn.classList.contains('arm-btn')) { btn.classList.add('arm-btn'); btn.dataset.armClass = '1'; }
+      if (label && typeof showToast === 'function') showToast(label);
       // Disarms itself rather than waiting to be pressed again — the same reason the header's does.
       armedTimer = setTimeout(disarmButton, ARM_MS);
     }
@@ -13809,7 +13816,7 @@ function convWebModeOf(conv) {
       // The element that was armed, and — for a keyed arm — whatever is standing in its place now.
       // A poll redraw replaces the node between the two taps, so by the time the arm expires the
       // one on screen is not the one this holds, and clearing only `armedEl` leaves a detached
-      // node tidied and a live button still saying "Pause all?" with nothing behind it.
+      // node tidied and a live button still draining with nothing behind it.
       // Read off the dataset rather than matched in a selector: the arm key is whatever the
       // caller had to name — a member's agent id, a conversation id, a label someone typed — and
       // a selector built out of one throws on the character it did not expect, which loses the
@@ -13818,10 +13825,9 @@ function convWebModeOf(conv) {
         ? Array.from(document.querySelectorAll('[data-arm-key]'))
           .find(el => el.dataset.armKey === key) : null;
       for (const el of new Set([btn, live])) {
-        if (!el || !el.dataset || !el.dataset.armLabel) continue;
-        el.textContent = el.dataset.armLabel;
+        if (!el || !el.dataset || !el.dataset.armed) continue;
         delete el.dataset.armed;
-        delete el.dataset.armLabel;
+        if (el.dataset.armClass) { el.classList.remove('arm-btn'); delete el.dataset.armClass; }
       }
     }
 
@@ -15438,7 +15444,7 @@ function convWebModeOf(conv) {
     function arbSessionActionsHtml() {
       return '<div class="arb-part arb-danger">' +
         '<button type="button" class="arb-btn arm-btn"' +
-        ` onclick="armButton(this, 'Re-brief?', () => arbSessionAction('arb_reinit'))">` +
+        ` onclick="armButton(this, '', () => arbSessionAction('arb_reinit'))">` +
         'Re-brief the arbitrator</button>' +
         '<button type="button" class="arb-btn arm-btn warn" data-arm-key="end-session"' +
         ` onclick="arbEndSession(this)">` +
@@ -15479,8 +15485,8 @@ function convWebModeOf(conv) {
       }).map(s => s.id);
     }
 
-    // One arm for a session with nothing under it; two for one with children, where the second
-    // says what ending it leaves behind. Shared with the Commander's End, which asks the same
+    // One arm, and for a session with children a toast with it that says what ending it leaves
+    // behind. Shared with the Commander's End, which asks the same
     // question about the same tree.
     function armEndSession(btn, id, send) {
       const running = arbDescendantsRunning(id);
@@ -15489,8 +15495,11 @@ function convWebModeOf(conv) {
       // element identity alone would be lost with it — the second tap would re-ask rather than
       // end. `data-arm-key` on the markup is the other half, which is what lets the label be put
       // back on whichever button is standing there when the arm expires.
-      armButton(btn, running.length ? `Leave ${running.length} running?` : 'End session?',
-        () => send(!!running.length), 'end-session');
+      // The button keeps its words while armed, so what ending leaves behind is said beside it.
+      if (running.length && !(typeof armButtonArmed === 'function' && armButtonArmed('end-session'))) {
+        showToast(`Ending this leaves ${running.length} running`, 'info');
+      }
+      armButton(btn, '', () => send(!!running.length), 'end-session');
     }
 
     function arbEndSession(btn) {
@@ -18135,7 +18144,7 @@ function convWebModeOf(conv) {
       const s = cmdSessionHere();
       const m = s && (s.members || []).find(x => x.id === member);
       if (!m) return;
-      armButton(btn, 'Remove?', () =>
+      armButton(btn, '', () =>
         arbSend({type: 'cmd_edit', session: s.id, members: cmdRosterOf(s, member)}),
         'cmd-drop-' + member);
     }
@@ -18226,7 +18235,7 @@ function convWebModeOf(conv) {
     function cmdRebrief(btn) {
       const s = cmdSessionHere();
       if (!s) return;
-      armButton(btn, 'Re-brief?', () => arbSend({type: 'cmd_rebrief', session: s.id}), 'cmd-rebrief');
+      armButton(btn, '', () => arbSend({type: 'cmd_rebrief', session: s.id}), 'cmd-rebrief');
     }
 
     function cmdEnd(btn) {
@@ -19559,7 +19568,7 @@ function convWebModeOf(conv) {
       const id = ccPlanPicked(owner);
       if (!id) { showToast('Pick the row to drop.'); return; }
       const why = ccPlanText(owner) || 'dropped from the Command Center';
-      armButton(btn, 'Drop ' + id + '?', () => ccPlanEdit('drop', {id, why}, owner));
+      armButton(btn, '', () => ccPlanEdit('drop', {id, why}, owner));
     }
 
     // The row is in this session's queue whichever direction it was drawn under: `tasks_out`
@@ -19575,7 +19584,7 @@ function convWebModeOf(conv) {
       };
       // Sending again costs the session it lands on a step and may run the work twice, which is
       // exactly what the flag is uncertain about. Marking it delivered takes nothing back.
-      if (resend) armButton(btn, 'Send it again?', send); else send();
+      if (resend) armButton(btn, '', send); else send();
     }
 
     function ccListHtml(title, note, rows, action) {
@@ -19911,7 +19920,7 @@ function convWebModeOf(conv) {
       const s = ccPickedSession();
       if (!s) return;
       const locked = s.locked === false;
-      armButton(btn, locked ? 'Lock roster?' : 'Unlock roster?', () =>
+      armButton(btn, '', () =>
         arbSend({type: s.kind === 'commander' ? 'cmd_edit' : 'arb_edit',
                  session: s.id, locked}), 'cc-lock');
     }
@@ -19935,7 +19944,7 @@ function convWebModeOf(conv) {
     function ccRebrief(btn) {
       const id = ccPick;
       const type = ccWire('rebrief');
-      if (id) armButton(btn, 'Re-brief?', () => arbSend({type, session: id}), 'cc-rebrief');
+      if (id) armButton(btn, '', () => arbSend({type, session: id}), 'cc-rebrief');
     }
 
     function ccEnd(btn) {
@@ -19982,7 +19991,7 @@ function convWebModeOf(conv) {
       if (text === String(s.scope || '')) { showToast('That is already the scope.'); return; }
       // Armed, because it changes what a running group is for and its members are told so.
       const id = ccPick;
-      armButton(btn, 'Point it at that?',
+      armButton(btn, '',
         () => arbSend({type: 'cmd_edit', session: id, scope: text}), 'cc-scope');
     }
 
@@ -20601,7 +20610,7 @@ function convWebModeOf(conv) {
       };
       // Sending again costs the session it lands on a step and may run the work twice, which is
       // exactly what the flag is uncertain about. Marking it delivered takes nothing back.
-      if (resend) armButton(btn, 'Send it again?', send); else send();
+      if (resend) armButton(btn, 'It may run the work twice', send); else send();
     }
 
     // --- drawing -------------------------------------------------------------------------------

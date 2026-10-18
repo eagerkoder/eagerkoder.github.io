@@ -2739,6 +2739,63 @@
       display: block;
     }
 
+    /* The launcher's Restart menu: the relay, the tunnel and herdr behind one control, so the bar
+       is not three buttons wide. The panel is positioned rather than laid out, so opening it moves
+       nothing under the pointer. Resting styles carry one class only: the armed drain is
+       `.arm-btn[data-armed="1"]`, and a heavier resting rule would hide it. */
+    .section-header .launcher-restart {
+      position: relative;
+      padding: 0;
+      display: inline-flex;
+    }
+
+    .launcher-restart > summary {
+      list-style: none;
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .launcher-restart > summary::-webkit-details-marker { display: none; }
+
+    .launcher-restart[open] > summary { color: var(--text); }
+
+    .launcher-restart-items {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 30;
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+    }
+
+    .launcher-restart-item {
+      width: 100%;
+      min-height: 34px;
+      padding: 6px 8px;
+      text-align: left;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      letter-spacing: normal;
+      text-transform: none;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .launcher-restart-item:hover { border-color: var(--orange); }
+
     .agent {
       background: var(--surface);
       border-radius: 12px;
@@ -4073,7 +4130,7 @@
       padding: 3px 6px;
       border-radius: 6px;
       border: 1px solid var(--border);
-      /* Fixed, so arming does not shuffle the buttons beside it as the label changes. */
+      /* Fixed, so the header does not shuffle as the pane changes. */
       min-width: 42px;
       text-align: center;
     }
@@ -4097,6 +4154,10 @@
     @media (prefers-reduced-motion: reduce) {
       .term-header .cls-btn[data-armed="1"] {
         background: var(--orange);
+        animation: none;
+      }
+      .ctrl-key.confirm {
+        background: var(--red);
         animation: none;
       }
     }
@@ -10663,10 +10724,12 @@
       border-color: color-mix(in srgb, var(--red) 30%, var(--border));
     }
 
+    /* Drains over the 3s pressCtrl gives the second tap, like every other arm. */
     .ctrl-key.confirm {
-      background: var(--red);
       color: var(--bg);
       border-color: var(--red);
+      background: linear-gradient(to right, var(--red) 50%, var(--bg) 50%) right / 200% 100%;
+      animation: arm-drain 3s linear forwards;
     }
 
     .digit-key {
@@ -12098,7 +12161,7 @@
         refresh, after a week away, and while the relay is unreachable. Only what was already read
         is kept: this fetches nothing on its own, and the pane's own transcript is separate and
         untouched.</div>
-      <button class="nav-key" onclick="forgetLiveRecord()">Forget the kept record</button>
+      <button class="nav-key" onclick="forgetLiveRecord(this)">Forget the kept record</button>
       <div class="hint" id="liveKeptHint">Everything kept is on the relay too, so this costs history
         only where the relay has since pruned it. It is read again the next time a thread is
         opened.</div>
@@ -12174,10 +12237,10 @@
       <div class="conv-bubble">
         <button class="open-pane" onclick="nlmMenu(); nlmRename(nlmCurrent)"
           aria-label="Rename this notebook">Rename notebook</button>
-        <button class="open-pane arm-btn" onclick="armButton(this, 'Delete on Google?',
+        <button class="open-pane arm-btn" onclick="armButton(this, 'Deletes it on Google too',
           () => { nlmMenu(); nlmDelete(nlmCurrent); })"
           aria-label="Delete this notebook on Google">Delete notebook</button>
-        <button class="open-pane arm-btn" onclick="armButton(this, 'Delete on Google?',
+        <button class="open-pane arm-btn" onclick="armButton(this, 'Deletes it on Google too',
           () => { nlmMenu(); nlmClear(); })"
           aria-label="Delete this conversation on Google">Clear chat</button>
         <button class="open-pane" id="nlmSourceBtn" onclick="nlmShowSource(nlmSource === 'live' ? 'record' : 'live')"></button>
@@ -12327,14 +12390,14 @@
           <button class="menu-item" id="webAgentRename"
             onclick="webchatMenu(); webchatRename(webchatCurrent)"
             aria-label="Rename this chat" hidden>Rename chat</button>
-          <button class="menu-item arm-btn" onclick="armButton(this, 'Clear local history?',
+          <button class="menu-item arm-btn" onclick="armButton(this, 'Only the local history is cleared',
             () => { webchatMenu(); webchatClear(); })"
             aria-label="Clear local Web Agent history">Clear history</button>
           <!-- Withheld on a provider's own default chat, which is not a thing anybody made and not
                a thing anybody can take away. Rename is at the top of this list rather than beside
                it: one names a thread and the other ends it. -->
           <button class="menu-item danger arm-btn" id="webAgentDelete"
-            onclick="armButton(this, 'Delete this chat?', () => webchatDelete(webchatCurrent))"
+            onclick="armButton(this, '', () => webchatDelete(webchatCurrent))"
             aria-label="Delete this chat" hidden>Delete chat</button>
           <!-- The two repairs that end a browser process are under the server pill, with the
                adapter's own: what is wrong when either is wrong is never one conversation. The
@@ -12821,7 +12884,7 @@
           <!-- Another one of these, beside this one, without answering the dialog again.
                renderTermMenuState names the agent and hides it when it cannot be started. -->
           <button class="menu-item arm-btn" role="menuitem" id="menuDuplicate" hidden
-            onclick="armButton(this, 'Duplicate?', () => { closeTermMenu(); duplicatePane(); })">Duplicate</button>
+            onclick="armButton(this, '', () => { closeTermMenu(); duplicatePane(); })">Duplicate</button>
           <!-- One item for both jobs: membership is a list the user edits, so joining an existing
                conversation and naming a new one are the same sheet. renderTermMenuState writes the
                text, because "start one" and "you are in one" are different offers. -->
@@ -13096,7 +13159,7 @@
           <!-- Two taps, the same as the Esc in the nav row: one rule for one key wherever it
                appears, rather than a control that is safe in one panel and immediate in another.
                No arm key — this button is static markup and is never replaced under its own arm. -->
-          <button class="nav-key arm-btn" onclick="armButton(this, 'Esc?', () => fireKey('Escape'))">Esc</button>
+          <button class="nav-key arm-btn" onclick="armButton(this, '', () => fireKey('Escape'))">Esc</button>
           <button class="nav-key" style="grid-column:span 2" onclick="fireKey('Space')">Space</button>
           <button class="nav-key" onclick="fireKey('Enter')">⏎ Enter</button>
         </div>
@@ -22734,7 +22797,7 @@
         closeLauncherEdit();
         renderLauncher();
       };
-      if (typeof armButton === 'function') armButton(btn, 'Delete?', run); else run();
+      if (typeof armButton === 'function') armButton(btn, '', run); else run();
     }
 
     // Back to the text the relay ships: the override and the tombstone both go.
@@ -23090,6 +23153,76 @@
       return out;
     }
 
+    // --- the Restart menu ---
+    //
+    // Whether it is open, held here rather than left to the DOM: the launcher is redrawn whenever
+    // the document or the agent list moves, and a menu that shut under the pointer between opening
+    // it and choosing would be one nobody could use. The same reason armButton keys its arm.
+    let launcherRestartOpen = false;
+
+    function launcherRestartToggle(el) { launcherRestartOpen = el.open; }
+
+    function closeLauncherRestart() {
+      launcherRestartOpen = false;
+      for (const el of document.querySelectorAll('.launcher-restart[open]')) el.open = false;
+    }
+
+    // A tap anywhere else closes it, the way an arm gives itself up to a tap that lands elsewhere.
+    document.addEventListener('click', (e) => {
+      if (!launcherRestartOpen) return;
+      if (e.target.closest && e.target.closest('.launcher-restart')) return;
+      closeLauncherRestart();
+    }, true);
+
+    // Every item is armed: opening the menu is not the question, only how the three are reached.
+    // Each one cannot be taken back — a reboot drops every client's socket for a few seconds, a
+    // tunnel restart can change the address, and a herdr restart ends what runs in the panes —
+    // so the first tap arms and the second, inside the drain, fires. The words stay as they are:
+    // the drain behind them is the signal. Keyed, so the arm survives the redraw that can land
+    // between the two taps; drawn armed when it is, for the same reason.
+    function launcherRestartItemHtml(o) {
+      const armed = typeof armButtonArmed === 'function' && armButtonArmed(o.key);
+      return `<button type="button" class="launcher-restart-item arm-btn" role="menuitem"` +
+        ` data-arm-key="${o.key}" aria-label="${escapeHtml(o.label)}"` +
+        (armed ? ' data-armed="1"' : '') +
+        ` onclick="armButton(this, '', () => { closeLauncherRestart(); ${o.run}(); }, '${o.key}')"` +
+        ` title="${escapeHtml(o.title)}">${escapeHtml(o.label)}</button>`;
+    }
+
+    function launcherRestartHtml() {
+      const items = [];
+      // The tunnel apart from the relay: a reboot keeps the tunnel, and a tunnel that has gone bad
+      // is fixed without dropping anything the relay holds.
+      if (typeof tunnelRestartOffered === 'function' && tunnelRestartOffered()) {
+        items.push({key: 'restart-tunnel', label: 'Restart tunnel', run: 'restartTunnel',
+          title: 'Replace the tunnel and leave the relay running — a quick tunnel comes back on a'
+            + ' new address, and this page follows it'});
+      }
+      // The panes and the agents in them are herdr's and keep running: this restarts the process
+      // that watches them, not the work.
+      if (typeof relayRebootOffered === 'function' && relayRebootOffered()) {
+        items.push({key: 'reboot-relay', label: 'Reboot relay', run: 'rebootRelay',
+          title: 'Restart the relay in place — agents, panes and the tunnel keep running'});
+      }
+      // herdr itself: unlike the two above, this one ends what runs in the panes. The label
+      // counts the agents it would cut off mid-turn, so the second tap is made knowing it — which
+      // is why that tap sends `force`.
+      if (typeof herdrRestartOffered === 'function' && herdrRestartOffered()) {
+        const n = herdrWorkingCount();
+        items.push({key: 'restart-herdr', run: 'restartHerdr',
+          label: n ? `Restart herdr \u00b7 ${n} working` : 'Restart herdr',
+          title: 'Stop and start the herdr server — the layout comes back and agents resume their'
+            + ' sessions, but every running process and turn in progress ends'});
+      }
+      if (!items.length) return '';
+      return `<details class="section-action launcher-restart"${launcherRestartOpen ? ' open' : ''}` +
+        ' ontoggle="launcherRestartToggle(this)">' +
+        '<summary aria-label="Restart the relay, the tunnel or herdr" aria-haspopup="menu"' +
+        ' title="Restart the relay, the tunnel or herdr">Restart \u25be</summary>' +
+        '<div class="launcher-restart-items" role="menu">' +
+        items.map(launcherRestartItemHtml).join('') + '</div></details>';
+    }
+
     // Compact is two lines a tile: the kind's glyph and the name, and the badges under them. The
     // payload as prose goes — a keypad of twenty tiles is a page of scrolling at full size, and the
     // reader of one already knows what their own tiles run. See compactButton in utils.js.
@@ -23121,39 +23254,14 @@
             + '<button class="section-action" onclick="openLauncherEdit()"'
             + ' title="Edit, reorder and delete tiles" aria-label="Edit the launcher">Edit</button>'
           : '')
-        // The relay, from the one bar that is on screen on both pages. Armed like every other
-        // control here that cannot be taken back: it drops every client's socket for a few
-        // seconds. The panes and the agents in them are herdr's and keep running — this restarts
-        // the process that watches them, not the work.
+        // The relay, the tunnel and herdr, from the one bar that is on screen on both pages: one
+        // menu rather than three buttons, so the bar keeps room for the controls used every day.
         //
         // Before + New and not after it: + New is the right-hand button of this bar whatever else
         // is drawn, because an add button that moves once the section has something in it is the
         // shape of a button people stop finding. Every other control here is conditional, and this
         // is the one position that has to be fixed.
-        // The tunnel beside it and not inside it: a reboot keeps the tunnel, and a tunnel that has
-        // gone bad is fixed without dropping anything the relay holds.
-        + (typeof tunnelRestartOffered === 'function' && tunnelRestartOffered()
-          ? '<button class="section-action" data-arm-key="restart-tunnel"'
-            + ' onclick="armButton(this, \'Restart?\', restartTunnel, \'restart-tunnel\')"'
-            + ' title="Replace the tunnel and leave the relay running — a quick tunnel comes back on'
-            + ' a new address, and this page follows it"'
-            + ' aria-label="Restart the tunnel">Restart Tunnel</button>'
-          : '')
-        + (typeof relayRebootOffered === 'function' && relayRebootOffered()
-          ? '<button class="section-action" data-arm-key="reboot-relay"'
-            + ' onclick="armButton(this, \'Reboot?\', rebootRelay, \'reboot-relay\')"'
-            + ' title="Restart the relay in place — agents, panes and the tunnel keep running"'
-            + ' aria-label="Reboot the relay">Reboot Relay</button>'
-          : '')
-        // herdr itself: unlike the two above, this one ends what runs in the panes. The arm label
-        // counts the agents it would cut off mid-turn.
-        + (typeof herdrRestartOffered === 'function' && herdrRestartOffered()
-          ? '<button class="section-action" data-arm-key="restart-herdr"'
-            + ' onclick="armButton(this, herdrRestartArmLabel(), restartHerdr, \'restart-herdr\')"'
-            + ' title="Stop and start the herdr server — the layout comes back and agents resume'
-            + ' their sessions, but every running process and turn in progress ends"'
-            + ' aria-label="Restart herdr">Restart herdr</button>'
-          : '')
+        + launcherRestartHtml()
         + '<button class="section-action" onclick="openLauncherNew()"'
         + ' title="Add a tile" aria-label="Add a launcher tile">+ New</button>'
         + '</div>'
@@ -23801,7 +23909,8 @@
         + ` aria-label="Move ${escapeHtml(tile.label)} down"${last ? ' disabled' : ''}>↓</button>`
         + (launcherBotSeeded(tile)
           ? ''
-          : `<button class="ql-del" onclick="launcherDelete('${escapeHtml(tile.id)}')"`
+          : `<button class="ql-del" data-arm-key="ql-del:${escapeHtml(tile.id)}"`
+            + ` onclick="launcherDelete('${escapeHtml(tile.id)}', this)"`
             + ` aria-label="Delete ${escapeHtml(tile.label)}">✕</button>`)
         + `</div>`;
     }
@@ -23967,7 +24076,7 @@
       // prompt into each, which is not something to do on a thumb brushing a list. armButton and
       // not armFire: this button is drawn by a render and has no id worth having, and armFire is
       // keyed by one against a table of labels.
-      armButton(btn, 'Start?', () => {
+      armButton(btn, '', () => {
         const to = at.project_id, name = at.name;
         closeLauncherEdit();
         launcherPressIn(at.id, to, name);
@@ -24001,16 +24110,17 @@
       launcherDrawList();
     }
 
-    function launcherDelete(id) {
+    function launcherDelete(id, btn) {
       const tile = loadLauncher().find(t => t.id === id);
       if (!tile) return;
-      // Asked, because it is the one action here that cannot be undone by pressing the other
+      // Armed, because it is the one action here that cannot be undone by pressing the other
       // arrow — and the tile may have been written on another browser, where it still is until
-      // this delete syncs.
-      if (!confirm(`Delete "${tile.label}"?`)) return;
-      removeLauncherTile(id);
-      renderLauncher();
-      launcherDrawList();
+      // this delete syncs. Keyed by the tile, so the list redrawing between taps keeps the arm.
+      armButton(btn, '', () => {
+        removeLauncherTile(id);
+        renderLauncher();
+        launcherDrawList();
+      }, 'ql-del:' + id);
     }
 
     // --- the form ---
@@ -24240,7 +24350,7 @@
         // refuses it either way; a button that is refused after the confirm is worse than no
         // button. A bot the user made is deleted like anything else they made.
         + (launcherEditing && !launcherBotSeeded(d)
-          ? `<button class="ql-secondary" onclick="launcherDelete('${escapeHtml(launcherEditing)}')">Delete</button>`
+          ? `<button class="ql-secondary" onclick="launcherDelete('${escapeHtml(launcherEditing)}', this)">Delete</button>`
           : '<button class="ql-secondary" onclick="launcherDrawList()">Cancel</button>')
         + '<button id="qlSave" class="ql-primary" onclick="launcherSaveTile()">'
         + (launcherIsBot(d) ? 'Save bot' : 'Save tile') + '</button>'
@@ -29425,7 +29535,7 @@ function convWebModeOf(conv) {
     function convArmEsc(btn, key) {
       const live = agents.find(x => convMemberKey(x) === key);
       if (!ws || !live || live.status !== 'working') return;
-      armButton(btn, 'Esc?', () => {
+      armButton(btn, '', () => {
         ws.send(JSON.stringify(Object.assign({type: 'send_keys', keys: ['Escape']}, paneAddr(live))));
         showToast(`Sent Escape to ${paneLabel(live)}`, 'info');
         if (typeof burstPoll === 'function') burstPoll();
@@ -31330,7 +31440,7 @@ function webchatRoomActions(conv) {
     + (typeof archiveBtnHtml === 'function' ? archiveBtnHtml(conv.id, archived, name) : '')
     + ((archived || studio) && typeof purgeConversation === 'function'
       ? `<button class="conv-purge arm-btn" data-conv-id="${escapeHtml(conv.id)}"`
-        + ` onclick="event.stopPropagation(); armButton(this, 'Delete for good?',`
+        + ` onclick="event.stopPropagation(); armButton(this, '',`
         + ` () => purgeConversation(this.dataset.convId))"`
         + ` aria-label="Delete ${escapeHtml(name)}, its sessions and everything it recorded">`
         + `Delete</button>`
@@ -31377,7 +31487,7 @@ function webchatCard(session, provider, compact) {
   const actions = `<button class="archive-btn" onclick="event.stopPropagation(); webchatRename(this.closest('.webchat-card').dataset.session)"`
     + ` aria-label="Rename ${escapeHtml(label)}">Rename</button>`
     + (session.default === false
-      ? `<button class="end-btn arm-btn" onclick="event.stopPropagation(); armButton(this, 'Delete local chat?',`
+      ? `<button class="end-btn arm-btn" onclick="event.stopPropagation(); armButton(this, '',`
         + ` () => webchatDelete(this.closest('.webchat-card').dataset.session))" aria-label="Delete ${escapeHtml(label)}">Delete</button>`
       : '');
   // The last thing said, on its own line under the name. Withheld when the row is compact and when
@@ -32173,7 +32283,7 @@ function webchatServerHtml(prefix, browser) {
     + `${escapeHtml(server.why)}</div>`
     + (can
       ? `<button class="menu-item danger arm-btn" id="${prefix}Restart"`
-        + " onclick=\"armButton(this, 'Restart the adapter? Any turn it is running is lost.',"
+        + " onclick=\"armButton(this, 'Any turn the adapter is running is lost',"
         + ' () => webchatServerRestart())"'
         + ' aria-label="Restart the web-agent adapter">Restart adapter</button>'
       : '')
@@ -32190,9 +32300,9 @@ function webchatBrowserHtml(prefix, provider) {
   const name = webchatSession(webchatCurrent)?.provider || '';
   const rungs = [
     ['restart', 'BrowserRestart', 'Restart browser', 'restart',
-      `Restart ${name}'s browser? Every tab on this profile closes.`],
+      'Every tab on this profile closes'],
     ['browser', 'BrowserStop', 'Stop browser', 'browser_stop',
-      `Stop ${name}'s browser? Every tab on this profile closes.`],
+      'Every tab on this profile closes'],
   ].filter(([can]) => name && webchatCan(can));
   if (!rungs.length) return '';
   const dot = provider.state === 'bad' ? 'var(--red)'
@@ -32762,8 +32872,8 @@ function webchatRosterHtml(conv) {
   const providers = webchatRosterProviders(conv);
   if (!providers.length) return '';
   const rungs = [['reconnect', 'Reconnect', 'reconnect', ''],
-    ['restart', 'Restart browser', 'restart', "Restart %s's browser? Every tab on this profile closes."],
-    ['browser', 'Stop browser', 'browser_stop', "Stop %s's browser? Every tab on this profile closes."]];
+    ['restart', 'Restart browser', 'restart', 'Every tab on this profile closes'],
+    ['browser', 'Stop browser', 'browser_stop', 'Every tab on this profile closes']];
   const rows = providers.map(provider => {
     const ready = WEBCHAT_READY[provider.ready] || WEBCHAT_READY.up;
     const label = provider.label || provider.id;
@@ -32773,7 +32883,7 @@ function webchatRosterHtml(conv) {
       // ends no process. The two that do are armed like every other destructive control here.
       return arm
         ? `<button class="conv-drop arm-btn" onclick="armButton(this, `
-          + `${escapeHtml(JSON.stringify(arm.replace('%s', label)))}, () => ${call})" `
+          + `${escapeHtml(JSON.stringify(arm))}, () => ${call})" `
           + `aria-label="${escapeHtml(name)} for ${escapeHtml(label)}">${escapeHtml(name)}</button>`
         : `<button class="conv-open" onclick="${call}" `
           + `aria-label="Reopen ${escapeHtml(label)}'s tab">${escapeHtml(name)}</button>`;
@@ -32788,7 +32898,7 @@ function webchatRosterHtml(conv) {
   // request *to* it, so a process that has stopped answering cannot be asked to replace itself.
   const server = webchatCan('server')
     ? `<button class="conv-drop arm-btn" onclick="armButton(this, `
-      + `'Restart the adapter? Any turn it is running is lost.', () => webchatServerRestart())" `
+      + `'Any turn the adapter is running is lost', () => webchatServerRestart())" `
       + `aria-label="Restart the web-agent adapter">Restart adapter</button>`
     : '';
   return `<div class="menu-label conv-roster-label">Providers${server
@@ -32901,9 +33011,9 @@ function convBrowserHtml(conv) {
   const handle = providers[0].id;
   const rungs = [
     ['restart', 'BrowserRestart', 'Restart browser', 'restart',
-      'Restart the browser? Every tab on this profile closes.'],
+      'Every tab on this profile closes'],
     ['browser', 'BrowserStop', 'Stop browser', 'browser_stop',
-      'Stop the browser? Every tab on this profile closes.'],
+      'Every tab on this profile closes'],
   ].filter(([can]) => webchatCan(can));
   // A profile somebody else's Chrome is holding is the one state where restarting is the wrong
   // advice, and a browser that is down is not a fault -- the next message brings it up. Said in
@@ -34317,7 +34427,7 @@ function nlmCard(notebook) {
     + `<span class="name">${escapeHtml(notebook.title || 'Untitled')}</span>`
     + `<button class="archive-btn" onclick="event.stopPropagation(); nlmRename(this.closest('.nlm-card').dataset.notebook)"`
     + ` aria-label="Rename ${escapeHtml(notebook.title || 'notebook')}">Rename</button>`
-    + `<button class="end-btn arm-btn" onclick="event.stopPropagation(); armButton(this, 'Delete on Google?',`
+    + `<button class="end-btn arm-btn" onclick="event.stopPropagation(); armButton(this, 'Deletes it on Google too',`
     + ` () => nlmDelete(this.closest('.nlm-card').dataset.notebook))"`
     + ` aria-label="Delete ${escapeHtml(notebook.title || 'notebook')}">Delete</button></div>`
     + `<div class="conversation-count">${count} ${count === 1 ? 'source' : 'sources'}</div>`
@@ -34575,7 +34685,7 @@ function nlmSourceHtml(source) {
     + `${escapeHtml(source.url || '')}`
     + `<button class="archive-btn" onclick="nlmSourceRename('${escapeHtml(source.id)}')"`
     + ` aria-label="Rename this source">Rename</button>`
-    + `<button class="end-btn arm-btn" onclick="armButton(this, 'Remove from Google?',`
+    + `<button class="end-btn arm-btn" onclick="armButton(this, 'Removes it on Google too',`
     + ` () => nlmSourceDelete('${escapeHtml(source.id)}'))" aria-label="Remove source">Remove</button></div>`;
 }
 
@@ -34588,7 +34698,7 @@ function nlmNoteHtml(note) {
     + ` aria-label="Edit this note">Edit</button>`
     + `<button class="archive-btn" onclick="nlmSave('note', '${escapeHtml(note.id)}')"`
     + ` aria-label="Save this note as a file in the project">Save file</button>`
-    + `<button class="end-btn arm-btn" onclick="armButton(this, 'Delete on Google?',`
+    + `<button class="end-btn arm-btn" onclick="armButton(this, 'Deletes it on Google too',`
     + ` () => nlmNoteDelete('${escapeHtml(note.id)}'))" aria-label="Delete this note">Delete</button></div>`;
 }
 
@@ -35283,11 +35393,13 @@ function nlmSourceDelete(source) {
       } catch (e) { /* nothing to do about it, and nothing lost that cannot be re-read */ }
     }
 
-    // The Settings button. Confirmed, because it is a delete — and worded as what it costs, which
-    // is nothing except where the relay has pruned what this browser still had.
-    async function forgetLiveRecord() {
-      if (!confirm('Forget the relay record kept on this device? It is read again the next time a '
-        + 'thread is opened, except for anything the relay has since pruned.')) return;
+    // The Settings button. Armed, because it is a delete; the hint under the button says what it
+    // costs, which is nothing except where the relay has pruned what this browser still had.
+    function forgetLiveRecord(btn) {
+      armButton(btn, '', forgetLiveRecordNow);
+    }
+
+    async function forgetLiveRecordNow() {
       await convLiveForget();
       if (typeof renderConvView === 'function') renderConvView();
       if (typeof renderConvAnalytics === 'function') renderConvAnalytics();
@@ -36923,7 +37035,7 @@ function nlmSourceDelete(source) {
         // strip is redrawn on the poll and an arm that did not survive that redraw could never be
         // reached a second time. Still armed — unpairing is not undoable.
         (ok ? '' : menuItemHtml({cls: 'unpair', key: pair.id, arm: 'unpair-stale:' + pair.id,
-          rest: 'Unpair\u2026', ask: 'Unpair?', fire: 'unpair()'})) +
+          rest: 'Unpair\u2026', fire: 'unpair()'})) +
         (ok ? '' : `<span class="pair-reason">${escapeHtml(health.reason)}</span>`);
       strip.style.display = 'flex';
       // Edit and Unpair live in the gear menu: the strip is for the two controls used while
@@ -36931,7 +37043,7 @@ function nlmSourceDelete(source) {
       menu.innerHTML =
         `<button class="menu-item" role="menuitem" onclick="closeTermMenu(); openPairDialog(activePane)">Edit pair</button>` +
         `<button class="menu-item danger arm-btn" role="menuitem"` +
-        ` onclick="armButton(this, 'Unpair?', unpair)">Unpair…</button>`;
+        ` onclick="armButton(this, '', unpair)">Unpair…</button>`;
     }
 
     // Renames the pane in herdr itself, not just in this browser. A frontend-only alias would
@@ -38073,7 +38185,7 @@ function nlmSourceDelete(source) {
     <span class="term-glyph" aria-hidden="true">$</span>
     <div class="info"><div class="project">${paneChrome(s)}${host}</div><div class="meta">${cwd}</div></div>
     ${endBtnHtml({cls: 'end-btn', key: 'end-pane:' + s.pane_id, pane: s.pane_id, stop: true,
-                  rest: 'Close', ask: 'Close?', going: 'Closing…',
+                  rest: 'Close', going: 'Closing…',
                   aria: 'Close ' + paneLabel(s), fire: `endPane('${s.pane_id}')`})}
     <span style="color:var(--muted);font-size:1.2rem" aria-hidden="true">›</span>
   </div>`;
@@ -38179,7 +38291,6 @@ function nlmSourceDelete(source) {
       // intact, and the row it leaves behind is the way back. A shell is the one caller with no
       // seat to come back to, so it passes Close.
       const rest = o.rest || 'Pause';
-      const ask = o.ask || 'Pause?';
       const going = o.going || 'Pausing…';
       if (pending) {
         return `<button class="${o.cls} end-going" disabled` +
@@ -38188,24 +38299,23 @@ function nlmSourceDelete(source) {
           `>${escapeHtml(going)}</button>`;
       }
       return `<button class="${o.cls} arm-btn" data-arm-key="${escapeHtml(key)}"` +
-        (armed ? ` data-armed="1" data-arm-label="${escapeHtml(rest)}"` : '') +
+        (armed ? ' data-armed="1"' : '') +
         (o.data || '') +
         ` aria-label="${escapeHtml(o.aria)}"` +
-        ` onclick="${o.stop ? 'event.stopPropagation();' : ''}armButton(this, '${ask}', ` +
-        `() => ${o.fire}, this.dataset.armKey)">${escapeHtml(armed ? ask : rest)}</button>`;
+        ` onclick="${o.stop ? 'event.stopPropagation();' : ''}armButton(this, '', ` +
+        `() => ${o.fire}, this.dataset.armKey)">${escapeHtml(rest)}</button>`;
     }
 
     function archiveBtnHtml(id, archived, name) {
       const key = `archive:${id}`, rest = archived ? 'Unarchive' : 'Archive';
-      const ask = archived ? 'Unarchive?' : 'Archive?';
       const fire = archived ? 'unarchiveConversation' : 'archiveConversation';
       const armed = typeof armButtonArmed === 'function' && armButtonArmed(key);
       return `<button class="archive-btn arm-btn" data-arm-key="${escapeHtml(key)}"` +
         ` data-conv-id="${escapeHtml(id)}"` +
-        (armed ? ` data-armed="1" data-arm-label="${rest}"` : '') +
-        ` onclick="event.stopPropagation();armButton(this, '${ask}', ` +
+        (armed ? ' data-armed="1"' : '') +
+        ` onclick="event.stopPropagation();armButton(this, '', ` +
         `() => ${fire}(this.dataset.convId), this.dataset.armKey)"` +
-        ` aria-label="${rest} ${escapeHtml(name)}">${armed ? ask : rest}</button>`;
+        ` aria-label="${rest} ${escapeHtml(name)}">${rest}</button>`;
     }
 
     const CONV_COMPACT_KEY = 'herdr_conv_compact';
@@ -38352,7 +38462,7 @@ function nlmSourceDelete(source) {
         // steps — see purgeConversation for why that is the safeguard rather than a second dialog.
         (archived
           ? `<button class="conv-purge arm-btn" data-conv-id="${escapeHtml(r.c.id)}"` +
-            ` onclick="event.stopPropagation(); armButton(this, 'Delete for good?',` +
+            ` onclick="event.stopPropagation(); armButton(this, '',` +
             ` () => purgeConversation(this.dataset.convId))"` +
             ` aria-label="Delete ${escapeHtml(r.c.name)}, its sessions and everything it recorded">` +
             `Delete</button>`
@@ -38364,7 +38474,7 @@ function nlmSourceDelete(source) {
         (r.liveNames.length
           // Ending… as soon as any member of it has a send in flight: the conversation is the
           // thing being ended, and one pane still on its way out is not a second question.
-          ? endBtnHtml({cls: 'end-btn', key: 'end-conversation:' + r.c.id, ask: 'Pause all?',
+          ? endBtnHtml({cls: 'end-btn', key: 'end-conversation:' + r.c.id,
               panes: r.livePanes,
               stop: true, data: ` data-conv-id="${escapeHtml(r.c.id)}"`,
               aria: `Pause every session in ${r.c.name}, keeping the transcripts`,
@@ -38641,7 +38751,7 @@ function nlmSourceDelete(source) {
           // that is drawn and then refuses is a button somebody presses.
           (on && !respawnWebRoom(m.aid)
             ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
-            ` onclick="armButton(this, 'Reset?', () => convResetMember(this.dataset.key))"` +
+            ` onclick="armButton(this, '', () => convResetMember(this.dataset.key))"` +
             ` aria-label="Clear this member's session and start it over in the same pane">` +
             `Reset</button>` : '') +
           // One control, both halves of a row's life: a live member is ended first and a paused
@@ -38654,7 +38764,7 @@ function nlmSourceDelete(source) {
           // above the items, where the toast that used to carry it could not be read twice.
           restartMenuHtml(m.aid, rec, on) +
           `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.aid)}"` +
-          ` onclick="armButton(this, 'Remove?', () => convRemoveMember(this.dataset.key))"` +
+          ` onclick="armButton(this, '', () => convRemoveMember(this.dataset.key))"` +
           ` aria-label="Remove this member from the conversation">Remove</button>` +
           // Every live member, not only whichever one the header's button would pick: the header
           // opens the first, and a conversation of four is exactly where that is the wrong one.
@@ -38693,12 +38803,12 @@ function nlmSourceDelete(source) {
         : '';
       return `<div class="conv-roster">${rows}${arb}${web}<div class="conv-roster-actions">` +
         // Destructive action first, followed by the two ways to preserve the grouping, then edits.
-        `<button class="conv-del arm-btn" onclick="armButton(this, 'Delete?', deleteConversation)"` +
+        `<button class="conv-del arm-btn" onclick="armButton(this, '', deleteConversation)"` +
         ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
         // Beside Delete because both end something, and apart from it in colour because they end
         // very different things: Delete destroys the record, Pause stops the sessions and leaves
         // it.
-        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id, ask: 'Pause all?',
+        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id,
           rest: 'Pause all', going: 'Pausing…',
           panes: Array.from(live.values()).map(a => a.pane_id),
           aria: 'Pause every session in this conversation, keeping the transcripts',
@@ -38708,10 +38818,10 @@ function nlmSourceDelete(source) {
         // grants web providers, for the reason the row's own Reset is: every member of one holds a
         // binding brief that a clear would throw away.
         (convWebRoomOf(convViewId) ? '' :
-          `<button class="conv-reset arm-btn" onclick="armButton(this, 'Reset all?', () => convResetAll(convViewId))"` +
+          `<button class="conv-reset arm-btn" onclick="armButton(this, '', () => convResetAll(convViewId))"` +
           ` aria-label="Clear every session in this conversation and start each one over">` +
           `Reset all</button>`) +
-        `<button class="conv-restart arm-btn" onclick="armButton(this, 'Restart all?', () => convRestartAll(convViewId))"` +
+        `<button class="conv-restart arm-btn" onclick="armButton(this, '', () => convRestartAll(convViewId))"` +
         ` aria-label="Pause every session in this conversation and start each one again">` +
         `Restart all</button>` +
         `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
@@ -38720,7 +38830,7 @@ function nlmSourceDelete(source) {
         // is exactly what somebody needs when a row is drawn in a place they did not expect.
         `<button onclick="openConvIds()" aria-label="Show each member's agent id and pane">` +
         `List</button>` +
-        `<button class="arm-btn" onclick="armButton(this, 'Duplicate?', duplicateConversation)"` +
+        `<button class="arm-btn" onclick="armButton(this, '', duplicateConversation)"` +
         ` aria-label="Copy this conversation so panes can be added without changing this one">` +
         `Duplicate</button>` +
         `<button onclick="renameConversation()">Rename</button>` +
@@ -38875,9 +38985,9 @@ function nlmSourceDelete(source) {
       const armed = typeof armButtonArmed === 'function' && armButtonArmed(o.arm);
       return `<button class="${o.cls} arm-btn" data-key="${escapeHtml(o.key)}"` +
         ` data-arm-key="${escapeHtml(o.arm)}"` +
-        (armed ? ` data-armed="1" data-arm-label="${escapeHtml(o.rest)}"` : '') +
-        ` onclick="armButton(this, '${o.ask}', () => ${o.fire}, this.dataset.armKey)">` +
-        `${escapeHtml(armed ? o.ask : o.rest)}</button>`;
+        (armed ? ' data-armed="1"' : '') +
+        ` onclick="armButton(this, '', () => ${o.fire}, this.dataset.armKey)">` +
+        `${escapeHtml(o.rest)}</button>`;
     }
 
     function restartMenuHtml(key, rec, on) {
@@ -38894,15 +39004,15 @@ function nlmSourceDelete(source) {
         `<div class="conv-menu-items">` +
         (note ? `<p class="conv-menu-note">${escapeHtml(note)}</p>` : '') +
         (again ? menuItemHtml({cls: 'conv-restart', key: key, arm: 'restart-member:' + key,
-          rest: on ? 'Restart \u2014 ends this session first' : 'Restart', ask: 'Restart?',
+          rest: on ? 'Restart \u2014 ends this session first' : 'Restart',
           fire: 'convRestart(this.dataset.key)'}) : '') +
         (again && resumableSession(key) ? menuItemHtml({cls: 'conv-resume', key: key,
           arm: 'restart-resume:' + key,
           rest: on ? 'Restart original session \u2014 ends this one first'
             : 'Restart original session',
-          ask: 'Reopen it?', fire: 'convRestart(this.dataset.key, true)'}) : '') +
+          fire: 'convRestart(this.dataset.key, true)'}) : '') +
         (other ? menuItemHtml({cls: 'conv-swap', key: key, arm: 'restart-as:' + key,
-          rest: 'Restart as\u2026', ask: 'Restart as?',
+          rest: 'Restart as\u2026',
           fire: 'convStartAs(this.dataset.key)'}) : '') +
         `</div></details>`;
     }
@@ -40068,7 +40178,7 @@ function nlmSourceDelete(source) {
         `aria-label="Edit the pair ${escapeHtml(pair.name)}">Edit pair · ${escapeHtml(pair.name)}</button>` +
         `<button class="menu-item danger arm-btn" role="menuitem" ` +
         `data-pane="${escapeHtml(to.pane_id)}" ` +
-        `onclick="armButton(this, 'Unpair?', () => unpair(this.dataset.pane))" ` +
+        `onclick="armButton(this, '', () => unpair(this.dataset.pane))" ` +
         `aria-label="Unpair ${name}">Unpair…</button>`;
     }
 
@@ -43681,10 +43791,10 @@ function studioCardHtml() {
       // not load, and half of what it builds (the data-key, the escaping) has nothing here to do.
       const escArmed = typeof armButtonArmed === 'function' && armButtonArmed('qa-esc');
       const esc = `<button class="qa-esc arm-btn" data-arm-key="qa-esc"` +
-        (escArmed ? ' data-armed="1" data-arm-label="Esc"' : '') +
-        ` onclick="armButton(this, 'Esc?', () => fireKey('Escape'), this.dataset.armKey)"` +
+        (escArmed ? ' data-armed="1"' : '') +
+        ` onclick="armButton(this, '', () => fireKey('Escape'), this.dataset.armKey)"` +
         ` title="Send Escape to this pane (tap twice)"` +
-        ` aria-label="Send Escape to this pane, tap twice">${escArmed ? 'Esc?' : 'Esc'}</button>`;
+        ` aria-label="Send Escape to this pane, tap twice">Esc</button>`;
       // Source order is the column order now that the edges are grid tracks rather than absolute:
       // left switches, arrows, right group.
       // Offered only on a pane that is in a conversation, for the reason Summary is conditional:
@@ -45268,7 +45378,7 @@ function studioCardHtml() {
     function arbSessionActionsHtml() {
       return '<div class="arb-part arb-danger">' +
         '<button type="button" class="arb-btn arm-btn"' +
-        ` onclick="armButton(this, 'Re-brief?', () => arbSessionAction('arb_reinit'))">` +
+        ` onclick="armButton(this, '', () => arbSessionAction('arb_reinit'))">` +
         'Re-brief the arbitrator</button>' +
         '<button type="button" class="arb-btn arm-btn warn" data-arm-key="end-session"' +
         ` onclick="arbEndSession(this)">` +
@@ -45309,8 +45419,8 @@ function studioCardHtml() {
       }).map(s => s.id);
     }
 
-    // One arm for a session with nothing under it; two for one with children, where the second
-    // says what ending it leaves behind. Shared with the Commander's End, which asks the same
+    // One arm, and for a session with children a toast with it that says what ending it leaves
+    // behind. Shared with the Commander's End, which asks the same
     // question about the same tree.
     function armEndSession(btn, id, send) {
       const running = arbDescendantsRunning(id);
@@ -45319,8 +45429,11 @@ function studioCardHtml() {
       // element identity alone would be lost with it — the second tap would re-ask rather than
       // end. `data-arm-key` on the markup is the other half, which is what lets the label be put
       // back on whichever button is standing there when the arm expires.
-      armButton(btn, running.length ? `Leave ${running.length} running?` : 'End session?',
-        () => send(!!running.length), 'end-session');
+      // The button keeps its words while armed, so what ending leaves behind is said beside it.
+      if (running.length && !(typeof armButtonArmed === 'function' && armButtonArmed('end-session'))) {
+        showToast(`Ending this leaves ${running.length} running`, 'info');
+      }
+      armButton(btn, '', () => send(!!running.length), 'end-session');
     }
 
     function arbEndSession(btn) {
@@ -47967,7 +48080,7 @@ function studioCardHtml() {
       const s = cmdSessionHere();
       const m = s && (s.members || []).find(x => x.id === member);
       if (!m) return;
-      armButton(btn, 'Remove?', () =>
+      armButton(btn, '', () =>
         arbSend({type: 'cmd_edit', session: s.id, members: cmdRosterOf(s, member)}),
         'cmd-drop-' + member);
     }
@@ -48058,7 +48171,7 @@ function studioCardHtml() {
     function cmdRebrief(btn) {
       const s = cmdSessionHere();
       if (!s) return;
-      armButton(btn, 'Re-brief?', () => arbSend({type: 'cmd_rebrief', session: s.id}), 'cmd-rebrief');
+      armButton(btn, '', () => arbSend({type: 'cmd_rebrief', session: s.id}), 'cmd-rebrief');
     }
 
     function cmdEnd(btn) {
@@ -50001,7 +50114,7 @@ function studioCardHtml() {
       const id = ccPlanPicked(owner);
       if (!id) { showToast('Pick the row to drop.'); return; }
       const why = ccPlanText(owner) || 'dropped from the Command Center';
-      armButton(btn, 'Drop ' + id + '?', () => ccPlanEdit('drop', {id, why}, owner));
+      armButton(btn, '', () => ccPlanEdit('drop', {id, why}, owner));
     }
 
     // The row is in this session's queue whichever direction it was drawn under: `tasks_out`
@@ -50017,7 +50130,7 @@ function studioCardHtml() {
       };
       // Sending again costs the session it lands on a step and may run the work twice, which is
       // exactly what the flag is uncertain about. Marking it delivered takes nothing back.
-      if (resend) armButton(btn, 'Send it again?', send); else send();
+      if (resend) armButton(btn, '', send); else send();
     }
 
     function ccListHtml(title, note, rows, action) {
@@ -50353,7 +50466,7 @@ function studioCardHtml() {
       const s = ccPickedSession();
       if (!s) return;
       const locked = s.locked === false;
-      armButton(btn, locked ? 'Lock roster?' : 'Unlock roster?', () =>
+      armButton(btn, '', () =>
         arbSend({type: s.kind === 'commander' ? 'cmd_edit' : 'arb_edit',
                  session: s.id, locked}), 'cc-lock');
     }
@@ -50377,7 +50490,7 @@ function studioCardHtml() {
     function ccRebrief(btn) {
       const id = ccPick;
       const type = ccWire('rebrief');
-      if (id) armButton(btn, 'Re-brief?', () => arbSend({type, session: id}), 'cc-rebrief');
+      if (id) armButton(btn, '', () => arbSend({type, session: id}), 'cc-rebrief');
     }
 
     function ccEnd(btn) {
@@ -50424,7 +50537,7 @@ function studioCardHtml() {
       if (text === String(s.scope || '')) { showToast('That is already the scope.'); return; }
       // Armed, because it changes what a running group is for and its members are told so.
       const id = ccPick;
-      armButton(btn, 'Point it at that?',
+      armButton(btn, '',
         () => arbSend({type: 'cmd_edit', session: id, scope: text}), 'cc-scope');
     }
 
@@ -51262,14 +51375,19 @@ function studioCardHtml() {
 
     // `key` is for a control whose enclosing card is redrawn by the poll. Its element changes,
     // but its action does not; matching that action lets the second tap reach the same arm.
+    // The button keeps its words: the drain behind them is the whole signal. A `label` is a note
+    // for what the button cannot say in its own words — "Every tab on this profile closes" — and
+    // shows as a toast on the first tap, never in place of the button's text.
     function armButton(btn, label, run, key) {
       if ((key && armedKey === key) || (!key && armedEl === btn)) { disarmButton(); run(); return; }
       disarmButton();
       armedEl = btn;
       armedKey = key || '';
-      btn.dataset.armLabel = btn.textContent;
       btn.dataset.armed = '1';
-      btn.textContent = label;
+      // The drain is drawn off `.arm-btn`, so a button whose markup never asked for it gets it for
+      // as long as it is armed — every armed button looks armed, whichever render drew it.
+      if (!btn.classList.contains('arm-btn')) { btn.classList.add('arm-btn'); btn.dataset.armClass = '1'; }
+      if (label && typeof showToast === 'function') showToast(label);
       // Disarms itself rather than waiting to be pressed again — the same reason the header's does.
       armedTimer = setTimeout(disarmButton, ARM_MS);
     }
@@ -51282,7 +51400,7 @@ function studioCardHtml() {
       // The element that was armed, and — for a keyed arm — whatever is standing in its place now.
       // A poll redraw replaces the node between the two taps, so by the time the arm expires the
       // one on screen is not the one this holds, and clearing only `armedEl` leaves a detached
-      // node tidied and a live button still saying "Pause all?" with nothing behind it.
+      // node tidied and a live button still draining with nothing behind it.
       // Read off the dataset rather than matched in a selector: the arm key is whatever the
       // caller had to name — a member's agent id, a conversation id, a label someone typed — and
       // a selector built out of one throws on the character it did not expect, which loses the
@@ -51291,10 +51409,9 @@ function studioCardHtml() {
         ? Array.from(document.querySelectorAll('[data-arm-key]'))
           .find(el => el.dataset.armKey === key) : null;
       for (const el of new Set([btn, live])) {
-        if (!el || !el.dataset || !el.dataset.armLabel) continue;
-        el.textContent = el.dataset.armLabel;
+        if (!el || !el.dataset || !el.dataset.armed) continue;
         delete el.dataset.armed;
-        delete el.dataset.armLabel;
+        if (el.dataset.armClass) { el.classList.remove('arm-btn'); delete el.dataset.armClass; }
       }
     }
 
@@ -51331,11 +51448,10 @@ function studioCardHtml() {
     // The danger shortcuts in the palette keep the longer window — those are picked off a list
     // that has to be read first, not aimed at a button already under the thumb.
     const SHORTCUT_ARM_MS = 8000;
-    const ARM_LABELS = { clsBtn: 'CLS', quitBtn: 'QUIT' };
     const armedAt = { clsBtn: 0, quitBtn: 0 };
 
-    // The two-tap arm, once. The label says what the second tap will do, because a button that
-    // only changes colour when armed does not say what it is armed to send.
+    // The two-tap arm, once. The button keeps its label — it already says what the second tap
+    // sends — and the fill draining behind it says how long that tap has.
     function armFire(id, fire) {
       if (!ws || !activePane) return;
       const btn = document.getElementById(id);
@@ -51346,7 +51462,6 @@ function studioCardHtml() {
       }
       armedAt[id] = Date.now();
       btn.dataset.armed = '1';
-      btn.textContent = ARM_LABELS[id] + '?';
       // Disarms itself rather than waiting to be pressed again: a button left armed across a
       // pocket is the accident this exists to stop.
       setTimeout(() => { if (Date.now() - armedAt[id] >= FIRE_ARM_MS) disarmFire(id); }, FIRE_ARM_MS);
@@ -51356,7 +51471,6 @@ function studioCardHtml() {
       armedAt[id] = 0;
       const btn = document.getElementById(id);
       delete btn.dataset.armed;
-      btn.textContent = ARM_LABELS[id];
     }
 
     // The other two-tap arm — the one for buttons a render drew — is in arm.js. It is loaded by
@@ -51699,19 +51813,19 @@ function studioCardHtml() {
       }
       document.getElementById('ctrlPresets').style.display = tab === 'ctrl' ? 'grid' : 'none';
       // Repainted on every entry, not filled once like the digits: a preset can be sitting armed
-      // as "Confirm?" from a previous visit, and the pad has to show that rather than a stale label.
+      // from a previous visit, and the pad has to show that rather than a stale resting state.
       if (tab === 'ctrl') paintCtrlPresets();
     }
 
     // The presets exist in two places \u2014 the keys pad's ^C tab and the terminal's own dock \u2014
     // so the armed state is painted into both from one function rather than into whichever one
     // the tap came from. Painting both also means the disarm below actually repaints: the old
-    // toggle-twice trick left "Confirm?" on screen, because a toggle only paints an empty grid.
+    // toggle-twice trick left the arm on screen, because a toggle only paints an empty grid.
     function paintCtrlPresets() {
       const html = CTRL_PRESETS.map(p => {
         const armed = p.label === ctrlConfirm;
         const cls = p.danger ? (armed ? 'ctrl-key confirm' : 'ctrl-key danger') : 'ctrl-key';
-        return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${armed ? 'Confirm?' : p.label}</button>`;
+        return `<button class="${cls}" onclick="pressCtrl('${p.label}')">${p.label}</button>`;
       }).join('');
       ['ctrlPresets', 'ctrlDockGrid'].forEach(id => { document.getElementById(id).innerHTML = html; });
     }
@@ -51973,15 +52087,10 @@ function studioCardHtml() {
       return !!((typeof startOptions !== 'undefined' && startOptions) || {}).herdr_restart;
     }
 
-    // How many local agents a restart would cut off mid-turn. Shown in the arm label, so the
+    // How many local agents a restart would cut off mid-turn. Shown in the item's label, so the
     // second tap is made knowing it — which is why that tap sends `force`.
     function herdrWorkingCount() {
       return (agents || []).filter(a => !a.remote && a.status === 'working').length;
-    }
-
-    function herdrRestartArmLabel() {
-      const n = herdrWorkingCount();
-      return n ? `Restart? ${n} working` : 'Restart?';
     }
 
     function restartHerdr() {
@@ -52067,7 +52176,7 @@ function studioCardHtml() {
             : `runShortcut(${c.idx})`;
         const del = paletteMode === 'terminal'
           ? `<button class="palette-del arm-btn" aria-label="Delete ${escapeHtml(c.cmd)}"
-        onclick="event.stopPropagation();armButton(this, 'Delete?', () => deleteShortcut(${c.idx}))">✕</button>` : '';
+        onclick="event.stopPropagation();armButton(this, '', () => deleteShortcut(${c.idx}))">✕</button>` : '';
         return `<div role="button" tabindex="0" onclick="${act}" onkeydown="if(event.key==='Enter')${act}" style="padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:2px;transition:background 0.15s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
     <span style="font-family:monospace;font-weight:600;font-size:0.85rem;${c.danger ? 'color:var(--red)' : 'color:var(--blue)'}">${escapeHtml(armed ? `Run ${c.cmd}?` : c.cmd)}</span>
     <span style="flex:1;font-size:0.75rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.desc)}</span>${del}
