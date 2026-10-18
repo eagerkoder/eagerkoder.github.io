@@ -37750,13 +37750,13 @@ convApplyTint();
 
     const RECENT_FLOAT_CSS = `
       .recent-float { position: fixed; z-index: 90; display: none;
-        font: 14px -apple-system, system-ui, -webkit-system-font, sans-serif; touch-action: none; }
+        font: 14px -apple-system, system-ui, -webkit-system-font, sans-serif; }
       .recent-float.on { display: block; }
       .recent-float-btn { width: 44px; height: 44px; border-radius: 50%;
         border: 1px solid var(--border); background: var(--surface); color: var(--text);
         font: inherit; font-size: 18px; line-height: 1; cursor: grab; opacity: .82;
         box-shadow: 0 2px 10px rgba(0,0,0,.35); display: flex; align-items: center;
-        justify-content: center; }
+        justify-content: center; touch-action: none; }
       .recent-float-btn:hover, .recent-float.open .recent-float-btn { opacity: 1; }
       .recent-float-btn { position: relative; }
       /* How many panes are waiting on the person, on the puck itself so it reads with the panel
@@ -37771,6 +37771,7 @@ convApplyTint();
       .recent-float.dragging .recent-float-btn { cursor: grabbing; opacity: 1; }
       .recent-float-panel { display: none; position: absolute; bottom: 52px; right: 0;
         width: 232px; max-width: 78vw; padding: 6px; border: 1px solid var(--border);
+        box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
         border-radius: 10px; background: var(--surface); color: var(--text);
         box-shadow: 0 6px 22px rgba(0,0,0,.45); }
       .recent-float.open .recent-float-panel { display: block; }
@@ -37843,7 +37844,7 @@ convApplyTint();
       el.className = 'recent-float';
       el.innerHTML = '<div class="recent-float-panel" id="recentFloatPanel"></div>'
         + '<button type="button" class="recent-float-btn" id="recentFloatBtn"'
-        + ' aria-label="Recent conversations">⇄'
+        + ' aria-label="Recent conversations" aria-controls="recentFloatPanel" aria-expanded="false">⇄'
         + '<span class="recent-float-badge" id="recentFloatBadge" hidden></span></button>';
       document.body.appendChild(el);
       recentFloatBind(el);
@@ -37873,8 +37874,21 @@ convApplyTint();
 
     function recentFloatBind(el) {
       const btn = el.querySelector('#recentFloatBtn');
+      const panel = el.querySelector('#recentFloatPanel');
+      // Let a press finish before replacing its target, including when an age ticks mid-press.
+      panel.addEventListener('pointerdown', () => { panel._pressed = true; });
+      const release = () => {
+        if (!panel._pressed) return;
+        panel._pressed = false;
+        setTimeout(recentFloatDraw, 0);
+      };
+      window.addEventListener('pointerup', release);
+      window.addEventListener('pointercancel', release);
       let from = null;
+      let suppressClick = false;
       btn.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        suppressClick = false;
         const rect = el.getBoundingClientRect();
         from = {x: e.clientX, y: e.clientY, left: rect.left, top: rect.top, moved: false};
         btn.setPointerCapture(e.pointerId);
@@ -37900,7 +37914,11 @@ convApplyTint();
         try { btn.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
         // A drag that ends is a drag and not a press. Without this every move of the puck opened
         // the panel under the finger that had just let go of it.
-        if (!dragged) recentFloatToggle();
+        suppressClick = dragged;
+      });
+      btn.addEventListener('click', e => {
+        if (!suppressClick || e.detail === 0) recentFloatToggle();
+        suppressClick = false;
       });
       btn.addEventListener('pointercancel', () => { from = null; el.classList.remove('dragging'); });
     }
@@ -37914,6 +37932,18 @@ convApplyTint();
       el.style.top = at.y + RECENT_FLOAT_INSET + 'px';
       el.classList.toggle('down', at.y < room.h / 2);
       el.classList.toggle('left', at.x < room.w / 2);
+      const panel = el.querySelector('#recentFloatPanel');
+      if (recentFloatOpen && panel) {
+        const left = at.x + RECENT_FLOAT_INSET;
+        const top = at.y + RECENT_FLOAT_INSET;
+        const down = at.y < room.h / 2;
+        panel.style.maxHeight = Math.max(0, down ? window.innerHeight - top - 52 - RECENT_FLOAT_INSET
+          : top - 8 - RECENT_FLOAT_INSET) + 'px';
+        const wanted = left - (at.x < room.w / 2 ? 0 : panel.offsetWidth - size.w);
+        panel.style.left = Math.max(RECENT_FLOAT_INSET,
+          Math.min(wanted, window.innerWidth - panel.offsetWidth - RECENT_FLOAT_INSET)) - left + 'px';
+        panel.style.right = 'auto';
+      }
     }
 
     // The pin, drawn here rather than borrowed: this is the only control in the app that freezes a
@@ -37983,12 +38013,13 @@ convApplyTint();
     function recentFloatRowHtml(row, here) {
       const glyph = row.type === 'term' ? recentFloatTypeIco('term')
         : (typeof convGlyph === 'function' ? convGlyph(row.conv) : '');
-      const name = typeof escapeHtml === 'function' ? escapeHtml(row.name) : String(row.name);
+      const esc = typeof escapeHtml === 'function' ? escapeHtml : String;
       return `<button type="button" class="recent-float-row ${row.type}`
         + `${here && row.type === here.type && row.key === here.key ? ' on' : ''}"`
         + ` style="--tint:${row.tint}"`
-        + ` onclick="recentFloatGo('${row.type}', '${row.key}')">${glyph}`
-        + `<span class="name">${name}</span></button>`;
+        + ` data-recent-type="${row.type}" data-recent-key="${esc(row.key)}"`
+        + ` onclick="recentFloatGo(this.dataset.recentType, this.dataset.recentKey)">${glyph}`
+        + `<span class="name">${esc(row.name)}</span></button>`;
     }
 
     function recentFloatWaitRowHtml(a) {
@@ -38029,6 +38060,7 @@ convApplyTint();
       }
       const btn = document.getElementById('recentFloatBtn');
       if (btn) {
+        btn.setAttribute('aria-expanded', String(recentFloatOpen));
         btn.setAttribute('aria-label', waits.length
           ? `Recent conversations, ${waits.length} waiting for you` : 'Recent conversations');
       }
@@ -38049,7 +38081,19 @@ convApplyTint();
         // Drawn on every snapshot now, so only when it changed: a rewrite under a press loses it.
         // Compared with what was last written, not with innerHTML, which the browser re-serializes.
         const panel = document.getElementById('recentFloatPanel');
-        if (panel._sig !== html || !panel.firstChild) { panel.innerHTML = html; panel._sig = html; }
+        if (!panel._pressed && (panel._sig !== html || !panel.firstChild)) {
+          const focused = panel.contains(document.activeElement) ? document.activeElement : null;
+          panel.innerHTML = html;
+          panel._sig = html;
+          if (focused) {
+            const next = Array.from(panel.querySelectorAll('button')).find(b =>
+              b.getAttribute('onclick') === focused.getAttribute('onclick')
+              && b.dataset.pane === focused.dataset.pane && b.dataset.aid === focused.dataset.aid
+              && b.dataset.recentKey === focused.dataset.recentKey
+              && b.dataset.recentType === focused.dataset.recentType);
+            (next || btn).focus({preventScroll: true});
+          }
+        }
       }
       recentFloatPlace(el);
     }
