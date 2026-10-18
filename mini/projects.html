@@ -11893,6 +11893,9 @@ function convWebModeOf(conv) {
       const snoozes = waitSnoozes(now);
       const onScreen = typeof activePane === 'undefined' ? null : activePane;
       const {rows, snoozed} = waitingRows(typeof agents === 'undefined' ? [] : agents, now, snoozes, onScreen);
+      // The floating dock counts the same waits on its puck, and is redrawn from here because this
+      // is what every snapshot and the 30s clock already call.
+      if (typeof recentFloatDraw === 'function') recentFloatDraw();
       const el = waitEl();
       if (!rows.length && !snoozed) { el.hidden = true; waitOpen = false; return; }
       const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);

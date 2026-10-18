@@ -19188,6 +19188,9 @@ convApplyTint();
       const snoozes = waitSnoozes(now);
       const onScreen = typeof activePane === 'undefined' ? null : activePane;
       const {rows, snoozed} = waitingRows(typeof agents === 'undefined' ? [] : agents, now, snoozes, onScreen);
+      // The floating dock counts the same waits on its puck, and is redrawn from here because this
+      // is what every snapshot and the 30s clock already call.
+      if (typeof recentFloatDraw === 'function') recentFloatDraw();
       const el = waitEl();
       if (!rows.length && !snoozed) { el.hidden = true; waitOpen = false; return; }
       const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -33188,7 +33191,9 @@ convApplyTint();
       const tab = deskTabFor((deskColumns[i] || {}).tabKey);
       const conv = !!tab && tab.kind === 'conversation';
       if (what === 'last') {
-        if (body) body.scrollTop = body.scrollHeight;
+        // Following is said here, not left to the scroll event this causes: that event fires a
+        // frame later, and a repaint before it would read the reader as still scrolled up.
+        if (body) { convFollow(body).on = true; body.scrollTop = body.scrollHeight; }
         deskHangSync(i);
         return;
       }
@@ -37593,9 +37598,27 @@ convApplyTint();
     // and the filter is a second press on the same icon away from being off again.
     const RECENT_FLOAT_TYPES = ['conv', 'web', 'term'];
 
+    // And a fourth tab that is not a kind of visit: the panes waiting on the person, from the
+    // waiting bar's own reading of the snapshot. The bar stays where it is; this is the same list
+    // where a reader already reaches for "take me somewhere", with the count on the puck so it is
+    // seen with the panel shut.
     function recentFloatType() {
       const type = recentFloatPrefs().type;
-      return RECENT_FLOAT_TYPES.indexOf(type) >= 0 ? type : '';
+      return RECENT_FLOAT_TYPES.indexOf(type) >= 0 || type === 'wait' ? type : '';
+    }
+
+    // Every blocked pane but the one on screen, oldest wait first — the bar's rows with no snooze
+    // applied: a snooze hides a wait from the bar on this device, and the dock is only drawn when
+    // somebody opened it to look, so it lists what is there. Empty on a page without the bar.
+    function recentFloatWaits() {
+      if (typeof waitingRows !== 'function') return [];
+      const onScreen = typeof activePane === 'undefined' ? null : activePane;
+      return waitingRows(typeof agents === 'undefined' ? [] : agents, Date.now(), {}, onScreen).rows;
+    }
+
+    function recentFloatGoWait(btn) {
+      if (!recentFloatPinned()) recentFloatSet(false);
+      if (typeof openTerminal === 'function') openTerminal(btn.dataset.pane, btn.dataset.aid || undefined);
     }
 
     function setRecentFloatType(type) {
@@ -37735,6 +37758,16 @@ convApplyTint();
         box-shadow: 0 2px 10px rgba(0,0,0,.35); display: flex; align-items: center;
         justify-content: center; }
       .recent-float-btn:hover, .recent-float.open .recent-float-btn { opacity: 1; }
+      .recent-float-btn { position: relative; }
+      /* How many panes are waiting on the person, on the puck itself so it reads with the panel
+         shut. Full opacity whatever the puck's own: it is the one part of it that is news. */
+      .recent-float-badge { position: absolute; top: -4px; right: -4px; min-width: 18px;
+        height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
+        background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
+        line-height: 18px; text-align: center; pointer-events: none;
+        box-shadow: 0 0 0 2px var(--surface); }
+      .recent-float-badge[hidden] { display: none; }
+      .recent-float.waiting .recent-float-btn { opacity: 1; }
       .recent-float.dragging .recent-float-btn { cursor: grabbing; opacity: 1; }
       .recent-float-panel { display: none; position: absolute; bottom: 52px; right: 0;
         width: 232px; max-width: 78vw; padding: 6px; border: 1px solid var(--border);
@@ -37763,6 +37796,10 @@ convApplyTint();
       .recent-float-ico.conv { --ico: var(--green); color: var(--ico); }
       .recent-float-ico.web { --ico: var(--orange); color: var(--ico); }
       .recent-float-ico.term { --ico: var(--shell); color: var(--ico); }
+      .recent-float-ico.wait { --ico: var(--red); color: var(--ico); }
+      .recent-float-ico .stop-glyph, .recent-float-row .stop-glyph { display: block; }
+      .recent-float-row .stop-glyph { flex: none; color: var(--tint, var(--red)); }
+      .recent-float-row .age { flex: none; font-size: 11px; color: var(--muted); }
       /* A filter that is on is the one thing in this widget with a border, and it is a ring
          rather than a box: every row under it is borderless by design, so the pressed state
          needed something that is not another edge. */
@@ -37806,7 +37843,8 @@ convApplyTint();
       el.className = 'recent-float';
       el.innerHTML = '<div class="recent-float-panel" id="recentFloatPanel"></div>'
         + '<button type="button" class="recent-float-btn" id="recentFloatBtn"'
-        + ' aria-label="Recent conversations">⇄</button>';
+        + ' aria-label="Recent conversations">⇄'
+        + '<span class="recent-float-badge" id="recentFloatBadge" hidden></span></button>';
       document.body.appendChild(el);
       recentFloatBind(el);
       recentFloatDraw();
@@ -37825,6 +37863,13 @@ convApplyTint();
     // and pen. The threshold is what tells a drag from a tap: a finger never presses a button
     // without moving a pixel or two, and treating that as a drag would mean the panel never opened.
     const RECENT_FLOAT_SLOP = 6;
+    // Kept this far off every edge of the screen, so the puck — and the count on its corner — is
+    // never cut by the edge it was parked against.
+    const RECENT_FLOAT_INSET = 8;
+
+    function recentFloatRoom() {
+      return {w: window.innerWidth - 2 * RECENT_FLOAT_INSET, h: window.innerHeight - 2 * RECENT_FLOAT_INSET};
+    }
 
     function recentFloatBind(el) {
       const btn = el.querySelector('#recentFloatBtn');
@@ -37841,10 +37886,10 @@ convApplyTint();
         from.moved = true;
         el.classList.add('dragging');
         const size = {w: el.offsetWidth, h: el.offsetHeight};
-        const room = {w: window.innerWidth, h: window.innerHeight};
+        const room = recentFloatRoom();
         const max = {x: Math.max(1, room.w - size.w), y: Math.max(1, room.h - size.h)};
-        const x = Math.min(max.x, Math.max(0, from.left + dx));
-        const y = Math.min(max.y, Math.max(0, from.top + dy));
+        const x = Math.min(max.x, Math.max(0, from.left - RECENT_FLOAT_INSET + dx));
+        const y = Math.min(max.y, Math.max(0, from.top - RECENT_FLOAT_INSET + dy));
         setRecentFloatPos(x / max.x, y / max.y);
         recentFloatPlace(el);
       });
@@ -37863,10 +37908,10 @@ convApplyTint();
     // Where the puck is, and which way its panel opens from there.
     function recentFloatPlace(el) {
       const size = {w: el.offsetWidth || 44, h: el.offsetHeight || 44};
-      const room = {w: window.innerWidth, h: window.innerHeight};
+      const room = recentFloatRoom();
       const at = recentFloatXY(recentFloatPos(), room, size);
-      el.style.left = at.x + 'px';
-      el.style.top = at.y + 'px';
+      el.style.left = at.x + RECENT_FLOAT_INSET + 'px';
+      el.style.top = at.y + RECENT_FLOAT_INSET + 'px';
       el.classList.toggle('down', at.y < room.h / 2);
       el.classList.toggle('left', at.x < room.w / 2);
     }
@@ -37889,8 +37934,16 @@ convApplyTint();
       return convGlyph(type === 'web' ? {id: 'kind', webchat: {providers: ['x']}} : {id: 'kind'});
     }
 
+    // A stop sign: the pane has stopped and is waiting on the person.
+    function recentFloatStopIco() {
+      return '<svg class="stop-glyph" width="14" height="14" viewBox="0 0 14 14" fill="none"'
+        + ' stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">'
+        + '<path d="M4.6 1.2h4.8l3.4 3.4v4.8l-3.4 3.4H4.6L1.2 9.4V4.6z"/>'
+        + '<path d="M4.5 7h5" stroke-linecap="round"/></svg>';
+    }
+
     const RECENT_FLOAT_LABELS = {conv: 'conversations', web: 'web agent conversations',
-                                 term: 'terminals'};
+                                 term: 'terminals', wait: 'panes waiting for you'};
 
     // Which of the three filters are worth drawing: the kinds this browser has actually been in,
     // and never the ones it has not. A reader with no web-agent rooms was being offered a filter
@@ -37898,11 +37951,13 @@ convApplyTint();
     // not in the list is a question about the app rather than about the work. The selected one is
     // kept whatever happens to the rows under it — the icon that turned a filter on is the only
     // way back out of it. One kind is no filter at all: there is nothing to narrow to.
-    function recentFloatKinds(log, convs, shells, type) {
+    function recentFloatKinds(log, convs, shells, type, waits) {
       // Asked of the whole log rather than of the five rows on screen: a kind that is in the
       // record but under the fold is exactly the one somebody would filter to.
       const kinds = RECENT_FLOAT_TYPES.filter(one =>
         one === type || recentFloatItems(log, convs, shells, one).length);
+      // Waiting is offered while anything waits, and kept while it is the tab that is on.
+      if (waits || type === 'wait') kinds.push('wait');
       return kinds.length > 1 ? kinds : [];
     }
 
@@ -37921,7 +37976,7 @@ convApplyTint();
           + ` aria-pressed="${type === one ? 'true' : 'false'}"`
           + ` onclick="setRecentFloatType('${one}')" title="Only ${RECENT_FLOAT_LABELS[one]}"`
           + ` aria-label="Show only ${RECENT_FLOAT_LABELS[one]}">`
-          + `${recentFloatTypeIco(one)}</button>`).join('')
+          + `${one === 'wait' ? recentFloatStopIco() : recentFloatTypeIco(one)}</button>`).join('')
         + `</div>`;
     }
 
@@ -37936,6 +37991,18 @@ convApplyTint();
         + `<span class="name">${name}</span></button>`;
     }
 
+    function recentFloatWaitRowHtml(a) {
+      const esc = typeof escapeHtml === 'function' ? escapeHtml : String;
+      const age = typeof waitAge === 'function' ? waitAge(a, Date.now()) : '';
+      const what = typeof waitWhat === 'function' ? waitWhat(a) : 'waiting for you';
+      const who = `${a.agent || 'agent'} · ${a.project || '—'}`;
+      return `<button type="button" class="recent-float-row wait" style="--tint:var(--red)"`
+        + ` data-pane="${esc(a.pane_id)}" data-aid="${esc(a.aid || '')}" title="${esc(what)}"`
+        + ` aria-label="Open ${esc(who)}, ${esc(what)}" onclick="recentFloatGoWait(this)">`
+        + `${recentFloatStopIco()}<span class="name">${esc(who)}</span>`
+        + `${age ? `<span class="age">${esc(age)}</span>` : ''}</button>`;
+    }
+
     function recentFloatDraw() {
       const el = typeof document !== 'undefined' ? document.getElementById('recentFloat') : null;
       if (!el) return;
@@ -37946,21 +38013,43 @@ convApplyTint();
       // the filter: a filter that emptied the list would also take the control that set it off the
       // screen, leaving no way back to the other kinds.
       const all = recentFloatItems(log, convs, live, '');
+      const waits = recentFloatWaits();
       const type = recentFloatType();
-      const items = type ? recentFloatItems(log, convs, live, type) : all;
       // One thing visited is no switch to make. The puck appears with the second and goes away
-      // again if the record is cleared.
-      const show = all.length > 1;
+      // again if the record is cleared — or with the first pane waiting, whatever the log holds.
+      const show = all.length > 1 || waits.length > 0;
       if (!show) recentFloatOpen = false;
       el.classList.toggle('on', show);
       el.classList.toggle('open', recentFloatOpen);
+      el.classList.toggle('waiting', waits.length > 0);
+      const badge = document.getElementById('recentFloatBadge');
+      if (badge) {
+        badge.hidden = !waits.length;
+        badge.textContent = waits.length ? String(waits.length) : '';
+      }
+      const btn = document.getElementById('recentFloatBtn');
+      if (btn) {
+        btn.setAttribute('aria-label', waits.length
+          ? `Recent conversations, ${waits.length} waiting for you` : 'Recent conversations');
+      }
       if (!show) return;
       if (recentFloatOpen) {
         const here = recentFloatHere();
-        const kinds = recentFloatKinds(log, convs, live, type);
-        document.getElementById('recentFloatPanel').innerHTML = recentFloatHeadHtml(type, kinds)
-          + (items.length ? items.map(row => recentFloatRowHtml(row, here)).join('')
+        const kinds = recentFloatKinds(log, convs, live, type, waits.length);
+        // The waiting tab, or — with nothing visited worth listing — what is waiting, so a puck
+        // that appeared for a wait opens onto it.
+        const listWaits = type === 'wait' || (!type && !all.length);
+        const items = listWaits ? [] : type ? recentFloatItems(log, convs, live, type) : all;
+        const body = listWaits
+          ? (waits.length ? waits.map(recentFloatWaitRowHtml).join('')
+            : `<p class="recent-float-empty">Nothing waiting.</p>`)
+          : (items.length ? items.map(row => recentFloatRowHtml(row, here)).join('')
             : `<p class="recent-float-empty">Nothing recent of that kind.</p>`);
+        const html = recentFloatHeadHtml(type, kinds) + body;
+        // Drawn on every snapshot now, so only when it changed: a rewrite under a press loses it.
+        // Compared with what was last written, not with innerHTML, which the browser re-serializes.
+        const panel = document.getElementById('recentFloatPanel');
+        if (panel._sig !== html || !panel.firstChild) { panel.innerHTML = html; panel._sig = html; }
       }
       recentFloatPlace(el);
     }
