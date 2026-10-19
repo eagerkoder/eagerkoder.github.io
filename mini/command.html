@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-18">
+  <meta name="app-built" content="2026-10-19">
   <title>herdr-remote — desktop</title>
   <!-- command.html is this page under another name. Named here, before attention.js reads the
        title it puts its unread count in front of. -->
@@ -4521,7 +4521,8 @@
   background: var(--border);
 }
 
-.chip-menu .tick {
+.chip-menu .tick,
+.webchat-menu .tick {
   display: inline-block;
   width: 1.2em;
   color: var(--blue);
@@ -8622,6 +8623,92 @@
           });
         } catch (e) { /* no audio on this device: not a reason to break the caller */ }
       };
+    })();
+
+  </script>
+  <script>
+    // A diagnostic, off unless the address carries `?trace=scroll`. It records how the visible
+    // conversation thread's scroll moves during the first fifteen seconds after load: every
+    // programmatic scrollTop write and scrollIntoView with the line that made it, every scroll
+    // event, focus changes, and each frame where the box's position or size changed. Then it shows
+    // the log in a sheet with a Copy button, because a phone has no console to read it from.
+    //
+    // It exists for one bug that does not reproduce on the test relay: a conversation window that
+    // drifts up partway on first load. Delete this file once that is found.
+    (function () {
+      if (!/[?&]trace=scroll\b/.test(location.search)) return;
+      const t0 = performance.now(), log = [];
+      const at = () => Math.round(performance.now() - t0);
+      const tracing = () => at() < 15000;
+      const boxes = () => [...document.querySelectorAll('#convViewThread, #convThread, .desk-pane-body')]
+        .filter(b => b.offsetParent);
+      const name = el => el.id || String(el.className || el.tagName).split(' ')[0];
+      const caller = () => (new Error().stack || '').split('\n').slice(3, 5)
+        .map(s => s.trim().replace(/^at /, '').replace(location.origin, '')).join(' < ');
+      const state = b => `${Math.round(b.scrollTop)}/${b.scrollHeight}/${b.clientHeight}`;
+
+      const top = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+      Object.defineProperty(Element.prototype, 'scrollTop', {
+        configurable: true, get: top.get,
+        set(v) {
+          if (tracing() && boxes().includes(this)) {
+            log.push(`${at()} SET ${name(this)} ${Math.round(v)} was ${state(this)} :: ${caller()}`);
+          }
+          top.set.call(this, v);
+        },
+      });
+      for (const fn of ['scrollIntoView', 'scrollTo', 'scrollBy']) {
+        const orig = Element.prototype[fn];
+        Element.prototype[fn] = function (...args) {
+          if (tracing()) log.push(`${at()} ${fn} ${name(this)} ${JSON.stringify(args)} :: ${caller()}`);
+          return orig.apply(this, args);
+        };
+      }
+      document.addEventListener('scroll', e => {
+        const b = e.target;
+        if (tracing() && b.nodeType === 1 && boxes().includes(b)) log.push(`${at()} scroll ${name(b)} ${state(b)}`);
+      }, true);
+      document.addEventListener('focusin', e => {
+        if (tracing()) log.push(`${at()} focus ${name(e.target)}`);
+      }, true);
+
+      const seen = new Map();
+      const frame = () => {
+        for (const b of boxes()) {
+          const s = `${state(b)} msgs ${b.querySelectorAll('.conv-msg').length}` +
+            ` follow ${b._convFollow ? b._convFollow.on : '-'}`;
+          if (seen.get(b) !== s) { seen.set(b, s); log.push(`${at()} frame ${name(b)} ${s}`); }
+        }
+        if (tracing()) requestAnimationFrame(frame); else show();
+      };
+      requestAnimationFrame(frame);
+
+      function show() {
+        const sheet = document.createElement('div');
+        sheet.style.cssText = 'position:fixed;inset:10% 16px;z-index:99999;display:flex;' +
+          'flex-direction:column;gap:8px;padding:12px;background:#111;color:#eee;' +
+          'border:1px solid #555;border-radius:8px;font:12px monospace';
+        const text = document.createElement('textarea');
+        text.readOnly = true;
+        text.value = `${navigator.userAgent}\n${location.pathname}${location.hash}\n` + log.join('\n');
+        text.style.cssText = 'flex:1;background:#000;color:#eee;font:11px monospace';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px';
+        const copy = document.createElement('button');
+        copy.textContent = 'Copy';
+        copy.onclick = () => {
+          text.select();
+          (navigator.clipboard ? navigator.clipboard.writeText(text.value) : Promise.reject())
+            .catch(() => document.execCommand('copy'))
+            .then(() => { copy.textContent = 'Copied'; });
+        };
+        const close = document.createElement('button');
+        close.textContent = 'Close';
+        close.onclick = () => sheet.remove();
+        row.append(copy, close);
+        sheet.append(text, row);
+        document.body.append(sheet);
+      }
     })();
 
   </script>

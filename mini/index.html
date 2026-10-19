@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-18">
+  <meta name="app-built" content="2026-10-19">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -95,6 +95,92 @@
           });
         } catch (e) { /* no audio on this device: not a reason to break the caller */ }
       };
+    })();
+
+  </script>
+  <script>
+    // A diagnostic, off unless the address carries `?trace=scroll`. It records how the visible
+    // conversation thread's scroll moves during the first fifteen seconds after load: every
+    // programmatic scrollTop write and scrollIntoView with the line that made it, every scroll
+    // event, focus changes, and each frame where the box's position or size changed. Then it shows
+    // the log in a sheet with a Copy button, because a phone has no console to read it from.
+    //
+    // It exists for one bug that does not reproduce on the test relay: a conversation window that
+    // drifts up partway on first load. Delete this file once that is found.
+    (function () {
+      if (!/[?&]trace=scroll\b/.test(location.search)) return;
+      const t0 = performance.now(), log = [];
+      const at = () => Math.round(performance.now() - t0);
+      const tracing = () => at() < 15000;
+      const boxes = () => [...document.querySelectorAll('#convViewThread, #convThread, .desk-pane-body')]
+        .filter(b => b.offsetParent);
+      const name = el => el.id || String(el.className || el.tagName).split(' ')[0];
+      const caller = () => (new Error().stack || '').split('\n').slice(3, 5)
+        .map(s => s.trim().replace(/^at /, '').replace(location.origin, '')).join(' < ');
+      const state = b => `${Math.round(b.scrollTop)}/${b.scrollHeight}/${b.clientHeight}`;
+
+      const top = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+      Object.defineProperty(Element.prototype, 'scrollTop', {
+        configurable: true, get: top.get,
+        set(v) {
+          if (tracing() && boxes().includes(this)) {
+            log.push(`${at()} SET ${name(this)} ${Math.round(v)} was ${state(this)} :: ${caller()}`);
+          }
+          top.set.call(this, v);
+        },
+      });
+      for (const fn of ['scrollIntoView', 'scrollTo', 'scrollBy']) {
+        const orig = Element.prototype[fn];
+        Element.prototype[fn] = function (...args) {
+          if (tracing()) log.push(`${at()} ${fn} ${name(this)} ${JSON.stringify(args)} :: ${caller()}`);
+          return orig.apply(this, args);
+        };
+      }
+      document.addEventListener('scroll', e => {
+        const b = e.target;
+        if (tracing() && b.nodeType === 1 && boxes().includes(b)) log.push(`${at()} scroll ${name(b)} ${state(b)}`);
+      }, true);
+      document.addEventListener('focusin', e => {
+        if (tracing()) log.push(`${at()} focus ${name(e.target)}`);
+      }, true);
+
+      const seen = new Map();
+      const frame = () => {
+        for (const b of boxes()) {
+          const s = `${state(b)} msgs ${b.querySelectorAll('.conv-msg').length}` +
+            ` follow ${b._convFollow ? b._convFollow.on : '-'}`;
+          if (seen.get(b) !== s) { seen.set(b, s); log.push(`${at()} frame ${name(b)} ${s}`); }
+        }
+        if (tracing()) requestAnimationFrame(frame); else show();
+      };
+      requestAnimationFrame(frame);
+
+      function show() {
+        const sheet = document.createElement('div');
+        sheet.style.cssText = 'position:fixed;inset:10% 16px;z-index:99999;display:flex;' +
+          'flex-direction:column;gap:8px;padding:12px;background:#111;color:#eee;' +
+          'border:1px solid #555;border-radius:8px;font:12px monospace';
+        const text = document.createElement('textarea');
+        text.readOnly = true;
+        text.value = `${navigator.userAgent}\n${location.pathname}${location.hash}\n` + log.join('\n');
+        text.style.cssText = 'flex:1;background:#000;color:#eee;font:11px monospace';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px';
+        const copy = document.createElement('button');
+        copy.textContent = 'Copy';
+        copy.onclick = () => {
+          text.select();
+          (navigator.clipboard ? navigator.clipboard.writeText(text.value) : Promise.reject())
+            .catch(() => document.execCommand('copy'))
+            .then(() => { copy.textContent = 'Copied'; });
+        };
+        const close = document.createElement('button');
+        close.textContent = 'Close';
+        close.onclick = () => sheet.remove();
+        row.append(copy, close);
+        sheet.append(text, row);
+        document.body.append(sheet);
+      }
     })();
 
   </script>
@@ -10057,7 +10143,8 @@
       background: var(--border);
     }
 
-    .chip-menu .tick {
+    .chip-menu .tick,
+    .webchat-menu .tick {
       display: inline-block;
       width: 1.2em;
       color: var(--blue);
@@ -30897,6 +30984,10 @@ let webchatAvailable = false;
 let webchatProviders = [];
 let webchatSessions = [];
 let webchatCapabilities = [];
+// What the relay can do for an adapter that is down — which the adapter, not answering, cannot say
+// for itself: `can` start it (HERDR_WEBCHAT_DIR set, write extensions on), and whether it starts
+// it on its own (`auto`, one relay-wide flag that holds across a reboot).
+let webchatStarter = {};
 // Which agent drives which namespace, as the relay has already written it. The relay's own fact —
 // it is the side holding the master bearer — and it never carries the token.
 let webchatBindings = {};
@@ -30959,6 +31050,7 @@ function webchatReset() {
   webchatProviders = [];
   webchatSessions = [];
   webchatCapabilities = [];
+  webchatStarter = {};
   webchatTruncated = false;
   webchatModels.clear();
   webchatModelRequests.clear();
@@ -31038,6 +31130,7 @@ function webchatReceiveState(msg) {
   // Gated on the list and never on the API version: adding a route is not a breaking change, so
   // an adapter with the recovery controls answers the same version as one without them.
   webchatCapabilities = Array.isArray(msg.capabilities) ? msg.capabilities : [];
+  webchatStarter = (msg.start && typeof msg.start === 'object') ? msg.start : {};
   webchatBindings = (msg.attached && typeof msg.attached === 'object') ? msg.attached : {};
   for (const name of webchatNeedsSync) {
     if (!webchatSessions.some(session => session.name === name)) webchatNeedsSync.delete(name);
@@ -31084,7 +31177,10 @@ function webchatReceiveState(msg) {
   if (webchatAwaitingServer) {
     const what = webchatAwaitingServer;
     webchatAwaitingServer = '';
-    if (!webchatAvailable) showToast('The adapter did not come back. Restart it on its own host.');
+    if (!webchatAvailable) {
+      showToast(webchatStarter.can ? 'The adapter did not come back. Try Start adapter.'
+        : 'The adapter did not come back. Restart it on its own host.');
+    }
     else {
       // The pages every session was holding went with the process, so what this phone shows for
       // the open chat is a transcript nobody can confirm — the same position a reconnect leaves
@@ -32121,6 +32217,15 @@ function webchatReceiveResult(msg) {
     // process answers; that broadcast is what this waits for.
     webchatAwaitingServer = 'Adapter restarted';
   }
+  if (msg.action === 'server_start') {
+    // The relay has already waited for the new process to answer, so unlike a restart there is
+    // nothing to wait for: the broadcast that follows this is the state.
+    if (!msg.ok) showToast(msg.error || 'The adapter did not start');
+    else showToast(msg.started ? 'Adapter started' : 'The adapter was already running', 'info');
+  }
+  if (msg.action === 'autostart') {
+    showToast(msg.auto ? 'The relay keeps the adapter running' : 'Auto-restart is off', 'info');
+  }
   if (msg.action === 'sync' || msg.action === 'clear') {
     webchatNeedsSync.delete(msg.synced || msg.cleared || webchatCurrent);
     renderWebchatView();
@@ -32423,9 +32528,26 @@ function webchatServerHtml(prefix, browser) {
         + ' () => webchatServerRestart())"'
         + ' aria-label="Restart the web-agent adapter">Restart adapter</button>'
       : '')
-    + (ok ? '' : '<div class="hint">Nothing on this page can reach a process that is not'
-      + ' answering. It has to be started again on the host it runs on.</div>')
+    + webchatStartHtml(prefix, ok)
     + (browser === undefined ? webchatBrowserHtml(prefix, health.provider) : browser);
+}
+
+// Start and auto-restart, which the relay does and the adapter does not: a process that is not
+// answering cannot start itself. Not armed — starting ends nothing. Without a relay that can
+// start it, the drawer says where it has to be started instead.
+function webchatStartHtml(prefix, ok) {
+  if (!webchatStarter.can) {
+    return ok ? '' : '<div class="hint">Nothing on this page can reach a process that is not'
+      + ' answering. It has to be started again on the host it runs on.</div>';
+  }
+  const auto = !!webchatStarter.auto;
+  return (ok ? '' : `<button class="menu-item" role="menuitem" id="${prefix}Start"`
+      + ' onclick="webchatServerStart()" aria-label="Start the web-agent adapter">'
+      + 'Start adapter</button>')
+    + `<button class="menu-item" role="menuitemcheckbox" aria-checked="${auto}" id="${prefix}Auto"`
+    + ' onclick="webchatAutostart()" title="The relay starts the adapter whenever it finds it'
+    + ' down, including after a reboot. For every device">'
+    + `<span class="tick">${auto ? '✓' : ''}</span>Auto-restart adapter</button>`;
 }
 
 // The provider's own browser, under the same drawer. Withheld with no chat open: which browser is
@@ -32915,6 +33037,16 @@ function webchatServerRestart() {
   }
 }
 
+function webchatServerStart() {
+  if (webchatAsk({type: 'webchat_server_start'})) {
+    showToast('Starting the web-agent adapter…', 'info');
+  }
+}
+
+function webchatAutostart() {
+  webchatAsk({type: 'webchat_autostart', on: !webchatStarter.auto});
+}
+
 // Open the tab and keep it. Every repair below ends with this session holding no page — `sync`
 // reads the conversation and closes what it opened, `reconnect` closes the cached page on purpose
 // — so without it a successful repair leaves the chat reading `cold`, which is the truth and not
@@ -33032,11 +33164,15 @@ function webchatRosterHtml(conv) {
   }).join('');
   // The adapter, above the browsers it drives. Withheld when it is not answering: the restart is a
   // request *to* it, so a process that has stopped answering cannot be asked to replace itself.
+  // Start takes its place then, when the relay can start one.
   const server = webchatCan('server')
     ? `<button class="conv-drop arm-btn" onclick="armButton(this, `
       + `'Any turn the adapter is running is lost', () => webchatServerRestart())" `
       + `aria-label="Restart the web-agent adapter">Restart adapter</button>`
-    : '';
+    : !webchatAvailable && webchatStarter.can
+      ? `<button class="conv-open" onclick="webchatServerStart()" `
+        + `aria-label="Start the web-agent adapter">Start adapter</button>`
+      : '';
   return `<div class="menu-label conv-roster-label">Providers${server
     ? `<span class="conv-roster-acts">${server}</span>` : ''}</div>${rows}`;
 }
