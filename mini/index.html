@@ -29825,12 +29825,23 @@ function convWebModeOf(conv) {
     // box's own scroll events (the reader's, or this page putting it at the end), and a resize or
     // an image arriving puts a thread that is following back at its end. One per box, made on
     // first use, following until the reader scrolls away.
+    //
+    // Away means up. A scroll event is delivered a frame after the write that caused it, measured
+    // against the box as it stands then, and Firefox delivers it before the resize observer below
+    // runs. So a desktop column written to its end and made shorter in the same frame (its
+    // neighbours drawing on first load) read as "short of the end" and let go; each re-wrap after
+    // that, as the columns settled their widths, pushed the thread up under a reader who never
+    // touched it. A box that only got shorter leaves scrollTop where it was; a reader scrolling
+    // away lowers it.
     function convFollow(box) {
       if (!box) return {on: true};
       if (box._convFollow) return box._convFollow;
       const f = box._convFollow = {on: true};
+      let last = box.scrollTop;
       box.addEventListener('scroll', () => {
-        f.on = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+        if (box.scrollHeight - box.scrollTop - box.clientHeight < 24) f.on = true;
+        else if (box.scrollTop < last) f.on = false;
+        last = box.scrollTop;
       }, {passive: true});
       const stick = () => { if (f.on) box.scrollTop = box.scrollHeight; };
       if (typeof ResizeObserver === 'function') new ResizeObserver(stick).observe(box);
