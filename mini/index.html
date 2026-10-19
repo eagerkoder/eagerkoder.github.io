@@ -17854,6 +17854,8 @@
         if (ws !== socket) return;
         stateSyncClose(socket);
         if (typeof cmdProjectFileReset === 'function') cmdProjectFileReset();
+        // A record question asked on this socket will never be answered on the next one.
+        if (typeof convLiveAskDone === 'function') convLiveAskDone(true);
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -35339,9 +35341,13 @@ function nlmSourceDelete(source) {
       return true;
     }
 
+    // The clock runs from the oldest question still out, not the newest. The thread re-asks every
+    // CONV_LIVE_EVERY while it is open, so a timeout restarted by each ask never lapsed: one
+    // question lost with its socket held the count above zero under every answered one after it,
+    // and the pill stayed lit over a finished thread for as long as the thread was open.
     function convLiveAskSent(n) {
+      if (!convLiveSyncing()) convLiveAskedAt = Date.now();
       convLiveAsking += n;
-      convLiveAskedAt = Date.now();
       if (typeof hangSync === 'function') {
         hangSync();
         // Nothing else redraws on a timeout expiring, and the pill has to be able to go out on its
@@ -35352,6 +35358,7 @@ function nlmSourceDelete(source) {
 
     function convLiveAskDone(all) {
       convLiveAsking = all ? 0 : Math.max(0, convLiveAsking - 1);
+      if (all) convOlderAnchor = null;
       if (typeof hangSync === 'function') hangSync();
     }
 
@@ -35782,6 +35789,7 @@ function nlmSourceDelete(source) {
         bucket.depth = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
         ws.send(JSON.stringify({ type: 'conv_log', aids: [aid],
                                  until_id: oldest.seq, last: CONV_LIVE_ROWS, detail: true }));
+        if (convOlderAnchor) convOlderAnchor.pending.set(aid, oldest.seq);
         asked++;
       }
       if (asked) convLiveAskSent(asked);
@@ -35830,7 +35838,9 @@ function nlmSourceDelete(source) {
       const scroller = box && box.classList.contains('conv-thread') ? box
         : (typeof hangConvBox === 'function' && box && box.id === 'convWrap' ? hangConvBox() : box);
       const keys = convOlderKeys(box);
-      if (scroller) convOlderAnchor = { box: scroller, height: scroller.scrollHeight };
+      if (scroller) convOlderAnchor = {
+        box: scroller, height: scroller.scrollHeight, at: Date.now(), pending: new Map(),
+      };
       if (!convLiveOlder(keys)) { convOlderAnchor = null; return; }
       if (btn) btn.disabled = true;
     }
@@ -35859,20 +35869,25 @@ function nlmSourceDelete(source) {
     // twice, so the only number that answers this is how much taller the box got.
     // Held across several answers rather than cleared by the first: a joint thread asks one
     // question per member, and each answer that lands grows the box again. The anchor moves with
-    // it and is dropped only once nothing is outstanding.
+    // it until its own backfills finish or lapse, independent of the pill's older questions.
     function convOlderRestore() {
       const anchor = convOlderAnchor;
       if (!anchor || !anchor.box) return;
       const grew = anchor.box.scrollHeight - anchor.height;
       if (grew > 0) anchor.box.scrollTop += grew;
       anchor.height = anchor.box.scrollHeight;
-      if (!convLiveSyncing()) convOlderAnchor = null;
+      if (!anchor.pending.size || Date.now() - anchor.at > CONV_LIVE_ASK_TIMEOUT) convOlderAnchor = null;
     }
 
     // The relay answering. Addressed to the client that asked and never broadcast, so this arrives
     // only where someone turned the toggle on.
     function convLiveReceive(msg) {
       convLiveAskDone();
+      if (convOlderAnchor && msg.until_id != null) {
+        for (const aid of (msg.aids || [])) {
+          if (convOlderAnchor.pending.get(aid) === msg.until_id) convOlderAnchor.pending.delete(aid);
+        }
+      }
       convLiveError = '';
       convLiveTruncated = !!msg.truncated;
       const turns = Array.isArray(msg.turns) ? msg.turns : [];

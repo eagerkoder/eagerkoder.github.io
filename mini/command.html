@@ -17385,9 +17385,13 @@ convApplyTint();
       return true;
     }
 
+    // The clock runs from the oldest question still out, not the newest. The thread re-asks every
+    // CONV_LIVE_EVERY while it is open, so a timeout restarted by each ask never lapsed: one
+    // question lost with its socket held the count above zero under every answered one after it,
+    // and the pill stayed lit over a finished thread for as long as the thread was open.
     function convLiveAskSent(n) {
+      if (!convLiveSyncing()) convLiveAskedAt = Date.now();
       convLiveAsking += n;
-      convLiveAskedAt = Date.now();
       if (typeof hangSync === 'function') {
         hangSync();
         // Nothing else redraws on a timeout expiring, and the pill has to be able to go out on its
@@ -17398,6 +17402,7 @@ convApplyTint();
 
     function convLiveAskDone(all) {
       convLiveAsking = all ? 0 : Math.max(0, convLiveAsking - 1);
+      if (all) convOlderAnchor = null;
       if (typeof hangSync === 'function') hangSync();
     }
 
@@ -17828,6 +17833,7 @@ convApplyTint();
         bucket.depth = Math.min(have + CONV_LIVE_ROWS, CONV_LIVE_DEEP_MAX);
         ws.send(JSON.stringify({ type: 'conv_log', aids: [aid],
                                  until_id: oldest.seq, last: CONV_LIVE_ROWS, detail: true }));
+        if (convOlderAnchor) convOlderAnchor.pending.set(aid, oldest.seq);
         asked++;
       }
       if (asked) convLiveAskSent(asked);
@@ -17876,7 +17882,9 @@ convApplyTint();
       const scroller = box && box.classList.contains('conv-thread') ? box
         : (typeof hangConvBox === 'function' && box && box.id === 'convWrap' ? hangConvBox() : box);
       const keys = convOlderKeys(box);
-      if (scroller) convOlderAnchor = { box: scroller, height: scroller.scrollHeight };
+      if (scroller) convOlderAnchor = {
+        box: scroller, height: scroller.scrollHeight, at: Date.now(), pending: new Map(),
+      };
       if (!convLiveOlder(keys)) { convOlderAnchor = null; return; }
       if (btn) btn.disabled = true;
     }
@@ -17905,20 +17913,25 @@ convApplyTint();
     // twice, so the only number that answers this is how much taller the box got.
     // Held across several answers rather than cleared by the first: a joint thread asks one
     // question per member, and each answer that lands grows the box again. The anchor moves with
-    // it and is dropped only once nothing is outstanding.
+    // it until its own backfills finish or lapse, independent of the pill's older questions.
     function convOlderRestore() {
       const anchor = convOlderAnchor;
       if (!anchor || !anchor.box) return;
       const grew = anchor.box.scrollHeight - anchor.height;
       if (grew > 0) anchor.box.scrollTop += grew;
       anchor.height = anchor.box.scrollHeight;
-      if (!convLiveSyncing()) convOlderAnchor = null;
+      if (!anchor.pending.size || Date.now() - anchor.at > CONV_LIVE_ASK_TIMEOUT) convOlderAnchor = null;
     }
 
     // The relay answering. Addressed to the client that asked and never broadcast, so this arrives
     // only where someone turned the toggle on.
     function convLiveReceive(msg) {
       convLiveAskDone();
+      if (convOlderAnchor && msg.until_id != null) {
+        for (const aid of (msg.aids || [])) {
+          if (convOlderAnchor.pending.get(aid) === msg.until_id) convOlderAnchor.pending.delete(aid);
+        }
+      }
       convLiveError = '';
       convLiveTruncated = !!msg.truncated;
       const turns = Array.isArray(msg.turns) ? msg.turns : [];
@@ -18562,6 +18575,8 @@ convApplyTint();
         if (ws !== socket) return;
         stateSyncClose(socket);
         if (typeof cmdProjectFileReset === 'function') cmdProjectFileReset();
+        // A record question asked on this socket will never be answered on the next one.
+        if (typeof convLiveAskDone === 'function') convLiveAskDone(true);
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -34163,7 +34178,7 @@ convApplyTint();
         const cls = [it.danger ? 'danger' : '', armed ? 'armed' : ''].filter(Boolean).join(' ');
         return `<button data-item="${i}"${it.disabled ? ' disabled' : ''}` +
           `${cls ? ` class="${cls}"` : ''}` +
-          `${armed ? ' aria-label="' + escapeHtml(it.arm || it.label) + '"' : ''}` +
+          `${armed ? ' aria-label="' + escapeHtml(it.label + ', press again to confirm') + '"' : ''}` +
           `>${escapeHtml(it.label)}` +
           (it.hint ? `<small>${escapeHtml(it.hint)}</small>` : '') + '</button>';
       }).join('');
@@ -34353,31 +34368,31 @@ convApplyTint();
       const canReattach = old && deskRunningLike(old).length > 0;
       const canReattachInto = live && deskClosedLike(live).length > 0;
       const items = [
-        live && {label: 'Pause', arm: 'Pause?',
+        live && {label: 'Pause', arm: true,
                  hint: 'keeps its seat and its thread',
                  run: () => endConvMember(aid)},
         // Left out entirely in a room that grants web providers: a clear throws away the brief
         // naming that agent's room and grant, and only Restart writes it again.
-        live && !respawnWebRoom(aid) && {label: 'Reset', arm: 'Reset?',
+        live && !respawnWebRoom(aid) && {label: 'Reset', arm: true,
                  hint: 'clears the session and says its opening words again',
                  run: () => { if (convResetMember(aid) === false) showToast('Nothing was reset.'); }},
-        {label: 'Restart', arm: 'Restart?', disabled: !again || !convId,
+        {label: 'Restart', arm: true, disabled: !again || !convId,
          hint: again && convId ? note : 'nothing on record to start again',
          run: () => convRestart(aid)},
         again && convId && resumableSession(aid) &&
-          {label: 'Restart original session', arm: 'Reopen it?',
+          {label: 'Restart original session', arm: true,
            hint: 'the harness reopens its last conversation',
            run: () => convRestart(aid, true)},
         startOptions && convId &&
-          {label: 'Restart as\u2026', arm: 'Restart as?',
+          {label: 'Restart as\u2026', arm: true,
            hint: 'opens the Start dialog', run: () => convStartAs(aid)},
-        canReattach && {label: 'Reattach to running pane…', arm: 'Reattach?',
+        canReattach && {label: 'Reattach to running pane…', arm: true,
           hint: 'matching host, harness, and directory; replaces that pane’s current AID',
           run: () => deskReattach(aid)},
-        canReattachInto && {label: 'Reattach a closed agent…', arm: 'Reattach?',
+        canReattachInto && {label: 'Reattach a closed agent…', arm: true,
           hint: 'same host, harness, and directory; retires this pane’s current AID',
           run: () => deskReattachInto(aid)},
-        convId && {label: 'Remove from this conversation', arm: 'Remove?',
+        convId && {label: 'Remove from this conversation', arm: true,
                    hint: 'its words leave the thread',
                    run: () => deskRemoveMember(convId, aid)},
       ].filter(Boolean);
@@ -34551,14 +34566,14 @@ convApplyTint();
         // The three the phone's roster puts under its rows, asked of the whole room at once. Pause
         // stops the sessions and keeps the thread, Reset keeps the panes and clears what is in
         // them, Restart replaces them — so they are in that order, least destructive first.
-        {label: 'Pause all', arm: 'Pause all?',
+        {label: 'Pause all', arm: true,
          disabled: !live, hint: live ? 'keeps every seat and the thread' : 'nothing running',
          run: () => endConversation(id)},
-        !convWebRoomOf(id) && {label: 'Reset all', arm: 'Reset all?',
+        !convWebRoomOf(id) && {label: 'Reset all', arm: true,
          disabled: !live,
          hint: live ? 'clears every session and says its opening words again' : 'nothing running',
          run: () => convResetAll(id)},
-        {label: 'Restart all', arm: 'Restart all?',
+        {label: 'Restart all', arm: true,
          disabled: !again,
          hint: again ? 'ends each session and starts it again, one at a time'
            : 'nothing here can be restarted',
@@ -34590,7 +34605,7 @@ convApplyTint();
         return ['sep',
           {label: `Edit pair · ${pair.name}`, hint: 'the partner, and what the two are called',
            run: () => openPairDialog(pane.pane_id)},
-          {label: `Unpair from ${other.label || other.aid || 'the other one'}`, arm: 'Unpair?',
+          {label: `Unpair from ${other.label || other.aid || 'the other one'}`, arm: true,
            run: () => deskUnpair(pair.id)}];
       }
       // Everything else the relay has named. A pane already in a pair is not offered: a member
@@ -34659,7 +34674,7 @@ convApplyTint();
                  run: () => deskFitPane(pane)},
         // A shell has no agent id and no seat in a room, so the five below do not apply to it —
         // ending it is the whole of its life cycle.
-        pane && !pane.aid && {label: 'End it', arm: 'End it?',
+        pane && !pane.aid && {label: 'End it', arm: true,
                               run: () => endPane(pane.pane_id)},
       ].concat(deskLifeItems(pane && pane.aid)).concat(deskPairItems(pane));
     }
@@ -34721,7 +34736,7 @@ convApplyTint();
           {label: 'Add to this conversation',
            run: () => deskJoinConv(deskSelectedConv, pane)},
         // A shell again: no agent id, so nothing below applies and ending it is all there is.
-        pane && !pane.aid && {label: 'End it', arm: 'End it?',
+        pane && !pane.aid && {label: 'End it', arm: true,
                               run: () => endPane(pane.pane_id)},
       ].concat(deskLifeItems(pane ? pane.aid : aid)).concat(deskPairItems(pane));
     }
@@ -35687,10 +35702,10 @@ convApplyTint();
         if (!it || (it.save === undefined && !it.hist)) return;
         e.preventDefault();
         const items = it.hist
-          ? [{label: 'Forget this command', arm: 'Forget it?',
+          ? [{label: 'Forget this command', arm: true,
               hint: 'it stays saved if you saved it',
               run: () => { deskForgetCommand(it.hist); deskPalettePaint(root, i); }}]
-          : [{label: 'Delete this command', arm: 'Delete it?',
+          : [{label: 'Delete this command', arm: true,
               hint: 'removed from every column and from the phone',
               run: () => {
                 const list = deskTermSaved();
@@ -39128,7 +39143,7 @@ convApplyTint();
       const again = at && at.dataset.again;
       if (again && !cmdSessions.concat(typeof arbSessions !== 'undefined' ? arbSessions : [])
         .some(s => s.conversation === room && s.state !== 'ended')) {
-        items = [{label: 'Start its last Commander again', arm: 'Start it again?',
+        items = [{label: 'Start its last Commander again', arm: true,
           hint: 'same scope, recipe, settings and seats; nothing it was doing carries over',
           run: () => arbSend({type: 'cmd_start', again: again})}].concat(items.length ? ['sep'] : [], items);
       }
