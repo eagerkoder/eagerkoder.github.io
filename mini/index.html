@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-19">
+  <meta name="app-built" content="2026-10-20">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -95,92 +95,6 @@
           });
         } catch (e) { /* no audio on this device: not a reason to break the caller */ }
       };
-    })();
-
-  </script>
-  <script>
-    // A diagnostic, off unless the address carries `?trace=scroll`. It records how the visible
-    // conversation thread's scroll moves during the first fifteen seconds after load: every
-    // programmatic scrollTop write and scrollIntoView with the line that made it, every scroll
-    // event, focus changes, and each frame where the box's position or size changed. Then it shows
-    // the log in a sheet with a Copy button, because a phone has no console to read it from.
-    //
-    // It exists for one bug that does not reproduce on the test relay: a conversation window that
-    // drifts up partway on first load. Delete this file once that is found.
-    (function () {
-      if (!/[?&]trace=scroll\b/.test(location.search)) return;
-      const t0 = performance.now(), log = [];
-      const at = () => Math.round(performance.now() - t0);
-      const tracing = () => at() < 15000;
-      const boxes = () => [...document.querySelectorAll('#convViewThread, #convThread, .desk-pane-body')]
-        .filter(b => b.offsetParent);
-      const name = el => el.id || String(el.className || el.tagName).split(' ')[0];
-      const caller = () => (new Error().stack || '').split('\n').slice(3, 5)
-        .map(s => s.trim().replace(/^at /, '').replace(location.origin, '')).join(' < ');
-      const state = b => `${Math.round(b.scrollTop)}/${b.scrollHeight}/${b.clientHeight}`;
-
-      const top = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
-      Object.defineProperty(Element.prototype, 'scrollTop', {
-        configurable: true, get: top.get,
-        set(v) {
-          if (tracing() && boxes().includes(this)) {
-            log.push(`${at()} SET ${name(this)} ${Math.round(v)} was ${state(this)} :: ${caller()}`);
-          }
-          top.set.call(this, v);
-        },
-      });
-      for (const fn of ['scrollIntoView', 'scrollTo', 'scrollBy']) {
-        const orig = Element.prototype[fn];
-        Element.prototype[fn] = function (...args) {
-          if (tracing()) log.push(`${at()} ${fn} ${name(this)} ${JSON.stringify(args)} :: ${caller()}`);
-          return orig.apply(this, args);
-        };
-      }
-      document.addEventListener('scroll', e => {
-        const b = e.target;
-        if (tracing() && b.nodeType === 1 && boxes().includes(b)) log.push(`${at()} scroll ${name(b)} ${state(b)}`);
-      }, true);
-      document.addEventListener('focusin', e => {
-        if (tracing()) log.push(`${at()} focus ${name(e.target)}`);
-      }, true);
-
-      const seen = new Map();
-      const frame = () => {
-        for (const b of boxes()) {
-          const s = `${state(b)} msgs ${b.querySelectorAll('.conv-msg').length}` +
-            ` follow ${b._convFollow ? b._convFollow.on : '-'}`;
-          if (seen.get(b) !== s) { seen.set(b, s); log.push(`${at()} frame ${name(b)} ${s}`); }
-        }
-        if (tracing()) requestAnimationFrame(frame); else show();
-      };
-      requestAnimationFrame(frame);
-
-      function show() {
-        const sheet = document.createElement('div');
-        sheet.style.cssText = 'position:fixed;inset:10% 16px;z-index:99999;display:flex;' +
-          'flex-direction:column;gap:8px;padding:12px;background:#111;color:#eee;' +
-          'border:1px solid #555;border-radius:8px;font:12px monospace';
-        const text = document.createElement('textarea');
-        text.readOnly = true;
-        text.value = `${navigator.userAgent}\n${location.pathname}${location.hash}\n` + log.join('\n');
-        text.style.cssText = 'flex:1;background:#000;color:#eee;font:11px monospace';
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:8px';
-        const copy = document.createElement('button');
-        copy.textContent = 'Copy';
-        copy.onclick = () => {
-          text.select();
-          (navigator.clipboard ? navigator.clipboard.writeText(text.value) : Promise.reject())
-            .catch(() => document.execCommand('copy'))
-            .then(() => { copy.textContent = 'Copied'; });
-        };
-        const close = document.createElement('button');
-        close.textContent = 'Close';
-        close.onclick = () => sheet.remove();
-        row.append(copy, close);
-        sheet.append(text, row);
-        document.body.append(sheet);
-      }
     })();
 
   </script>
@@ -3093,6 +3007,31 @@
     .conversation-tier.idle {
       color: var(--orange);
       border-color: var(--orange);
+    }
+
+    /* A session over the room. Paused is a word in the app's amber, on the name's line, because a
+       stopped Commander otherwise looks exactly like an idle room. A running Commander is its flag
+       alone, in the purple its button wears, so the list shows which rooms own work without a
+       chip on each saying "running". Kept in compact cards: it is the one thing worth seeing. */
+    .room-mark {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: var(--bot);
+      line-height: 1;
+    }
+
+    .room-mark.paused {
+      font-size: 0.55rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      padding: 1px 5px;
+      border: 1px solid var(--orange);
+      border-radius: 4px;
+      color: var(--orange);
+      background: color-mix(in srgb, var(--orange) 12%, transparent);
     }
 
     .conversation-count,
@@ -9058,6 +8997,33 @@
       border-color: var(--bot);
     }
 
+    /* With a session the button carries its name: a glyph on its own said only that something
+       could be done here, not that this room is already owned, or by whom. Amber while it is
+       stopped, the rule the Loop button beside it already follows. */
+    .hang-commander.live {
+      width: auto;
+      max-width: 50vw;
+      padding: 0 8px;
+      font-size: 0.68rem;
+      font-weight: 600;
+    }
+
+    .hang-commander .cmd-btn-name {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .hang-commander svg {
+      flex: none;
+    }
+
+    .hang-commander.live.paused {
+      color: var(--orange);
+      border-color: var(--orange);
+      background: color-mix(in srgb, var(--orange) 14%, var(--surface));
+    }
+
     /* A loop the person owns is green while it runs and amber while it is stopped: the colour is
        what says, from across the room, whether the chain is still moving. */
     .hang-loop.live {
@@ -9089,9 +9055,27 @@
       overflow-wrap: anywhere;
     }
 
-    #loopStrip {
+    #loopStrip, #cmdStrip {
       min-width: 0;
       max-width: 100%;
+    }
+
+    /* A paused Commander's tray: arbitration's shape in the amber a stopped session wears, so it
+       is not read as an arbitrator's blue one. */
+    .cmd-strip {
+      --arb-tray: color-mix(in srgb, var(--orange) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--orange) 55%, var(--border));
+    }
+
+    /* Sized by its one sentence rather than by its two buttons: the sentence is the point of it. */
+    .cmd-strip .arb-say {
+      width: auto;
+    }
+
+    .cmd-strip .arb-say-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
     }
     /* border-box: the tray has padding and a border, and 100% of the stack plus those is wider
        than the column lane it sits in. */
@@ -12800,7 +12784,7 @@
            arbitrator is — an arbitrator *is* its transcript, and a Commander is a thing with a
            state, a plan and a tree under it. -->
       <button class="hang-btn hang-commander" id="convCommander" onclick="cmdOpenFromConv()"
-        aria-label="Give this conversation a Commander"><svg class="cmd-sign" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg></button>
+        aria-label="Give this conversation a Commander"><svg class="cmd-sign" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 21.5V3" /><path d="M5.5 4.5c2.4-1.4 4.6-1.4 7 0s4.6 1.4 7 0v9c-2.4 1.4-4.6 1.4-7 0s-4.6-1.4-7 0z" fill="currentColor" fill-opacity="0.22" /></svg></button>
       <button class="hang-btn hang-tidy" id="convTidy" onclick="hangRefreshConv()"
         title="Reload this conversation, then remove any duplicates its members picked up"
         aria-label="Refresh and tidy">
@@ -12838,6 +12822,7 @@
     <div class="conv-session-stack">
       <div id="arbStrip"></div>
       <div id="loopStrip"></div>
+      <div id="cmdStrip"></div>
       <div class="hang-working" id="convViewWorking" aria-live="polite"></div>
     </div>
     </div>
@@ -38732,6 +38717,9 @@ function nlmSourceDelete(source) {
         `<div class="conversation-title"><span class="dot${r.pulse}${r.ended}" style="background:${r.dot}"` +
         ` aria-hidden="true"></span><span class="conv-kind">${convGlyph(r.c)}</span>` +
         `<span class="name">${escapeHtml(r.c.name)}</span>` +
+        // A session over this room that has stopped, or a Commander running in it. A paused one
+        // looks exactly like an idle room otherwise, and it will not start itself again.
+        (typeof roomSessionMarkHtml === 'function' ? roomSessionMarkHtml(r.c.id) : '') +
         // Which providers this conversation talks to, beside its name. Without it an agent
         // conversation and an ordinary one are the same card, and the only place the difference
         // was written down was a field one module reads.
@@ -44622,6 +44610,8 @@ function studioCardHtml() {
       arbAskDetail(arbSession);
       arbRender();
       syncBrowserTab();
+      // A paused session is marked on its room's row (commander.js, which every page loads).
+      if (typeof roomMarksChanged === 'function') roomMarksChanged();
     }
 
     // One session on any state change. `ended` is not a state to draw: the session is over, and a
@@ -44646,6 +44636,8 @@ function studioCardHtml() {
       arbAskDetail(arbSession);
       arbRender();
       syncBrowserTab();
+      // A paused session is marked on its room's row (commander.js, which every page loads).
+      if (typeof roomMarksChanged === 'function') roomMarksChanged();
     }
 
     // A session that stopped is asking for a person, and `call_human` is it asking by name. That
@@ -47293,6 +47285,7 @@ function studioCardHtml() {
       cmdPast = [];
       closeCmdSetup();
       cmdSyncButton();
+      if (had) roomMarksChanged();
       if (had && typeof renderLauncher === 'function') renderLauncher();
     }
 
@@ -47302,6 +47295,7 @@ function studioCardHtml() {
       cmdSessions = (msg && msg.sessions) || [];
       cmdPast = (msg && msg.past) || [];
       cmdSyncButton();
+      roomMarksChanged();
       // Whether this relay answers about Commanders at all is what gates the Command Center's
       // tile, and that answer arrives after the launcher has already been drawn once.
       if (!had && typeof renderLauncher === 'function') renderLauncher();
@@ -47318,6 +47312,7 @@ function studioCardHtml() {
       if (s.state === 'ended') cmdPast = [s].concat(cmdPast);
       else cmdSessions = [s].concat(cmdSessions);
       cmdSyncButton();
+      roomMarksChanged();
       // The dialog redraws itself only while it is standing over the session that moved — a
       // Commander pausing in another room must not take the form out from under somebody.
       //
@@ -47362,14 +47357,147 @@ function studioCardHtml() {
       return out;
     }
 
-    // The mark. Two chevrons, which is what a commander wears — deliberately nothing like
-    // arbitration's three circles, because the two buttons sit beside each other.
+    // The mark. A flag on its pole, which is what a command post flies — deliberately nothing like
+    // arbitration's three circles, because the two buttons sit beside each other. The cloth is
+    // washed with the stroke colour so the mark still reads as a flag at 14px.
     function cmdSign(size) {
       const n = size || 16;
       return `<svg class="cmd-sign" viewBox="0 0 24 24" width="${n}" height="${n}"` +
-        ' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"' +
+        ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
         ' stroke-linejoin="round" aria-hidden="true">' +
-        '<path d="M5 13l7-6 7 6" /><path d="M5 19l7-6 7 6" /></svg>';
+        '<path d="M5.5 21.5V3" />' +
+        '<path d="M5.5 4.5c2.4-1.4 4.6-1.4 7 0s4.6 1.4 7 0v9c-2.4 1.4-4.6 1.4-7 0s-4.6-1.4-7 0z"' +
+        ' fill="currentColor" fill-opacity="0.22" /></svg>';
+    }
+
+    // Two bars, filled: the pause every media control has taught. Drawn rather than typed, because
+    // the ⏸ character is an emoji on some platforms and a thin glyph on others.
+    function cmdPauseSign(size) {
+      const n = size || 12;
+      return `<svg class="cmd-pause-sign" viewBox="0 0 24 24" width="${n}" height="${n}"` +
+        ' fill="currentColor" aria-hidden="true">' +
+        '<rect x="6" y="4.5" width="4.2" height="15" rx="1.3" />' +
+        '<rect x="13.8" y="4.5" width="4.2" height="15" rx="1.3" /></svg>';
+    }
+
+    // A pause reason in a few words, for a chip and a strip. The full sentence, and what to do
+    // about it, is arbitration's ARB_PAUSE_WHY, which both kinds of session share.
+    const CMD_PAUSE_SHORT = {
+      restart: 'relay restarted', user: 'paused by you', parent: 'paused with its parent',
+      budget_steps: 'out of steps', budget_consecutive: 'too many sends in a row',
+      budget_time: 'out of time', call_human: 'asking for you', send_unconfirmed: 'send unconfirmed',
+      arbitrator_gone: 'its pane exited', member_gone: 'a member exited',
+      not_started: 'not started yet',
+    };
+
+    function cmdPauseShort(s) {
+      const why = (s && s.pause_reason) || '';
+      return CMD_PAUSE_SHORT[why] || (why ? String(why).replace(/_/g, ' ') : 'paused');
+    }
+
+    function cmdPauseWhy(s) {
+      return (typeof ARB_PAUSE_WHY !== 'undefined' && ARB_PAUSE_WHY[(s || {}).pause_reason])
+        || 'It stopped and is waiting for you to resume it.';
+    }
+
+    // What a session is called where a person reads it: its coordinator's pane label, which is the
+    // name the person gave it ("General", "Commander 1"), else what it is.
+    function cmdShortName(s) {
+      if (!s) return '';
+      if (s.manual) return 'Loop';
+      const label = String((s.coordinator || {}).label || '').trim();
+      if (label) return label.length > 16 ? label.slice(0, 15) + '…' : label;
+      return s.tier === 'general' ? 'General' : 'Commander';
+    }
+
+    // What a room row says about the sessions over it, or null for nothing. A paused session of
+    // either kind is the one thing worth a word: it will not start itself again, and the room looks
+    // exactly like an idle one without this. A running Commander is a mark and no word, so a list
+    // of rooms can be scanned for the ones that own work without forty chips saying "running".
+    function roomSessionMark(convId) {
+      if (!convId) return null;
+      const cmd = cmdOn ? cmdSessionForConversation(convId) : null;
+      const arb = typeof arbSessionForConversation === 'function' ? arbSessionForConversation(convId) : null;
+      const stopped = [cmd, arb].find(s => s && s.state === 'paused');
+      if (stopped) {
+        const name = stopped === cmd ? cmdShortName(cmd) : 'Arbitration';
+        return {kind: stopped === cmd ? 'cmd' : 'arb', paused: true, session: stopped,
+                title: `${name} is paused — ${cmdPauseShort(stopped)}. ${cmdPauseWhy(stopped)}`};
+      }
+      if (cmd && !cmd.manual) {
+        return {kind: 'cmd', paused: false, session: cmd, title: `${cmdShortName(cmd)} is running in this room`};
+      }
+      return null;
+    }
+
+    function roomSessionMarkHtml(convId) {
+      const m = roomSessionMark(convId);
+      if (!m) return '';
+      return m.paused
+        ? `<span class="room-mark paused" title="${escapeHtml(m.title)}">${cmdPauseSign(10)}Paused</span>`
+        : `<span class="room-mark" title="${escapeHtml(m.title)}">${cmdSign(12)}</span>`;
+    }
+
+    // The room lists carry the marks above, so they are redrawn when a session moves. Both pages
+    // answer to `renderConversations`, and both only rewrite the rows that changed.
+    function roomMarksChanged() {
+      if (typeof renderConversations === 'function') renderConversations();
+    }
+
+    // The button's face: the flag alone while it is an offer, the flag and the session's name once
+    // the room has one, and a pause mark beside the name while it is stopped. A glyph on its own
+    // said nothing about whether this room was owned or merely could be.
+    function cmdButtonFace(s) {
+      if (!s) return cmdSign(16);
+      return cmdSign(14) + `<span class="cmd-btn-name">${escapeHtml(cmdShortName(s))}</span>` +
+        (s.state === 'paused' ? cmdPauseSign(11) : '');
+    }
+
+    function cmdButtonLabel(s) {
+      return !s ? 'Give this conversation a Commander'
+        : s.state === 'paused' ? `${cmdShortName(s)} is paused (${cmdPauseShort(s)}) — open it to resume`
+          : `Manage ${cmdShortName(s)}, this conversation’s Commander`;
+    }
+
+    // Shared by the phone's floating button and each desktop column's: same face, same classes.
+    function cmdPaintButton(el, s) {
+      const face = cmdButtonFace(s);
+      if (el._cmdFace !== face) { el._cmdFace = face; el.innerHTML = face; }
+      el.classList.toggle('live', !!s);
+      el.classList.toggle('paused', !!(s && s.state === 'paused'));
+      const label = cmdButtonLabel(s);
+      el.title = label;
+      el.setAttribute('aria-label', label);
+    }
+
+    // Over the thread, while this room's Commander is stopped: what stopped it and the one press
+    // that starts it again. The panel behind the button already had Resume, and a Commander sat
+    // paused for four days behind it because nothing in the room said so. A manual loop has its
+    // own strip, which already says paused and carries its own Resume.
+    function cmdStripHtml(s) {
+      if (!s || s.manual || s.state !== 'paused') return '';
+      return `<div class="arb-strip loop-strip cmd-strip" data-session="${escapeHtml(s.id)}"` +
+        ' data-state="paused" role="button" tabindex="0" onclick="cmdOpenFromConv()"' +
+        ` onkeydown="if (event.key === 'Enter') cmdOpenFromConv()" title="${escapeHtml(cmdPauseWhy(s))}">` +
+        '<div class="arb-bar">' +
+        '<button type="button" class="hang-btn loop-txt lit" onclick="event.stopPropagation(); cmdResume()"' +
+        ` title="Let ${escapeHtml(cmdShortName(s))} start and wake on work again">Resume</button>` +
+        '<button type="button" class="hang-btn loop-txt" onclick="event.stopPropagation(); cmdOpenFromConv()"' +
+        ' title="Open the Commander panel">Details</button>' +
+        '</div>' +
+        '<div class="arb-say">' +
+        `<span class="arb-say-state">${cmdPauseSign(11)} ${escapeHtml(cmdShortName(s))} is paused · ` +
+        `${escapeHtml(cmdPauseShort(s))}</span></div></div>`;
+    }
+
+    let cmdStripLast = '';
+    function cmdStripSync() {
+      const el = document.getElementById('cmdStrip');
+      if (!el) return;
+      const html = cmdOn ? cmdStripHtml(cmdSessionHere()) : '';
+      if (html === cmdStripLast) return;
+      cmdStripLast = html;
+      el.innerHTML = html;
     }
 
     // The phone's floating button, if this page has one. Two states, like Arbitrate's: this room
@@ -47378,16 +47506,17 @@ function studioCardHtml() {
       const el = document.getElementById('convCommander');
       const conv = typeof convCurrentId === 'function' ? convCurrentId() : '';
       if (cmdSetupConv && cmdSetupConv !== conv) closeCmdSetup();
+      cmdStripSync();
       // The loop's button and strip are synced whether or not this page has the Commander button:
       // the desktop page has a Loop button in its roster header and no Commander button at all.
+      // It also re-syncs every desktop column's buttons and places the strips, this one included.
       if (typeof loopSync === 'function') loopSync();
       if (!el) return;
-      const live = cmdOn && !!cmdSessionHere();
       el.classList.toggle('on', !!(cmdOn && conv));
-      el.classList.toggle('live', live);
-      const label = live ? 'Manage this conversation’s Commander' : 'Give this conversation a Commander';
-      el.title = label;
-      el.setAttribute('aria-label', label);
+      // A manual loop is this room's Commander session too, and the Loop button beside this one
+      // is the face it already has; here it would read as a Commander called "Loop".
+      const s = cmdOn ? cmdSessionHere() : null;
+      cmdPaintButton(el, s && !s.manual ? s : null);
     }
 
     // Whether the button should be offered at all. Called by both pages.
