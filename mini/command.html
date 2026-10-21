@@ -10180,6 +10180,9 @@
     // name -> the last body this browser either adopted from the relay or had acknowledged by it.
     // Such a body is in the relay's history already, so overwriting it needs no `_local` copy.
     const stateRelayHad = {};
+    // name -> the revision that body was at. Kept across sockets, unlike `stateRev`: it is what lets
+    // a reconnect tell an edit made on top of the relay's current document from a stale one.
+    const stateRelayHadRev = {};
 
     // Pure. What to do with one document on the first answer after connect.
     //   'adopt'  — the relay holds it; take it whole
@@ -10473,6 +10476,7 @@
         if (body === null) localStorage.removeItem(key); else localStorage.setItem(key, body);
       } catch (e) { return false; }
       stateRelayHad[name] = body;
+      stateRelayHadRev[name] = stateRev[name] || 0;
       stateSyncRerender(name);
       return true;
     }
@@ -10521,10 +10525,30 @@
         const body = doc.body == null ? null : doc.body;
         // Whatever this browser then decides to do with it, this is what the relay holds.
         if (rev > 0) stateHeld[name] = body;
-        if (rev > 0 && body != null && body === stateRead(name)) stateRelayHad[name] = body;
+        if (rev > 0 && body != null && body === stateRead(name)) {
+          stateRelayHad[name] = body;
+          stateRelayHadRev[name] = rev;
+        }
         if (first) {
           const local = stateRead(name);
           const pending = statePending(name);
+          const edited = stateDirty.has(name) && local !== null && local !== body;
+          // An unsent edit — made while the socket was down, or sent on one that died before its
+          // ack — on top of exactly the document the relay still holds. Nobody wrote in between, so
+          // this is not stale state and the relay's CAS would take it: keep it and send it. Before
+          // the outbox branch, because an unmoved relay copy means the local one already holds
+          // anything that branch would append.
+          if (edited && rev > 0 && stateRelayHadRev[name] === rev && stateRelayHad[name] === body) {
+            continue;
+          }
+          // Otherwise the relay moved and wins below. Say what that cost before it is gone.
+          if (edited && rev > 0) {
+            const carried = pending || new Set();
+            const merged = pending ? stateMerge(name, body, local, carried) : null;
+            stateNoteDrop(name, stateRelayHadRev[name], rev,
+                          stateDropRows(name, merged === null ? body : merged, local, carried),
+                          carried.size);
+          }
           if (pending && rev > 0 && local) {
             const merged = stateMerge(name, body, local, pending);
             if (merged !== null && merged !== body) {
@@ -10588,7 +10612,10 @@
       stateInFlight.delete(name);
       stateClearPending(name, stateSent[name]);
       // Accepted, so what we sent is now what the relay holds.
-      if (stateSent[name] != null) stateHeld[name] = stateRelayHad[name] = stateSent[name];
+      if (stateSent[name] != null) {
+        stateHeld[name] = stateRelayHad[name] = stateSent[name];
+        stateRelayHadRev[name] = stateRev[name];
+      }
       delete stateSent[name];
       if (stateDirty.has(name)) stateSyncFlush(name);
     }
