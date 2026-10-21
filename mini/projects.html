@@ -7,7 +7,17 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-20">
+  <meta name="app-built" content="2026-10-21">
+  <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
+  <script>
+    try {
+      const tint = localStorage.getItem('herdr_tint');
+      if (/^#[0-9a-f]{6}$/i.test(tint || '')) {
+        document.documentElement.style.setProperty('--tint', tint);
+        document.documentElement.dataset.tint = parseInt(tint.slice(1, 3), 16) > 0x80 ? 'light' : 'dark';
+      }
+    } catch (e) { /* storage blocked: stay on the default */ }
+  </script>
   <title>herdr-remote &mdash; projects</title>
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='3'%20y='3.5'%20width='4'%20height='9'%20rx='1'%20fill='%237aa2f7'/%3E%3Crect%20x='8.5'%20y='3.5'%20width='4.5'%20height='5.5'%20rx='1'%20fill='%239ece6a'/%3E%3C/svg%3E">
@@ -3267,6 +3277,94 @@
 .wait-bar .wait-snooze { color: var(--muted); }
 
   </style>
+  <style>
+/* The background tint chosen in Settings, for telling apart copies of the app pointed at different
+   relays. settings.js (and the head script before first paint) writes the one colour as --tint on
+   <html> and marks it data-tint="dark" or "light"; everything below is derived from that colour, so the palette
+   lives in one list in settings.js and no rule here names a hue. No data-tint means the default,
+   and none of these rules apply.
+
+   Dark uses the tint as the page itself and lifts the surfaces and rules off it; light keeps its
+   own lightness and borrows only the tint's hue, so the text contrast each theme was tuned for
+   still holds. The `.desk` rules are the same job for the desktop shell's own token names. */
+:root[data-tint="dark"] {
+  --bg: var(--tint);
+  --surface: color-mix(in srgb, var(--tint), #fff 4%);
+  --border: color-mix(in srgb, var(--tint), #fff 13%);
+  --term-bg: var(--tint);
+}
+
+:root[data-tint="dark"] .desk {
+  --term-bg: var(--tint);
+  --term-sidebar-bg: color-mix(in srgb, var(--tint), #000 18%);
+  --term-active-bg: color-mix(in srgb, var(--tint), #fff 4%);
+  --term-tab-bg: color-mix(in srgb, var(--tint), #fff 4%);
+  --term-border: color-mix(in srgb, var(--tint), #fff 9%);
+}
+
+/* Light takes the tint's hue at its own lightness: mixing a dark tint into a pale grey leaves a
+   grey, so the colour is re-drawn in oklch instead. A browser without relative colour syntax keeps
+   the plain light theme rather than a broken one. */
+@supports (color: oklch(from red l c h)) {
+  :root[data-theme="light"][data-tint="dark"] {
+    --bg: oklch(from var(--tint) 0.92 0.025 h);
+    --surface: oklch(from var(--tint) 0.95 0.015 h);
+    --border: oklch(from var(--tint) 0.85 0.03 h);
+    --term-bg: oklch(from var(--tint) 0.97 0.01 h);
+  }
+
+  :root[data-theme="light"][data-tint="dark"] .desk {
+    --term-bg: oklch(from var(--tint) 0.97 0.01 h);
+    --term-sidebar-bg: oklch(from var(--tint) 0.92 0.025 h);
+    --term-active-bg: oklch(from var(--tint) 0.89 0.03 h);
+    --term-tab-bg: oklch(from var(--tint) 0.92 0.025 h);
+    --term-border: oklch(from var(--tint) 0.85 0.03 h);
+  }
+}
+
+/* A light tint is the light theme's page itself: the pane is the brightest ground, the shell steps
+   down from it, as the plain light theme does. The dark theme has no rule for it and stays Night. */
+:root[data-theme="light"][data-tint="light"] {
+  --bg: var(--tint);
+  --surface: color-mix(in srgb, var(--tint), #fff 45%);
+  --border: color-mix(in srgb, var(--tint), #000 12%);
+  --term-bg: color-mix(in srgb, var(--tint), #fff 55%);
+}
+
+:root[data-theme="light"][data-tint="light"] .desk {
+  --term-bg: color-mix(in srgb, var(--tint), #fff 55%);
+  --term-sidebar-bg: var(--tint);
+  --term-active-bg: color-mix(in srgb, var(--tint), #000 5%);
+  --term-tab-bg: var(--tint);
+  --term-border: color-mix(in srgb, var(--tint), #000 12%);
+}
+
+/* The picker: one round swatch per colour, the chosen one ringed, two even rows of six — twelve
+   in one row do not fit a phone's card, and a ragged wrap reads as a mistake. */
+.tint-pick {
+  display: grid;
+  grid-template-columns: repeat(6, 28px);
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.setting-group .tint-swatch {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.setting-group .tint-swatch[aria-checked="true"] {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+  </style>
 </head>
 
 <body>
@@ -4128,14 +4226,15 @@
     const TAB_TITLE = (typeof document !== 'undefined' && document.title) || 'herdr-remote';
     const favicon = fill => 'data:image/svg+xml,' + encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">` +
-      `<rect width="16" height="16" rx="4" fill="#1a1b26"/>` +
+      `<rect width="16" height="16" rx="4" fill="${document.documentElement.style.getPropertyValue('--tint').trim() || '#1a1b26'}"/>` +
       `<circle cx="8" cy="8" r="4.5" fill="${fill}"/></svg>`);
     function syncBrowserTab() {
       const n = attentionCount();
       document.title = n ? `(${n}) ${TAB_TITLE}` : TAB_TITLE;
       const el = document.getElementById('favicon');
       // Hex and not var(--red): this is an SVG in a data: URI, which resolves no custom property
-      // from the page. The two are the dark theme's --red and --blue.
+      // from the page. The two are the dark theme's --red and --blue; the square is Settings'
+      // background tint, read off <html>, so a tab says which copy of the app it is.
       //
       // Red is blocked alone, matching everything else. Done shares the resting blue rather than
       // getting a third colour: a 16px dot cannot carry three states apart at tab size, and the
@@ -12028,10 +12127,73 @@ function convWebModeOf(conv) {
       if (pick) pick.value = light ? 'light' : 'dark';
       // The installed PWA paints its chrome from this, so it has to track the choice.
       const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.content = light ? '#e6e8ee' : '#1a1b26';
+      const tint = document.documentElement.dataset.tint;
+      if (meta) meta.content = light ? (tint === 'light' ? tintNow() : '#e6e8ee')
+        : (tint === 'dark' ? tintNow() : '#1a1b26');
+    }
+
+    // Background tint, for telling apart copies of the app pointed at different relays. Stored as
+    // the colour itself rather than a name, so the head script can paint it before first paint
+    // without this list. The first entry is the default and stores nothing. src/app_tint.css
+    // derives every surface from the one colour.
+    //
+    // A tint is dark or light by its red channel (tintKind, and the same test in each page's head
+    // script): every dark entry is under 0x40 and every light one over 0xd0. A dark tint is the
+    // dark theme's page and only a hue in light; a light tint is the light theme's page and the
+    // dark theme ignores it. Picking a swatch takes the theme it was drawn for, so a pick looks
+    // like its swatch; Appearance can still put a dark tint under Light afterwards.
+    const TINT_KEY = 'herdr_tint';
+    const TINTS = [
+      ['Night', ''], ['Graphite', '#1d1d20'], ['Slate', '#1e252e'], ['Navy', '#13203a'],
+      ['Teal', '#10292a'], ['Forest', '#142a1c'], ['Olive', '#26271a'], ['Umber', '#2c2118'],
+      ['Wine', '#301a22'], ['Plum', '#261b33'], ['Light grey', '#e2e2e4'], ['Whitish', '#f7f7f4'],
+    ];
+    function tintKind(hex) { return parseInt(hex.slice(1, 3), 16) > 0x80 ? 'light' : 'dark'; }
+    function tintNow() {
+      return document.documentElement.style.getPropertyValue('--tint').trim();
+    }
+    function setTint(hex) {
+      if (hex) setTheme(tintKind(hex));
+      applyTint(hex);
+    }
+    function applyTint(hex) {
+      const root = document.documentElement;
+      if (!TINTS.some(([, h]) => h === hex)) hex = '';
+      if (hex) { root.style.setProperty('--tint', hex); root.dataset.tint = tintKind(hex); }
+      else { root.style.removeProperty('--tint'); delete root.dataset.tint; }
+      try { if (hex) localStorage.setItem(TINT_KEY, hex); else localStorage.removeItem(TINT_KEY); } catch (e) { /* session-only */ }
+      setTheme(root.dataset.theme === 'light' ? 'light' : 'dark');
+      if (typeof syncBrowserTab === 'function') syncBrowserTab();
+      syncTouchIcon(hex);
+      const pick = document.getElementById('tintPick');
+      if (!pick) return;
+      const name = ([n, h]) => h ? n : n + ' (default)';
+      const now = TINTS.find(([, h]) => h === hex);
+      const label = document.getElementById('tintNow');
+      if (label) label.textContent = name(now);
+      pick.innerHTML = TINTS.map(t =>
+        `<button type="button" class="tint-swatch" role="radio" aria-checked="${t[1] === hex}" title="${name(t)}"`
+        + ` aria-label="${t[0]}" style="background:${t[1] || '#1a1b26'}" onclick="setTint('${t[1]}')"></button>`).join('');
+    }
+    // The home-screen icon, redrawn in the tint: the favicon's disc on a square of it. iOS reads
+    // this link when Add to Home Screen is tapped and never again, so an installed copy keeps the
+    // icon it was installed with; the file in the page is the default and stays so.
+    function syncTouchIcon(hex) {
+      const link = document.querySelector('link[rel="apple-touch-icon"]');
+      if (!link) return;
+      if (!link.dataset.file) link.dataset.file = link.getAttribute('href');
+      if (!hex) { link.setAttribute('href', link.dataset.file); return; }
+      const c = document.createElement('canvas');
+      c.width = c.height = 180;
+      const g = c.getContext('2d');
+      if (!g) return;
+      g.fillStyle = hex; g.fillRect(0, 0, 180, 180);
+      g.fillStyle = '#7aa2f7'; g.beginPath(); g.arc(90, 90, 50.4, 0, 2 * Math.PI); g.fill();
+      link.setAttribute('href', c.toDataURL('image/png'));
     }
 
     setTheme(localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark');
+    try { applyTint(localStorage.getItem(TINT_KEY) || ''); } catch (e) { applyTint(''); }
 
     // Both defaults preserve the existing prompt treatment and make a detected summary useful the
     // first time a pane opens. The parser still runs when a colour is off; only row classes stop.
