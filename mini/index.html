@@ -23754,6 +23754,8 @@
         // is what a band names, and it is not a tile of the document — nothing made it and
         // nothing can edit or delete it.
         + (typeof ccLauncherTileHtml === 'function' ? ccLauncherTileHtml() : '')
+        // The General beside it, for the same reasons: one per install, nobody's tile to edit.
+        + (typeof cmdGeneralTileHtml === 'function' ? cmdGeneralTileHtml() : '')
         // One band is every tile in it, so a heading over the lot says nothing. Two or more and the
         // heading is what tells a template from a tile that already knows where it runs.
         + (groups.length > 1
@@ -47570,13 +47572,14 @@ function studioCardHtml() {
     function cmdSessionsReceive(msg) {
       const had = cmdOn;
       cmdOn = true;
+      const general = cmdGeneralSig();
       cmdSessions = (msg && msg.sessions) || [];
       cmdPast = (msg && msg.past) || [];
       cmdSyncButton();
       roomMarksChanged();
       // Whether this relay answers about Commanders at all is what gates the Command Center's
       // tile, and that answer arrives after the launcher has already been drawn once.
-      if (!had && typeof renderLauncher === 'function') renderLauncher();
+      if (!had || general !== cmdGeneralSig()) cmdGeneralChanged();
     }
 
     // One session, merged in place. An ended one is moved rather than dropped: the form a person
@@ -47585,12 +47588,14 @@ function studioCardHtml() {
       const s = msg && msg.session;
       if (!s || !s.id) return;
       cmdOn = true;
+      const general = cmdGeneralSig();
       cmdSessions = cmdSessions.filter(x => x.id !== s.id);
       cmdPast = cmdPast.filter(x => x.id !== s.id);
       if (s.state === 'ended') cmdPast = [s].concat(cmdPast);
       else cmdSessions = [s].concat(cmdSessions);
       cmdSyncButton();
       roomMarksChanged();
+      if (general !== cmdGeneralSig()) cmdGeneralChanged();
       // The dialog redraws itself only while it is standing over the session that moved — a
       // Commander pausing in another room must not take the form out from under somebody.
       //
@@ -47892,6 +47897,12 @@ function studioCardHtml() {
     // which keeps the form open so the press can be corrected, and the success, which is the only
     // thing that closes it now.
     function cmdNoteStartResult(msg) {
+      // The General tile's start, answered: a refusal takes the tile off "Starting…" (the toast
+      // says why); a success is redrawn by the session it brings.
+      if (cmdGeneralAsked && msg.type === 'error') {
+        cmdGeneralAsked = 0;
+        cmdGeneralChanged();
+      }
       if (!cmdSetupConv) return false;       // nothing open; whatever this is, it is not ours
       if (msg.type === 'error') {
         cmdSetupStatus(msg.message || 'The relay refused that.');
@@ -48467,6 +48478,69 @@ function studioCardHtml() {
     function cmdAgain(id) {
       arbSend({type: 'cmd_start', again: id});
       cmdSetupStatus('Starting it again…', true);
+    }
+
+    // --- the General's way in ---------------------------------------------------------------
+    // One General per install, always in the Project `home` and the room `c_general`: the relay
+    // fixes both, so a start here has nothing to choose and is one press (two taps, armed). A
+    // General already open, running or paused, is opened instead, in whatever room it is in.
+    let cmdGeneralAsked = 0;
+
+    function cmdOpenGeneralSession() {
+      return cmdSessions.find(s => s.tier === 'general' && s.state !== 'ended') || null;
+    }
+
+    function cmdGeneralSig() {
+      const g = cmdOpenGeneralSession();
+      return g ? g.id + ':' + g.state : '';
+    }
+
+    function cmdGeneralTileHtml() {
+      if (!cmdOn) return '';
+      const g = cmdOpenGeneralSession();
+      const starting = !g && Date.now() - cmdGeneralAsked < CMD_START_WAIT_MS;
+      const live = g && g.state !== 'paused'
+        ? '<span class="launcher-live" title="It is running — pressing this opens it">'
+          + '<span class="launcher-live-dot"></span>live</span>'
+        : '';
+      const what = g ? (g.state === 'paused' ? 'Paused — open its room to resume' : 'Open its room')
+        : starting ? 'Starting…' : 'Start it in home';
+      return '<div class="launcher-tile-wrap">'
+        + '<button class="launcher-tile" data-action="command" data-general="true"'
+        + ' data-arm-key="cmd-general"'
+        + ' onclick="cmdGeneralPress(this)" title="The one General: hand it work for any Project">'
+        + '<span class="launcher-kind">Commander</span>'
+        + '<span class="launcher-name">General</span>'
+        + `<span class="launcher-payload">${escapeHtml(what)}</span>`
+        + '</button>' + live + '</div>';
+    }
+
+    function cmdGeneralPress(btn) {
+      const g = cmdOpenGeneralSession();
+      if (g) {
+        if (g.conversation && typeof openConversation === 'function') openConversation(g.conversation);
+        return;
+      }
+      if (Date.now() - cmdGeneralAsked < CMD_START_WAIT_MS) {
+        showToast('The General is starting — this can take a minute.');
+        return;
+      }
+      armButton(btn, 'Tap again to start the General.', cmdGeneralStart, 'cmd-general');
+    }
+
+    function cmdGeneralStart() {
+      cmdGeneralAsked = Date.now();
+      arbSend({type: 'cmd_start', recipe: 'general', scope: 'General', conversation: 'c_general',
+               coordinator: {}, members: []});
+      showToast('Starting the General… this can take a minute.');
+      cmdGeneralChanged();
+    }
+
+    // The tile and the General tab say what the General is now: redrawn when it starts, ends or
+    // pauses, and when a start this page sent is refused.
+    function cmdGeneralChanged() {
+      if (typeof renderLauncher === 'function') renderLauncher();
+      if (typeof cmdRender === 'function') cmdRender();
     }
 
     // --- managing one ------------------------------------------------------------------------
