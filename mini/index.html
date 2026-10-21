@@ -9024,6 +9024,15 @@
       background: color-mix(in srgb, var(--orange) 14%, var(--surface));
     }
 
+    /* On a phone the name does not fit beside both floating rows: it pushed the right row over the
+       left one at 375px. The flag, the pause mark and the colour still say it; the strip under the
+       row and the button's label carry the name. */
+    @media (max-width: 440px) {
+      .hang-commander .cmd-btn-name {
+        display: none;
+      }
+    }
+
     /* A loop the person owns is green while it runs and amber while it is stopped: the colour is
        what says, from across the room, whether the chain is still moving. */
     .hang-loop.live {
@@ -9200,6 +9209,17 @@
     .hang-tint.bare {
       color: var(--pink);
       border-color: var(--pink);
+    }
+
+    /* Red, which nothing else in the row uses: on, this switch changes what Send does, and a
+       reader who forgot it was on should see why a sheet came up. */
+    .hang-guard.live {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    .hang-guard svg {
+      display: block;
     }
 
     /* Lit in the branch colour rather than the record's green: two buttons side by side in the
@@ -11957,6 +11977,89 @@
 .wait-bar .wait-snooze { color: var(--muted); }
 
   </style>
+  <style>
+/* The send guard's popup, for both pages. Centred rather than a sheet from the bottom edge: it is
+   a question asked of a send in progress, and on a phone a sheet sitting where the keyboard was
+   read as the composer having moved. Only palette variables both pages define. */
+/* Placed by `.app-overlay`, which each page defines: the visual viewport on the phone, the window
+   on the desktop. This only centres the card in it and keeps it above the other dialogs. */
+.app-overlay.send-guard {
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.app-overlay.send-guard[hidden] {
+  display: none;
+}
+
+.send-guard-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.send-guard-card {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.send-guard-title {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.send-guard-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.send-guard-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.send-guard-actions button {
+  flex: 1;
+  padding: 11px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.send-guard-cancel {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+}
+
+.send-guard-ok {
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: var(--bg);
+}
+
+  </style>
 </head>
 
 <body>
@@ -12766,6 +12869,16 @@
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />
+        </svg></button>
+      <!-- The send guard: on, every send stops on a sheet naming the agent it is about to reach.
+           With the drawing switches because it is a setting the reader leaves on, not an action on
+           this thread. The icon is a shield with a check. -->
+      <button class="hang-btn hang-guard" id="convGuard" onclick="toggleSendGuard(); hangSync()"
+        aria-pressed="false" aria-label="Confirm the agent before every send">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 2.5l7.5 3v6c0 4.6-3.2 8.4-7.5 10-4.3-1.6-7.5-5.4-7.5-10v-6z" />
+          <path d="M8.8 12.2l2.3 2.3 4.3-4.5" />
         </svg></button>
     </div>
     <div class="hang-float">
@@ -41267,6 +41380,7 @@ function nlmSourceDelete(source) {
       const target = dockAddressed();
       const live = agents.find(a => a.pane_id === target);
       if (!live) { showToast('That agent is no longer running.'); return; }
+      if (sendGuardHolds(live, convSend)) return;
       const lead = dockInstruction(target);
       if (!sendTextTo(target, lead ? lead + '\n\n' + body : body)) return;
       noteDockUse('who', convMemberKey(live));
@@ -41332,6 +41446,7 @@ function nlmSourceDelete(source) {
       const target = dockTargetOf(targets, source);
       const live = agents.find(a => a.pane_id === target);
       if (!live) { showToast('That agent is no longer running.'); return; }
+      if (sendGuardHolds(live, convDockSend)) return;
       const quoted = picked.join('\n\n');
       // The box is sent as written, with each token standing up into the message it names. So a
       // note typed after a token goes out after that message and a note before it goes out before
@@ -47418,24 +47533,36 @@ function studioCardHtml() {
       if (!convId) return null;
       const cmd = cmdOn ? cmdSessionForConversation(convId) : null;
       const arb = typeof arbSessionForConversation === 'function' ? arbSessionForConversation(convId) : null;
-      const stopped = [cmd, arb].find(s => s && s.state === 'paused');
-      if (stopped) {
-        const name = stopped === cmd ? cmdShortName(cmd) : 'Arbitration';
-        return {kind: stopped === cmd ? 'cmd' : 'arb', paused: true, session: stopped,
-                title: `${name} is paused — ${cmdPauseShort(stopped)}. ${cmdPauseWhy(stopped)}`};
+      if (cmd && cmd.state === 'paused') return cmdSessionMark(cmd);
+      if (arb && arb.state === 'paused') {
+        return {flag: false, paused: true,
+                title: `Arbitration is paused — ${cmdPauseShort(arb)}. ${cmdPauseWhy(arb)}`};
       }
-      if (cmd && !cmd.manual) {
-        return {kind: 'cmd', paused: false, session: cmd, title: `${cmdShortName(cmd)} is running in this room`};
-      }
-      return null;
+      return cmd && !cmd.manual ? cmdSessionMark(cmd) : null;
+    }
+
+    // One Commander session's mark, for a list that is already a list of sessions — the Agents
+    // panel's cards on command.html — as well as for the room rows above.
+    function cmdSessionMark(s) {
+      if (!s) return null;
+      const paused = s.state === 'paused';
+      return {flag: !s.manual, paused,
+              title: paused ? `${cmdShortName(s)} is paused — ${cmdPauseShort(s)}. ${cmdPauseWhy(s)}`
+                : `${cmdShortName(s)} is running in this room`};
+    }
+
+    // A paused Commander keeps its flag inside the chip: the row still says whose room it is, and
+    // the chip says it has stopped. A paused arbitration or loop has no flag to keep.
+    function roomMarkHtml(m) {
+      if (!m) return '';
+      const flag = m.flag ? cmdSign(12) : '';
+      return m.paused
+        ? `<span class="room-mark paused" title="${escapeHtml(m.title)}">${flag}${cmdPauseSign(10)}Paused</span>`
+        : `<span class="room-mark" title="${escapeHtml(m.title)}">${flag}</span>`;
     }
 
     function roomSessionMarkHtml(convId) {
-      const m = roomSessionMark(convId);
-      if (!m) return '';
-      return m.paused
-        ? `<span class="room-mark paused" title="${escapeHtml(m.title)}">${cmdPauseSign(10)}Paused</span>`
-        : `<span class="room-mark" title="${escapeHtml(m.title)}">${cmdSign(12)}</span>`;
+      return roomMarkHtml(roomSessionMark(convId));
     }
 
     // The room lists carry the marks above, so they are redrawn when a session moves. Both pages
@@ -51401,6 +51528,9 @@ function studioCardHtml() {
       // Offered over every thread, like the paragraph view and unlike the Markdown switch: the
       // ground behind a bubble is drawn whether or not there is a provider in the room.
       hangSyncTint(document.getElementById('convTint'), !!convViewId);
+      // The send guard, wherever there is a member to send to. A panel's sends go to its providers
+      // and the guard does not stand in front of those.
+      hangSyncGuard(document.getElementById('convGuard'), !!convViewId && recorded);
       hangSyncPara(document.getElementById('panePara'), !!thread && !thread.hidden);
     }
 
@@ -51469,6 +51599,16 @@ function studioCardHtml() {
       btn.classList.toggle('bare', state === 'bare');
       btn.setAttribute('aria-pressed', String(state !== 'normal'));
       btn.title = typeof convTintTitle === 'function' ? convTintTitle(state) : '';
+    }
+
+    function hangSyncGuard(btn, offered) {
+      if (!btn) return;
+      const on = typeof sendGuardOn === 'function' && sendGuardOn();
+      btn.classList.toggle('on', offered);
+      btn.classList.toggle('live', on);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.title = on ? 'Send guard on: every send asks you to confirm the agent — tap to turn it off'
+        : 'Ask before every send which agent it goes to';
     }
 
     function hangSyncPill(el, on) {
@@ -51781,6 +51921,97 @@ function studioCardHtml() {
       if (!live.length) { showToast('Nothing in this conversation is still running.'); return false; }
       live.forEach(p => endPane(p.pane_id));
       return true;
+    }
+
+  </script>
+  <script>
+    // The send guard: a per-device switch that puts a confirmation between Send and the pane,
+    // naming the agent the message is about to reach. The address row already names it, but a
+    // person halfway through a paragraph is not reading the address row — and a message sent to the
+    // wrong member cannot be taken back. Off by default, and per device like the commits toggle:
+    // it is a habit of the hand holding this device, not a fact about the work.
+    //
+    // Shared by the phone and the desktop: each page's send path asks `sendGuardHolds` and each
+    // page's floating row carries the switch. The popup is built here on first use, so neither
+    // page carries markup for it.
+    const SEND_GUARD_KEY = 'herdr_send_guard';
+    let sendGuardRetry = null;
+    let sendGuardReturn = null;
+    let sendGuardPassed = false;
+
+    function sendGuardOn() {
+      try { return localStorage.getItem(SEND_GUARD_KEY) === 'on'; }
+      catch (e) { return false; }
+    }
+
+    function toggleSendGuard() {
+      const on = !sendGuardOn();
+      try { localStorage.setItem(SEND_GUARD_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: nothing to keep it in */ }
+      showToast(on ? 'Send guard on: every send asks first' : 'Send guard off');
+    }
+
+    // True when the send is held for the person to confirm. `retry` is the send to run again on
+    // Confirm, which reads the composer afresh rather than a copy taken here.
+    function sendGuardHolds(pane, retry) {
+      if (sendGuardPassed || !sendGuardOn() || !pane) return false;
+      const box = sendGuardBox();
+      sendGuardRetry = retry;
+      sendGuardReturn = document.activeElement;
+      box.querySelector('#sendGuardWho').innerHTML =
+        `<strong>${escapeHtml(paneLabel(pane) || pane.pane_id)}</strong>${paneBadge(pane)}`;
+      box.hidden = false;
+      box.querySelector('#sendGuardOk').focus();
+      return true;
+    }
+
+    function sendGuardCancel() {
+      const box = document.getElementById('sendGuard');
+      if (box) box.hidden = true;
+      sendGuardRetry = null;
+      const back = sendGuardReturn;
+      sendGuardReturn = null;
+      if (back && back.isConnected && typeof back.focus === 'function') back.focus();
+    }
+
+    function sendGuardConfirm() {
+      const retry = sendGuardRetry;
+      sendGuardCancel();
+      if (!retry) return;
+      sendGuardPassed = true;
+      try { retry(); } finally { sendGuardPassed = false; }
+    }
+
+    function sendGuardBox() {
+      let box = document.getElementById('sendGuard');
+      if (box) return box;
+      box = document.createElement('div');
+      box.id = 'sendGuard';
+      // `app-overlay` for what every dialog on both pages shares: the phone's visual-viewport box
+      // (so the keyboard does not hide it) and the desktop's dialog font and badge rules.
+      box.className = 'app-overlay send-guard';
+      box.hidden = true;
+      box.innerHTML = '<div class="send-guard-scrim"></div>' +
+        '<div class="send-guard-card" role="alertdialog" aria-modal="true"' +
+        ' aria-labelledby="sendGuardTitle" aria-describedby="sendGuardWho">' +
+        '<div class="send-guard-title" id="sendGuardTitle">Confirm send to</div>' +
+        '<div class="send-guard-who" id="sendGuardWho"></div>' +
+        '<div class="send-guard-actions">' +
+        '<button type="button" class="send-guard-cancel">Cancel</button>' +
+        '<button type="button" class="send-guard-ok" id="sendGuardOk">Send</button>' +
+        '</div></div>';
+      box.querySelector('.send-guard-scrim').addEventListener('click', sendGuardCancel);
+      box.querySelector('.send-guard-cancel').addEventListener('click', sendGuardCancel);
+      box.querySelector('.send-guard-ok').addEventListener('click', sendGuardConfirm);
+      // Esc is Cancel, and stops here: the pages have their own Esc for closing what is under it.
+      box.addEventListener('keydown', e => {
+        if (e.key !== 'Escape') return;
+        e.preventDefault();
+        e.stopPropagation();
+        sendGuardCancel();
+      });
+      document.body.appendChild(box);
+      return box;
     }
 
   </script>

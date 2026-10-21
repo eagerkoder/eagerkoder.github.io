@@ -17234,24 +17234,36 @@ function convWebModeOf(conv) {
       if (!convId) return null;
       const cmd = cmdOn ? cmdSessionForConversation(convId) : null;
       const arb = typeof arbSessionForConversation === 'function' ? arbSessionForConversation(convId) : null;
-      const stopped = [cmd, arb].find(s => s && s.state === 'paused');
-      if (stopped) {
-        const name = stopped === cmd ? cmdShortName(cmd) : 'Arbitration';
-        return {kind: stopped === cmd ? 'cmd' : 'arb', paused: true, session: stopped,
-                title: `${name} is paused — ${cmdPauseShort(stopped)}. ${cmdPauseWhy(stopped)}`};
+      if (cmd && cmd.state === 'paused') return cmdSessionMark(cmd);
+      if (arb && arb.state === 'paused') {
+        return {flag: false, paused: true,
+                title: `Arbitration is paused — ${cmdPauseShort(arb)}. ${cmdPauseWhy(arb)}`};
       }
-      if (cmd && !cmd.manual) {
-        return {kind: 'cmd', paused: false, session: cmd, title: `${cmdShortName(cmd)} is running in this room`};
-      }
-      return null;
+      return cmd && !cmd.manual ? cmdSessionMark(cmd) : null;
+    }
+
+    // One Commander session's mark, for a list that is already a list of sessions — the Agents
+    // panel's cards on command.html — as well as for the room rows above.
+    function cmdSessionMark(s) {
+      if (!s) return null;
+      const paused = s.state === 'paused';
+      return {flag: !s.manual, paused,
+              title: paused ? `${cmdShortName(s)} is paused — ${cmdPauseShort(s)}. ${cmdPauseWhy(s)}`
+                : `${cmdShortName(s)} is running in this room`};
+    }
+
+    // A paused Commander keeps its flag inside the chip: the row still says whose room it is, and
+    // the chip says it has stopped. A paused arbitration or loop has no flag to keep.
+    function roomMarkHtml(m) {
+      if (!m) return '';
+      const flag = m.flag ? cmdSign(12) : '';
+      return m.paused
+        ? `<span class="room-mark paused" title="${escapeHtml(m.title)}">${flag}${cmdPauseSign(10)}Paused</span>`
+        : `<span class="room-mark" title="${escapeHtml(m.title)}">${flag}</span>`;
     }
 
     function roomSessionMarkHtml(convId) {
-      const m = roomSessionMark(convId);
-      if (!m) return '';
-      return m.paused
-        ? `<span class="room-mark paused" title="${escapeHtml(m.title)}">${cmdPauseSign(10)}Paused</span>`
-        : `<span class="room-mark" title="${escapeHtml(m.title)}">${cmdSign(12)}</span>`;
+      return roomMarkHtml(roomSessionMark(convId));
     }
 
     // The room lists carry the marks above, so they are redrawn when a session moves. Both pages
