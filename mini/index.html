@@ -15525,6 +15525,56 @@
       } catch (e) { /* local recovery metadata is best effort */ }
     }
 
+    // A write is the whole document, so one built on an older copy than the relay now holds takes
+    // back whatever landed in between: a member the relay seated, a room it made, a room it
+    // retired. The CAS cannot see it — the browser quotes the new revision, because a push it chose
+    // not to adopt still told it the number. That is how codex left the bench room on 2026-10-21.
+    //
+    // So a conversations write is rebased first, against `base` (what this browser's copy came
+    // from) and `stateHeld` (what the relay holds now). Which rooms exist, and who is in each, is
+    // three-way: what this browser added or removed since its base is applied, everything else is
+    // the relay's. Every other field, member labels and counts included, is this browser's, as it
+    // was. Pure.
+    //
+    // ponytail: a stopgap until the relay owns membership — see the 2026-10-21 decision
+    // "the relay owns room membership". Field edits on both sides are still last-write-wins.
+    function stateRebaseRooms(body, theirs, base) {
+      if (body == null || theirs == null || base == null || theirs === base) return body;
+      let m, t, b;
+      try { m = JSON.parse(body); t = JSON.parse(theirs); b = JSON.parse(base); }
+      catch (e) { return body; }
+      if (![m, t, b].every(d => d && typeof d === 'object' && Array.isArray(d.items))) return body;
+      const byId = list => new Map(list.filter(r => r && r.id).map(r => [r.id, r]));
+      const mine = byId(m.items), held = byId(t.items), had = byId(b.items);
+      const aids = r => new Set(((r && r.members) || []).map(x => x && x.aid).filter(Boolean));
+      const items = [];
+      for (const row of m.items) {
+        if (!row || !row.id) { items.push(row); continue; }
+        const h = held.get(row.id), o = had.get(row.id);
+        if (!h) {
+          if (!o) items.push(row);   // made here and not sent yet; gone from the relay is gone
+          continue;
+        }
+        if (!o) { items.push(row); continue; }   // both have it and the base does not: nothing to rebase
+        const mineA = aids(row), baseA = aids(o);
+        const local = new Map((row.members || []).filter(x => x && x.aid).map(x => [x.aid, x]));
+        // The relay's members, less the ones removed here, then the ones added here.
+        const members = (h.members || [])
+          .filter(x => !(x && baseA.has(x.aid) && !mineA.has(x.aid)))
+          .map(x => (x && local.get(x.aid)) || x);
+        const have = aids({members});
+        for (const x of row.members || []) {
+          if (x && x.aid && !baseA.has(x.aid) && !have.has(x.aid)) members.push(x);
+        }
+        items.push(Object.assign({}, row, {members}));
+      }
+      // Rooms the relay made since this browser's base.
+      for (const row of t.items) {
+        if (row && row.id && !mine.has(row.id) && !had.has(row.id)) items.push(row);
+      }
+      return JSON.stringify(Object.assign({}, m, {items}));
+    }
+
     // Everything still waiting on its timer, sent now.
     //
     // The debounce is a 500 ms window in which an edit exists in this browser and nowhere else,
@@ -15610,8 +15660,17 @@
       if (stateUnwritable.has(name)) return;
       // Read at flush time and not at mark time: a burst of edits sends the final state, and an
       // edit that arrived while the timer was running is already included rather than queued.
-      const body = stateRead(name);
-      if (body === null) { stateDirty.delete(name); return; }
+      const raw = stateRead(name);
+      if (raw === null) { stateDirty.delete(name); return; }
+      let body = raw;
+      if (name === 'conversations') {
+        body = stateRebaseRooms(raw, stateHeld[name], stateRelayHad[name]);
+        if (body !== raw) {
+          // What goes out is what this browser shows: a member seated elsewhere appears here too.
+          try { localStorage.setItem(STATE_DOCS[name].key, body); } catch (e) { body = raw; }
+          if (body !== raw) stateSyncRerender(name);
+        }
+      }
       stateDirty.delete(name);
       stateInFlight.add(name);
       stateSent[name] = body;
@@ -15743,6 +15802,10 @@
             const merged = stateMerge(name, body, local, pending);
             if (merged !== null && merged !== body) {
               stateAdopt(name, merged);
+              // The base is the relay's document, not the merge: the appended rows are this
+              // browser's own and still unsent, and the rebase must see them as made here.
+              stateRelayHad[name] = body;
+              stateRelayHadRev[name] = rev;
               stateDirty.add(name);
             } else {
               stateAdopt(name, body);
@@ -15835,6 +15898,8 @@
       delete stateTimers[name];
       if (merged !== null && merged !== remote) {
         stateAdopt(name, merged);
+        stateRelayHad[name] = remote;   // the relay's document is the base, as on connect
+        stateRelayHadRev[name] = stateRev[name];
         stateDirty.add(name);
         stateSyncFlush(name);
         return;
