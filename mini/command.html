@@ -10477,8 +10477,9 @@
         body = stateRebaseRooms(raw, stateHeld[name], stateRelayHad[name]);
         if (body !== raw) {
           // What goes out is what this browser shows: a member seated elsewhere appears here too.
-          try { localStorage.setItem(STATE_DOCS[name].key, body); } catch (e) { body = raw; }
-          if (body !== raw) stateSyncRerender(name);
+          try { localStorage.setItem(STATE_DOCS[name].key, body); }
+          catch (e) { return; } // Keep the edit dirty: the stale body would undo the rebase.
+          stateSyncRerender(name);
         }
       }
       stateDirty.delete(name);
