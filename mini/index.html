@@ -2107,6 +2107,8 @@
       border-bottom: 1px solid var(--border); font-size: 0.8rem; min-width: 0; }
     .remote-links-name { flex: 1; min-width: 0; font-family: monospace; overflow-wrap: anywhere; }
     .remote-links-via { color: var(--muted); font-size: 0.7rem; flex: none; }
+    /* Off this machine's own page the name is shown, not edited. */
+    #remoteLinksAs:read-only { background: transparent; border-color: transparent; padding-left: 0; }
     .setting-group .remote-links-row button { margin: 0; padding: 4px 10px; flex: none;
       background: var(--bg); border: 1px solid var(--border); color: var(--text); font-weight: 500; }
     .remote-links-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px;
@@ -12342,7 +12344,7 @@
          reached are two separately deployed things, and "which versions am I actually running"
          is the first thing asked when one of them behaves unlike the other. The page knows its
          own build; the other two come from the relay, so they read as unknown until connected. -->
-    <!-- The remote machines: the links file (remote_rooms.js). Shown only on this machine's own page. -->
+    <!-- The remote machines: the links file (remote_rooms.js). Listed on every page, edited where the relay allows (links_edit_refusal). -->
     <div class="setting-group" id="remoteLinksGroup" hidden>
       <label>Remote machines</label>
       <div id="remoteLinksList"></div>
@@ -18498,6 +18500,10 @@
         if (typeof remoteRoomsRepaint === 'function') remoteRoomsRepaint();
       }
       else if (msg.type === 'links') { if (typeof remoteRoomsSync === 'function') remoteRoomsSync(msg); }
+      else if (msg.type === 'remote_rooms') { if (typeof remoteRoomsFed === 'function') remoteRoomsFed(msg); }
+      else if (msg.type === 'remote_conv_log') {
+        if (typeof remoteThreadReceive === 'function') remoteThreadReceive(msg.machine, msg);
+      }
       else if (msg.type === 'bench') {
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
@@ -18966,18 +18972,22 @@
     //
     // This relay names the machines it is linked to in a `links` message, each with the address its
     // relay answers at here: its own (`via: lan`), or an SSH forward this relay holds when that
-    // does not answer (`via: ssh`), or its tunnel (`via: wss`), which needs a token this page is
-    // never sent: such a machine is drawn by name alone. This page opens one read-only socket to
-    // each of the others, keeps the
-    // Commanders of Projects that have the same id here, and draws them at the top of the rooms
-    // list, each tagged `remote:<machine>` with its Project. A row opens the room read-only here,
-    // its turns asked of that relay with `conv_log` over the same socket — the only thing this page
-    // ever sends on it — and kept in this module, never in the page's own stores. "Framed app"
-    // shows that relay's own app at the room (`#conv/<id>`) instead, and "Open app" opens it whole
-    // in a new tab: every action happens there, at its own origin.
+    // does not answer (`via: ssh`), or its tunnel or LAN listener (`via: wss`), which needs a token
+    // this page is never sent. This page opens one read-only socket to each `lan`/`ssh` machine;
+    // a `wss` machine's rooms this page's own relay passes through (`remote_rooms`), and reads
+    // their turns for it (`remote_conv_log`). Either way it keeps the Commanders of Projects that
+    // have the same id here, and draws them at the top of the rooms list, each tagged
+    // `remote:<machine>` with its Project. A row opens the room read-only here, its turns asked
+    // with `conv_log` — the only thing this page ever sends that relay — and kept in this module,
+    // never in the page's own stores. "Framed app" shows that relay's own app at the room
+    // (`#conv/<id>`) instead, and "Open app" opens it whole in a new tab: every action happens
+    // there, at its own origin. Neither for a `wss` machine, whose app needs the token.
     //
-    // Only on the laptop relay's own page: the forward listens on this machine's loopback, which
-    // a phone or a page on another host cannot reach. Design:
+    // The `lan`/`ssh` rooms only on the laptop relay's own page: the forward listens on this
+    // machine's loopback, which a phone or a page on another host cannot reach; the `wss` ones on
+    // every page, since they come from this page's own relay. Settings lists the machines
+    // and their routes on every page, and edits them where the relay says this connection may
+    // (`editable`: its own page, or one that showed the token, such as a phone). Design:
     // .workflow/01_concepts/2026-10-25_remote_bench_link.md.
 
     // The rows for one linked machine, from its relay's open Commanders: those of a Project with
@@ -19017,6 +19027,8 @@
     const remoteLinks = new Map();   // name -> {url, via, ws, sessions: Map, timer}
     let remoteAs = 'laptop';
     let remoteConfig = null;         // the links file as written, for Settings
+    let remoteRoutes = new Map();    // name -> {url, via}, the relay's routes, for Settings
+    let remoteEditable = false;      // whether the relay takes this connection's links_put
 
     function remoteRoomsOn() {
       return location.protocol === 'http:'
@@ -19027,13 +19039,17 @@
     // came back, or the forward took over), and closes the ones no longer linked. Called on every
     // `links` message.
     function remoteRoomsSync(msg) {
-      if (!remoteRoomsOn()) return;
       remoteAs = msg.as || 'laptop';
       remoteConfig = msg.config || null;
-      const want = new Map((msg.links || []).map(l => [l.name, l]));
+      remoteRoutes = new Map((msg.links || []).map(l => [l.name, l]));
+      // Sent with the copy on connect only: the broadcasts after it are everybody's.
+      if ('editable' in msg) remoteEditable = !!msg.editable;
+      const want = new Map((msg.links || []).filter(l => l.via === 'wss' || remoteRoomsOn())
+        .map(l => [l.name, l]));
       for (const [host, link] of remoteLinks) {
         const w = want.get(host);
         if (w && w.url === link.url) { link.via = w.via; continue; }
+        if (remoteThread && remoteThread.host === host) remoteRoomClose();
         clearTimeout(link.timer);
         link.closed = true;
         if (link.ws) link.ws.close();
@@ -19044,6 +19060,18 @@
         remoteLinks.set(host, {url: w.url, via: w.via, sessions: new Map()});
         remoteRoomsConnect(host);
       }
+      remoteRoomsRepaint();
+    }
+
+    // A `wss` machine's rooms, passed through by this page's own relay, which holds its token.
+    function remoteRoomsFed(msg) {
+      const link = remoteLinks.get(msg.machine);
+      if (!link || link.via !== 'wss') return;
+      const t = remoteThread && remoteThread.host === msg.machine ? remoteThread : null;
+      const before = t && JSON.stringify(link.sessions.get(t.session) || null);
+      link.connected = !!msg.connected;
+      link.sessions = new Map((msg.sessions || []).map(s => [s.id, s]));
+      if (t && JSON.stringify(link.sessions.get(t.session) || null) !== before) remoteThreadAsk();
       remoteRoomsRepaint();
     }
 
@@ -19087,16 +19115,15 @@
     // The section's rows, as `[key, html]` pairs for paintList: one header per host, then its
     // rooms. Empty when nothing is linked, so a relay without links draws exactly what it did.
     function remoteRoomParts() {
-      if (!remoteRoomsOn()) return [];
       const ids = new Set(((typeof projects !== 'undefined' && projects) || []).map(p => p.id));
       const parts = [];
       for (const [name, link] of remoteLinks) {
         const rows = remoteRoomRows([...link.sessions.values()], {projects: ids, as: remoteAs});
         const host = escapeHtml(name);
         const url = escapeHtml(link.url);
-        const note = link.via === 'wss' ? 'over wss · read its rooms with link.py room'
-          : !(link.ws && link.ws.readyState === 1) ? 'not reachable'
-          : [link.via === 'ssh' ? 'over ssh' : '', rows.length ? '' : 'no Commanders open']
+        const note = !remoteLinkUp(link) ? 'not reachable'
+          : [link.via === 'ssh' ? 'over ssh' : link.via === 'wss' ? 'over wss' : '',
+            rows.length ? '' : 'no Commanders open']
             .filter(Boolean).join(' · ');
         parts.push([`remote:${name}`, `<div class="remote-head"><span class="remote-badge">remote</span>` +
           `<span class="remote-host">${host}</span>` +
@@ -19117,6 +19144,23 @@
         }
       }
       return parts;
+    }
+
+    function remoteLinkUp(link) {
+      return link.via === 'wss' ? !!link.connected : !!(link.ws && link.ws.readyState === 1);
+    }
+
+    // Sends a read to the relay a room is on: on this page's own socket for a `wss` machine,
+    // which this relay forwards, else on the socket to that relay. False when neither is open.
+    function remoteSend(host, link, msg) {
+      if (link.via === 'wss') {
+        if (typeof ws === 'undefined' || !ws || ws.readyState !== 1) return false;
+        ws.send(JSON.stringify({...msg, type: 'remote_conv_log', machine: host}));
+        return true;
+      }
+      if (!link.ws || link.ws.readyState !== 1) return false;
+      link.ws.send(JSON.stringify(msg));
+      return true;
     }
 
     // The room open in the overlay: which machine and session, the agents its record is asked by,
@@ -19144,9 +19188,9 @@
       const src = link.url + '#conv/' + encodeURIComponent(r.room);
       box.innerHTML = `<div class="remote-overlay-head"><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
         `<span class="remote-title">${escapeHtml(r.title)}</span>` +
-        `<button type="button" class="remote-frame-toggle" onclick="remoteRoomFrame()"` +
+        (link.via === 'wss' ? '' : `<button type="button" class="remote-frame-toggle" onclick="remoteRoomFrame()"` +
         ` aria-pressed="false" title="That relay's own app at this room, to act on it">Framed app</button>` +
-        `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>` +
+        `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>`) +
         `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close">✕</button></div>` +
         `<div class="remote-thread" role="log" aria-label="Remote room, read-only"></div>`;
       document.body.appendChild(box);
@@ -19159,7 +19203,7 @@
     function remoteThreadAsk() {
       const t = remoteThread;
       const link = t && remoteLinks.get(t.host);
-      if (!t || t.framed || !link || !link.ws || link.ws.readyState !== 1) return;
+      if (!t || t.framed || !link || !remoteLinkUp(link)) return;
       const s = link.sessions.get(t.session);
       const aids = s ? remoteRoomRows([s], {projects: new Set([s.project_id]), as: remoteAs})[0]?.aids : t.aids;
       const changed = aids && JSON.stringify(aids) !== JSON.stringify(t.aids);
@@ -19169,14 +19213,14 @@
       // A newly staffed agent can have turns older than the previous roster's watermark.
       const newest = changed ? 0 : remoteThreadNewest(t.turns);
       if (newest) msg.since_id = newest;
-      link.ws.send(JSON.stringify(msg));
+      remoteSend(t.host, link, msg);
     }
 
     // Only the answer to this room's own question: the same socket may still carry the answer to
     // the room open before it.
     function remoteThreadReceive(host, msg) {
       const t = remoteThread;
-      if (!t || t.host !== host || JSON.stringify(msg.aids || []) !== JSON.stringify(t.aids)) return;
+      if (!t || t.host !== host || msg.error || JSON.stringify(msg.aids || []) !== JSON.stringify(t.aids)) return;
       t.turns = remoteThreadMerge(t.turns, msg.turns);
       const changed = !t.answered || (msg.turns || []).length > 0;
       t.answered = true;
@@ -19259,11 +19303,17 @@
     const REMOTE_PORTS = new Set(['ssh_port', 'http_port', 'relay_port', 'forward_port']);
     let remoteEdit = null;           // {i, route} while a form is open; i is -1 for a new machine
 
+    // On another page an SSH machine has no socket to look at: the route the relay holds is all
+    // there is.
     function remoteRouteText(name) {
       const link = remoteLinks.get(name);
-      if (!link) return '';
+      if (!link) {
+        const via = (remoteRoutes.get(name) || {}).via;
+        return remoteRoomsOn() ? '' : via === 'ssh' ? 'ssh · forward' : via === 'lan' ? 'ssh · lan'
+          : 'not reachable';
+      }
+      if (!remoteLinkUp(link)) return 'not reachable';
       if (link.via === 'wss') return 'http · wss';
-      if (!(link.ws && link.ws.readyState === 1)) return 'not reachable';
       return link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
     }
 
@@ -19285,7 +19335,7 @@
           remoteInput(k, row.url ? '' : row[k], ph, REMOTE_PORTS.has(k) ? ' inputmode="numeric"' : '') +
           `</label>`).join('') + `</div>` +
         `<div class="wide remote-route-fields" data-route="http"${http ? '' : ' hidden'}>` +
-        `<label class="wide">Tunnel link${remoteInput('url', row.url, 'wss://… its relay tunnel')}</label>` +
+        `<label class="wide">Relay link${remoteInput('url', row.url, 'wss://… its tunnel, or ws://<host>:<port> here')}</label>` +
         `<label class="wide">Auth token${remoteInput('token', '', row.url ? 'saved — blank keeps it'
           : 'its HERDR_RELAY_TOKEN', ' type="password" autocomplete="new-password"')}</label></div>` +
         `<div class="wide remote-links-actions"><button type="button" onclick="remoteEditSave()">Save</button>` +
@@ -19296,21 +19346,25 @@
       const group = document.getElementById('remoteLinksGroup');
       const list = document.getElementById('remoteLinksList');
       if (!group || !list) return;
-      group.hidden = !remoteRoomsOn() || !remoteConfig;
+      group.hidden = !remoteConfig;
       if (group.hidden) return;
+      const own = remoteEditable;
+      if (!own) remoteEdit = null;
       const rows = remoteConfig.links || [];
       let html = rows.map((r, i) => remoteEdit && remoteEdit.i === i ? remoteFormHtml(r)
         : `<div class="remote-links-row"><span class="remote-links-name">${escapeHtml(r.name)}</span>` +
           `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span>` +
-          (remoteEdit ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
+          (remoteEdit || !own ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
             ` aria-label="Edit ${escapeHtml(r.name)}">Edit</button>` +
             `<button type="button" onclick="remoteRemove(${i})"` +
             ` aria-label="Remove ${escapeHtml(r.name)}">Remove</button>`) + `</div>`).join('');
       if (remoteEdit && remoteEdit.i === -1) html += remoteFormHtml({});
-      if (!remoteEdit) html += `<button type="button" class="nav-key" onclick="remoteEditOpen(-1)">Add machine</button>`;
+      if (!remoteEdit && own) html += `<button type="button" class="nav-key" onclick="remoteEditOpen(-1)">Add machine</button>`;
       list.innerHTML = html;
       const as = document.getElementById('remoteLinksAs');
+      if (as) as.readOnly = !own;
       if (as && document.activeElement !== as) as.value = remoteConfig.as || 'laptop';
+      if (!own) remoteHint('Read-only here. Edit them on the relay\'s own page, or connected with its token.');
       const first = list.querySelector('#remoteLinksForm input');
       if (first && remoteEdit && remoteEdit.focus) { remoteEdit.focus = false; first.focus(); }
     }

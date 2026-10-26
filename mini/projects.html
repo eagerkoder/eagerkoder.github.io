@@ -11579,6 +11579,10 @@ function convWebModeOf(conv) {
         if (typeof remoteRoomsRepaint === 'function') remoteRoomsRepaint();
       }
       else if (msg.type === 'links') { if (typeof remoteRoomsSync === 'function') remoteRoomsSync(msg); }
+      else if (msg.type === 'remote_rooms') { if (typeof remoteRoomsFed === 'function') remoteRoomsFed(msg); }
+      else if (msg.type === 'remote_conv_log') {
+        if (typeof remoteThreadReceive === 'function') remoteThreadReceive(msg.machine, msg);
+      }
       else if (msg.type === 'bench') {
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
