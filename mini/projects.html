@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-21">
+  <meta name="app-built" content="2026-10-26">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -7287,7 +7287,18 @@ function convWebModeOf(conv) {
     function convClean(who, text, agent) {
       if (agent !== 'claude' || !text) return text;
       if (who === 'user') {
-        return text.split('\n').filter(l => !CONV_CLAUDE_QUEUE.test(l)).join('\n').trim();
+        // A slash command's output and an @-mention's read hang under the prompt; not typed.
+        const kept = [];
+        let fence = '';
+        for (const line of text.split('\n')) {
+          const mark = line.trimStart().slice(0, 3);
+          if (mark === '```' || mark === '~~~') {
+            if (!fence) fence = mark;
+            else if (fence === mark) fence = '';
+          } else if (!fence && CONV_CLAUDE_RESULT.test(line)) break;
+          if (fence || !CONV_CLAUDE_QUEUE.test(line)) kept.push(line);
+        }
+        return kept.join('\n').trim();
       }
       const kept = [];
       let fence = '';
@@ -11565,13 +11576,21 @@ function convWebModeOf(conv) {
       else if (msg.type === 'projects') {
         projects = msg.projects || [];
         render();
+        if (typeof remoteRoomsRepaint === 'function') remoteRoomsRepaint();
       }
+      else if (msg.type === 'links') { if (typeof remoteRoomsSync === 'function') remoteRoomsSync(msg); }
       else if (msg.type === 'bench') {
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
       }
+      else if (msg.type === 'command_result' && msg.command === 'links_put') {
+        if (typeof remotePutResult === 'function') remotePutResult(msg);
+      }
       else if (msg.type === 'command_result' && msg.command === 'bench_open') {
         if (typeof benchResult === 'function') benchResult(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_edit') {
+        if (typeof benchEditResult === 'function') benchEditResult(msg);
       }
       else if (msg.type === 'start_options') {
         startOptions = msg;
@@ -13657,7 +13676,6 @@ function convWebModeOf(conv) {
       if (!doc) return '';
       const stored = loadCommanderDefaults();
       const policy = f => (stored[f] !== undefined ? stored[f] : doc[f]);
-      const kinds = ((typeof startOptions !== 'undefined' && startOptions) || {}).agents || [];
       const roles = ((typeof startOptions !== 'undefined' && startOptions) || {}).roles || [];
       const rows = Object.keys(doc.profiles).map(name => {
         const mine = stored.profiles && stored.profiles[name] || {};
@@ -13665,8 +13683,6 @@ function convWebModeOf(conv) {
         const at = f => (mine[f] !== undefined ? mine[f] : relay[f]);
         const kind = at('kind');
         const config = at('config') || '';
-        const options = (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
-          .filter(r => r.kind === kind);
         // The relay's sentence about this profile, and only while it is still about what is on
         // screen: an edit this browser has made and the relay has not answered yet would
         // otherwise carry the complaint about the value it replaced. It can be about either
@@ -13674,20 +13690,11 @@ function convWebModeOf(conv) {
         // on it — so both have to still be the pair the relay was answering about.
         const problem = (kind === relay.kind && config === relay.config && relay.problem)
           ? relay.problem : '';
-        // A harness the document names and this relay cannot start is still what the next spawn
-        // would ask for, so it is offered rather than left out. A select whose value matches no
-        // option shows the first one instead, which on a devin-only install drew every built-in
-        // profile as `devin` while the stored document said claude — the screen reading as
-        // already-fixed being exactly how this went unnoticed.
-        const kindOptions = (kind && !kinds.includes(kind)) ? kinds.concat([kind]) : kinds;
         return '<div class="cmd-def">'
           + `<div class="cmd-def-head">${escapeHtml(name)}`
           + `<span class="cfg-sub">${escapeHtml(COMMANDER_PROFILE_NOTES[name] || '')}</span>`
           + '</div><div class="cmd-def-fields">'
-          + commanderPick(name, 'kind', kindOptions.map(k => [k, k]), kind)
-          + commanderPick(name, 'config',
-                          [['', 'stock']].concat(options.map(r => [r.id, r.label || r.id])),
-                          config)
+          + harnessPicks(name, kind, config, 'commanderProfileSet')
           + commanderPick(name, 'role', roles.map(r => [r, r]), at('role'))
           + (name === 'arbitrator'
             ? commanderPick(name, 'mode', COMMANDER_MODES.map(m => [m, m]), at('mode'))
@@ -13706,7 +13713,10 @@ function convWebModeOf(conv) {
       const generals = Array.from({length: 30}, (_, i) => i + 1).map(n =>
         `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
         + `${n}</option>`).join('');
-      return '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
+      // The bench's seats first: what a Project's standing agents start on is read before what a
+      // Commander staffs itself with.
+      return benchDefaultsHtml(doc, stored)
+        + '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
         + '<div class="cfg-note">What a Commander starts when it decides it needs an agent. It'
         + ' names one of these at the moment it wants that kind of agent — nothing here starts'
         + ' anything, and a profile nobody asks for costs nothing.</div>'
@@ -13721,9 +13731,58 @@ function convWebModeOf(conv) {
         + '</div></div>' + rows + '</div>';
     }
 
-    function commanderPick(name, field, options, value) {
+    // What the bench's two built-in seats start on, in every Project that has not picked its own
+    // on the seat itself. In the same document as the profiles above, and drawn the same way.
+    function benchDefaultsHtml(doc, stored) {
+      if (!doc.bench) return '';
+      const rows = Object.keys(doc.bench).map(name => {
+        const mine = stored.bench && stored.bench[name] || {};
+        const relay = doc.bench[name] || {};
+        const at = f => (mine[f] !== undefined ? mine[f] : relay[f]);
+        const kind = at('kind');
+        const config = at('config') || '';
+        const problem = (kind === relay.kind && config === relay.config && relay.problem)
+          ? relay.problem : '';
+        return '<div class="cmd-def">'
+          + `<div class="cmd-def-head">${escapeHtml(name)}</div><div class="cmd-def-fields">`
+          + harnessPicks(name, kind, config, 'benchDefaultSet') + '</div>'
+          + (problem ? `<div class="cfg-note cmd-def-problem">${escapeHtml(problem)}</div>` : '')
+          + '</div>';
+      }).join('');
+      return '<div class="section-header" style="margin-top:18px">Bench defaults</div>'
+        + '<div class="cfg-note">What each bench seat starts on, in every Project that has not'
+        + ' picked its own on the seat. A seat already holding an agent keeps it.</div>'
+        + `<div class="cfg-list">${rows}</div>`;
+    }
+
+    // A harness and its alias. A harness the document names and this relay cannot start is still
+    // offered rather than left out: a select whose value matches no option shows the first one
+    // instead, which on a devin-only install drew every built-in as `devin` while the stored
+    // document said claude — the screen reading as already-fixed being how that went unnoticed.
+    function harnessPicks(name, kind, config, set) {
+      const kinds = ((typeof startOptions !== 'undefined' && startOptions) || {}).agents || [];
+      const kindOptions = (kind && !kinds.includes(kind)) ? kinds.concat([kind]) : kinds;
+      const options = (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
+        .filter(r => r.kind === kind);
+      if (config && !options.some(r => r.id === config)) options.push({id: config});
+      return commanderPick(name, 'kind', kindOptions.map(k => [k, k]), kind, set)
+        + commanderPick(name, 'config',
+                        [['', 'stock']].concat(options.map(r => [r.id, r.label || r.id])), config, set);
+    }
+
+    function benchDefaultSet(name, field, value) {
+      const doc = loadCommanderDefaults();
+      const seats = doc.bench = doc.bench || {};
+      const row = seats[name] = seats[name] || {};
+      row[field] = value;
+      if (field === 'kind') row.config = '';
+      saveCommanderDefaults(doc);
+      if (typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    function commanderPick(name, field, options, value, set = 'commanderProfileSet') {
       return `<select title="${escapeHtml(field)}"`
-        + ` onchange="commanderProfileSet('${escapeHtml(name)}','${field}',this.value)">`
+        + ` onchange="${set}('${escapeHtml(name)}','${field}',this.value)">`
         + options.map(([id, label]) =>
           `<option value="${escapeHtml(id)}"${id === value ? ' selected' : ''}>`
           + `${escapeHtml(label)}</option>`).join('')

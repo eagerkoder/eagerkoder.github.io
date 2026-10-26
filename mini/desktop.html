@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-21">
+  <meta name="app-built" content="2026-10-26">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -4006,6 +4006,79 @@
       font-size: 11px;
     }
 
+    /* Remote rooms (remote_rooms.js): another machine's Commanders, and its app in an overlay. */
+    .remote-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+      padding: 1px 5px; border-radius: 4px; background: var(--accent, #6b8afd); color: #fff;
+      flex: none; }
+    .remote-head, .remote-room, .remote-overlay-head { display: flex; align-items: center;
+      gap: 8px; min-width: 0; }
+    .remote-head { flex-wrap: wrap; row-gap: 2px; padding: 0.45rem 0.7rem 0.2rem; font-size: 12px; opacity: .85; }
+    .remote-host { font-weight: 600; flex: 0 0 auto; max-width: 100%; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .remote-note { opacity: .7; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+    .remote-open { margin-left: auto; color: inherit; font-size: 12px; flex: none; }
+    .remote-room { width: 100%; text-align: left; font: inherit; color: var(--term-dim);
+      background: transparent; border: 0; padding: 0.55rem 0.7rem; margin: 0; cursor: pointer;
+      flex-wrap: wrap; row-gap: 2px; }
+    .remote-room:hover { background: var(--term-active-bg); }
+    .remote-title { flex: 1 1 8em; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; color: var(--text); }
+    .remote-state { font-size: 12px; opacity: .7; flex: none; }
+    .remote-overlay { position: fixed; inset: 4vh 4vw; z-index: 1000; display: flex;
+      flex-direction: column; background: var(--bg, #111); border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.5); overflow: hidden;
+      /* On body, outside `.desk`, so it brings the shell's type and text colour with it. */
+      color: var(--text); font: 13px 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .remote-overlay-head { padding: 8px 12px; border-bottom: 1px solid var(--border, rgba(127,127,127,.3)); }
+    /* The room read here: the page's own bubbles, at a size of their own, since the overlay sits
+       outside every container that sets one. */
+    .remote-tag { text-transform: none; letter-spacing: 0; }
+    .remote-room { flex-wrap: wrap; row-gap: 4px; }
+    .remote-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      font-size: 11px; opacity: .85; min-width: 0; }
+    .remote-meta .remote-state { margin-left: auto; }
+    .remote-meta .badge { margin: 0; }
+    .remote-project { margin-right: 2px; }
+    .remote-frame-toggle { margin-left: auto; font: inherit; font-size: 12px; color: inherit;
+      background: transparent; border: 1px solid var(--border, rgba(127,127,127,.4));
+      border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
+    .remote-frame-toggle[aria-pressed="true"] { background: var(--surface, rgba(127,127,127,.15)); }
+    .remote-frame-toggle + .remote-open { margin-left: 0; }
+    .remote-thread { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
+      gap: 8px; padding: 12px; --conv-font: 13px; }
+    .remote-thread .conv-msg { font-size: var(--conv-font); white-space: normal; }
+    .remote-thread .conv-msg p { margin: 0 0 .5em; }
+    .remote-thread .conv-msg > :last-child { margin-bottom: 0; }
+    .remote-thread .conv-msg.user { align-self: flex-end; }
+    .remote-thread .conv-time { margin-left: 8px; opacity: .6; font-weight: 400; }
+    .remote-thread-note { margin: auto; opacity: .7; font-size: 13px; }
+    .remote-close { background: none; border: 0; color: inherit; font-size: 16px; cursor: pointer; }
+    .remote-frame { flex: 1; border: 0; width: 100%; background: #fff; }
+    /* Settings › Remote machines: one row per machine, and the form in its place while editing. */
+    .remote-links-row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-bottom: 1px solid var(--border); font-size: 0.8rem; min-width: 0; }
+    .remote-links-name { flex: 1; min-width: 0; font-family: monospace; overflow-wrap: anywhere; }
+    .remote-links-via { color: var(--muted); font-size: 0.7rem; flex: none; }
+    .setting-group .remote-links-row button { margin: 0; padding: 4px 10px; flex: none;
+      background: var(--bg); border: 1px solid var(--border); color: var(--text); font-weight: 500; }
+    .remote-links-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px;
+      padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .setting-group .remote-links-form label { margin: 0; }
+    .remote-links-form label input { margin-top: 2px; }
+    .remote-links-form .wide { grid-column: 1 / -1; }
+    .remote-route-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+    .remote-route-fields[hidden] { display: none; }
+    .remote-route { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .setting-group .remote-route label { flex: 1; display: flex; align-items: center; gap: 6px;
+      color: var(--muted); padding: 6px 10px; cursor: pointer; }
+    .setting-group .remote-route input { width: auto; margin: 0; accent-color: var(--blue); }
+    .setting-group .remote-route label:has(input:checked) { background: var(--blue); color: var(--bg); }
+    .remote-links-actions { display: flex; gap: 8px; }
+    .setting-group .remote-links-actions button { margin-top: 2px; flex: 1; width: auto; }
+    @media (max-width: 360px) { .remote-links-form, .remote-route-fields { grid-template-columns: 1fr; } }
+    @media (max-width: 600px) { .remote-overlay { inset: 0; border-radius: 0; } }
+
     <!-- Start session, the pane picker, New agent, the notices and arbitration. Linked here,
          in the middle of this stylesheet, because that is where the rules were. -->
     </style>
@@ -7295,21 +7368,6 @@
   padding: 2px 0;
 }
 
-/* The rest of the Projects, one control rather than one fold each. */
-.bench-add {
-  grid-column: 1 / -1;
-  justify-self: start;
-  max-width: 100%;
-  min-height: 32px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.78rem;
-}
-
 .bench-rows {
   display: flex;
   flex-wrap: wrap;
@@ -7352,6 +7410,67 @@
 .badge.bench {
   color: var(--muted);
   border-style: dashed;
+}
+
+/* An entry's row and the two selects saying what it starts on. */
+.bench-entry {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.bench-pick {
+  min-height: 28px;
+  max-width: 9em;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.bench-pick:disabled { color: var(--muted); opacity: 0.7; }
+
+/* Adding a seat: a native dialog, so the page underneath can repaint without taking the form. */
+.bench-add-dialog {
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  /* A dialog sits on the top layer, outside the desk that sets the page's font. */
+  font: 14px -apple-system, system-ui, sans-serif;
+}
+
+.bench-add-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+
+.bench-add-dialog form { display: flex; flex-direction: column; gap: 10px; }
+
+.bench-add-title { font-weight: 600; }
+
+.bench-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.bench-add-field input,
+.bench-add-field select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
 }
 
   </style>
@@ -7654,7 +7773,14 @@
 
 /* The Project file column: a head with the two views and a refresh, held at the top while the
    file scrolls under it. */
-.cmd-pf { color: var(--term-text); }
+.cmd-pf { color: var(--term-text); font-size: var(--cmd-pf-font, var(--desk-font, 13px)); }
+
+/* Back and forward, and the text size: two small pairs before the views. */
+.cmd-pf-nav { display: inline-flex; }
+.cmd-pf-nav .cmd-pf-btn { padding-inline: 0.5em; }
+.cmd-pf-nav .cmd-pf-btn:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.cmd-pf-nav .cmd-pf-btn:last-child { border-radius: 0 var(--radius-md) var(--radius-md) 0; margin-left: -1px; }
+.cmd-pf-btn:disabled { opacity: 0.35; cursor: default; border-color: var(--term-border); }
 
 .cmd-pf-head {
   display: flex;
@@ -7716,6 +7842,10 @@
 .cmd-pf-md ol { padding-left: 1.6em; }
 .cmd-pf-md code { color: var(--term-str); }
 .cmd-pf-md a { color: var(--accent); }
+/* A relative link to another document in the Project: drawn as a link, a button underneath. */
+.cmd-doc-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.cmd-doc-link:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 .cmd-pf-md .md-copy { display: none; }
 
 .cmd-pf-md .md-code pre {
@@ -7970,6 +8100,32 @@
 .cmd-task[data-focus="1"],
 .cmd-table tr[data-focus="1"] { box-shadow: inset 3px 0 0 var(--accent); }
 .cmd-task[data-focus="1"] { padding-left: 0.5em; }
+
+/* An unstarted bench entry's harness and alias, under the card's badges: its name, then the two
+   selects sharing what width is left, which a narrow panel takes from them and not from the name. */
+.cmd-page .cmd-bench-pick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 0.35em 0.6em;
+}
+
+.cmd-page .cmd-bench-pick .bench-pick { max-width: none; min-height: 24px; padding: 1px 2px; }
+
+.cmd-page .cmd-bench-add {
+  margin: 0 0 0.4em 0.6em;
+  padding: 2px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.cmd-page .cmd-bench-add:hover { color: var(--text); border-color: var(--accent); }
 
   </style>
 
@@ -8371,6 +8527,15 @@
           <div class="hint">Tells apart copies of the app on different relays. Kept on this device.</div>
         </div>
 
+        <!-- The remote machines: the links file (remote_rooms.js). Shown only on this machine's own page. -->
+        <div class="setting-group" id="remoteLinksGroup" hidden>
+          <label>Remote machines</label>
+          <div id="remoteLinksList"></div>
+          <label for="remoteLinksAs" style="margin-top:10px">This machine's name on them</label>
+          <input id="remoteLinksAs" type="text" spellcheck="false" autocapitalize="none" autocomplete="off"
+            placeholder="laptop" onchange="remoteSetAs(this.value)" />
+          <div class="hint" id="remoteLinksHint" role="status"></div>
+        </div>
         <div class="setting-group">
           <label>Versions</label>
           <dl class="version-list">
@@ -13207,7 +13372,18 @@ function convWebModeOf(conv) {
     function convClean(who, text, agent) {
       if (agent !== 'claude' || !text) return text;
       if (who === 'user') {
-        return text.split('\n').filter(l => !CONV_CLAUDE_QUEUE.test(l)).join('\n').trim();
+        // A slash command's output and an @-mention's read hang under the prompt; not typed.
+        const kept = [];
+        let fence = '';
+        for (const line of text.split('\n')) {
+          const mark = line.trimStart().slice(0, 3);
+          if (mark === '```' || mark === '~~~') {
+            if (!fence) fence = mark;
+            else if (fence === mark) fence = '';
+          } else if (!fence && CONV_CLAUDE_RESULT.test(line)) break;
+          if (fence || !CONV_CLAUDE_QUEUE.test(line)) kept.push(line);
+        }
+        return kept.join('\n').trim();
       }
       const kept = [];
       let fence = '';
@@ -16184,11 +16360,14 @@ function mdImage(alt, src) {
 
 // After escaping, a URL's `&` is `&amp;` and its quotes are entities, so the only thing left to
 // check is where it points. Anything that is not plainly http, https or mailto is dropped back to
-// its own text — `javascript:` is the reason, and a relative link has nowhere to go from here.
+// its own text — `javascript:` is the reason. A relative link has nowhere to go from a chat, so it
+// is its own text too, in a span that remembers where it pointed: inert everywhere, and the one
+// page that can open a path — command.html's Project file — makes a link of it (`cmdDocLinks`).
+// No scheme of any kind, no `//host`, no bare `#anchor`.
+const MD_RELATIVE = /^(?![a-z][a-z0-9+.-]*:|\/\/|#)/i;
 function mdLink(text, href) {
-  return MD_SCHEME.test(href)
-    ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
-    : `${text}`;
+  if (MD_SCHEME.test(href)) return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  return MD_RELATIVE.test(href) ? `<span class="md-rel" data-href="${href}">${text}</span>` : `${text}`;
 }
 
 // A pipe table's delimiter row, which is the only thing that makes the row above it a header
@@ -16332,14 +16511,18 @@ function mdCopy(button) {
 function mdInline(line) {
   return line.split(/`([^`]+)`/).map((piece, index) => {
     if (index % 2) return `<code>${piece}</code>`;
+    const tags = [];
     return piece
       // Before the link rule, or that one matches `[alt](src)` and leaves a stray `!` behind.
       .replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_all, alt, src) => mdImage(alt, src))
       .replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_all, text, href) => mdLink(text, href))
+      // Input is escaped, so these tags are ours: keep their attributes out of emphasis rules.
+      .replace(/<[^>]*>/g, tag => `<${tags.push(tag) - 1}>`)
       // Bold before italic, or `**a**` is read as an empty italic wrapping a bold.
       .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1<em>$2</em>')
-      .replace(/(^|\W)_([^_\n]+)_(?=\W|$)/g, '$1<em>$2</em>');
+      .replace(/(^|\W)_([^_\n]+)_(?=\W|$)/g, '$1<em>$2</em>')
+      .replace(/<(\d+)>/g, (_all, at) => tags[Number(at)]);
   }).join('');
 }
 
@@ -19042,13 +19225,21 @@ convApplyTint();
       else if (msg.type === 'projects') {
         projects = msg.projects || [];
         render();
+        if (typeof remoteRoomsRepaint === 'function') remoteRoomsRepaint();
       }
+      else if (msg.type === 'links') { if (typeof remoteRoomsSync === 'function') remoteRoomsSync(msg); }
       else if (msg.type === 'bench') {
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
       }
+      else if (msg.type === 'command_result' && msg.command === 'links_put') {
+        if (typeof remotePutResult === 'function') remotePutResult(msg);
+      }
       else if (msg.type === 'command_result' && msg.command === 'bench_open') {
         if (typeof benchResult === 'function') benchResult(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_edit') {
+        if (typeof benchEditResult === 'function') benchEditResult(msg);
       }
       else if (msg.type === 'start_options') {
         startOptions = msg;
@@ -19497,6 +19688,446 @@ convApplyTint();
           if (pane && convRecordable(msg)) recordPane(pane, (msg.content || '').split('\n'));
         }
       }
+    }
+
+  </script>
+  <script>
+    // Remote rooms: the Commanders of other machines' relays, listed among this page's rooms.
+    //
+    // This relay names the machines it is linked to in a `links` message, each with the address its
+    // relay answers at here: its own (`via: lan`), or an SSH forward this relay holds when that
+    // does not answer (`via: ssh`), or its tunnel (`via: wss`), which needs a token this page is
+    // never sent: such a machine is drawn by name alone. This page opens one read-only socket to
+    // each of the others, keeps the
+    // Commanders of Projects that have the same id here, and draws them at the top of the rooms
+    // list, each tagged `remote:<machine>` with its Project. A row opens the room read-only here,
+    // its turns asked of that relay with `conv_log` over the same socket — the only thing this page
+    // ever sends on it — and kept in this module, never in the page's own stores. "Framed app"
+    // shows that relay's own app at the room (`#conv/<id>`) instead, and "Open app" opens it whole
+    // in a new tab: every action happens there, at its own origin.
+    //
+    // Only on the laptop relay's own page: the forward listens on this machine's loopback, which
+    // a phone or a page on another host cannot reach. Design:
+    // .workflow/01_concepts/2026-10-25_remote_bench_link.md.
+
+    // The rows for one linked machine, from its relay's open Commanders: those of a Project with
+    // an id this page knows. Those whose scope starts with `[<as>]` are the ones this bench
+    // directs, and come first.
+    function remoteRoomRows(sessions, {projects, as}) {
+      const tag = new RegExp('^\\s*\\[' + String(as || 'laptop').replace(/[^a-z0-9-]/g, '') + '\\]\\s*');
+      return (sessions || [])
+        .filter(s => s && projects.has(s.project_id) && s.state !== 'ended' && s.conversation)
+        .map(s => {
+          // The agents whose record is the room: its Commander and its roster, by that relay's ids.
+          const who = [s.coordinator || {}].concat(s.members || []);
+          return {id: s.id, room: s.conversation, state: s.state || '', linked: tag.test(s.scope || ''),
+            title: String(s.scope || s.id).split('\n')[0].replace(tag, '') || s.id,
+            project: s.project_id,
+            aids: [...new Set(who.map(m => m.aid).filter(Boolean))],
+            kinds: [...new Set(who.map(m => m.agent).filter(Boolean))]};
+        })
+        .sort((a, b) => (b.linked - a.linked) || a.id.localeCompare(b.id));
+    }
+
+    // A remote room's thread, held and a delta merged in: one row per record id, in the order it
+    // was said, the newest REMOTE_THREAD_MAX kept. A copy (`dupe_of`) never reaches the wire.
+    const REMOTE_THREAD_MAX = 200;
+    function remoteThreadMerge(held, turns) {
+      const byId = new Map((held || []).map(t => [t.seq, t]));
+      for (const t of turns || []) if (t && t.seq) byId.set(t.seq, t);
+      const out = [...byId.values()].sort((a, b) => (a.at - b.at) || (a.seq - b.seq));
+      return out.length > REMOTE_THREAD_MAX ? out.slice(out.length - REMOTE_THREAD_MAX) : out;
+    }
+
+    function remoteThreadNewest(turns) {
+      return (turns || []).reduce((m, t) => Math.max(m, t.seq || 0), 0);
+    }
+    // --- end remote rooms (pure) ---
+
+    const remoteLinks = new Map();   // name -> {url, via, ws, sessions: Map, timer}
+    let remoteAs = 'laptop';
+    let remoteConfig = null;         // the links file as written, for Settings
+
+    function remoteRoomsOn() {
+      return location.protocol === 'http:'
+        && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    }
+
+    // Opens a socket for every linked machine, moves one whose address changed (its own address
+    // came back, or the forward took over), and closes the ones no longer linked. Called on every
+    // `links` message.
+    function remoteRoomsSync(msg) {
+      if (!remoteRoomsOn()) return;
+      remoteAs = msg.as || 'laptop';
+      remoteConfig = msg.config || null;
+      const want = new Map((msg.links || []).map(l => [l.name, l]));
+      for (const [host, link] of remoteLinks) {
+        const w = want.get(host);
+        if (w && w.url === link.url) { link.via = w.via; continue; }
+        clearTimeout(link.timer);
+        link.closed = true;
+        if (link.ws) link.ws.close();
+        remoteLinks.delete(host);
+      }
+      for (const [host, w] of want) {
+        if (remoteLinks.has(host)) continue;
+        remoteLinks.set(host, {url: w.url, via: w.via, sessions: new Map()});
+        remoteRoomsConnect(host);
+      }
+      remoteRoomsRepaint();
+    }
+
+    function remoteRoomsConnect(host) {
+      const link = remoteLinks.get(host);
+      if (!link || link.closed || link.via === 'wss') return;
+      const ws = new WebSocket(link.url.replace(/^http/, 'ws') + '?proto=' + WEB_PROTOCOL);
+      link.ws = ws;
+      ws.onmessage = ev => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.type === 'conv_log') { remoteThreadReceive(host, msg); return; }
+        if (msg.type === 'cmd_sessions') {
+          link.sessions = new Map((msg.sessions || []).map(s => [s.id, s]));
+        } else if (msg.type === 'cmd_session' && msg.session) {
+          link.sessions.set(msg.session.id, msg.session);
+          if (remoteThread && remoteThread.host === host && remoteThread.session === msg.session.id) {
+            remoteThreadAsk();
+          }
+        } else return;
+        remoteRoomsRepaint();
+      };
+      // A relay comes and goes with its machine and the route to it; try again, and draw the
+      // machine as unreachable meanwhile rather than keep a list that may be stale.
+      ws.onclose = () => {
+        if (link.ws !== ws || link.closed) return;
+        link.ws = null;
+        link.sessions = new Map();
+        remoteRoomsRepaint();
+        link.timer = setTimeout(() => remoteRoomsConnect(host), 5000);
+      };
+    }
+
+    // The rooms list, and Settings' route column, which follows the same sockets. Not under an
+    // open form: a route changing every 15 s would wipe what is being typed.
+    function remoteRoomsRepaint() {
+      if (typeof renderConversations === 'function') renderConversations();
+      if (!remoteEdit) remoteSettingsRender();
+    }
+
+    // The section's rows, as `[key, html]` pairs for paintList: one header per host, then its
+    // rooms. Empty when nothing is linked, so a relay without links draws exactly what it did.
+    function remoteRoomParts() {
+      if (!remoteRoomsOn()) return [];
+      const ids = new Set(((typeof projects !== 'undefined' && projects) || []).map(p => p.id));
+      const parts = [];
+      for (const [name, link] of remoteLinks) {
+        const rows = remoteRoomRows([...link.sessions.values()], {projects: ids, as: remoteAs});
+        const host = escapeHtml(name);
+        const url = escapeHtml(link.url);
+        const note = link.via === 'wss' ? 'over wss · read its rooms with link.py room'
+          : !(link.ws && link.ws.readyState === 1) ? 'not reachable'
+          : [link.via === 'ssh' ? 'over ssh' : '', rows.length ? '' : 'no Commanders open']
+            .filter(Boolean).join(' · ');
+        parts.push([`remote:${name}`, `<div class="remote-head"><span class="remote-badge">remote</span>` +
+          `<span class="remote-host">${host}</span>` +
+          `<span class="remote-note">${note}</span>` +
+          (link.via === 'wss' ? '' : `<a class="remote-open" href="${url}" target="_blank" rel="noopener"` +
+          ` aria-label="Open the app on ${host} in a new tab">Open app ↗</a>`) + `</div>`]);
+        const label = id => (((typeof projects !== 'undefined' && projects) || []).find(p => p.id === id) || {}).label || id;
+        for (const r of rows) {
+          const kinds = r.kinds.map(k => typeof agentBadge === 'function' ? agentBadge(k) : escapeHtml(k)).join('');
+          parts.push([`remote:${name}:${r.id}`, `<button class="remote-room" type="button"` +
+            ` data-host="${host}" data-session="${escapeHtml(r.id)}"` +
+            ` onclick="remoteRoomOpen(this.dataset)">` +
+            `<span class="remote-badge remote-tag">remote:${host}</span>` +
+            `<span class="remote-title">${escapeHtml(r.title)}</span>` +
+            `<span class="remote-meta"><span class="remote-project">${escapeHtml(label(r.project))}</span>${kinds}` +
+            `<span class="remote-state">${r.linked ? escapeHtml(remoteAs) + ' · ' : ''}${escapeHtml(r.state)}</span></span>` +
+            `</button>`]);
+        }
+      }
+      return parts;
+    }
+
+    // The room open in the overlay: which machine and session, the agents its record is asked by,
+    // and the turns held. One at a time, like the overlay.
+    let remoteThread = null;
+    // ponytail: a timer while open, besides the session's own updates; a member's turn landing with
+    // no session change is seen within this. Follow the relay's per-pane `turn` if it lags.
+    const REMOTE_THREAD_EVERY = 5000;
+
+    function remoteRoomOpen({host, session}) {
+      const link = remoteLinks.get(host);
+      const s = link && link.sessions.get(session);
+      if (!s) return;
+      const r = remoteRoomRows([s], {projects: new Set([s.project_id]), as: remoteAs})[0];
+      if (!r) return;
+      remoteRoomClose();
+      remoteThread = {host, session, url: link.url, room: r.room, title: r.title, aids: r.aids,
+        turns: [], answered: false, framed: false,
+        timer: setInterval(() => remoteThreadAsk(), REMOTE_THREAD_EVERY)};
+      const box = document.createElement('div');
+      box.id = 'remoteRoomOverlay';
+      box.className = 'remote-overlay';
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-label', `Remote room on ${host}`);
+      const src = link.url + '#conv/' + encodeURIComponent(r.room);
+      box.innerHTML = `<div class="remote-overlay-head"><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
+        `<span class="remote-title">${escapeHtml(r.title)}</span>` +
+        `<button type="button" class="remote-frame-toggle" onclick="remoteRoomFrame()"` +
+        ` aria-pressed="false" title="That relay's own app at this room, to act on it">Framed app</button>` +
+        `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>` +
+        `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close">✕</button></div>` +
+        `<div class="remote-thread" role="log" aria-label="Remote room, read-only"></div>`;
+      document.body.appendChild(box);
+      box.querySelector('.remote-close').focus();
+      remoteThreadDraw();
+      remoteThreadAsk();
+    }
+
+    // The newest window first, then only what is newer than the newest row held.
+    function remoteThreadAsk() {
+      const t = remoteThread;
+      const link = t && remoteLinks.get(t.host);
+      if (!t || t.framed || !link || !link.ws || link.ws.readyState !== 1) return;
+      const s = link.sessions.get(t.session);
+      const aids = s ? remoteRoomRows([s], {projects: new Set([s.project_id]), as: remoteAs})[0]?.aids : t.aids;
+      const changed = aids && JSON.stringify(aids) !== JSON.stringify(t.aids);
+      if (changed) t.aids = aids;
+      if (!t.aids.length) return;
+      const msg = {type: 'conv_log', aids: t.aids, last: 60};
+      // A newly staffed agent can have turns older than the previous roster's watermark.
+      const newest = changed ? 0 : remoteThreadNewest(t.turns);
+      if (newest) msg.since_id = newest;
+      link.ws.send(JSON.stringify(msg));
+    }
+
+    // Only the answer to this room's own question: the same socket may still carry the answer to
+    // the room open before it.
+    function remoteThreadReceive(host, msg) {
+      const t = remoteThread;
+      if (!t || t.host !== host || JSON.stringify(msg.aids || []) !== JSON.stringify(t.aids)) return;
+      t.turns = remoteThreadMerge(t.turns, msg.turns);
+      const changed = !t.answered || (msg.turns || []).length > 0;
+      t.answered = true;
+      if (changed) remoteThreadDraw();
+    }
+
+    function remoteThreadDraw() {
+      const box = document.querySelector('#remoteRoomOverlay .remote-thread');
+      const t = remoteThread;
+      if (!box || !t) return;
+      const near = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+      if (!t.answered) {
+        box.innerHTML = '<p class="remote-thread-note">Reading the room from ' + escapeHtml(t.host) + '…</p>';
+        return;
+      }
+      if (!t.turns.length) {
+        box.innerHTML = '<p class="remote-thread-note">Nothing said in this room yet.</p>';
+        return;
+      }
+      box.innerHTML = t.turns.map(remoteTurnHtml).join('');
+      if (near) box.scrollTop = box.scrollHeight;
+    }
+
+    // One turn as the page's own bubbles draw it: what was said to an agent on the right, what it
+    // said on the left in its harness's colour.
+    function remoteTurnHtml(turn) {
+      const asked = turn.kind === 'human_prompt' || turn.kind === 'arbitrated';
+      const name = turn.label || turn.agent || 'agent';
+      const who = asked ? `${turn.origin === 'human_web' ? 'You' : 'Relay'} → ${name}` : name;
+      const color = typeof agentColor === 'function' ? agentColor(turn.agent) : '';
+      const at = turn.at ? new Date(turn.at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+      const text = turn.text || turn.tail || '';
+      return `<div class="conv-msg${asked ? ' user' : ''}"${color ? ` style="--conv-agent:${escapeHtml(color)}"` : ''}>` +
+        `<div class="conv-who">${escapeHtml(who)}<span class="conv-time">${escapeHtml(at)}</span></div>` +
+        (typeof markdownHtml === 'function' ? markdownHtml(text) : escapeHtml(text)) + '</div>';
+    }
+
+    // That relay's own app in place of the thread, and back.
+    function remoteRoomFrame() {
+      const t = remoteThread;
+      const box = document.getElementById('remoteRoomOverlay');
+      if (!t || !box) return;
+      t.framed = !t.framed;
+      box.querySelector('.remote-frame-toggle').setAttribute('aria-pressed', String(t.framed));
+      const body = box.querySelector('.remote-thread, .remote-frame');
+      if (t.framed) {
+        const src = t.url + '#conv/' + encodeURIComponent(t.room);
+        body.outerHTML = `<iframe class="remote-frame" title="Remote room on ${escapeHtml(t.host)}" src="${escapeHtml(src)}"></iframe>`;
+      } else {
+        body.outerHTML = '<div class="remote-thread" role="log" aria-label="Remote room, read-only"></div>';
+        remoteThreadDraw();
+        remoteThreadAsk();
+      }
+    }
+
+    function remoteRoomClose() {
+      if (remoteThread) clearInterval(remoteThread.timer);
+      remoteThread = null;
+      const box = document.getElementById('remoteRoomOverlay');
+      if (box) box.remove();
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && document.getElementById('remoteRoomOverlay')) remoteRoomClose();
+    });
+
+    // Settings: the remote machines, which is the links file. Only on this machine's own page,
+    // which is also the only page the relay takes a `links_put` from. Each machine is reached one
+    // way at a time, switchable on its form: over SSH, where its name is how SSH and the browser
+    // both reach it unless its SSH or HTTP fields say otherwise (a reverse SSH tunnel, a fixed
+    // address; an empty field takes the default its placeholder names), or over HTTP, its relay's
+    // wss:// tunnel and token. The token goes to the relay once, which keeps it in a file of its
+    // own; it never comes back to this page.
+    const REMOTE_FIELDS = [
+      ['ssh_host', 'SSH host', 'the name'], ['ssh_port', 'SSH port', 'from ssh config'],
+      ['ssh_user', 'SSH user', 'from ssh config'], ['http_host', 'HTTP host', 'the name'],
+      ['http_port', 'HTTP port', 'the relay port'], ['relay_port', 'Relay port there', '8375'],
+      ['forward_port', 'Forward port here', 'automatic'], ['python', 'Python there', 'python3', 'wide'],
+    ];
+    const REMOTE_PORTS = new Set(['ssh_port', 'http_port', 'relay_port', 'forward_port']);
+    let remoteEdit = null;           // {i, route} while a form is open; i is -1 for a new machine
+
+    function remoteRouteText(name) {
+      const link = remoteLinks.get(name);
+      if (!link) return '';
+      if (link.via === 'wss') return 'http · wss';
+      if (!(link.ws && link.ws.readyState === 1)) return 'not reachable';
+      return link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
+    }
+
+    function remoteInput(k, value, ph, extra = '') {
+      return `<input data-k="${k}" value="${escapeHtml(String(value ?? ''))}" placeholder="${escapeHtml(ph)}"` +
+        ` spellcheck="false" autocapitalize="none" autocomplete="off"${extra}>`;
+    }
+
+    function remoteFormHtml(row) {
+      const http = remoteEdit.route === 'http';
+      const route = r => `<label><input type="radio" name="remoteRoute" value="${r}"` +
+        `${remoteEdit.route === r ? ' checked' : ''} onchange="remoteEditRoute(this.value)">` +
+        `${r === 'ssh' ? 'SSH' : 'HTTP (tunnel)'}</label>`;
+      return `<div class="remote-links-form" id="remoteLinksForm">` +
+        `<label class="wide">Name${remoteInput('name', row.name, 'towshifs-mini')}</label>` +
+        `<div class="wide remote-route" role="radiogroup" aria-label="Reach it over">${route('ssh')}${route('http')}</div>` +
+        `<div class="wide remote-route-fields" data-route="ssh"${http ? ' hidden' : ''}>` +
+        REMOTE_FIELDS.map(([k, label, ph, cls]) => `<label class="${cls || ''}">${label}` +
+          remoteInput(k, row.url ? '' : row[k], ph, REMOTE_PORTS.has(k) ? ' inputmode="numeric"' : '') +
+          `</label>`).join('') + `</div>` +
+        `<div class="wide remote-route-fields" data-route="http"${http ? '' : ' hidden'}>` +
+        `<label class="wide">Tunnel link${remoteInput('url', row.url, 'wss://… its relay tunnel')}</label>` +
+        `<label class="wide">Auth token${remoteInput('token', '', row.url ? 'saved — blank keeps it'
+          : 'its HERDR_RELAY_TOKEN', ' type="password" autocomplete="new-password"')}</label></div>` +
+        `<div class="wide remote-links-actions"><button type="button" onclick="remoteEditSave()">Save</button>` +
+        `<button type="button" class="nav-key" onclick="remoteEditCancel()">Cancel</button></div></div>`;
+    }
+
+    function remoteSettingsRender() {
+      const group = document.getElementById('remoteLinksGroup');
+      const list = document.getElementById('remoteLinksList');
+      if (!group || !list) return;
+      group.hidden = !remoteRoomsOn() || !remoteConfig;
+      if (group.hidden) return;
+      const rows = remoteConfig.links || [];
+      let html = rows.map((r, i) => remoteEdit && remoteEdit.i === i ? remoteFormHtml(r)
+        : `<div class="remote-links-row"><span class="remote-links-name">${escapeHtml(r.name)}</span>` +
+          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span>` +
+          (remoteEdit ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
+            ` aria-label="Edit ${escapeHtml(r.name)}">Edit</button>` +
+            `<button type="button" onclick="remoteRemove(${i})"` +
+            ` aria-label="Remove ${escapeHtml(r.name)}">Remove</button>`) + `</div>`).join('');
+      if (remoteEdit && remoteEdit.i === -1) html += remoteFormHtml({});
+      if (!remoteEdit) html += `<button type="button" class="nav-key" onclick="remoteEditOpen(-1)">Add machine</button>`;
+      list.innerHTML = html;
+      const as = document.getElementById('remoteLinksAs');
+      if (as && document.activeElement !== as) as.value = remoteConfig.as || 'laptop';
+      const first = list.querySelector('#remoteLinksForm input');
+      if (first && remoteEdit && remoteEdit.focus) { remoteEdit.focus = false; first.focus(); }
+    }
+
+    function remoteEditOpen(i) {
+      const row = (remoteConfig.links || [])[i] || {};
+      remoteEdit = {i, focus: true, config: JSON.stringify(remoteConfig), route: row.url ? 'http' : 'ssh'};
+      remoteHint('');
+      remoteSettingsRender();
+    }
+
+    // Shows one route's fields and hides the other's, keeping what was typed in both: only the
+    // route chosen when Save is pressed is written.
+    function remoteEditRoute(route) {
+      if (!remoteEdit) return;
+      remoteEdit.route = route;
+      document.querySelectorAll('#remoteLinksForm .remote-route input').forEach(b => {
+        b.checked = b.value === route;
+      });
+      document.querySelectorAll('#remoteLinksForm .remote-route-fields').forEach(el => {
+        el.hidden = el.dataset.route !== route;
+      });
+    }
+
+    function remoteEditCancel() {
+      remoteEdit = null;
+      remoteHint('');
+      remoteSettingsRender();
+    }
+
+    function remoteHint(text) {
+      const el = document.getElementById('remoteLinksHint');
+      if (el) el.textContent = text;
+    }
+
+    // A port that is not digits goes as written, so the relay refuses it by name rather than
+    // the page turning it into nothing.
+    function remoteEditSave() {
+      if (remoteEdit.config && remoteEdit.config !== JSON.stringify(remoteConfig)) {
+        remoteHint('The machines changed. Cancel and reopen this form before saving.');
+        return;
+      }
+      const old = (remoteConfig.links || [])[remoteEdit.i] || {};
+      const value = k => (document.querySelector(`#remoteLinksForm input[data-k="${k}"]`) || {}).value?.trim() || '';
+      const row = {name: value('name')};
+      const tokens = {};
+      if (remoteEdit.route === 'http') {
+        if (value('url')) row.url = value('url');
+        const token = value('token');
+        if (token) tokens[row.name] = token;
+        else if (old.url && old.token_file) row.token_file = old.token_file;
+        else { remoteHint("Paste the remote relay's auth token."); return; }
+      } else {
+        for (const [k] of REMOTE_FIELDS) {
+          const v = value(k);
+          if (v) row[k] = REMOTE_PORTS.has(k) && /^\d+$/.test(v) ? Number(v) : v;
+        }
+        // Fields this form does not show, such as arbiter_dir, stay with the SSH route.
+        if (!old.url) for (const k of Object.keys(old)) if (!(k in row) && k !== 'name' && !REMOTE_FIELDS.some(f => f[0] === k)) row[k] = old[k];
+      }
+      const links = (remoteConfig.links || []).slice();
+      if (remoteEdit.i === -1) links.push(row); else links[remoteEdit.i] = row;
+      remotePut({as: remoteConfig.as || 'laptop', links}, tokens);
+    }
+
+    function remoteRemove(i) {
+      const row = (remoteConfig.links || [])[i];
+      if (!row || !confirm(`Remove ${row.name}? Its rooms leave this list${row.url ? ' and its saved token is deleted' : ' and its SSH forward stops'}.`)) return;
+      remotePut({as: remoteConfig.as || 'laptop', links: remoteConfig.links.filter((_, j) => j !== i)});
+    }
+
+    function remoteSetAs(value) {
+      if (!remoteConfig || value.trim() === (remoteConfig.as || 'laptop')) return;
+      remotePut({as: value.trim(), links: remoteConfig.links || []});
+    }
+
+    function remotePut(config, tokens) {
+      if (!ws || ws.readyState !== 1) { remoteHint('Not connected — nothing was saved.'); return; }
+      remoteHint('Saving…');
+      ws.send(JSON.stringify({type: 'links_put', config, ...(tokens && Object.keys(tokens).length ? {tokens} : {})}));
+    }
+
+    function remotePutResult(msg) {
+      if (!msg.ok) { remoteHint(msg.error || 'Not saved.'); return; }
+      remoteEdit = null;
+      remoteHint('Saved.');
+      remoteSettingsRender();
     }
 
   </script>
@@ -21619,7 +22250,6 @@ convApplyTint();
       if (!doc) return '';
       const stored = loadCommanderDefaults();
       const policy = f => (stored[f] !== undefined ? stored[f] : doc[f]);
-      const kinds = ((typeof startOptions !== 'undefined' && startOptions) || {}).agents || [];
       const roles = ((typeof startOptions !== 'undefined' && startOptions) || {}).roles || [];
       const rows = Object.keys(doc.profiles).map(name => {
         const mine = stored.profiles && stored.profiles[name] || {};
@@ -21627,8 +22257,6 @@ convApplyTint();
         const at = f => (mine[f] !== undefined ? mine[f] : relay[f]);
         const kind = at('kind');
         const config = at('config') || '';
-        const options = (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
-          .filter(r => r.kind === kind);
         // The relay's sentence about this profile, and only while it is still about what is on
         // screen: an edit this browser has made and the relay has not answered yet would
         // otherwise carry the complaint about the value it replaced. It can be about either
@@ -21636,20 +22264,11 @@ convApplyTint();
         // on it — so both have to still be the pair the relay was answering about.
         const problem = (kind === relay.kind && config === relay.config && relay.problem)
           ? relay.problem : '';
-        // A harness the document names and this relay cannot start is still what the next spawn
-        // would ask for, so it is offered rather than left out. A select whose value matches no
-        // option shows the first one instead, which on a devin-only install drew every built-in
-        // profile as `devin` while the stored document said claude — the screen reading as
-        // already-fixed being exactly how this went unnoticed.
-        const kindOptions = (kind && !kinds.includes(kind)) ? kinds.concat([kind]) : kinds;
         return '<div class="cmd-def">'
           + `<div class="cmd-def-head">${escapeHtml(name)}`
           + `<span class="cfg-sub">${escapeHtml(COMMANDER_PROFILE_NOTES[name] || '')}</span>`
           + '</div><div class="cmd-def-fields">'
-          + commanderPick(name, 'kind', kindOptions.map(k => [k, k]), kind)
-          + commanderPick(name, 'config',
-                          [['', 'stock']].concat(options.map(r => [r.id, r.label || r.id])),
-                          config)
+          + harnessPicks(name, kind, config, 'commanderProfileSet')
           + commanderPick(name, 'role', roles.map(r => [r, r]), at('role'))
           + (name === 'arbitrator'
             ? commanderPick(name, 'mode', COMMANDER_MODES.map(m => [m, m]), at('mode'))
@@ -21668,7 +22287,10 @@ convApplyTint();
       const generals = Array.from({length: 30}, (_, i) => i + 1).map(n =>
         `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
         + `${n}</option>`).join('');
-      return '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
+      // The bench's seats first: what a Project's standing agents start on is read before what a
+      // Commander staffs itself with.
+      return benchDefaultsHtml(doc, stored)
+        + '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
         + '<div class="cfg-note">What a Commander starts when it decides it needs an agent. It'
         + ' names one of these at the moment it wants that kind of agent — nothing here starts'
         + ' anything, and a profile nobody asks for costs nothing.</div>'
@@ -21683,9 +22305,58 @@ convApplyTint();
         + '</div></div>' + rows + '</div>';
     }
 
-    function commanderPick(name, field, options, value) {
+    // What the bench's two built-in seats start on, in every Project that has not picked its own
+    // on the seat itself. In the same document as the profiles above, and drawn the same way.
+    function benchDefaultsHtml(doc, stored) {
+      if (!doc.bench) return '';
+      const rows = Object.keys(doc.bench).map(name => {
+        const mine = stored.bench && stored.bench[name] || {};
+        const relay = doc.bench[name] || {};
+        const at = f => (mine[f] !== undefined ? mine[f] : relay[f]);
+        const kind = at('kind');
+        const config = at('config') || '';
+        const problem = (kind === relay.kind && config === relay.config && relay.problem)
+          ? relay.problem : '';
+        return '<div class="cmd-def">'
+          + `<div class="cmd-def-head">${escapeHtml(name)}</div><div class="cmd-def-fields">`
+          + harnessPicks(name, kind, config, 'benchDefaultSet') + '</div>'
+          + (problem ? `<div class="cfg-note cmd-def-problem">${escapeHtml(problem)}</div>` : '')
+          + '</div>';
+      }).join('');
+      return '<div class="section-header" style="margin-top:18px">Bench defaults</div>'
+        + '<div class="cfg-note">What each bench seat starts on, in every Project that has not'
+        + ' picked its own on the seat. A seat already holding an agent keeps it.</div>'
+        + `<div class="cfg-list">${rows}</div>`;
+    }
+
+    // A harness and its alias. A harness the document names and this relay cannot start is still
+    // offered rather than left out: a select whose value matches no option shows the first one
+    // instead, which on a devin-only install drew every built-in as `devin` while the stored
+    // document said claude — the screen reading as already-fixed being how that went unnoticed.
+    function harnessPicks(name, kind, config, set) {
+      const kinds = ((typeof startOptions !== 'undefined' && startOptions) || {}).agents || [];
+      const kindOptions = (kind && !kinds.includes(kind)) ? kinds.concat([kind]) : kinds;
+      const options = (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
+        .filter(r => r.kind === kind);
+      if (config && !options.some(r => r.id === config)) options.push({id: config});
+      return commanderPick(name, 'kind', kindOptions.map(k => [k, k]), kind, set)
+        + commanderPick(name, 'config',
+                        [['', 'stock']].concat(options.map(r => [r.id, r.label || r.id])), config, set);
+    }
+
+    function benchDefaultSet(name, field, value) {
+      const doc = loadCommanderDefaults();
+      const seats = doc.bench = doc.bench || {};
+      const row = seats[name] = seats[name] || {};
+      row[field] = value;
+      if (field === 'kind') row.config = '';
+      saveCommanderDefaults(doc);
+      if (typeof renderLauncher === 'function') renderLauncher();
+    }
+
+    function commanderPick(name, field, options, value, set = 'commanderProfileSet') {
       return `<select title="${escapeHtml(field)}"`
-        + ` onchange="commanderProfileSet('${escapeHtml(name)}','${field}',this.value)">`
+        + ` onchange="${set}('${escapeHtml(name)}','${field}',this.value)">`
         + options.map(([id, label]) =>
           `<option value="${escapeHtml(id)}"${id === value ? ' selected' : ''}>`
           + `${escapeHtml(label)}</option>`).join('')
@@ -22856,14 +23527,12 @@ convApplyTint();
     // a third time.
     const benchOpening = new Set();
     const benchFolds = new Map();
-    // Projects this page was asked to show a bench for before anybody stands there. Kept across a
-    // reconnect: it is what the reader chose to look at, not what the relay said.
-    const benchShown = new Set();
 
     function benchReset() {
       benchProjects = null;
       benchOpening.clear();
       benchFolds.clear();
+      document.getElementById('benchAdd')?.close();
     }
 
     function benchReceive(msg) {
@@ -22871,9 +23540,18 @@ convApplyTint();
       if (typeof renderLauncher === 'function') renderLauncher();
     }
 
-    const BENCH_STATE = {live: 'live', away: 'away', 'not started': 'not started'};
+    const BENCH_STATE = {live: 'live', away: 'away', 'not started': 'not started', linked: 'linked'};
+    // A link entry is another machine's bench writing in over SSH: nothing here to open or start.
+    const BENCH_LINK_TITLE = 'The bench on this machine directs work here over SSH; it has no pane here';
 
     function benchRowHtml(pid, e) {
+      if (e.state === 'linked') {
+        return `<span class="bench-row" data-state="linked" title="${escapeHtml(BENCH_LINK_TITLE)}">`
+          + '<span class="bench-dot"></span>'
+          + `<span class="bench-name">${escapeHtml(e.label || e.name)}</span>`
+          + `<span class="bench-kind">${typeof agentBadge === 'function' ? agentBadge('remote') : 'remote'}</span>`
+          + '<span class="bench-state">linked</span></span>';
+      }
       const key = `${pid}/${e.name}`;
       const opening = benchOpening.has(key);
       const state = opening ? 'opening…' : (BENCH_STATE[e.state] || e.state || '');
@@ -22889,19 +23567,143 @@ convApplyTint();
         + `<span class="bench-name">${escapeHtml(e.label || e.name)}</span>`
         + `<span class="bench-kind">${kind}</span>`
         + `<span class="bench-state">${escapeHtml(state)}</span>`
-        + '</button>';
+        + '</button>' + benchPickHtml(pid, e);
     }
 
-    // One fold per Project where somebody stands, and one picker for the rest: a relay with twenty
-    // Projects is twenty folds of "not started" otherwise. Picking a Project draws its fold, open.
+    // Which harness, and which alias of it, an entry starts on: the recipe editor's two selects.
+    // Drawn only while the entry holds no agent, because an entry holding one brings that same
+    // agent back on its own harness session, and a new harness under it is a resume nobody could
+    // make; its badge says what it runs on. Held still while an open is in flight. A harness this relay does not start is still drawn, so the entry reads as what
+    // the next open would ask for rather than as already fixed.
+    function benchPickHtml(pid, e) {
+      const kinds = ((typeof startOptions !== 'undefined' && startOptions) || {}).agents || [];
+      if (!kinds.length) return '';
+      const kind = e.kind || '';
+      const allKinds = kind && !kinds.includes(kind) ? kinds.concat([kind]) : kinds;
+      const configs = (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
+        .filter(r => r.kind === kind).map(r => [r.id, r.label || r.id]);
+      if (e.config && !configs.some(c => c[0] === e.config)) configs.push([e.config, e.config]);
+      if (e.aid) return '';
+      const held = benchOpening.has(`${pid}/${e.name}`);
+      const title = `What ${e.label || e.name} starts on`;
+      const select = (field, options, value) =>
+        `<select class="bench-pick" data-pid="${escapeHtml(pid)}" data-name="${escapeHtml(e.name)}"`
+        + ` data-field="${field}" aria-label="${escapeHtml(`${e.label || e.name} ${field === 'kind' ? 'harness' : 'alias'}`)}"`
+        + ` title="${escapeHtml(title)}"${held ? ' disabled' : ''} onchange="benchEdit(this)">`
+        + options.map(([v, label]) => `<option value="${escapeHtml(v)}"${v === value ? ' selected' : ''}>`
+          + `${escapeHtml(label)}</option>`).join('') + '</select>';
+      return select('kind', allKinds.map(k => [k, k]), kind)
+        + select('config', [['', 'stock']].concat(configs), e.config || '');
+    }
+
+    function benchRedraw() {
+      if (typeof renderLauncher === 'function') renderLauncher();
+      if (typeof cmdRender === 'function') cmdRender();
+    }
+
+    // The relay checks the harness and answers with a fresh `bench` broadcast, which redraws the
+    // selects from what it holds. A new harness drops the alias, which belongs to the old one.
+    function benchEdit(sel) {
+      const {pid, name, field} = sel.dataset;
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was changed.'); benchRedraw(); return; }
+      const msg = {type: 'bench_edit', project_id: pid, name: name, [field]: sel.value};
+      if (field === 'kind') msg.config = '';
+      ws.send(JSON.stringify(msg));
+    }
+
+    // A seat of the Project's own, beside the two every Project has: `bench_edit` naming a seat
+    // that is not there makes it. In a dialog rather than on the card, because the card is
+    // repainted whenever anything in the panel moves and would take a half-typed name with it.
+    const BENCH_NAME = /^[a-z][a-z0-9-]{0,31}$/;
+    // The add in flight, so a relay older than `create_only` can be asked again without it: the
+    // page has already stopped a taken name, which is all an older relay leaves to check.
+    let benchAddSent = null;
+
+    function benchAddOpen(pid) {
+      const opts = (typeof startOptions !== 'undefined' && startOptions) || {};
+      if (!(opts.agents || []).length) { showToast('This relay starts nothing.'); return; }
+      let dlg = document.getElementById('benchAdd');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'benchAdd';
+        dlg.className = 'bench-add-dialog';
+        dlg.setAttribute('aria-labelledby', 'benchAddTitle');
+        document.body.appendChild(dlg);
+      }
+      const project = (typeof projects !== 'undefined' ? projects : []).find(p => p.id === pid);
+      const option = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+      dlg.dataset.pid = pid;
+      dlg.innerHTML = '<form method="dialog" onsubmit="benchAddSubmit(event)">'
+        + `<div id="benchAddTitle" class="bench-add-title">Add a seat to the bench of ${escapeHtml(project ? project.label || pid : pid)}</div>`
+        + '<label class="bench-add-field">Name<input name="name" required maxlength="32"'
+        + ' pattern="[a-z][a-z0-9\\-]{0,31}" autocapitalize="none" autocomplete="off" spellcheck="false"'
+        + ' placeholder="critic" title="a-z, 0-9 and -, starting with a letter"></label>'
+        + '<label class="bench-add-field">Harness<select name="kind" onchange="benchAddAliases(this.form)">'
+        + (opts.agents || []).map(option).join('') + '</select></label>'
+        + '<label class="bench-add-field">Alias<select name="config"></select></label>'
+        + '<label class="bench-add-field">Role<select name="role"><option value="">none</option>'
+        + (opts.recipe_roles || []).map(option).join('') + '</select></label>'
+        + '<div class="ql-actions"><button type="button" class="ql-secondary"'
+        + ' onclick="this.closest(\'dialog\').close()">Cancel</button>'
+        + '<button type="submit" class="ql-primary">Add</button></div></form>';
+      benchAddAliases(dlg.querySelector('form'));
+      dlg.showModal();
+      dlg.querySelector('input[name="name"]').focus();
+    }
+
+    function benchAddAliases(form) {
+      const kind = form.elements.kind.value;
+      const rows = (typeof agentConfigOffered === 'function' ? agentConfigOffered() : [])
+        .filter(r => r.kind === kind);
+      form.elements.config.innerHTML = '<option value="">stock</option>'
+        + rows.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.label || r.id)}</option>`).join('');
+    }
+
+    function benchAddSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
+      const dlg = form.closest('dialog');
+      const pid = dlg.dataset.pid;
+      const name = form.elements.name.value.trim();
+      if (!BENCH_NAME.test(name)) { showToast('A seat name is a-z, 0-9 and -, starting with a letter.'); return; }
+      // `bench_edit` on a seat that is there changes it, so a name already taken is stopped here.
+      if (((benchProjects || {})[pid] || []).some(x => x.name === name)) {
+        showToast(`${name} is already on this bench.`);
+        return;
+      }
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was added.'); return; }
+      const role = form.elements.role.value;
+      benchAddSent = {type: 'bench_edit', project_id: pid, name: name, create_only: true,
+        label: name.charAt(0).toUpperCase() + name.slice(1), kind: form.elements.kind.value,
+        config: form.elements.config.value, roles: role ? [role] : []};
+      ws.send(JSON.stringify(benchAddSent));
+      dlg.close();
+    }
+
+    function benchEditResult(msg) {
+      const add = benchAddSent && benchAddSent.project_id === msg.project_id
+        && benchAddSent.name === msg.name ? benchAddSent : null;
+      if (add) benchAddSent = null;
+      if (add && !msg.ok && /unexpected field\(s\): create_only/.test(msg.error || '')
+          && ws && ws.readyState === 1) {
+        const {create_only, ...plain} = add;
+        ws.send(JSON.stringify(plain));
+        return;
+      }
+      if (msg.ok) return;
+      showToast(`${msg.name}: ${msg.error || 'not changed'}`);
+      benchRedraw();
+    }
+
+    // One fold per Project where somebody stands, and nothing for the rest: every Project has the
+    // same two seats until somebody starts one, so a list of them all said nothing. A first start
+    // is the command page's bench card, or the General's `bench.open`.
     function benchHtml() {
       if (!benchProjects) return '';
-      const all = projects.filter(p => benchProjects[p.id] && benchProjects[p.id].length);
-      const active = p => benchShown.has(p.id) || benchProjects[p.id].some(e => e.aid
-        || benchOpening.has(`${p.id}/${e.name}`));
-      const rows = all.filter(active);
-      const rest = all.filter(p => !active(p));
-      if (!rows.length && !rest.length) return '';
+      // A linked seat is on every Project of this relay, so it is no sign anybody stands here.
+      const rows = projects.filter(p => (benchProjects[p.id] || []).some(e => (e.aid && e.state !== 'linked')
+        || benchOpening.has(`${p.id}/${e.name}`)));
+      if (!rows.length) return '';
       return '<div class="bench-band">Bench</div>'
         + rows.map(p => {
           const entries = benchProjects[p.id];
@@ -22909,21 +23711,9 @@ convApplyTint();
           return `<details class="bench-project"${open ? ' open' : ''}>`
             + `<summary onclick="benchFolds.set('${escapeHtml(p.id)}', !this.parentElement.open)">`
             + `${escapeHtml(p.label || p.id)}</summary>`
-            + `<div class="bench-rows">${entries.map(e => benchRowHtml(p.id, e)).join('')}</div>`
+            + `<div class="bench-rows">${entries.map(e => `<span class="bench-entry">${benchRowHtml(p.id, e)}</span>`).join('')}</div>`
             + '</details>';
-        }).join('')
-        + (rest.length ? '<select class="bench-add" aria-label="Show the bench of another Project"'
-          + ' onchange="benchShow(this.value)">'
-          + `<option value="">${rows.length ? '+ Another Project…' : '+ Open a Project\'s bench…'}</option>`
-          + rest.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label || p.id)}</option>`).join('')
-          + '</select>' : '');
-    }
-
-    function benchShow(pid) {
-      if (!pid) return;
-      benchShown.add(pid);
-      benchFolds.set(pid, true);
-      renderLauncher();
+        }).join('');
     }
 
     function benchOpen(pid, name) {
@@ -32825,6 +33615,9 @@ convApplyTint();
       // control because it is read at a different distance from all three of those — it is looked
       // at once to find something and then not read again.
       {label: 'Interface', key: 'herdr_desk_ui_font', prop: '--desk-ui-font', def: 11},
+      // A Project file and the documents it links to: read as documents, at the page's own size
+      // until somebody picks another.
+      {label: 'Project file', key: 'herdr_cmd_pf_font', prop: '--cmd-pf-font', def: 13},
     ];
     // 6px is smaller than anything is comfortably read at, which is the point: a wall of five
     // columns is skimmed for shape as often as it is read for words.
@@ -35681,6 +36474,10 @@ convApplyTint();
       const list = deskConvList();
       const convs = list.shown;
       deskDrawConvHead(list);
+      // Another machine's Commanders, linked to a Project here, above this machine's rooms;
+      // not in the archive or a search. See remote_rooms.js.
+      const remote = !list.find.trim() && !list.archiveOn
+        && typeof remoteRoomParts === 'function' ? remoteRoomParts() : [];
       if (!convs.length) {
         // "Waiting" and not "none": an empty list before the documents have arrived is this
         // browser knowing nothing yet, which is a different thing from the fleet having nothing.
@@ -35697,7 +36494,7 @@ convApplyTint();
             ? '<div class="mock-space"><div><small>nothing here — the rooms this app filed ' +
               'itself are under ⋯</small></div></div>'
             : '<div class="mock-space"><div><small>no conversations yet</small></div></div>';
-        paintList(box, html);
+        paintList(box, remote.map(r => r[1]).join('') + html);
         return;
       }
       const pins = deskPins();
@@ -35761,7 +36558,8 @@ convApplyTint();
           ' aria-label="Keep this conversation at the top of the list">★</button>' +
           '</div>'];
       });
-      paintList(box, rows.map(r => r[1]).join(''), rows);
+      const parts = remote.concat(rows);
+      paintList(box, parts.map(r => r[1]).join(''), parts);
       deskMarkConvActive();
     }
 
@@ -39127,6 +39925,16 @@ convApplyTint();
       return rows;
     }
 
+    // The rail in the order this browser last picked each Project: newest first, never-picked ones
+    // after them in the relay's order, and Unplaced last whatever it was stamped. `used` is
+    // `{pid: {at}}`.
+    function cmdRailSort(rows, used) {
+      const at = r => (!r.unplaced && used && used[r.id] && Number(used[r.id].at)) || 0;
+      return rows.map((r, i) => ({r, i}))
+        .sort((a, b) => (!!a.r.unplaced - !!b.r.unplaced) || (at(b.r) - at(a.r)) || (a.i - b.i))
+        .map(x => x.r);
+    }
+
     // A room the recorder filed on its own until somebody names it. Hidden by default: the rooms
     // worth listing are the ones a person named.
     function cmdRoomAuto(conv) {
@@ -39319,6 +40127,24 @@ convApplyTint();
       return (p ? p.label : doc.pid) + ' · ' + file;
     }
 
+    // Where a relative link in a Project's Markdown points, as a path from the Project root, or
+    // null when it is not one this tab opens: a Markdown file that stays inside the Project. `base`
+    // is the path of the file the link is in ('' for PROJECT.md); a leading `/` is the root. The
+    // relay still decides which paths it will read.
+    function cmdDocResolve(base, href) {
+      let p = String(href || '').replace(/[?#].*$/, '');
+      try { p = decodeURIComponent(p); } catch (e) { return null; }
+      if (!/\.md$/i.test(p)) return null;
+      const parts = p.startsWith('/') ? [] : String(base || '').split('/').slice(0, -1).filter(Boolean);
+      for (const seg of p.split('/')) {
+        if (seg === '' || seg === '.') continue;
+        if (seg !== '..') parts.push(seg);
+        else if (!parts.length) return null;
+        else parts.pop();
+      }
+      return parts.length ? parts.join('/') : null;
+    }
+
     // --- end command page (pure) ---
 
     const CMD_PAGE = typeof location !== 'undefined' && /command\.html$/.test(location.pathname);
@@ -39327,6 +40153,8 @@ convApplyTint();
     const CMD_PF_VIEW_KEY = 'herdr_cmd_pf_view';
     const CMD_PF_FOCUS_KEY = 'herdr_cmd_pf_focus';
     const CMD_RAIL_W_KEY = 'herdr_cmd_rail_w';
+    const CMD_USED_KEY = 'herdr_cmd_projects_used';
+    const CMD_PF_FOLD_KEY = 'herdr_cmd_pf_fold';
 
     function cmdStoreGet(key) {
       try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -39344,6 +40172,18 @@ convApplyTint();
     const cmdFolds = new Map();
     let cmdEndedOpen = false;
     let cmdAvailableOpen = false;
+    // Per Project, when this browser last picked it and the room it was standing in when it left:
+    // `{pid: {at, conv}}`. The room is what brings that Project's columns back, because a layout
+    // is already kept per room (desktop_tabs.js).
+    let cmdUsed = (() => {
+      try {
+        const d = JSON.parse(cmdStoreGet(CMD_USED_KEY) || '{}');
+        return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+      } catch (e) { return {}; }
+    })();
+    // The rail's order while the pointer is over it. A pick re-sorts the rail, and a row that moved
+    // under the pointer between the two clicks of a double click would take the second one.
+    let cmdRailHeld = null;
 
     function cmdToggle(name) {
       cmdToggles[name] = !cmdToggles[name];
@@ -39427,6 +40267,133 @@ convApplyTint();
       if (typeof deskRenderColumns === 'function') deskRenderColumns();
     }
 
+    // How the Tree and Roadmap folds open: `auto` opens only what the phase under way holds,
+    // `expand` and `collapse` all of them. A fold the reader turns by hand keeps its own state until
+    // the mode next changes.
+    const CMD_PF_FOLDS = ['auto', 'expand', 'collapse'];
+    const CMD_PF_FOLD_FACE = {auto: '◐ Auto', expand: '⊞ Expanded', collapse: '⊟ Collapsed'};
+    function cmdPfFold() {
+      const v = cmdStoreGet(CMD_PF_FOLD_KEY);
+      return CMD_PF_FOLDS.includes(v) ? v : 'auto';
+    }
+
+    function cmdPfCycleFold(button) {
+      const body = button && button.closest('.desk-pane-body');
+      const next = CMD_PF_FOLDS[(CMD_PF_FOLDS.indexOf(cmdPfFold()) + 1) % CMD_PF_FOLDS.length];
+      cmdStoreSet(CMD_PF_FOLD_KEY, next);
+      // The Project file's folds are the JSON keys; a Commander card's is its session id.
+      for (const k of [...cmdFolds.keys()]) if (k[0] === '[') cmdFolds.delete(k);
+      if (typeof deskRenderColumns === 'function') deskRenderColumns();
+      if (body) body.querySelector('.cmd-pf-fold')?.focus({preventScroll: true});
+    }
+
+    // A fold turned back to what the mode would draw is no longer the reader's own.
+    function cmdFoldNote(key, el) {
+      if (String(el.open) === el.dataset.def) cmdFolds.delete(key);
+      else cmdFolds.set(key, el.open);
+    }
+
+    // The Project file's own text size, on the same scale as the sidebar's text menu.
+    function cmdPfFontRow() {
+      return typeof DESK_TEXT !== 'undefined' ? DESK_TEXT.find(r => r.key === 'herdr_cmd_pf_font') : null;
+    }
+
+    function cmdPfFont(step, button) {
+      const row = cmdPfFontRow();
+      if (!row) return;
+      deskSetTextSize(row, deskTextSize(row) + step, true);
+      const body = button && button.closest('.desk-pane-body');
+      if (typeof deskRenderColumns === 'function') deskRenderColumns();
+      if (body) body.querySelector(`.cmd-pf-font[data-step="${step}"]`)?.focus({preventScroll: true});
+    }
+
+    // Back and forward between a Project file and the documents it links to, in the switchable
+    // column where a link opens. This visit only, like a browser tab's history.
+    let cmdNav = {list: [], at: -1};
+
+    function cmdNavStep(from, to) {
+      if (cmdNav.list[cmdNav.at] !== from) cmdNav = {list: [from], at: 0};
+      if (from === to) return;
+      cmdNav.list = cmdNav.list.slice(0, cmdNav.at + 1).concat(to);
+      cmdNav.at = cmdNav.list.length - 1;
+    }
+
+    function cmdNavGo(step) {
+      const at = cmdNav.at + step;
+      if (at < 0 || at >= cmdNav.list.length) return;
+      cmdNav.at = at;
+      const key = cmdNav.list[at];
+      deskOpen('project', key, cmdTabLabel(key, typeof projects !== 'undefined' ? projects : []));
+      cmdAskProjectFile(key, false);
+    }
+
+    // What every Project file head carries on its right, before the views: back and forward, then
+    // the text size.
+    function cmdPfCommonTools(key) {
+      const here = cmdNav.list[cmdNav.at] === key;
+      const back = here && cmdNav.at > 0, fwd = here && cmdNav.at < cmdNav.list.length - 1;
+      const row = cmdPfFontRow();
+      const size = row ? deskTextSize(row) : null;
+      return '<span class="cmd-pf-nav" role="group" aria-label="History">'
+        + `<button class="cmd-pf-btn" onclick="cmdNavGo(-1)"${back ? '' : ' disabled'}`
+        + ' title="Back" aria-label="Back">‹</button>'
+        + `<button class="cmd-pf-btn" onclick="cmdNavGo(1)"${fwd ? '' : ' disabled'}`
+        + ' title="Forward" aria-label="Forward">›</button></span>'
+        + (row ? '<span class="cmd-pf-nav" role="group" aria-label="Text size">'
+          + `<button class="cmd-pf-btn cmd-pf-font" data-step="-1" onclick="cmdPfFont(-1,this)"`
+          + `${size <= DESK_TEXT_MIN ? ' disabled' : ''} title="Smaller text" aria-label="Smaller text">A−</button>`
+          + `<button class="cmd-pf-btn cmd-pf-font" data-step="1" onclick="cmdPfFont(1,this)"`
+          + `${size >= DESK_TEXT_MAX ? ' disabled' : ''} title="Larger text · ${size}px now"`
+          + ` aria-label="Larger text">A+</button></span>` : '');
+    }
+
+    function cmdOpenDocTab(pid, path) {
+      const key = cmdDocKey(pid, path);
+      const tabKey = deskTabKey('project', key);
+      const lay = deskConvLayout(deskSelectedConv);
+      lay.closed = lay.closed.filter(k => k !== tabKey);
+      deskRememberExtra({kind: 'project', key: key, label: cmdTabLabel(key, projects)});
+      deskComputeTabs();
+      deskSaveLayout();
+      deskRenderTabs();
+      cmdAskProjectFile(key, true);
+    }
+
+    // A linked document's own menu: where it opens. The browser's menu has nothing to offer a
+    // button that is not a link.
+    function cmdDocMenu(e) {
+      const chip = e.target.closest('.cmd-doc[data-path], .cmd-doc-link[data-path]');
+      if (!chip || typeof deskMenuOpen !== 'function') return false;
+      const pid = chip.dataset.pid, path = chip.dataset.path;
+      deskMenuOpen(e.clientX, e.clientY, [
+        {label: path},
+        {label: 'Open here', run: () => cmdOpenDoc(pid, path, false, chip)},
+        {label: 'Open in a new tab', hint: 'on the strip, behind this one', run: () => cmdOpenDocTab(pid, path)},
+        {label: 'Open in a column of its own', run: () => cmdOpenDoc(pid, path, true)},
+      ]);
+      return true;
+    }
+
+    // A relative link `markdownHtml` left inert, made a link to the document it names when it
+    // names one; otherwise its own words, as before. A button, so a keyboard reaches it.
+    function cmdDocLinks(html, pid, base) {
+      return html.replace(/<span class="md-rel" data-href="([^"]*)">([\s\S]*?)<\/span>/g, (_all, href, text) => {
+        const path = cmdDocResolve(base, href.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&'));
+        if (!path) return text;
+        return `<button type="button" class="cmd-doc-link" title="${escapeHtml(path)}"`
+          + ` data-pid="${escapeHtml(pid)}" data-path="${escapeHtml(path)}"`
+          + ` onclick="cmdDocLinkClick(event,this)">${text}</button>`;
+      });
+    }
+
+    // Here, as a link does; Cmd/Ctrl for a tab behind this one, Shift for a column of its own.
+    function cmdDocLinkClick(e, el) {
+      const pid = el.dataset.pid, path = el.dataset.path;
+      if (e && (e.metaKey || e.ctrlKey)) cmdOpenDocTab(pid, path);
+      else cmdOpenDoc(pid, path, !!(e && e.shiftKey), el);
+    }
+
     // A drawn box rather than a glyph, so done is a green tick in every theme and font.
     const CMD_TASK_MARK = {todo: '', doing: '', done: '✓', dropped: '✕'};
     function cmdMark(status) {
@@ -39440,7 +40407,8 @@ convApplyTint();
       const name = String(path).split('/').pop() || path;
       const args = escapeHtml(JSON.stringify(pid) + ',' + JSON.stringify(String(path)));
       return `<button class="cmd-doc${primary ? ' plan' : ''}" title="${escapeHtml(path)}"`
-        + ` onclick="cmdOpenDoc(${args})">${primary ? '📄 ' : ''}${escapeHtml(name)}</button>`;
+        + ` data-pid="${escapeHtml(pid)}" data-path="${escapeHtml(String(path))}"`
+        + ` onclick="cmdOpenDoc(${args},false,this)">${primary ? '📄 ' : ''}${escapeHtml(name)}</button>`;
     }
 
     function cmdTaskHtml(t, mentions, pid, attrs) {
@@ -39460,18 +40428,22 @@ convApplyTint();
     }
 
     function cmdRoadmapHtml(text, pid, focus) {
-      const map = cmdRoadmap(cmdParseProjectFile(text));
+      const parsed = cmdParseProjectFile(text);
+      const map = cmdRoadmap(parsed);
+      const under = cmdFocusPhase(parsed);
       const mentions = cmdMentions(typeof cmdSessions !== 'undefined' ? cmdSessions : [], pid);
       const task = t => cmdTaskHtml(t, mentions, pid, cmdFocusAttr(focus === undefined ? null : focus, t.phase));
       if (!map.categories.length && !map.loose.length) {
         return '<p class="desk-empty">No roadmap in this file yet. The Roadmap view reads '
           + '<code>## Roadmap</code> and the tasks under <code>## Phases</code>.</p>';
       }
-      const feature = f => `<details class="cmd-feature"${f.total && f.done < f.total ? ' open' : ''}>`
+      // Auto opens a feature with a slice in the phase under way.
+      const feature = f => `<details class="cmd-feature"`
+        + cmdFoldAttrs(JSON.stringify(['feature', pid, f.id]), !!under && f.tasks.some(t => t.phase === under)) + '>'
         + `<summary><span class="cmd-feature-id">${escapeHtml(f.id)}</span>`
         + `<span class="cmd-feature-name">${escapeHtml(f.name)}</span>`
         + `<span class="cmd-feature-count">${f.total ? f.done + '/' + f.total : 'no slices'}</span></summary>`
-        + (f.line || f.see.length ? `<div class="cmd-feature-line">${f.line ? markdownHtml(f.line) : ''}`
+        + (f.line || f.see.length ? `<div class="cmd-feature-line">${f.line ? cmdDocLinks(markdownHtml(f.line), pid, '') : ''}`
           + f.see.map(p => cmdDocChip(pid, p)).join('') + '</div>' : '')
         + '<ul class="cmd-tasks">'
         + f.closed.map(c => '<li class="cmd-task cmd-legacy">'
@@ -39483,6 +40455,15 @@ convApplyTint();
         + '</section>').join('')
         + (map.loose.length ? '<section class="cmd-category"><h3>No feature on the roadmap</h3>'
           + `<ul class="cmd-tasks">${map.loose.map(task).join('')}</ul></section>` : '');
+    }
+
+    // A fold's `open`, what the mode alone would draw, and the hand-turn note.
+    function cmdFoldAttrs(key, auto) {
+      const mode = cmdPfFold();
+      const def = mode === 'expand' || (mode === 'auto' && auto);
+      const open = cmdFolds.has(key) ? cmdFolds.get(key) : def;
+      return `${open ? ' open' : ''} data-def="${def}"`
+        + ` ontoggle="cmdFoldNote(${escapeHtml(JSON.stringify(key))},this)"`;
     }
 
     // What focus mode says about one phase: nothing when it is off, else focused or greyed.
@@ -39502,15 +40483,15 @@ convApplyTint();
     // one line saying how many it held.
     function cmdTreeHtml(doc, pid, focus) {
       const mentions = cmdMentions(typeof cmdSessions !== 'undefined' ? cmdSessions : [], pid);
+      const under = cmdFocusPhase(doc);
+      // Auto opens the phase under way and nothing else.
       const node = (id, name, tasks, collapsed, total) => {
         const live = tasks.filter(t => t.status !== 'dropped');
         const done = collapsed ? total : live.filter(t => t.status === 'done').length;
         const all = collapsed ? total : live.length;
-        const key = JSON.stringify(['project', pid, id]);
-        const open = cmdFolds.has(key) ? cmdFolds.get(key) : !collapsed && live.some(t => t.status !== 'done');
-        return `<details class="cmd-tree-phase"${open ? ' open' : ''}${cmdFocusAttr(focus, id)}`
-          + ` ontoggle="cmdFolds.set(${escapeHtml(JSON.stringify(key))},this.open)"`
-          + ` data-done="${all && done === all ? 1 : 0}">`
+        return '<details class="cmd-tree-phase"'
+          + cmdFoldAttrs(JSON.stringify(['project', pid, id]), !!under && id === under)
+          + `${cmdFocusAttr(focus, id)} data-done="${all && done === all ? 1 : 0}">`
           + `<summary><span class="cmd-tree-caret" aria-hidden="true"></span>`
           + (id && id !== 'backlog' ? `<span class="cmd-tree-id">${escapeHtml(id)}</span>` : '')
           + `<span class="cmd-tree-name">${escapeHtml(name)}</span>`
@@ -39548,10 +40529,10 @@ convApplyTint();
 
     // Text: the file as Markdown, a section per phase so focus can grey the others, and the
     // checkboxes Markdown leaves as `[x]` drawn as the other views draw them.
-    function cmdTextHtml(text, focus) {
+    function cmdTextHtml(text, focus, pid) {
       const marks = {' ': 'todo', '~': 'doing', x: 'done', X: 'done', '-': 'dropped'};
       return cmdTextChunks(text).map(c => {
-        const html = markdownHtml(c.text).replace(/<li>\[([ ~xX-])\]\s*/g,
+        const html = cmdDocLinks(markdownHtml(c.text), pid, '').replace(/<li>\[([ ~xX-])\]\s*/g,
           (_all, m) => `<li class="cmd-md-task" data-status="${marks[m]}">${cmdMark(marks[m])}`);
         return c.phase ? `<section class="cmd-md-phase"${cmdFocusAttr(focus, c.phase)}>${html}</section>` : html;
       }).join('');
@@ -39563,7 +40544,8 @@ convApplyTint();
       const when = held && held.mtime && typeof fmtAgo === 'function'
         ? `<span class="cmd-pf-when">edited ${escapeHtml(fmtAgo(new Date(held.mtime)))}</span>` : '';
       const head = `<div class="cmd-pf-head"><code class="cmd-pf-path">${escapeHtml(doc.path)}</code>${when}`
-        + `<span class="cmd-pf-tools"><button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"`
+        + `<span class="cmd-pf-tools">${cmdPfCommonTools(key)}`
+        + '<button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"'
         + ` onclick="cmdPfRefresh(${escapeHtml(JSON.stringify(key))})">↻</button></span></div>`;
       let body;
       if (!held) body = '<p class="desk-empty">Reading…</p>';
@@ -39573,8 +40555,8 @@ convApplyTint();
           {unknown_project: 'this relay knows no such Project', remote: 'the Project is on another host',
             bad_path: 'only Markdown under .workflow/ or docs/, and the root README.md, can be opened here',
             unreadable: 'the relay could not open it — its log says why'}[held.error] || held.error)}.</p>`;
-      } else body = `<div class="cmd-pf-md">${markdownHtml(held.text)}</div>`;
-      return `<div class="cmd-pf" data-view="doc">${head}<div class="cmd-pf-body">${body}</div></div>`;
+      } else body = `<div class="cmd-pf-md">${cmdDocLinks(markdownHtml(held.text), doc.pid, doc.path)}</div>`;
+      return `<div class="cmd-pf" data-view="doc" data-key="${escapeHtml(key)}">${head}<div class="cmd-pf-body">${body}</div></div>`;
     }
 
     function cmdProjectHtml(key) {
@@ -39590,10 +40572,19 @@ convApplyTint();
       const when = held && held.mtime && typeof fmtAgo === 'function'
         ? `<span class="cmd-pf-when">edited ${escapeHtml(fmtAgo(new Date(held.mtime)))}</span>` : '';
       // The column's own header already names the file and the Project.
+      const fold = cmdPfFold();
+      const nextFold = CMD_PF_FOLDS[(CMD_PF_FOLDS.indexOf(fold) + 1) % CMD_PF_FOLDS.length];
       const head = `<div class="cmd-pf-head">${when}`
-        + '<span class="cmd-pf-tools"><span class="cmd-pf-views" role="group" aria-label="View">'
+        + `<span class="cmd-pf-tools">${cmdPfCommonTools(pid)}`
+        + '<span class="cmd-pf-views" role="group" aria-label="View">'
         + btn('tree', 'Tree') + btn('table', 'Table') + btn('roadmap', 'Roadmap') + btn('text', 'Text')
         + '</span>'
+        // Only the two views that fold.
+        + (view === 'tree' || view === 'roadmap'
+          ? `<button class="cmd-pf-btn cmd-pf-fold" data-fold-mode="${fold}" onclick="cmdPfCycleFold(this)"`
+            + ` title="${{auto: 'Only the phase under way is open', expand: 'Every fold is open',
+              collapse: 'Every fold is shut'}[fold]} · press for ${nextFold}"`
+            + ` aria-label="Folds: ${fold}. Press for ${nextFold}">${CMD_PF_FOLD_FACE[fold]}</button>` : '')
         + `<button class="cmd-pf-btn cmd-pf-focus" aria-pressed="${focusOn}" onclick="cmdPfToggleFocus(this)"`
         + ' title="Grey every phase but the one under way, and scroll to it">◎ Focus</button>'
         + `<button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"`
@@ -39611,9 +40602,9 @@ convApplyTint();
         body = view === 'roadmap' ? cmdRoadmapHtml(held.text, pid, focus)
           : view === 'tree' ? cmdTreeHtml(doc, pid, focus)
             : view === 'table' ? cmdTableHtml(doc, pid, focus)
-              : `<div class="cmd-pf-md">${cmdTextHtml(held.text, focus)}</div>`;
+              : `<div class="cmd-pf-md">${cmdTextHtml(held.text, focus, pid)}</div>`;
       }
-      return `<div class="cmd-pf" data-view="${view}"${focusOn ? ' data-focus-mode="1"' : ''}>`
+      return `<div class="cmd-pf" data-view="${view}" data-key="${escapeHtml(pid)}"${focusOn ? ' data-focus-mode="1"' : ''}>`
         + `${head}<div class="cmd-pf-body">${body}</div></div>`;
     }
 
@@ -39645,8 +40636,13 @@ convApplyTint();
     }
 
     function cmdRailHtml(data) {
-      const rows = cmdRailRows(data.projs, data.panes,
+      let rows = cmdRailRows(data.projs, data.panes,
         cmdRoomsByProject(data.convs, data.panes, data.projs, data.sessions), cmdToggles);
+      if (cmdRailHeld) {
+        const at = new Map(cmdRailHeld.map((id, i) => [id, i]));
+        const rank = r => at.has(r.id) ? at.get(r.id) : at.size;
+        rows = rows.map((r, i) => ({r, i})).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map(x => x.r);
+      } else rows = cmdRailSort(rows, cmdUsed);
       if (!rows.length) {
         return '<div class="mock-space"><div><small>'
           + (data.projs.length ? 'nothing live — see ⋯' : 'no Projects on this relay') + '</small></div></div>';
@@ -39734,10 +40730,16 @@ convApplyTint();
     }
 
     function cmdBenchHtml(pid, view, data) {
-      const entries = typeof benchProjects !== 'undefined' && benchProjects ? (benchProjects[pid] || []) : [];
-      if (!entries.length && !view.bench) return '';
+      const offered = typeof benchProjects !== 'undefined' && benchProjects && Array.isArray(benchProjects[pid]);
+      const entries = offered ? benchProjects[pid] : [];
+      if (!offered && !view.bench) return '';
       const room = 'c_bench_' + pid;
       const badges = entries.map(e => {
+        if (e.state === 'linked') {
+          return `<span class="cmd-badge" data-state="linked" title="${escapeHtml(BENCH_LINK_TITLE)}">`
+            + cmdDot('var(--dot-cold)', 'linked', true) + agentBadge('remote')
+            + `<span class="cmd-badge-role">${escapeHtml(e.label || e.name)}</span></span>`;
+        }
         const pane = e.aid ? data.panes.find(p => p.aid === e.aid) : null;
         const dot = cmdDot(pane ? statusColor(pane) : 'var(--dot-cold)', e.state || '', !pane);
         const kind = typeof configBadge === 'function' ? configBadge(e.kind || '?', e.config) : agentBadge(e.kind || '?');
@@ -39750,7 +40752,14 @@ convApplyTint();
         + `<div class="cmd-card-head" data-room="${escapeHtml(view.bench ? room : '')}">`
         + '<span class="cmd-caret-gap"></span><span class="cmd-bench-mark">🏛</span>'
         + '<span class="cmd-card-name">bench</span></div>'
-        + (cmdToggles.compact ? '' : `<div class="cmd-card-badges">${badges}</div>`) + '</div>';
+        + (cmdToggles.compact ? '' : `<div class="cmd-card-badges">${badges}</div>`)
+        + (cmdToggles.compact || typeof benchPickHtml !== 'function' ? ''
+          : entries.filter(e => !e.aid).map(e => `<div class="cmd-bench-pick">`
+            + `<span class="cmd-badge-role">${escapeHtml(e.label || e.name)}</span>`
+            + `${benchPickHtml(pid, e)}</div>`).join(''))
+        + (cmdToggles.compact || typeof benchAddOpen !== 'function' ? ''
+          : '<button type="button" class="cmd-bench-add" data-bench-add title="Add a seat of this Project\'s own">+ seat</button>')
+        + '</div>';
     }
 
     function cmdAgentsHtml(data) {
@@ -39841,19 +40850,42 @@ convApplyTint();
       cmdAskProjectFile(pid, true);
     }
 
-    function cmdOpenDoc(pid, path, split) {
+    // `from` is the link pressed, when it was one inside a Project file: that step is what Back
+    // walks back over.
+    function cmdOpenDoc(pid, path, split, from) {
       const key = cmdDocKey(pid, path);
       const label = cmdTabLabel(key, typeof projects !== 'undefined' ? projects : []);
+      const src = from && from.closest && from.closest('.cmd-pf[data-key]');
+      if (!split && src) cmdNavStep(src.dataset.key, key);
       if (split) deskOpenSplit('project', key, label);
       else deskOpen('project', key, label);
       cmdAskProjectFile(key, true);
     }
 
+    function cmdNoteUse(pid, fields) {
+      cmdUsed[pid] = Object.assign({}, cmdUsed[pid], fields);
+      cmdStoreSet(CMD_USED_KEY, JSON.stringify(cmdUsed));
+    }
+
+    // Picking a Project brings back the room, and so the columns, it had when it was last left;
+    // the first time, its last active Commander's room or its newest room. A Project with no room
+    // leaves the columns as they are.
     function cmdSelect(pid) {
       if (cmdSelected === pid) return;
+      if (cmdSelected !== null && typeof deskSelectedConv !== 'undefined' && deskSelectedConv) {
+        cmdNoteUse(cmdSelected, {conv: deskSelectedConv});
+      }
       cmdSelected = pid;
       cmdStoreSet(CMD_PROJECT_KEY, pid);
+      cmdNoteUse(pid, {at: Date.now()});
       cmdRender();
+      const convs = readConvIndex();
+      let room = cmdUsed[pid].conv;
+      if (!room || !convs.some(c => c.id === room)) {
+        const view = cmdProjectView(pid, cmdData(), cmdToggles);
+        room = (view.last && view.last.conversation) || (view.rooms[0] && view.rooms[0].conv.id) || '';
+      }
+      if (room && convs.some(c => c.id === room) && typeof deskSelectConv === 'function') deskSelectConv(room);
     }
 
     // The bench: a live entry opens its room; one that is not up is started or brought back, which
@@ -39888,6 +40920,11 @@ convApplyTint();
 
     function cmdClick(e, split) {
       const t = e.target;
+      if (t.closest('.bench-pick')) return;
+      if (t.closest('[data-bench-add]')) {
+        if (!split && cmdSelected) benchAddOpen(cmdSelected);
+        return;
+      }
       const fold = t.closest('[data-fold]');
       if (fold) {
         if (split) return;
@@ -40042,6 +41079,10 @@ convApplyTint();
     // --- boot ---
 
     function cmdBoot() {
+      // The Project file tab is on both pages, and so is its links' menu.
+      document.getElementById('deskCols')?.addEventListener('contextmenu', e => {
+        if (cmdDocMenu(e)) e.preventDefault();
+      });
       if (!CMD_PAGE) return;
       const desk = document.getElementById('desk');
       const side = desk && desk.querySelector('.mock-sidebar');
@@ -40083,7 +41124,12 @@ convApplyTint();
           }
         });
       }
-      document.getElementById('cmdRail').addEventListener('contextmenu', e => {
+      const rail = document.getElementById('cmdRail');
+      rail.addEventListener('mouseenter', () => {
+        cmdRailHeld = [...rail.querySelectorAll('.cmd-rail-row')].map(r => r.dataset.pid);
+      });
+      rail.addEventListener('mouseleave', () => { cmdRailHeld = null; cmdRender(); });
+      rail.addEventListener('contextmenu', e => {
         e.preventDefault();
         cmdRailMenu(e);
       });
