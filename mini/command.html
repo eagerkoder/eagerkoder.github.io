@@ -4072,6 +4072,7 @@
       white-space: nowrap; }
     .remote-open { margin-left: auto; color: inherit; font: inherit; font-size: 12px; flex: none;
       background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+    .remote-overlay[hidden] { display: none; }
     .remote-overlay { position: fixed; inset: 4vh 4vw; z-index: 1000; display: flex;
       flex-direction: column; background: var(--bg, #111); border-radius: 10px;
       box-shadow: 0 10px 40px rgba(0,0,0,.5); overflow: hidden;
@@ -19809,7 +19810,7 @@ convApplyTint();
       if ('editable' in msg) remoteEditable = !!msg.editable;
       for (const host of [...remoteLinks.keys()]) {
         if (remoteRoutes.has(host)) continue;
-        if (remoteOpen && remoteOpen.host === host) remoteRoomClose();
+        remoteRoomDrop(host);
         remoteLinks.delete(host);
       }
       for (const [host, w] of remoteRoutes) {
@@ -19977,6 +19978,11 @@ convApplyTint();
     }
 
     let remoteOpen = null;           // {host, room} while the overlay is up
+    // Closed overlays, hidden rather than removed, by address and least recently shown first:
+    // reopening one finds its socket, thread and draft as they were instead of booting the app
+    // again. Each holds a live socket, so only the last few are kept.
+    const remoteKept = new Map();
+    const REMOTE_KEEP = 3;
 
     // The machine's own app, at the room or whole, framed over this page.
     function remoteRoomOpen({host, room = '', title = ''}) {
@@ -19984,24 +19990,46 @@ convApplyTint();
       remoteRoomClose();
       remoteOpen = {host, room};
       const src = remoteAppHref(location.href, host, room);
-      const box = document.createElement('div');
+      let box = remoteKept.get(src);
+      remoteKept.delete(src);
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'remote-overlay';
+        box.dataset.host = host;
+        box.setAttribute('role', 'dialog');
+        box.setAttribute('aria-label', `${room ? 'Room' : 'App'} on ${host}`);
+        box.innerHTML = `<div class="remote-overlay-head"><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
+          `<span class="remote-title">${escapeHtml(title || host)}</span>` +
+          `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>` +
+          `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close">✕</button></div>` +
+          `<iframe class="remote-frame" title="${escapeHtml(title || host)} on ${escapeHtml(host)}" src="${escapeHtml(src)}"></iframe>`;
+        document.body.appendChild(box);
+      }
+      remoteKept.set(src, box);
+      for (const [k, old] of remoteKept) {
+        if (remoteKept.size <= REMOTE_KEEP) break;
+        old.remove();
+        remoteKept.delete(k);
+      }
       box.id = 'remoteRoomOverlay';
-      box.className = 'remote-overlay';
-      box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-label', `${room ? 'Room' : 'App'} on ${host}`);
-      box.innerHTML = `<div class="remote-overlay-head"><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
-        `<span class="remote-title">${escapeHtml(title || host)}</span>` +
-        `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>` +
-        `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close">✕</button></div>` +
-        `<iframe class="remote-frame" title="${escapeHtml(title || host)} on ${escapeHtml(host)}" src="${escapeHtml(src)}"></iframe>`;
-      document.body.appendChild(box);
+      box.hidden = false;
       box.querySelector('.remote-close').focus();
     }
 
     function remoteRoomClose() {
       remoteOpen = null;
       const box = document.getElementById('remoteRoomOverlay');
-      if (box) box.remove();
+      if (!box) return;
+      box.hidden = true;
+      box.removeAttribute('id');
+    }
+
+    // A machine no longer linked takes its kept overlays with it.
+    function remoteRoomDrop(host) {
+      if (remoteOpen && remoteOpen.host === host) remoteRoomClose();
+      for (const [k, box] of remoteKept) {
+        if (box.dataset.host === host) { box.remove(); remoteKept.delete(k); }
+      }
     }
 
     document.addEventListener('keydown', e => {
