@@ -4109,6 +4109,8 @@
     .mach-go { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg);
       color: var(--text); font: inherit; font-size: 0.72rem; cursor: pointer; white-space: nowrap; }
     .mach-go.primary { border-color: var(--accent, #6b8afd); color: var(--accent, #6b8afd); font-weight: 600; }
+    .mach-more { display: block; width: 100%; padding: 6px 8px 6px 18px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+    .mach-more:hover { color: var(--text); }
     .mach-note { padding: 6px 8px; border-top: 1px solid var(--border); color: var(--muted); overflow-wrap: anywhere; }
     /* On a phone a branch's moves take a line of their own under its two commits. */
     @media (max-width: 480px) {
@@ -20295,13 +20297,20 @@ convApplyTint();
     //
     // One linked machine at a time, compared with this one Project by Project: this machine's
     // checkout in the first column, the other's in the second, and the moves in the third. A
-    // Project only one machine has is listed too. A row opens to its branches, each with its moves:
+    // Project only one machine has is listed too. Nothing is read until Compare is pressed: a
+    // comparison reads every Project on both machines. A row opens to its branches, each with its moves:
     // Send pushes this machine's branch through origin and the other machine fast-forwards to it;
     // Bring has the other machine push its branch to origin and this checkout fast-forward to it;
-    // Pull fast-forwards one side to what origin already has. All of them are `link_git` messages,
-    // which this relay runs with link.py's own verbs, so nothing here merges, forces, or pushes a
-    // default branch. Under the table, the links themselves and their tokens (remote_rooms.js's
-    // form, formerly in Settings).
+    // Pull fast-forwards one side to what origin already has. Over SSH, Send and Bring go checkout
+    // to checkout and never through origin. All of them are `link_git` messages, which this relay
+    // runs with link.py's own verbs, so nothing here merges, forces, or pushes a default branch to
+    // origin. Under the table, the links themselves and their tokens (remote_rooms.js's form,
+    // formerly in Settings).
+    //
+    // Which branches: the default branch and the branch each main checkout has out are what is
+    // kept in step, and what a Project's summary counts. Every other branch (an architect's or a
+    // bench's worktree, a feature branch) is folded under the Project's "more branches" and moved
+    // only when asked: its work reaches the other machine through main.
     // Design: .workflow/01_concepts/2026-10-27_remote_manager.md.
 
     // How one branch stands on two machines, `h` this one's row and `t` the other's, each as
@@ -20322,14 +20331,21 @@ convApplyTint();
       return {state: 'diverged', label: 'differs', go: ''};
     }
 
-    // One Project's branches on both machines, in one list: those checked out on either side
-    // first, then this machine's order (newest first), then those only the other has.
+    // One Project's branches on both machines, in one list: the default branch first, then those
+    // checked out on either side, then this machine's order (newest first), then those only the
+    // other has. `core` marks the default branch and the main checkouts' own: the ones kept in
+    // step. `worktree` says a linked worktree holds it on either side.
     function machineBranchRows(here, there) {
       const h = new Map(((here || {}).branches || []).map(b => [b.name, b]));
       const t = new Map(((there || {}).branches || []).map(b => [b.name, b]));
       const names = [...h.keys(), ...[...t.keys()].filter(n => !h.has(n))];
-      const out = n => !((h.get(n) || {}).checked_out || (t.get(n) || {}).checked_out);
-      return names.sort((a, b) => out(a) - out(b)).map(name => ({name, here: h.get(name), there: t.get(name),
+      const main = (here || {}).default || (there || {}).default ||
+        ['main', 'master'].find(n => h.has(n) || t.has(n)) || '';
+      const co = n => !!((h.get(n) || {}).checked_out || (t.get(n) || {}).checked_out);
+      const rank = n => n === main ? 0 : co(n) ? 1 : 2;
+      return names.sort((a, b) => rank(a) - rank(b)).map(name => ({name, here: h.get(name), there: t.get(name),
+        main: name === main, core: rank(name) < 2,
+        worktree: !!((h.get(name) || {}).worktree || (t.get(name) || {}).worktree),
         ...machineCompare(h.get(name), t.get(name))}));
     }
 
@@ -20341,7 +20357,7 @@ convApplyTint();
       // like. Anything else (a relay too old to answer, a socket down) is only unread.
       if (!row.there) return ['bad_project', 'not_linked'].includes(row.there_code)
         ? {state: 'here', label: 'not set up there'} : {state: 'diverged', label: 'not read there'};
-      const rows = machineBranchRows(row.here, row.there);
+      const rows = machineBranchRows(row.here, row.there).filter(r => r.core);
       const n = s => rows.filter(r => r.state === s).length;
       const parts = [[n('ahead') + n('here'), 'to send'], [n('behind') + n('there'), 'to bring'],
         [n('stale'), 'behind origin'], [n('diverged'), 'diverged']].filter(([k]) => k);
@@ -20351,11 +20367,11 @@ convApplyTint();
     // --- end machines (pure) ---
 
     let machinesSel = '';                 // the linked machine being compared
-    const machinesSeen = new Map();       // machine -> {projects, at, busy, note, open: Set}
+    const machinesSeen = new Map();       // machine -> {projects, at, busy, note, open: Set, more: Set}
     let machinesAsk = 0;
 
     function machinesOf(host) {
-      if (!machinesSeen.has(host)) machinesSeen.set(host, {projects: null, at: 0, busy: '', note: '', open: new Set()});
+      if (!machinesSeen.has(host)) machinesSeen.set(host, {projects: null, at: 0, busy: '', note: '', open: new Set(), more: new Set()});
       return machinesSeen.get(host);
     }
 
@@ -20375,21 +20391,19 @@ convApplyTint();
 
     function machinesPick(host) {
       machinesSel = host;
-      const m = machinesOf(host);
-      if (!m.projects && !m.busy) machinesCompare(host);
-      else machinesRepaint();
+      machinesRepaint();
     }
 
-    function machinesToggle(host, id) {
-      const open = machinesOf(host).open;
-      if (open.has(id)) open.delete(id); else open.add(id);
+    function machinesToggle(host, id, which = 'open') {
+      const set = machinesOf(host)[which];
+      if (set.has(id)) set.delete(id); else set.add(id);
       machinesRepaint();
     }
 
     const MACHINE_VERBS = {send: 'Send ▸', bring: '◂ Bring', pull_here: 'Pull here', pull: 'Pull there'};
     const MACHINE_SAYS = {
-      send: 'Push this branch to origin, then that machine fast-forwards to it',
-      bring: 'That machine pushes this branch to origin, then this checkout fast-forwards to it',
+      send: 'That machine fast-forwards its branch to this one',
+      bring: 'This checkout fast-forwards its branch to that machine\'s',
       pull_here: 'Fast-forward this checkout\'s branch to origin\'s',
       pull: 'That machine fast-forwards its branch to origin\'s'};
 
@@ -20444,11 +20458,20 @@ convApplyTint();
         ` onclick="armButton(this, '', () => ${run}, ${escapeHtml(JSON.stringify(key))})">${MACHINE_VERBS[verb]}</button>`;
     }
 
+    // Whether git moves to `host` go over SSH, checkout to checkout, rather than through origin.
+    function machinesOverSsh(host) {
+      const row = ((typeof remoteConfig !== 'undefined' && remoteConfig && remoteConfig.links) || [])
+        .find(l => l.name === host);
+      return !!row && !row.url;
+    }
+
     // One branch: this machine's copy, the other's, and the moves. A Project only the other
-    // machine has has no checkout here to move a branch into, so it offers none.
+    // machine has has no checkout here to move a branch into, so it offers none. The default
+    // branch is sent and brought only over SSH: through a relay, both would push it to origin.
     function machinesBranchHtml(host, row, r, busy) {
       const go = v => machinesButton(host, row.id, v, r.name, r.go === v);
-      const acts = busy || row.only_there ? [] : [r.here && go('send'), r.there && go('bring'),
+      const across = !r.main || machinesOverSsh(host);
+      const acts = busy || row.only_there ? [] : [across && r.here && go('send'), across && r.there && go('bring'),
         r.here && r.here.behind && go('pull_here'), r.there && r.there.behind && go('pull')].filter(Boolean);
       return `<div class="mach-row mach-branch">` +
         `<div class="mach-cell"><span class="mach-name">${escapeHtml(r.name)}</span>${machinesShort(r.here)}</div>` +
@@ -20466,8 +20489,13 @@ convApplyTint();
       const there = row.there ? '' : row.only_there ? (row.there_error ? 'not read' : 'not read over ssh')
         : sum.state === 'here' ? 'not set up' : 'not read';
       const id = escapeHtml(JSON.stringify(row.id)), h = escapeHtml(JSON.stringify(host));
-      const branches = open && (row.here || row.there)
-        ? machineBranchRows(row.here, row.there).map(r => machinesBranchHtml(host, row, r, !!m.busy)).join('') : '';
+      const all = open && (row.here || row.there) ? machineBranchRows(row.here, row.there) : [];
+      const more = m.more.has(row.id), rest = all.filter(r => !r.core);
+      const held = rest.filter(r => r.worktree).length;
+      const branches = all.filter(r => r.core || more).map(r => machinesBranchHtml(host, row, r, !!m.busy)).join('') +
+        (rest.length ? `<button type="button" class="mach-more" aria-expanded="${more}"` +
+          ` onclick="machinesToggle(${h}, ${id}, 'more')">${more ? 'Fewer branches' : `${rest.length} more branch${rest.length === 1 ? '' : 'es'}` +
+          (held ? ` (${held} in worktrees)` : '')}</button>` : '');
       return `<div class="mach-project${open ? ' open' : ''}">` +
         `<button type="button" class="mach-row mach-head" aria-expanded="${open}" onclick="machinesToggle(${h}, ${id})">` +
         `<span class="mach-cell"><span class="mach-name">${escapeHtml(p.label || row.label || row.id)}</span>` +
@@ -20536,7 +20564,8 @@ convApplyTint();
         `<button type="button" class="section-action" onclick="machinesCompare(${h})"${m.busy ? ' disabled' : ''}>` +
         `${m.busy === 'status' ? 'Comparing…' : m.projects ? 'Compare again' : 'Compare'}</button>`) +
         `<div class="mach-picks">${hosts.map(chip).join('')}</div>` +
-        `<div class="mach-status" role="status">${escapeHtml(m.busy && m.busy !== 'status' ? m.busy + '…' : m.note)}</div>` +
+        `<div class="mach-status" role="status">${escapeHtml(m.busy && m.busy !== 'status' ? m.busy + '…'
+          : m.note || (m.projects || m.busy ? '' : 'Compare reads every Project on both machines.'))}</div>` +
         (m.projects
           ? `<div class="mach-table"><div class="mach-row mach-cols">` +
             `<span class="mach-cell">${escapeHtml(remoteConfig.as || 'this machine')} (here)</span>` +
@@ -20546,12 +20575,9 @@ convApplyTint();
           : '');
     }
 
-    // Opening the section or the sheet compares the chosen machine, once: a comparison reads
-    // every Project on both machines, which is not worth doing on every page load.
+    // Opening the section or the sheet only draws it: comparing is the person's to start.
     function machinesOpened() {
       machinesRepaint();
-      const m = machinesSel && machinesOf(machinesSel);
-      if (m && !m.projects && !m.busy) machinesCompare(machinesSel);
     }
 
     // The desktop's sheet, beside the launcher's (desktop_settings.js draws the overlay).
