@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-26">
+  <meta name="app-built" content="2026-10-27">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -11586,6 +11586,9 @@ function convWebModeOf(conv) {
       else if (msg.type === 'bench') {
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
+      }
+      else if (msg.type === 'command_result' && msg.command === 'link_git') {
+        if (typeof machinesResult === 'function') machinesResult(msg);
       }
       else if (msg.type === 'command_result' && msg.command === 'links_put') {
         if (typeof remotePutResult === 'function') remotePutResult(msg);

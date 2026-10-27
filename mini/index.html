@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-26">
+  <meta name="app-built" content="2026-10-27">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -1452,6 +1452,7 @@
     .recents,
     .conversations,
     .web-agents,
+    .machines,
     .launcher {
       padding: 0 12px 12px;
     }
@@ -2094,6 +2095,55 @@
 
     .cmd-def-problem { color: var(--red); margin-top: 6px; }
 
+    /* Machines (machines.js): remote management. One linked machine compared with this one,
+       Project by Project: this machine, that one, then the moves. */
+    .mach-picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+    .mach-pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; min-width: 0;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
+      font: inherit; font-size: 0.8rem; cursor: pointer; }
+    .mach-pick.on { border-color: var(--accent, #6b8afd); }
+    .mach-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+    .mach-dot.up { background: var(--green, #3fb950); }
+    .mach-via { color: var(--muted); font-size: 0.7rem; }
+    .mach-status { color: var(--muted); font-size: 0.75rem; margin-bottom: 8px; overflow-wrap: anywhere; }
+    .mach-status:empty { display: none; }
+    .mach-table { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 0.78rem;
+      margin-bottom: 14px; }
+    .mach-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+      gap: 6px; align-items: center; padding: 7px 8px; width: 100%; box-sizing: border-box;
+      border: 0; border-top: 1px solid var(--border); background: none; color: var(--text);
+      font: inherit; text-align: left; }
+    .mach-cols { border-top: 0; color: var(--muted); font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: .04em; background: var(--surface); }
+    .mach-head { cursor: pointer; }
+    .mach-head:hover, .mach-project.open .mach-head { background: var(--surface); }
+    .mach-branch { padding-top: 5px; padding-bottom: 5px; padding-left: 18px; }
+    .mach-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0;
+      overflow-wrap: anywhere; }
+    .mach-acts { justify-content: flex-end; }
+    .mach-name { font-weight: 600; overflow-wrap: anywhere; flex-basis: 100%; }
+    .mach-branch .mach-name { font-weight: 500; }
+    .mach-chip { font-size: 0.68rem; padding: 1px 6px; border-radius: 10px; color: var(--muted);
+      border: 1px solid var(--border); white-space: nowrap; }
+    .mach-chip[data-state="same"] { color: var(--green, #3fb950); border-color: currentColor; }
+    .mach-chip[data-state="ahead"], .mach-chip[data-state="here"],
+    .mach-chip[data-state="behind"], .mach-chip[data-state="there"],
+    .mach-chip[data-state="stale"] { color: var(--accent, #6b8afd); border-color: currentColor; }
+    .mach-chip[data-state="diverged"] { color: var(--red, #f85149); border-color: currentColor; }
+    .mach-mark { font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+    .mach-cell code { white-space: nowrap; }
+    .mach-co { color: var(--green, #3fb950); }
+    .mach-dirty { color: var(--orange, #d29922); }
+    .mach-none { color: var(--muted); }
+    .mach-go { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg);
+      color: var(--text); font: inherit; font-size: 0.72rem; cursor: pointer; white-space: nowrap; }
+    .mach-go.primary { border-color: var(--accent, #6b8afd); color: var(--accent, #6b8afd); font-weight: 600; }
+    .mach-note { padding: 6px 8px; border-top: 1px solid var(--border); color: var(--muted); overflow-wrap: anywhere; }
+    /* On a phone a branch's moves take a line of their own under its two commits. */
+    @media (max-width: 480px) {
+      .mach-branch { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+      .mach-branch .mach-acts { grid-column: 1 / -1; }
+    }
     /* Remote rooms (remote_rooms.js): another machine's Commanders, and its app in an overlay. */
     .remote-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
       padding: 1px 5px; border-radius: 4px; background: var(--accent, #6b8afd); color: #fff;
@@ -12364,15 +12414,6 @@
          reached are two separately deployed things, and "which versions am I actually running"
          is the first thing asked when one of them behaves unlike the other. The page knows its
          own build; the other two come from the relay, so they read as unknown until connected. -->
-    <!-- The remote machines: the links file (remote_rooms.js). Listed on every page, edited where the relay allows (links_edit_refusal). -->
-    <div class="setting-group" id="remoteLinksGroup" hidden>
-      <label>Remote machines</label>
-      <div id="remoteLinksList"></div>
-      <label for="remoteLinksAs" style="margin-top:10px">This machine's name on them</label>
-      <input id="remoteLinksAs" type="text" spellcheck="false" autocapitalize="none" autocomplete="off"
-        placeholder="laptop" onchange="remoteSetAs(this.value)" />
-      <div class="hint" id="remoteLinksHint" role="status"></div>
-    </div>
     <div class="setting-group">
       <label>Versions</label>
       <dl class="version-list">
@@ -12420,6 +12461,7 @@
     <div class="setting-group">
       <label>Main page sections</label>
       <label class="toggle-option"><input type="checkbox" id="sectionLauncher" onchange="toggleSection('launcher', this.checked)"> Launcher</label>
+      <label class="toggle-option"><input type="checkbox" id="sectionMachines" onchange="toggleSection('machines', this.checked)"> Machines</label>
       <label class="toggle-option"><input type="checkbox" id="sectionCommand" onchange="toggleSection('command', this.checked)"> Command</label>
       <label class="toggle-option" id="sectionNotebooklmRow" hidden><input type="checkbox" id="sectionNotebooklm" onchange="toggleSection('notebooklm', this.checked)"> NotebookLM</label>
       <label class="toggle-option" id="sectionWebAgentRow" hidden><input type="checkbox" id="sectionWebAgent" onchange="toggleSection('webAgent', this.checked)"> Web Agent</label>
@@ -12623,6 +12665,9 @@
     <!-- Tiles that create things, so it leads: a launcher under four lists of what is already
          running is a launcher nobody presses. -->
     <div class="launcher" id="launcher" style="display:none"></div>
+    <!-- Remote management: the linked machines, their Projects compared with this one's, and the
+         links themselves (machines.js). Empty, and so off screen, on a relay with no links file. -->
+    <div class="machines" id="machines" style="display:none"></div>
     <!-- One row per Project with work in it, each opening that Project's Command Center. The
          entry point: a Command Center is about a Project, and every other way in was through a
          session that was already open — which is no way in for somebody asking what is running. -->
@@ -17686,7 +17731,7 @@
     // the terminals write rewrites each section's innerHTML on their own schedule, and a reorder
     // that moved DOM nodes would race all three.
     const SECTIONS_KEY = 'herdr_sections';
-    const SECTION_IDS = {launcher: 'launcher', command: 'commandCenters', webAgent: 'webAgents', notebooklm: 'notebooklm', agents: 'agents', terminals: 'terminals', pairs: 'pairs', recents: 'recents', conversations: 'conversations'};
+    const SECTION_IDS = {launcher: 'launcher', machines: 'machines', command: 'commandCenters', webAgent: 'webAgents', notebooklm: 'notebooklm', agents: 'agents', terminals: 'terminals', pairs: 'pairs', recents: 'recents', conversations: 'conversations'};
     const SECTION_KEYS = Object.keys(SECTION_IDS);
     // Today's layout, so an install that never opens Settings sees no change at all — except for
     // the launcher, which leads. That is the one deliberate departure: a section that defaults to
@@ -17768,12 +17813,12 @@
     // scrolling the four above it. Header-side and not a row of its own: "page layout does not
     // change" is the point — the landing page leaves the tab strip's space empty anyway.
     const SECTION_NAMES = {
-      launcher: 'Launcher', command: 'Command', webAgent: 'Web Agent', notebooklm: 'NotebookLM', agents: 'Agents', terminals: 'Terminals', pairs: 'Pairs',
+      launcher: 'Launcher', machines: 'Machines', command: 'Command', webAgent: 'Web Agent', notebooklm: 'NotebookLM', agents: 'Agents', terminals: 'Terminals', pairs: 'Pairs',
       recents: 'Recents', conversations: 'Conversations',
     };
     // Its own order, not the sections' and not Settings': this row is fixed so a button stays under
     // the same thumb whatever the page below is doing, and it leads with what is read most.
-    const SECTION_TABS = ['conversations', 'command', 'webAgent', 'notebooklm', 'agents', 'terminals', 'pairs', 'recents', 'launcher'];
+    const SECTION_TABS = ['conversations', 'command', 'webAgent', 'notebooklm', 'agents', 'terminals', 'pairs', 'recents', 'launcher', 'machines'];
     const SECTION_GLYPHS = {
       // Drawn to the same 18-unit span as the bubble and the terminal beside it: a 16-wide box
       // between two 18s reads as the odd one out even though all three are on an 18px canvas.
@@ -17803,6 +17848,10 @@
         + '<rect x="14" y="3" width="7" height="7" rx="1.5"/>'
         + '<rect x="3" y="14" width="7" height="7" rx="1.5"/>'
         + '<rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+      // Two screens, one behind the other: this machine and a linked one.
+      machines: '<rect x="2" y="3" width="13" height="9" rx="1.5"/>'
+        + '<path d="M17 8h3.5A1.5 1.5 0 0 1 22 9.5v6a1.5 1.5 0 0 1-1.5 1.5H9.5A1.5 1.5 0 0 1 8 15.5V14"/>'
+        + '<path d="M12 21h6M15 17v4"/>',
     };
 
     let sectionTabsHtml = '';
@@ -17861,6 +17910,7 @@
       if (!SECTION_KEYS.includes(key)) return;
       sectionFilter = sectionFilter === key ? '' : key;
       applySections();
+      if (sectionFilter === 'machines' && typeof machinesOpened === 'function') machinesOpened();
       if (typeof cue === 'function') cue('tick');
     }
 
@@ -18527,6 +18577,9 @@
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
       }
+      else if (msg.type === 'command_result' && msg.command === 'link_git') {
+        if (typeof machinesResult === 'function') machinesResult(msg);
+      }
       else if (msg.type === 'command_result' && msg.command === 'links_put') {
         if (typeof remotePutResult === 'function') remotePutResult(msg);
       }
@@ -19002,8 +19055,9 @@
     // goes to `<this relay>/link/<machine>`, which this relay pipes to that machine's relay with
     // the token it holds (`link_proxy`). So the room is that relay's own, with every control it
     // has there, on any page that may control this relay; *Open in tab* opens the same address.
-    // Settings lists the machines and their routes, and edits them where the relay says this
-    // connection may (`editable`: its own page, or one that showed the token, such as a phone).
+    // The Machines section (machines.js; *Remote management* on the desktop) lists the machines
+    // and their routes, and edits them where the relay says this connection may (`editable`: its
+    // own page, or one that showed the token, such as a phone).
     // Design: .workflow/01_concepts/2026-10-25_remote_bench_link.md; plan:
     // .workflow/04_implementation_plans/2026-10-26_remote_rooms_full.md.
 
@@ -19080,6 +19134,7 @@
       const link = remoteLinks.get(msg.machine);
       if (!link) return;
       link.connected = !!msg.connected;
+      link.versions = msg.versions || null;
       link.sessions = new Map((msg.sessions || []).map(s => [s.id, s]));
       remoteRoomsRepaint();
     }
@@ -19089,6 +19144,7 @@
     function remoteRoomsRepaint() {
       if (typeof renderConversations === 'function') renderConversations();
       if (!remoteEdit) remoteSettingsRender();
+      if (typeof machinesRepaint === 'function') machinesRepaint();
       // The desktop's columns holding a remote room: a machine that came or went changes them.
       if (typeof deskPaintColumn === 'function') {
         deskColumns.forEach((c, i) => { const t = deskTabFor(c.tabKey); if (t && t.kind === 'remote') deskPaintColumn(i); });
@@ -19448,6 +19504,280 @@
       remoteEdit = null;
       remoteHint('Saved.');
       remoteSettingsRender();
+    }
+
+  </script>
+  <script>
+    // Machines: remote management for the machines this relay is linked to (remote_rooms.js). Its
+    // own section on the phone (`#machines`, with a tab like the launcher's) and its own sheet on
+    // the desktop (*Remote management*, opened beside the launcher).
+    //
+    // One linked machine at a time, compared with this one Project by Project: this machine's
+    // checkout in the first column, the other's in the second, and the moves in the third. A
+    // Project only one machine has is listed too. A row opens to its branches, each with its moves:
+    // Send pushes this machine's branch through origin and the other machine fast-forwards to it;
+    // Bring has the other machine push its branch to origin and this checkout fast-forward to it;
+    // Pull fast-forwards one side to what origin already has. All of them are `link_git` messages,
+    // which this relay runs with link.py's own verbs, so nothing here merges, forces, or pushes a
+    // default branch. Under the table, the links themselves and their tokens (remote_rooms.js's
+    // form, formerly in Settings).
+    // Design: .workflow/01_concepts/2026-10-27_remote_manager.md.
+
+    // How one branch stands on two machines, `h` this one's row and `t` the other's, each as
+    // git_probe.branches reads it: `{commit, origin, ahead, behind}`. `go` is the move that brings
+    // them together, if one does: `send`, `bring`, `pull_here` or `pull`.
+    function machineCompare(h, t) {
+      if (!h && !t) return {state: 'none', label: '', go: ''};
+      if (!t) return {state: 'here', label: 'only here', go: 'send'};
+      if (!h) return {state: 'there', label: 'only there', go: 'bring'};
+      if (h.commit === t.commit) return {state: 'same', label: 'in sync', go: ''};
+      // A branch origin lacks is ahead of it by everything it has.
+      const hAhead = !h.origin || h.ahead > 0, tAhead = !t.origin || t.ahead > 0;
+      if (hAhead && tAhead) return {state: 'diverged', label: 'diverged', go: ''};
+      if (hAhead) return {state: 'ahead', label: 'ahead here', go: 'send'};
+      if (tAhead) return {state: 'behind', label: 'ahead there', go: 'bring'};
+      if (h.behind > 0) return {state: 'stale', label: 'behind origin here', go: 'pull_here'};
+      if (t.behind > 0) return {state: 'stale', label: 'behind origin there', go: 'pull'};
+      return {state: 'diverged', label: 'differs', go: ''};
+    }
+
+    // One Project's branches on both machines, in one list: those checked out on either side
+    // first, then this machine's order (newest first), then those only the other has.
+    function machineBranchRows(here, there) {
+      const h = new Map(((here || {}).branches || []).map(b => [b.name, b]));
+      const t = new Map(((there || {}).branches || []).map(b => [b.name, b]));
+      const names = [...h.keys(), ...[...t.keys()].filter(n => !h.has(n))];
+      const out = n => !((h.get(n) || {}).checked_out || (t.get(n) || {}).checked_out);
+      return names.sort((a, b) => out(a) - out(b)).map(name => ({name, here: h.get(name), there: t.get(name),
+        ...machineCompare(h.get(name), t.get(name))}));
+    }
+
+    // The line a Project's row says before it is opened: the moves waiting, or that there are none.
+    function machineSummary(row) {
+      if (row.only_there) return {state: 'there', label: 'only there'};
+      if (!row.here) return {state: 'none', label: 'not a git checkout here'};
+      // That machine has no such Project, or holds no link entry on it: what a new machine looks
+      // like. Anything else (a relay too old to answer, a socket down) is only unread.
+      if (!row.there) return ['bad_project', 'not_linked'].includes(row.there_code)
+        ? {state: 'here', label: 'not set up there'} : {state: 'diverged', label: 'not read there'};
+      const rows = machineBranchRows(row.here, row.there);
+      const n = s => rows.filter(r => r.state === s).length;
+      const parts = [[n('ahead') + n('here'), 'to send'], [n('behind') + n('there'), 'to bring'],
+        [n('stale'), 'behind origin'], [n('diverged'), 'diverged']].filter(([k]) => k);
+      if (!parts.length) return {state: 'same', label: 'in sync'};
+      return {state: n('diverged') ? 'diverged' : 'ahead', label: parts.map(([k, w]) => `${k} ${w}`).join(' · ')};
+    }
+    // --- end machines (pure) ---
+
+    let machinesSel = '';                 // the linked machine being compared
+    const machinesSeen = new Map();       // machine -> {projects, at, busy, note, open: Set}
+    let machinesAsk = 0;
+
+    function machinesOf(host) {
+      if (!machinesSeen.has(host)) machinesSeen.set(host, {projects: null, at: 0, busy: '', note: '', open: new Set()});
+      return machinesSeen.get(host);
+    }
+
+    function machinesSend(body) {
+      if (!ws || ws.readyState !== 1) { showToast('Not connected'); return false; }
+      ws.send(JSON.stringify({type: 'link_git', request_id: 'mg' + (++machinesAsk), ...body}));
+      return true;
+    }
+
+    function machinesCompare(host) {
+      const m = machinesOf(host);
+      if (m.busy || !machinesSend({machine: host, action: 'status'})) return;
+      m.busy = 'status';
+      m.note = '';
+      machinesRepaint();
+    }
+
+    function machinesPick(host) {
+      machinesSel = host;
+      const m = machinesOf(host);
+      if (!m.projects && !m.busy) machinesCompare(host);
+      else machinesRepaint();
+    }
+
+    function machinesToggle(host, id) {
+      const open = machinesOf(host).open;
+      if (open.has(id)) open.delete(id); else open.add(id);
+      machinesRepaint();
+    }
+
+    const MACHINE_VERBS = {send: 'Send ▸', bring: '◂ Bring', pull_here: 'Pull here', pull: 'Pull there'};
+    const MACHINE_SAYS = {
+      send: 'Push this branch to origin, then that machine fast-forwards to it',
+      bring: 'That machine pushes this branch to origin, then this checkout fast-forwards to it',
+      pull_here: 'Fast-forward this checkout\'s branch to origin\'s',
+      pull: 'That machine fast-forwards its branch to origin\'s'};
+
+    function machinesRun(host, project, verb, branch) {
+      const m = machinesOf(host);
+      if (m.busy || !machinesSend({machine: host, project, action: verb, branch})) return;
+      m.busy = `${verb} ${branch}`;
+      m.note = '';
+      machinesRepaint();
+    }
+
+    // The relay's answer to a link_git. A move that worked is followed by a fresh comparison, so
+    // the table shows what it did rather than what was there before.
+    function machinesResult(msg) {
+      const m = machinesOf(msg.machine);
+      m.busy = '';
+      if (!msg.ok) {
+        m.note = `${MACHINE_VERBS[msg.action] || msg.action || 'link_git'} refused: ${msg.detail || msg.error || 'no reason given'}`;
+      } else if (msg.action === 'status') {
+        m.projects = msg.projects || [];
+        m.at = Date.now();
+      } else {
+        const r = msg.result || {};
+        m.note = `${MACHINE_VERBS[msg.action] || msg.action} ${msg.branch}: done` +
+          (r.reboot ? '. Relay code changed: reboot that relay to load it.' : '');
+        machinesCompare(msg.machine);
+        return;
+      }
+      machinesRepaint();
+    }
+
+    function machinesShort(b) {
+      if (!b) return '<span class="mach-none">not here</span>';
+      const marks = [];
+      if (!b.origin) marks.push('<span class="mach-mark" title="origin has no such branch">not on origin</span>');
+      else {
+        if (b.ahead) marks.push(`<span class="mach-mark" title="commits origin lacks">↑${b.ahead}</span>`);
+        if (b.behind) marks.push(`<span class="mach-mark" title="commits behind origin">↓${b.behind}</span>`);
+      }
+      if (b.checked_out) marks.push('<span class="mach-mark mach-co" title="checked out">●</span>');
+      if (b.worktree) marks.push(`<span class="mach-mark" title="checked out in a worktree">${escapeHtml(b.worktree)}</span>`);
+      return `<code>${escapeHtml(String(b.commit || '').slice(0, 7))}</code>${marks.join('')}`;
+    }
+
+    function machinesButton(host, project, verb, branch, primary) {
+      const key = `mach:${host}:${project}:${verb}:${branch}`;
+      const armed = typeof armButtonArmed === 'function' && armButtonArmed(key);
+      const run = `machinesRun(${escapeHtml(JSON.stringify(host))}, ${escapeHtml(JSON.stringify(project))}, '${verb}', ${escapeHtml(JSON.stringify(branch))})`;
+      return `<button type="button" class="mach-go arm-btn${primary ? ' primary' : ''}" data-arm-key="${escapeHtml(key)}"` +
+        (armed ? ' data-armed="1"' : '') +
+        ` title="${escapeHtml(MACHINE_SAYS[verb])}" aria-label="${escapeHtml(`${MACHINE_SAYS[verb]}: ${branch}`)}"` +
+        ` onclick="armButton(this, '', () => ${run}, ${escapeHtml(JSON.stringify(key))})">${MACHINE_VERBS[verb]}</button>`;
+    }
+
+    // One branch: this machine's copy, the other's, and the moves. A Project only the other
+    // machine has has no checkout here to move a branch into, so it offers none.
+    function machinesBranchHtml(host, row, r, busy) {
+      const go = v => machinesButton(host, row.id, v, r.name, r.go === v);
+      const acts = busy || row.only_there ? [] : [r.here && go('send'), r.there && go('bring'),
+        r.here && r.here.behind && go('pull_here'), r.there && r.there.behind && go('pull')].filter(Boolean);
+      return `<div class="mach-row mach-branch">` +
+        `<div class="mach-cell"><span class="mach-name">${escapeHtml(r.name)}</span>${machinesShort(r.here)}</div>` +
+        `<div class="mach-cell">${machinesShort(r.there)}</div>` +
+        `<div class="mach-cell mach-acts"><span class="mach-chip" data-state="${r.state}">${escapeHtml(r.label)}</span>${acts.join('')}</div></div>`;
+    }
+
+    function machinesProjectHtml(host, m, row) {
+      const p = (typeof projects !== 'undefined' ? projects : []).find(x => x.id === row.id) || {};
+      const sum = machineSummary(row);
+      const open = m.open.has(row.id);
+      const side = (s, none) => s ? `<span>${escapeHtml(s.head || 'detached')}</span>` +
+        (s.dirty ? '<span class="mach-mark mach-dirty" title="uncommitted changes">dirty</span>' : '')
+        : `<span class="mach-none">${escapeHtml(none)}</span>`;
+      const there = row.there ? '' : row.only_there ? (row.there_error ? 'not read' : 'not read over ssh')
+        : sum.state === 'here' ? 'not set up' : 'not read';
+      const id = escapeHtml(JSON.stringify(row.id)), h = escapeHtml(JSON.stringify(host));
+      const branches = open && (row.here || row.there)
+        ? machineBranchRows(row.here, row.there).map(r => machinesBranchHtml(host, row, r, !!m.busy)).join('') : '';
+      return `<div class="mach-project${open ? ' open' : ''}">` +
+        `<button type="button" class="mach-row mach-head" aria-expanded="${open}" onclick="machinesToggle(${h}, ${id})">` +
+        `<span class="mach-cell"><span class="mach-name">${escapeHtml(p.label || row.label || row.id)}</span>` +
+        `${side(row.here, row.only_there ? 'not on this machine' : 'not a checkout')}</span>` +
+        `<span class="mach-cell" title="${escapeHtml(row.there_error || '')}">${side(row.there, there)}</span>` +
+        `<span class="mach-cell mach-acts"><span class="mach-chip" data-state="${sum.state}">${escapeHtml(sum.label)}</span></span></button>` +
+        branches + (open && !row.there && row.there_error ? `<div class="mach-note">${escapeHtml(row.there_error)}</div>` : '') +
+        `</div>`;
+    }
+
+    // The section's frame, drawn once: the comparison (`#machinesBody`, redrawn) and the links
+    // form under it (`#remoteLinksGroup`, which remote_rooms.js draws and keeps while it is being
+    // typed in). Nothing on a relay with no links file, so the phone's section stays off screen.
+    function machinesShell(el) {
+      if (el.querySelector('#machinesBody')) return;
+      el.innerHTML = '<div id="machinesBody"></div>' +
+        '<div class="setting-group" id="remoteLinksGroup" hidden>' +
+        '<label>Linked machines</label><div id="remoteLinksList"></div>' +
+        '<label for="remoteLinksAs" style="margin-top:10px">This machine\'s name on them</label>' +
+        '<input id="remoteLinksAs" type="text" spellcheck="false" autocapitalize="none" autocomplete="off"' +
+        ' placeholder="laptop" onchange="remoteSetAs(this.value)" />' +
+        '<div class="hint" id="remoteLinksHint" role="status"></div></div>';
+      remoteSettingsRender();
+    }
+
+    function machinesRepaint() {
+      const open = document.getElementById('deskMachinesOpen');
+      if (open) open.hidden = typeof remoteConfig === 'undefined' || !remoteConfig;
+      const el = document.getElementById('machines');
+      if (!el) return;
+      if (typeof remoteConfig === 'undefined' || !remoteConfig) {
+        if (el.hasChildNodes()) el.innerHTML = '';
+        if (typeof applySections === 'function') applySections();
+        return;
+      }
+      const fresh = !el.querySelector('#machinesBody');
+      machinesShell(el);
+      document.getElementById('machinesBody').innerHTML = machinesBodyHtml();
+      if (fresh && typeof applySections === 'function') applySections();
+    }
+
+    function machinesBodyHtml() {
+      const hosts = [...remoteLinks.keys()];
+      if (!hosts.includes(machinesSel)) machinesSel = hosts[0] || '';
+      const head = buttons => `<div class="section-header"><span class="section-name">Machines</span>${buttons}</div>`;
+      if (!hosts.length) return head('') + '<div class="cfg-empty">No machines linked yet. Add one under Linked machines.</div>';
+      const here = typeof relayVersions !== 'undefined' && relayVersions.relay;
+      const chip = host => {
+        const l = remoteLinks.get(host) || {};
+        const v = l.versions && l.versions.relay;
+        const drift = v && here && v !== here;
+        return `<button type="button" class="mach-pick${host === machinesSel ? ' on' : ''}" aria-pressed="${host === machinesSel}"` +
+          ` onclick="machinesPick(${escapeHtml(JSON.stringify(host))})">` +
+          `<span class="mach-dot${l.connected ? ' up' : ''}"></span>${escapeHtml(host)}` +
+          `<span class="mach-via">${escapeHtml(remoteRouteText(host))}${v ? ' · ' + escapeHtml(v) : ''}</span>` +
+          (drift ? `<span class="mach-mark mach-dirty" title="this relay is ${escapeHtml(here)}">version differs</span>` : '') +
+          `</button>`;
+      };
+      const m = machinesOf(machinesSel);
+      const h = escapeHtml(JSON.stringify(machinesSel));
+      const live = (remoteLinks.get(machinesSel) || {}).connected;
+      // A Project that is a git checkout on neither machine has nothing to compare: left out.
+      const rows = (m.projects || []).filter(r => r.here || r.there || r.only_there);
+      return head((live && remoteEditable && !window.STORAGE_NS
+          ? `<button type="button" class="section-action" onclick="remoteRoomOpen({host: ${h}})">Open its app</button>` : '') +
+        `<button type="button" class="section-action" onclick="machinesCompare(${h})"${m.busy ? ' disabled' : ''}>` +
+        `${m.busy === 'status' ? 'Comparing…' : m.projects ? 'Compare again' : 'Compare'}</button>`) +
+        `<div class="mach-picks">${hosts.map(chip).join('')}</div>` +
+        `<div class="mach-status" role="status">${escapeHtml(m.busy && m.busy !== 'status' ? m.busy + '…' : m.note)}</div>` +
+        (m.projects
+          ? `<div class="mach-table"><div class="mach-row mach-cols">` +
+            `<span class="mach-cell">${escapeHtml(remoteConfig.as || 'this machine')} (here)</span>` +
+            `<span class="mach-cell">${escapeHtml(machinesSel)}</span><span class="mach-cell mach-acts">Actions</span></div>` +
+            (rows.length ? rows.map(row => machinesProjectHtml(machinesSel, m, row)).join('')
+              : '<div class="cfg-empty">No Projects to compare.</div>') + `</div>`
+          : '');
+    }
+
+    // Opening the section or the sheet compares the chosen machine, once: a comparison reads
+    // every Project on both machines, which is not worth doing on every page load.
+    function machinesOpened() {
+      machinesRepaint();
+      const m = machinesSel && machinesOf(machinesSel);
+      if (m && !m.projects && !m.busy) machinesCompare(machinesSel);
+    }
+
+    // The desktop's sheet, beside the launcher's (desktop_settings.js draws the overlay).
+    function deskToggleMachines() {
+      if (deskOverlayOn === 'machinesView') { deskCloseOverlay(); return; }
+      deskOpenOverlay('machinesView', 'Remote management');
+      machinesOpened();
     }
 
   </script>
