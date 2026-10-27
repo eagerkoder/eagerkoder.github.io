@@ -2117,7 +2117,9 @@
       letter-spacing: .04em; background: var(--surface); }
     .mach-head { cursor: pointer; }
     .mach-head:hover, .mach-project.open .mach-head { background: var(--surface); }
-    .mach-branch { padding-top: 5px; padding-bottom: 5px; padding-left: 18px; }
+    .mach-branch { padding-top: 4px; padding-bottom: 4px; padding-left: 18px; font-size: 0.72rem;
+      background: color-mix(in srgb, var(--blue) 10%, var(--bg)); }
+    .mach-bico { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; color: var(--muted); flex: none; }
     .mach-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0;
       overflow-wrap: anywhere; }
     .mach-acts { justify-content: flex-end; }
@@ -2138,7 +2140,8 @@
     .mach-go { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg);
       color: var(--text); font: inherit; font-size: 0.72rem; cursor: pointer; white-space: nowrap; }
     .mach-go.primary { border-color: var(--accent, #6b8afd); color: var(--accent, #6b8afd); font-weight: 600; }
-    .mach-more { display: block; width: 100%; padding: 6px 8px 6px 18px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+    .mach-more { display: block; width: 100%; padding: 6px 8px 6px 18px; border: 0; border-top: 1px solid var(--border);
+      background: color-mix(in srgb, var(--blue) 10%, var(--bg)); color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
     .mach-more:hover { color: var(--text); }
     .mach-note { padding: 6px 8px; border-top: 1px solid var(--border); color: var(--muted); overflow-wrap: anywhere; }
     /* On a phone a branch's moves take a line of their own under its two commits. */
@@ -19386,8 +19389,14 @@
       return !row.url ? 'ssh' : row.token_file ? 'http' : 'lan';
     }
 
+    // One route's saved settings on a row: the row itself on the route it is on, its `spare` for
+    // the others, which the relay keeps so switching back needs nothing typed again.
+    function remoteRouteRow(row, route) {
+      return remoteRowRoute(row) === route ? row : ((row.spare || {})[route] || {});
+    }
+
     function remoteFormHtml(row) {
-      const on = remoteRowRoute(row);
+      const ssh = remoteRouteRow(row, 'ssh'), http = remoteRouteRow(row, 'http'), lan = remoteRouteRow(row, 'lan');
       const fields = r => `<div class="wide remote-route-fields" data-route="${r}"${remoteEdit.route === r ? '' : ' hidden'}>`;
       const route = r => `<label><input type="radio" name="remoteRoute" value="${r}"` +
         `${remoteEdit.route === r ? ' checked' : ''} onchange="remoteEditRoute(this.value)">` +
@@ -19398,14 +19407,14 @@
         Object.keys(REMOTE_ROUTES).map(route).join('') + `</div>` +
         fields('ssh') +
         REMOTE_FIELDS.map(([k, label, ph, cls]) => `<label class="${cls || ''}">${label}` +
-          remoteInput(k, row.url ? '' : row[k], ph, REMOTE_PORTS.has(k) ? ' inputmode="numeric"' : '') +
+          remoteInput(k, ssh[k], ph, REMOTE_PORTS.has(k) ? ' inputmode="numeric"' : '') +
           `</label>`).join('') + `</div>` +
         fields('http') +
-        `<label class="wide">Relay link${remoteInput('url', on === 'http' ? row.url : '', 'wss://… its tunnel')}</label>` +
-        `<label class="wide">Auth token${remoteInput('token', '', on === 'http' ? 'saved — blank keeps it'
+        `<label class="wide">Relay link${remoteInput('url', http.url, 'wss://… its tunnel')}</label>` +
+        `<label class="wide">Auth token${remoteInput('token', '', http.token_file ? 'saved — blank keeps it'
           : 'its HERDR_RELAY_TOKEN', ' type="password" autocomplete="new-password"')}</label></div>` +
         fields('lan') +
-        `<label class="wide">Relay address${remoteInput('lan_url', on === 'lan' ? row.url : '', 'ws://<host>:8375 on this network')}</label>` +
+        `<label class="wide">Relay address${remoteInput('lan_url', lan.url, 'ws://<host>:8375 on this network')}</label>` +
         `<div class="hint wide">No token is sent: that relay must run its LAN listener open (HERDR_LAN_OPEN=1).</div></div>` +
         `<div class="wide remote-links-actions"><button type="button" onclick="remoteEditSave()">Save</button>` +
         `<button type="button" class="nav-key" onclick="remoteEditCancel()">Cancel</button></div></div>`;
@@ -19445,8 +19454,8 @@
       remoteSettingsRender();
     }
 
-    // Shows one route's fields and hides the other's, keeping what was typed in both: only the
-    // route chosen when Save is pressed is written.
+    // Shows one route's fields and hides the others', keeping what was typed in all: the route
+    // chosen when Save is pressed is the one used, and the others are saved as its `spare`.
     function remoteEditRoute(route) {
       if (!remoteEdit) return;
       remoteEdit.route = route;
@@ -19478,26 +19487,39 @@
       }
       const old = (remoteConfig.links || [])[remoteEdit.i] || {};
       const value = k => (document.querySelector(`#remoteLinksForm input[data-k="${k}"]`) || {}).value?.trim() || '';
-      const row = {name: value('name')};
-      const tokens = {};
-      if (remoteEdit.route === 'lan') {
-        // An address typed as http:// is the same listener; the relay is reached by its socket.
-        const url = value('lan_url').replace(/^http:/i, 'ws:');
-        if (url) row.url = url;
-      } else if (remoteEdit.route === 'http') {
-        if (value('url')) row.url = value('url').replace(/^https:/i, 'wss:');
-        const token = value('token');
-        if (token) tokens[row.name] = token;
-        else if (old.url && old.token_file) row.token_file = old.token_file;
-        else { remoteHint("Paste the remote relay's auth token."); return; }
-      } else {
-        for (const [k] of REMOTE_FIELDS) {
-          const v = value(k);
-          if (v) row[k] = REMOTE_PORTS.has(k) && /^\d+$/.test(v) ? Number(v) : v;
-        }
-        // Fields this form does not show, such as arbiter_dir, stay with the SSH route.
-        if (!old.url) for (const k of Object.keys(old)) if (!(k in row) && k !== 'name' && !REMOTE_FIELDS.some(f => f[0] === k)) row[k] = old[k];
+      const name = value('name'), tokens = {};
+      // Each route as the form holds it. An address typed as http:// is the same listener; the
+      // relay is reached by its socket.
+      const routes = {ssh: {}, http: {}, lan: {}};
+      const lanUrl = value('lan_url').replace(/^http:/i, 'ws:');
+      if (lanUrl) routes.lan.url = lanUrl;
+      const httpUrl = value('url').replace(/^https:/i, 'wss:');
+      if (httpUrl) routes.http.url = httpUrl;
+      const oldHttp = remoteRouteRow(old, 'http');
+      if (oldHttp.token_file) routes.http.token_file = oldHttp.token_file;
+      for (const [k] of REMOTE_FIELDS) {
+        const v = value(k);
+        if (v) routes.ssh[k] = REMOTE_PORTS.has(k) && /^\d+$/.test(v) ? Number(v) : v;
       }
+      // Fields this form does not show, such as arbiter_dir, stay with the SSH route.
+      const oldSsh = remoteRouteRow(old, 'ssh');
+      for (const k of Object.keys(oldSsh)) if (!(k in routes.ssh) && !['name', 'spare'].includes(k)
+        && !REMOTE_FIELDS.some(f => f[0] === k)) routes.ssh[k] = oldSsh[k];
+      if (remoteEdit.route === 'http') {
+        const token = value('token');
+        if (token) { tokens[name] = token; delete routes.http.token_file; }
+        else if (!routes.http.token_file) { remoteHint("Paste the remote relay's auth token."); return; }
+      }
+      const row = {name, ...routes[remoteEdit.route]};
+      // The others, kept for switching back: a tunnel only with its saved token, which a token
+      // typed but not saved is not.
+      const spare = {};
+      for (const r of ['ssh', 'http', 'lan']) {
+        if (r === remoteEdit.route || !Object.keys(routes[r]).length) continue;
+        if (r === 'http' && !(routes.http.url && routes.http.token_file)) continue;
+        spare[r] = routes[r];
+      }
+      if (Object.keys(spare).length) row.spare = spare;
       const links = (remoteConfig.links || []).slice();
       if (remoteEdit.i === -1) links.push(row); else links[remoteEdit.i] = row;
       remotePut({as: remoteConfig.as || 'laptop', links}, tokens);
@@ -19696,6 +19718,10 @@
         ` onclick="armButton(this, '', () => ${run}, ${escapeHtml(JSON.stringify(key))})">${MACHINE_VERBS[verb]}</button>`;
     }
 
+    const MACHINE_BRANCH_ICON = '<svg class="mach-bico" viewBox="0 0 16 16" fill="none" stroke="currentColor"' +
+      ' stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="4" cy="3.5" r="1.6"/>' +
+      '<circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><path d="M4 5.1v5.8M12 6.6c0 3-8 2.2-8 4.3"/></svg>';
+
     // Whether git moves to `host` go over SSH, checkout to checkout, rather than through origin.
     function machinesOverSsh(host) {
       const row = ((typeof remoteConfig !== 'undefined' && remoteConfig && remoteConfig.links) || [])
@@ -19712,7 +19738,7 @@
       const acts = busy || row.only_there ? [] : [across && r.here && go('send'), across && r.there && go('bring'),
         r.here && r.here.behind && go('pull_here'), r.there && r.there.behind && go('pull')].filter(Boolean);
       return `<div class="mach-row mach-branch">` +
-        `<div class="mach-cell"><span class="mach-name">${escapeHtml(r.name)}</span>${machinesShort(r.here)}</div>` +
+        `<div class="mach-cell"><span class="mach-name">${MACHINE_BRANCH_ICON}${escapeHtml(r.name)}</span>${machinesShort(r.here)}</div>` +
         `<div class="mach-cell">${machinesShort(r.there)}</div>` +
         `<div class="mach-cell mach-acts"><span class="mach-chip" data-state="${r.state}">${escapeHtml(r.label)}</span>${acts.join('')}</div></div>`;
     }
@@ -19736,7 +19762,7 @@
           (held ? ` (${held} in worktrees)` : '')}</button>` : '');
       return `<div class="mach-project${open ? ' open' : ''}">` +
         `<button type="button" class="mach-row mach-head" aria-expanded="${open}" onclick="machinesToggle(${h}, ${id})">` +
-        `<span class="mach-cell"><span class="mach-name">${escapeHtml(p.label || row.label || row.id)}</span>` +
+        `<span class="mach-cell"><span class="mach-name"><span class="badge proj">@${escapeHtml(p.label || row.label || row.id)}</span></span>` +
         `${side(row.here, row.only_there ? 'not on this machine' : 'not a checkout')}</span>` +
         `<span class="mach-cell" title="${escapeHtml(row.there_error || '')}">${side(row.there, there)}</span>` +
         `<span class="mach-cell mach-acts"><span class="mach-chip" data-state="${sum.state}">${escapeHtml(sum.label)}</span></span></button>` +
