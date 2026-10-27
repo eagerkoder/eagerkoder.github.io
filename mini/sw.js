@@ -45,7 +45,8 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
-        if (client.url.includes(self.location.origin)) {
+        if (new URL(client.url).origin === self.location.origin
+            && !new URL(client.url).searchParams.has('ns')) {
           client.focus();
           client.postMessage({ type: 'navigate', url });
           return;

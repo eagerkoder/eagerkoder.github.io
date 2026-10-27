@@ -8,6 +8,44 @@
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
   <meta name="app-built" content="2026-10-26">
+  <script>
+    // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
+    // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
+    // machine's relay, and without this it would read and overwrite this app's own storage — the
+    // relay address and token first of all. Every localStorage and sessionStorage key is read and
+    // written under `ns:<name>:`, and `length` and `key()` see only those, so code that walks the
+    // keys walks its own. The theme and tint are this browser's, read from the page's own keys.
+    // The first script on the page: nothing may touch storage before it.
+    (function () {
+      const ns = new URLSearchParams(location.search).get('ns');
+      window.STORAGE_NS = ns && /^[A-Za-z0-9._-]{1,128}$/.test(ns) ? ns : '';
+      if (!window.STORAGE_NS) return;
+      const prefix = 'ns:' + window.STORAGE_NS + ':';
+      const shared = new Set(['herdr_theme', 'herdr_tint']);
+      const S = Storage.prototype;
+      const get = S.getItem, set = S.setItem, remove = S.removeItem, key = S.key;
+      const size = Object.getOwnPropertyDescriptor(S, 'length').get;
+      const own = store => {
+        const out = [];
+        const n = size.call(store);
+        for (let i = 0; i < n; i++) {
+          const k = key.call(store, i);
+          if (k && k.startsWith(prefix)) out.push(k.slice(prefix.length));
+        }
+        return out;
+      };
+      S.getItem = function (k) {
+        const v = get.call(this, prefix + k);
+        return v === null && shared.has(String(k)) ? get.call(this, String(k)) : v;
+      };
+      S.setItem = function (k, v) { return set.call(this, prefix + k, v); };
+      S.removeItem = function (k) { return remove.call(this, prefix + k); };
+      S.key = function (i) { return own(this)[i] ?? null; };
+      S.clear = function () { for (const k of own(this)) remove.call(this, prefix + k); };
+      Object.defineProperty(S, 'length', {configurable: true, get() { return own(this).length; }});
+    })();
+
+  </script>
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -446,6 +484,11 @@
     /* Collapsed: the sidebar is gone rather than narrow, and the whole window is columns. The
        handle stays — it is how it comes back, along with the button in the tab strip. */
     .desk.side-off { grid-template-columns: 0 5px minmax(0, 1fr); }
+
+    /* room.html: one room's column, the whole window. desktop_shell.js's DESK_ROOM. */
+    .desk-room .desk { grid-template-columns: minmax(0, 1fr); }
+    .desk-room .mock-sidebar, .desk-room .desk-side-width-drag, .desk-room .mock-tabs-row,
+    .desk-room #recentFloat { display: none; }
 
     /* Emptied, not removed. `display: none` takes the aside out of the grid, and the two tracks
        after it slide one place left — the 5px handle becomes the main panel and the columns get a
@@ -1219,6 +1262,12 @@
     /* No strip means no row: columns reclaim its height. Tabs still open from the sidebar, and
        split columns keep their own title controls. */
     .desk.tabs-off .mock-main { grid-template-rows: minmax(0, 1fr); }
+    .desk-room .desk .mock-main { grid-template-rows: minmax(0, 1fr); }
+    /* room.html in another page's column: that column is the frame and the title, so this one has
+       neither, and its thread and composer sit edge to edge in it. */
+    .desk-room-framed .mock-panes { padding: 0; }
+    .desk-room-framed .mock-pane { border: 0; --desk-title-h: 0px; }
+    .desk-room-framed .desk-pane-title { display: none; }
     .desk.tabs-off .mock-tabs-row { display: none; }
 
     /* Titles off by choice, on top of the single-column rule that hides them anyway. A split
@@ -1579,6 +1628,10 @@
        the drawing switches on the left as well as the right, the first agent bubble sat under
        them. The rows are 26px and hang 5px into the body. Scrolled text still passes beneath. */
     .desk-pane-body.desk-conv { padding-top: 34px; }
+
+    /* Another machine's room: its own page, framed edge to edge (remote_rooms.js). */
+    .desk-pane-body.desk-remote { overflow: hidden; padding: 0; }
+    .desk-remote-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--term-bg); }
 
     /* A bubble born under a chip is a pick button nobody can press. The chips hang under the rows. */
     .desk-pane-body.desk-conv.has-working { padding-top: 62px; }
@@ -4010,51 +4063,32 @@
     .remote-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
       padding: 1px 5px; border-radius: 4px; background: var(--accent, #6b8afd); color: #fff;
       flex: none; }
-    .remote-head, .remote-room, .remote-overlay-head { display: flex; align-items: center;
+    .remote-head, .remote-overlay-head { display: flex; align-items: center;
       gap: 8px; min-width: 0; }
     .remote-head { flex-wrap: wrap; row-gap: 2px; padding: 0.45rem 0.7rem 0.2rem; font-size: 12px; opacity: .85; }
     .remote-host { font-weight: 600; flex: 0 0 auto; max-width: 100%; overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap; }
     .remote-note { opacity: .7; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap; }
-    .remote-open { margin-left: auto; color: inherit; font-size: 12px; flex: none; }
-    .remote-room { width: 100%; text-align: left; font: inherit; color: var(--term-dim);
-      background: transparent; border: 0; padding: 0.55rem 0.7rem; margin: 0; cursor: pointer;
-      flex-wrap: wrap; row-gap: 2px; }
-    .remote-room:hover { background: var(--term-active-bg); }
-    .remote-title { flex: 1 1 8em; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-      white-space: nowrap; color: var(--text); }
-    .remote-state { font-size: 12px; opacity: .7; flex: none; }
+    .remote-open { margin-left: auto; color: inherit; font: inherit; font-size: 12px; flex: none;
+      background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
     .remote-overlay { position: fixed; inset: 4vh 4vw; z-index: 1000; display: flex;
       flex-direction: column; background: var(--bg, #111); border-radius: 10px;
       box-shadow: 0 10px 40px rgba(0,0,0,.5); overflow: hidden;
       /* On body, outside `.desk`, so it brings the shell's type and text colour with it. */
       color: var(--text); font: 13px 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
     .remote-overlay-head { padding: 8px 12px; border-bottom: 1px solid var(--border, rgba(127,127,127,.3)); }
-    /* The room read here: the page's own bubbles, at a size of their own, since the overlay sits
-       outside every container that sets one. */
     .remote-tag { text-transform: none; letter-spacing: 0; }
-    .remote-room { flex-wrap: wrap; row-gap: 4px; }
-    .remote-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
-      font-size: 11px; opacity: .85; min-width: 0; }
-    .remote-meta .remote-state { margin-left: auto; }
-    .remote-meta .badge { margin: 0; }
-    .remote-project { margin-right: 2px; }
-    .remote-frame-toggle { margin-left: auto; font: inherit; font-size: 12px; color: inherit;
-      background: transparent; border: 1px solid var(--border, rgba(127,127,127,.4));
-      border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
-    .remote-frame-toggle[aria-pressed="true"] { background: var(--surface, rgba(127,127,127,.15)); }
-    .remote-frame-toggle + .remote-open { margin-left: 0; }
-    .remote-thread { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
-      gap: 8px; padding: 12px; --conv-font: 13px; }
-    .remote-thread .conv-msg { font-size: var(--conv-font); white-space: normal; }
-    .remote-thread .conv-msg p { margin: 0 0 .5em; }
-    .remote-thread .conv-msg > :last-child { margin-bottom: 0; }
-    .remote-thread .conv-msg.user { align-self: flex-end; }
-    .remote-thread .conv-time { margin-left: 8px; opacity: .6; font-weight: 400; }
-    .remote-thread-note { margin: auto; opacity: .7; font-size: 13px; }
+    /* The R ahead of a remote room's name, in the slot a local room's mark takes. */
+    .remote-r { flex: none; display: inline-grid; place-items: center; width: 1.35em; height: 1.35em;
+      border-radius: 4px; background: var(--accent, #6b8afd); color: #fff; font-size: 0.7rem;
+      font-weight: 700; line-height: 1; }
+    .remote-room.disabled { opacity: .6; cursor: default; }
+    .remote-kinds .remote-badge { margin-right: 4px; }
+    .desk-conv-body strong .remote-r { margin-right: 6px; vertical-align: 0.05em; }
+    .desk-conv-body small .remote-badge { font-size: inherit; padding: 0 4px; }
     .remote-close { background: none; border: 0; color: inherit; font-size: 16px; cursor: pointer; }
-    .remote-frame { flex: 1; border: 0; width: 100%; background: #fff; }
+    .remote-frame { flex: 1; border: 0; width: 100%; background: var(--bg, #111); }
     /* Settings › Remote machines: one row per machine, and the form in its place while editing. */
     .remote-links-row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
       border-bottom: 1px solid var(--border); font-size: 0.8rem; min-width: 0; }
@@ -14279,7 +14313,8 @@ function convWebModeOf(conv) {
         'A7.7 7.7 0 0 1 3.5 11.5a8 8 0 0 1 8.5-8 8 8 0 0 1 8.5 8z"/></svg>';
     }
 
-    const CONV_DB_NAME = 'herdr', CONV_DB_STORE = 'transcripts';
+    // Another machine's room opened here keeps its transcripts apart (storage_ns.js).
+    const CONV_DB_NAME = 'herdr' + (window.STORAGE_NS ? ':' + window.STORAGE_NS : ''), CONV_DB_STORE = 'transcripts';
     // The relay's own record, kept beside the transcripts rather than mixed into them. They are two
     // sources for one conversation and they must never be folded together: one is what this browser
     // witnessed, the other is what the relay wrote for every pane whether anyone was watching. Its
@@ -19143,7 +19178,9 @@ convApplyTint();
         if (ws !== socket) return;
         setStatus('connected');
         if (window.cue) cue('ready');
-        if (typeof announceSubscription === 'function') announceSubscription();
+        // Not from another machine's room opened here (storage_ns.js): this page's own socket
+        // already holds this browser's subscription, and a second relay would push the same alerts.
+        if (typeof announceSubscription === 'function' && !window.STORAGE_NS) announceSubscription();
         if (typeof ccReconnect === 'function') ccReconnect();
         // Before state_get: one lane, so the numbers are in hand when the index first lands.
         if (typeof convActivityOpen === 'function') convActivityOpen(socket);
@@ -19231,9 +19268,6 @@ convApplyTint();
       }
       else if (msg.type === 'links') { if (typeof remoteRoomsSync === 'function') remoteRoomsSync(msg); }
       else if (msg.type === 'remote_rooms') { if (typeof remoteRoomsFed === 'function') remoteRoomsFed(msg); }
-      else if (msg.type === 'remote_conv_log') {
-        if (typeof remoteThreadReceive === 'function') remoteThreadReceive(msg.machine, msg);
-      }
       else if (msg.type === 'bench') {
         if (typeof benchReceive === 'function') benchReceive(msg);
         if (typeof cmdRender === 'function') cmdRender();
@@ -19698,27 +19732,25 @@ convApplyTint();
 
   </script>
   <script>
-    // Remote rooms: the Commanders of other machines' relays, listed among this page's rooms.
+    // Remote rooms: the Commanders of other machines' relays, listed among this page's rooms, and
+    // opened here fully featured.
     //
-    // This relay names the machines it is linked to in a `links` message, each with the address its
-    // relay answers at here: its own (`via: lan`), or an SSH forward this relay holds when that
-    // does not answer (`via: ssh`), or its tunnel or LAN listener (`via: wss`), which needs a token
-    // this page is never sent. This page opens one read-only socket to each `lan`/`ssh` machine;
-    // a `wss` machine's rooms this page's own relay passes through (`remote_rooms`), and reads
-    // their turns for it (`remote_conv_log`). Either way it keeps the Commanders of Projects that
-    // have the same id here, and draws them at the top of the rooms list, each tagged
-    // `remote:<machine>` with its Project. A row opens the room read-only here, its turns asked
-    // with `conv_log` — the only thing this page ever sends that relay — and kept in this module,
-    // never in the page's own stores. "Framed app" shows that relay's own app at the room
-    // (`#conv/<id>`) instead, and "Open app" opens it whole in a new tab: every action happens
-    // there, at its own origin. Neither for a `wss` machine, whose app needs the token.
+    // This relay names the machines it is linked to in a `links` message, with the route it
+    // reaches each by: its own address (`via: lan`), an SSH forward (`ssh`), or its tunnel or LAN
+    // listener with its token (`wss`). This relay holds a socket to each and passes its
+    // Commanders through (`remote_rooms`); this page keeps those of Projects with an id it knows
+    // and draws them at the top of the rooms list, each tagged `remote:<machine>` with its
+    // Project. This page opens no socket of its own to another relay.
     //
-    // The `lan`/`ssh` rooms only on the laptop relay's own page: the forward listens on this
-    // machine's loopback, which a phone or a page on another host cannot reach; the `wss` ones on
-    // every page, since they come from this page's own relay. Settings lists the machines
-    // and their routes on every page, and edits them where the relay says this connection may
-    // (`editable`: its own page, or one that showed the token, such as a phone). Design:
-    // .workflow/01_concepts/2026-10-25_remote_bench_link.md.
+    // A row opens the room in an overlay, as this same app framed at `index.html?ns=<machine>
+    // #conv/<room>`: storage_ns.js keeps that copy's storage apart from this one's, and its socket
+    // goes to `<this relay>/link/<machine>`, which this relay pipes to that machine's relay with
+    // the token it holds (`link_proxy`). So the room is that relay's own, with every control it
+    // has there, on any page that may control this relay; *Open in tab* opens the same address.
+    // Settings lists the machines and their routes, and edits them where the relay says this
+    // connection may (`editable`: its own page, or one that showed the token, such as a phone).
+    // Design: .workflow/01_concepts/2026-10-25_remote_bench_link.md; plan:
+    // .workflow/04_implementation_plans/2026-10-26_remote_rooms_full.md.
 
     // The rows for one linked machine, from its relay's open Commanders: those of a Project with
     // an id this page knows. Those whose scope starts with `[<as>]` are the ones this bench
@@ -19728,287 +19760,246 @@ convApplyTint();
       return (sessions || [])
         .filter(s => s && projects.has(s.project_id) && s.state !== 'ended' && s.conversation)
         .map(s => {
-          // The agents whose record is the room: its Commander and its roster, by that relay's ids.
           const who = [s.coordinator || {}].concat(s.members || []);
           return {id: s.id, room: s.conversation, state: s.state || '', linked: tag.test(s.scope || ''),
             title: String(s.scope || s.id).split('\n')[0].replace(tag, '') || s.id,
             project: s.project_id,
-            aids: [...new Set(who.map(m => m.aid).filter(Boolean))],
             kinds: [...new Set(who.map(m => m.agent).filter(Boolean))]};
         })
         .sort((a, b) => (b.linked - a.linked) || a.id.localeCompare(b.id));
     }
 
-    // A remote room's thread, held and a delta merged in: one row per record id, in the order it
-    // was said, the newest REMOTE_THREAD_MAX kept. A copy (`dupe_of`) never reaches the wire.
-    const REMOTE_THREAD_MAX = 200;
-    function remoteThreadMerge(held, turns) {
-      const byId = new Map((held || []).map(t => [t.seq, t]));
-      for (const t of turns || []) if (t && t.seq) byId.set(t.seq, t);
-      const out = [...byId.values()].sort((a, b) => (a.at - b.at) || (a.seq - b.seq));
-      return out.length > REMOTE_THREAD_MAX ? out.slice(out.length - REMOTE_THREAD_MAX) : out;
+    // Where the copy of this app that opens a machine's room connects: this page's own relay at
+    // `/link/<machine>`, without the query (its token travels on its own).
+    function remoteLinkRelay(relay, machine) {
+      return String(relay).split('?')[0].replace(/\/+$/, '') + '/link/' + encodeURIComponent(machine);
     }
 
-    function remoteThreadNewest(turns) {
-      return (turns || []).reduce((m, t) => Math.max(m, t.seq || 0), 0);
+    // That copy's address, beside this page and in the machine's storage namespace: room.html at
+    // the room when one is named (its thread and composer alone), else the whole app, index.html.
+    function remoteAppHref(page, machine, room) {
+      const url = new URL(room ? 'room.html' : 'index.html', page);
+      url.search = '?ns=' + encodeURIComponent(machine);
+      url.hash = room ? '#conv/' + encodeURIComponent(room) : '';
+      return url.href;
+    }
+    // A remote room's tab on the desktop page: `<machine>/<room>`. A machine name has no `/`.
+    function remoteTabKey(machine, room) { return machine + '/' + room; }
+    function remoteTabParts(key) {
+      const at = String(key).indexOf('/');
+      return at < 0 ? {host: String(key), room: ''} : {host: key.slice(0, at), room: key.slice(at + 1)};
     }
     // --- end remote rooms (pure) ---
 
-    const remoteLinks = new Map();   // name -> {url, via, ws, sessions: Map, timer}
+    const remoteLinks = new Map();   // name -> {via, connected, sessions: Map}
     let remoteAs = 'laptop';
+    let remoteSynced = false;        // a `links` message has come: the machines are known
     let remoteConfig = null;         // the links file as written, for Settings
     let remoteRoutes = new Map();    // name -> {url, via}, the relay's routes, for Settings
     let remoteEditable = false;      // whether the relay takes this connection's links_put
 
-    function remoteRoomsOn() {
-      return location.protocol === 'http:'
-        && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-    }
-
-    // Opens a socket for every linked machine, moves one whose address changed (its own address
-    // came back, or the forward took over), and closes the ones no longer linked. Called on every
-    // `links` message.
+    // Keeps a machine for every linked one and drops the ones no longer linked. Called on every
+    // `links` message; the rooms come in `remote_rooms`.
     function remoteRoomsSync(msg) {
+      remoteSynced = true;
       remoteAs = msg.as || 'laptop';
       remoteConfig = msg.config || null;
       remoteRoutes = new Map((msg.links || []).map(l => [l.name, l]));
       // Sent with the copy on connect only: the broadcasts after it are everybody's.
       if ('editable' in msg) remoteEditable = !!msg.editable;
-      const want = new Map((msg.links || []).filter(l => l.via === 'wss' || remoteRoomsOn())
-        .map(l => [l.name, l]));
-      for (const [host, link] of remoteLinks) {
-        const w = want.get(host);
-        if (w && w.url === link.url) { link.via = w.via; continue; }
-        if (remoteThread && remoteThread.host === host) remoteRoomClose();
-        clearTimeout(link.timer);
-        link.closed = true;
-        if (link.ws) link.ws.close();
+      for (const host of [...remoteLinks.keys()]) {
+        if (remoteRoutes.has(host)) continue;
+        if (remoteOpen && remoteOpen.host === host) remoteRoomClose();
         remoteLinks.delete(host);
       }
-      for (const [host, w] of want) {
-        if (remoteLinks.has(host)) continue;
-        remoteLinks.set(host, {url: w.url, via: w.via, sessions: new Map()});
-        remoteRoomsConnect(host);
+      for (const [host, w] of remoteRoutes) {
+        const link = remoteLinks.get(host);
+        if (link) link.via = w.via;
+        else remoteLinks.set(host, {via: w.via, connected: false, sessions: new Map()});
       }
       remoteRoomsRepaint();
     }
 
-    // A `wss` machine's rooms, passed through by this page's own relay, which holds its token.
+    // A machine's rooms, passed through by this page's own relay.
     function remoteRoomsFed(msg) {
       const link = remoteLinks.get(msg.machine);
-      if (!link || link.via !== 'wss') return;
-      const t = remoteThread && remoteThread.host === msg.machine ? remoteThread : null;
-      const before = t && JSON.stringify(link.sessions.get(t.session) || null);
+      if (!link) return;
       link.connected = !!msg.connected;
       link.sessions = new Map((msg.sessions || []).map(s => [s.id, s]));
-      if (t && JSON.stringify(link.sessions.get(t.session) || null) !== before) remoteThreadAsk();
       remoteRoomsRepaint();
     }
 
-    function remoteRoomsConnect(host) {
-      const link = remoteLinks.get(host);
-      if (!link || link.closed || link.via === 'wss') return;
-      const ws = new WebSocket(link.url.replace(/^http/, 'ws') + '?proto=' + WEB_PROTOCOL);
-      link.ws = ws;
-      ws.onmessage = ev => {
-        let msg;
-        try { msg = JSON.parse(ev.data); } catch { return; }
-        if (msg.type === 'conv_log') { remoteThreadReceive(host, msg); return; }
-        if (msg.type === 'cmd_sessions') {
-          link.sessions = new Map((msg.sessions || []).map(s => [s.id, s]));
-        } else if (msg.type === 'cmd_session' && msg.session) {
-          link.sessions.set(msg.session.id, msg.session);
-          if (remoteThread && remoteThread.host === host && remoteThread.session === msg.session.id) {
-            remoteThreadAsk();
-          }
-        } else return;
-        remoteRoomsRepaint();
-      };
-      // A relay comes and goes with its machine and the route to it; try again, and draw the
-      // machine as unreachable meanwhile rather than keep a list that may be stale.
-      ws.onclose = () => {
-        if (link.ws !== ws || link.closed) return;
-        link.ws = null;
-        link.sessions = new Map();
-        remoteRoomsRepaint();
-        link.timer = setTimeout(() => remoteRoomsConnect(host), 5000);
-      };
-    }
-
-    // The rooms list, and Settings' route column, which follows the same sockets. Not under an
-    // open form: a route changing every 15 s would wipe what is being typed.
+    // The rooms list, and Settings' route column. Not under an open form: a route changing every
+    // 15 s would wipe what is being typed.
     function remoteRoomsRepaint() {
       if (typeof renderConversations === 'function') renderConversations();
       if (!remoteEdit) remoteSettingsRender();
+      // The desktop's columns holding a remote room: a machine that came or went changes them.
+      if (typeof deskPaintColumn === 'function') {
+        deskColumns.forEach((c, i) => { const t = deskTabFor(c.tabKey); if (t && t.kind === 'remote') deskPaintColumn(i); });
+      }
+    }
+
+    // A desktop row is lit while the focused column holds its room, as a local room's is while selected.
+    function remoteMarkActive() {
+      if (typeof deskFocused !== 'function') return;
+      const tab = deskFocused() && deskTabFor(deskFocused().tabKey);
+      const key = tab && tab.kind === 'remote' ? tab.key : null;
+      document.querySelectorAll('.mock-space.remote-room').forEach(el => {
+        el.classList.toggle('active', remoteTabKey(el.dataset.host, el.dataset.room) === key);
+      });
     }
 
     // The section's rows, as `[key, html]` pairs for paintList: one header per host, then its
     // rooms. Empty when nothing is linked, so a relay without links draws exactly what it did.
-    function remoteRoomParts() {
+    // A room is drawn in the list's own markup, the phone's card or the desktop sidebar's row
+    // (`desk`), so it reads as one of this machine's rooms but for the R ahead of its name, which
+    // survives the compact view, and the machine's badge: on the card's second line, and on the
+    // row's third, which compact drops.
+    function remoteRoomParts(desk = false) {
+      // shortcut: one remote level; nesting needs hierarchical routes and storage namespaces.
+      if (window.STORAGE_NS) return [];
       const ids = new Set(((typeof projects !== 'undefined' && projects) || []).map(p => p.id));
+      const label = id => (((typeof projects !== 'undefined' && projects) || []).find(p => p.id === id) || {}).label || id;
+      const refused = ' title="Connect with this relay’s token to open remote apps"';
       const parts = [];
       for (const [name, link] of remoteLinks) {
         const rows = remoteRoomRows([...link.sessions.values()], {projects: ids, as: remoteAs});
         const host = escapeHtml(name);
-        const url = escapeHtml(link.url);
-        const note = !remoteLinkUp(link) ? 'not reachable'
+        const note = !link.connected ? 'not reachable'
           : [link.via === 'ssh' ? 'over ssh' : link.via === 'wss' ? 'over wss' : '',
-            rows.length ? '' : 'no Commanders open']
-            .filter(Boolean).join(' · ');
+            rows.length ? '' : 'no Commanders open'].filter(Boolean).join(' · ');
         parts.push([`remote:${name}`, `<div class="remote-head"><span class="remote-badge">remote</span>` +
           `<span class="remote-host">${host}</span>` +
           `<span class="remote-note">${note}</span>` +
-          (link.via === 'wss' ? '' : `<a class="remote-open" href="${url}" target="_blank" rel="noopener"` +
-          ` aria-label="Open the app on ${host} in a new tab">Open app ↗</a>`) + `</div>`]);
-        const label = id => (((typeof projects !== 'undefined' && projects) || []).find(p => p.id === id) || {}).label || id;
+          // Desktop rows offer it on right-click; an empty machine has no row yet.
+          (link.connected && (!desk || !rows.length) ? `<button type="button" class="remote-open" data-host="${host}"` +
+            (remoteEditable ? '' : ' disabled' + refused) +
+            ` onclick="remoteRoomOpen(this.dataset)" aria-label="Open the app on ${host}">Open app</button>` : '') +
+          `</div>`]);
         for (const r of rows) {
-          const kinds = r.kinds.map(k => typeof agentBadge === 'function' ? agentBadge(k) : escapeHtml(k)).join('');
-          parts.push([`remote:${name}:${r.id}`, `<button class="remote-room" type="button"` +
-            ` data-host="${host}" data-session="${escapeHtml(r.id)}"` +
-            ` onclick="remoteRoomOpen(this.dataset)">` +
-            `<span class="remote-badge remote-tag">remote:${host}</span>` +
-            `<span class="remote-title">${escapeHtml(r.title)}</span>` +
-            `<span class="remote-meta"><span class="remote-project">${escapeHtml(label(r.project))}</span>${kinds}` +
-            `<span class="remote-state">${r.linked ? escapeHtml(remoteAs) + ' · ' : ''}${escapeHtml(r.state)}</span></span>` +
-            `</button>`]);
+          const kinds = r.kinds.map(k => typeof agentBadge === 'function' ? agentBadge(k) : escapeHtml(k));
+          const project = `<span class="badge proj remote-project">@${escapeHtml(label(r.project))}</span>`;
+          const tag = `<span class="remote-badge remote-tag">remote:${host}</span>`;
+          const state = escapeHtml((r.linked ? remoteAs + ' · ' : '') + r.state);
+          const live = ['active', 'awaiting', 'running', 'idle'].includes(r.state);
+          const mark = `<span class="remote-r" title="On ${host}" aria-label="remote">R</span>`;
+          const title = escapeHtml(r.title);
+          // The phone opens the room over the page; the desktop in a column of its own, as it
+          // opens a local room: a click here, a double click beside, the rest on right-click.
+          const go = desk ? 'remoteRoomColumn(this.dataset, false, event)' : 'remoteRoomOpen(this.dataset)';
+          const open = (cls) => `<div class="${cls} remote-room${remoteEditable ? '' : ' disabled'}"` +
+            ` role="button" tabindex="0" data-host="${host}" data-room="${escapeHtml(r.room)}"` +
+            ` data-title="${title}"` +
+            (remoteEditable
+              ? ` onclick="${go}" onkeydown="if (event.key === 'Enter' ||` +
+                ` event.key === ' ') { event.preventDefault(); ${go}; }"` +
+                (desk ? ` ondblclick="remoteRoomColumn(this.dataset, true, event)"` +
+                  ` oncontextmenu="remoteRoomMenu(this.dataset, event)"` : '') + '>'
+              : ` aria-disabled="true"${refused}>`);
+          parts.push([`remote:${name}:${r.id}`, desk
+            ? open(`mock-space${live ? '' : ' inactive'}`) +
+              `<span class="mock-dot${live ? '' : ' ended'}" style="background:var(--dot-cold)" aria-hidden="true"></span>` +
+              `<div class="desk-conv-body"><strong>${mark}<span class="desk-name remote-title">${title}</span>` +
+              `<span class="desk-chip remote-state">${state}</span></strong>` +
+              `<div class="desk-conv-badges remote-kinds">` +
+              kinds.map(b => `<span class="desk-badge-agent">${b}</span>`).join('') + ` ${project}</div>` +
+              `<small>${tag}</small></div></div>`
+            : open('conversation-card') +
+              `<div class="conversation-title"><span class="dot${live ? '' : ' ended'}"` +
+              ` style="background:var(--dot-cold)" aria-hidden="true"></span>${mark}` +
+              `<span class="name remote-title">${title}</span>` +
+              `<span class="conversation-tier remote-state">${state}</span></div>` +
+              `<div class="conversation-meta kinds remote-kinds">${tag}${kinds.join('')} ${project}</div></div>`]);
         }
       }
       return parts;
     }
 
-    function remoteLinkUp(link) {
-      return link.via === 'wss' ? !!link.connected : !!(link.ws && link.ws.readyState === 1);
+    // This page's relay, as net.js connects to it, and its token.
+    function remoteOwnRelay() {
+      let url = '', token = '';
+      try { url = localStorage.getItem('herdr_relay_url') || ''; token = localStorage.getItem('herdr_relay_token') || ''; }
+      catch (e) { /* storage blocked: this page's own address */ }
+      return {url: url || (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host, token};
     }
 
-    // Sends a read to the relay a room is on: on this page's own socket for a `wss` machine,
-    // which this relay forwards, else on the socket to that relay. False when neither is open.
-    function remoteSend(host, link, msg) {
-      if (link.via === 'wss') {
-        if (typeof ws === 'undefined' || !ws || ws.readyState !== 1) return false;
-        ws.send(JSON.stringify({...msg, type: 'remote_conv_log', machine: host}));
-        return true;
-      }
-      if (!link.ws || link.ws.readyState !== 1) return false;
-      link.ws.send(JSON.stringify(msg));
+    // Points the machine's copy of this app at `/link/<machine>` with this page's token, written
+    // into that copy's own storage namespace (`ns:<machine>:`, storage_ns.js). Same origin, so this
+    // page may; the token never enters an address.
+    function remoteAppPrepare(host) {
+      const own = remoteOwnRelay();
+      const key = k => 'ns:' + host + ':' + k;
+      try {
+        localStorage.setItem(key('herdr_relay_url'), remoteLinkRelay(own.url, host));
+        if (own.token) localStorage.setItem(key('herdr_relay_token'), own.token);
+        else localStorage.removeItem(key('herdr_relay_token'));
+      } catch (e) { return false; }
       return true;
     }
 
-    // The room open in the overlay: which machine and session, the agents its record is asked by,
-    // and the turns held. One at a time, like the overlay.
-    let remoteThread = null;
-    // ponytail: a timer while open, besides the session's own updates; a member's turn landing with
-    // no session change is seen within this. Follow the relay's per-pane `turn` if it lags.
-    const REMOTE_THREAD_EVERY = 5000;
+    // The desktop page: a machine's room in a column, as a local room opens. `split` is the
+    // double click's column beside; the second click of a double click is part of it.
+    function remoteRoomColumn({host, room, title}, split, ev) {
+      if (!split && ev && ev.detail > 1) return;
+      if (typeof deskOpen !== 'function' || !remoteEditable || !remoteLinks.has(host) || !room) return;
+      const key = remoteTabKey(host, room);
+      if (split) deskOpenSplit('remote', key, title || room);
+      else deskOpen('remote', key, title || room);
+    }
 
-    function remoteRoomOpen({host, session}) {
-      const link = remoteLinks.get(host);
-      const s = link && link.sessions.get(session);
-      if (!s) return;
-      const r = remoteRoomRows([s], {projects: new Set([s.project_id]), as: remoteAs})[0];
-      if (!r) return;
+    // What a column holding a remote room draws: room.html for it, framed through this relay.
+    function remoteColumnHtml(key) {
+      const {host, room} = remoteTabParts(key);
+      if (!remoteSynced) return '<p class="desk-empty">Waiting for the relay…</p>';
+      if (!remoteLinks.has(host)) return `<p class="desk-empty">${escapeHtml(host)} is not linked here any more.</p>`;
+      if (!remoteEditable || !remoteAppPrepare(host)) {
+        return '<p class="desk-empty">Connect with this relay’s token to open remote rooms.</p>';
+      }
+      const src = remoteAppHref(location.href, host, room);
+      return `<iframe class="desk-remote-frame" title="${escapeHtml(room)} on ${escapeHtml(host)}"` +
+        ` src="${escapeHtml(src)}"></iframe>`;
+    }
+
+    // A desktop row's right-click menu: the column, and the room or the whole app elsewhere.
+    function remoteRoomMenu(d, ev) {
+      ev.preventDefault();
+      if (typeof deskMenuOpen !== 'function') return;
+      deskMenuOpen(ev.clientX, ev.clientY, [
+        {label: 'Open here', run: () => remoteRoomColumn(d, false)},
+        {label: 'Open beside', hint: 'in a column of its own', run: () => remoteRoomColumn(d, true)},
+        'sep',
+        {label: 'Open room in tab', hint: 'a browser tab', run: () => {
+          if (remoteAppPrepare(d.host)) window.open(remoteAppHref(location.href, d.host, d.room), '_blank', 'noopener');
+        }},
+        {label: `Open app on ${d.host}`, hint: 'the whole app, over this page', run: () => remoteRoomOpen({host: d.host})},
+      ]);
+    }
+
+    let remoteOpen = null;           // {host, room} while the overlay is up
+
+    // The machine's own app, at the room or whole, framed over this page.
+    function remoteRoomOpen({host, room = '', title = ''}) {
+      if (window.STORAGE_NS || !remoteEditable || !remoteLinks.has(host) || !remoteAppPrepare(host)) return;
       remoteRoomClose();
-      remoteThread = {host, session, url: link.url, room: r.room, title: r.title, aids: r.aids,
-        turns: [], answered: false, framed: false,
-        timer: setInterval(() => remoteThreadAsk(), REMOTE_THREAD_EVERY)};
+      remoteOpen = {host, room};
+      const src = remoteAppHref(location.href, host, room);
       const box = document.createElement('div');
       box.id = 'remoteRoomOverlay';
       box.className = 'remote-overlay';
       box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-label', `Remote room on ${host}`);
-      const src = link.url + '#conv/' + encodeURIComponent(r.room);
+      box.setAttribute('aria-label', `${room ? 'Room' : 'App'} on ${host}`);
       box.innerHTML = `<div class="remote-overlay-head"><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
-        `<span class="remote-title">${escapeHtml(r.title)}</span>` +
-        (link.via === 'wss' ? '' : `<button type="button" class="remote-frame-toggle" onclick="remoteRoomFrame()"` +
-        ` aria-pressed="false" title="That relay's own app at this room, to act on it">Framed app</button>` +
-        `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>`) +
+        `<span class="remote-title">${escapeHtml(title || host)}</span>` +
+        `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>` +
         `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close">✕</button></div>` +
-        `<div class="remote-thread" role="log" aria-label="Remote room, read-only"></div>`;
+        `<iframe class="remote-frame" title="${escapeHtml(title || host)} on ${escapeHtml(host)}" src="${escapeHtml(src)}"></iframe>`;
       document.body.appendChild(box);
       box.querySelector('.remote-close').focus();
-      remoteThreadDraw();
-      remoteThreadAsk();
-    }
-
-    // The newest window first, then only what is newer than the newest row held.
-    function remoteThreadAsk() {
-      const t = remoteThread;
-      const link = t && remoteLinks.get(t.host);
-      if (!t || t.framed || !link || !remoteLinkUp(link)) return;
-      const s = link.sessions.get(t.session);
-      const aids = s ? remoteRoomRows([s], {projects: new Set([s.project_id]), as: remoteAs})[0]?.aids : t.aids;
-      const changed = aids && JSON.stringify(aids) !== JSON.stringify(t.aids);
-      if (changed) t.aids = aids;
-      if (!t.aids.length) return;
-      const msg = {type: 'conv_log', aids: t.aids, last: 60};
-      // A newly staffed agent can have turns older than the previous roster's watermark.
-      const newest = changed ? 0 : remoteThreadNewest(t.turns);
-      if (newest) msg.since_id = newest;
-      remoteSend(t.host, link, msg);
-    }
-
-    // Only the answer to this room's own question: the same socket may still carry the answer to
-    // the room open before it.
-    function remoteThreadReceive(host, msg) {
-      const t = remoteThread;
-      if (!t || t.host !== host || msg.error || JSON.stringify(msg.aids || []) !== JSON.stringify(t.aids)) return;
-      t.turns = remoteThreadMerge(t.turns, msg.turns);
-      const changed = !t.answered || (msg.turns || []).length > 0;
-      t.answered = true;
-      if (changed) remoteThreadDraw();
-    }
-
-    function remoteThreadDraw() {
-      const box = document.querySelector('#remoteRoomOverlay .remote-thread');
-      const t = remoteThread;
-      if (!box || !t) return;
-      const near = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-      if (!t.answered) {
-        box.innerHTML = '<p class="remote-thread-note">Reading the room from ' + escapeHtml(t.host) + '…</p>';
-        return;
-      }
-      if (!t.turns.length) {
-        box.innerHTML = '<p class="remote-thread-note">Nothing said in this room yet.</p>';
-        return;
-      }
-      box.innerHTML = t.turns.map(remoteTurnHtml).join('');
-      if (near) box.scrollTop = box.scrollHeight;
-    }
-
-    // One turn as the page's own bubbles draw it: what was said to an agent on the right, what it
-    // said on the left in its harness's colour.
-    function remoteTurnHtml(turn) {
-      const asked = turn.kind === 'human_prompt' || turn.kind === 'arbitrated';
-      const name = turn.label || turn.agent || 'agent';
-      const who = asked ? `${turn.origin === 'human_web' ? 'You' : 'Relay'} → ${name}` : name;
-      const color = typeof agentColor === 'function' ? agentColor(turn.agent) : '';
-      const at = turn.at ? new Date(turn.at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
-      const text = turn.text || turn.tail || '';
-      return `<div class="conv-msg${asked ? ' user' : ''}"${color ? ` style="--conv-agent:${escapeHtml(color)}"` : ''}>` +
-        `<div class="conv-who">${escapeHtml(who)}<span class="conv-time">${escapeHtml(at)}</span></div>` +
-        (typeof markdownHtml === 'function' ? markdownHtml(text) : escapeHtml(text)) + '</div>';
-    }
-
-    // That relay's own app in place of the thread, and back.
-    function remoteRoomFrame() {
-      const t = remoteThread;
-      const box = document.getElementById('remoteRoomOverlay');
-      if (!t || !box) return;
-      t.framed = !t.framed;
-      box.querySelector('.remote-frame-toggle').setAttribute('aria-pressed', String(t.framed));
-      const body = box.querySelector('.remote-thread, .remote-frame');
-      if (t.framed) {
-        const src = t.url + '#conv/' + encodeURIComponent(t.room);
-        body.outerHTML = `<iframe class="remote-frame" title="Remote room on ${escapeHtml(t.host)}" src="${escapeHtml(src)}"></iframe>`;
-      } else {
-        body.outerHTML = '<div class="remote-thread" role="log" aria-label="Remote room, read-only"></div>';
-        remoteThreadDraw();
-        remoteThreadAsk();
-      }
     }
 
     function remoteRoomClose() {
-      if (remoteThread) clearInterval(remoteThread.timer);
-      remoteThread = null;
+      remoteOpen = null;
       const box = document.getElementById('remoteRoomOverlay');
       if (box) box.remove();
     }
@@ -20033,18 +20024,11 @@ convApplyTint();
     const REMOTE_PORTS = new Set(['ssh_port', 'http_port', 'relay_port', 'forward_port']);
     let remoteEdit = null;           // {i, route} while a form is open; i is -1 for a new machine
 
-    // On another page an SSH machine has no socket to look at: the route the relay holds is all
-    // there is.
+    // The route the relay holds, and whether its socket to that machine is up.
     function remoteRouteText(name) {
       const link = remoteLinks.get(name);
-      if (!link) {
-        const via = (remoteRoutes.get(name) || {}).via;
-        return remoteRoomsOn() ? '' : via === 'ssh' ? 'ssh · forward' : via === 'lan' ? 'ssh · lan'
-          : 'not reachable';
-      }
-      if (!remoteLinkUp(link)) return 'not reachable';
-      if (link.via === 'wss') return 'http · wss';
-      return link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
+      if (!link || !link.connected) return 'not reachable';
+      return link.via === 'wss' ? 'http · wss' : link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
     }
 
     function remoteInput(k, value, ph, extra = '') {
@@ -34245,6 +34229,9 @@ convApplyTint();
         // A Project's PROJECT.md, opened from command.html's rail. Read from disk on demand, so
         // there is nothing in a snapshot to check it against: kept as it was opened.
         else if (t.kind === 'project') out.push(Object.assign({}, t, {state: 'live'}));
+        // Another machine's room, framed through this relay (remote_rooms.js): that relay says
+        // what is in it, not this snapshot, so it is kept as it was opened too.
+        else if (t.kind === 'remote') out.push(Object.assign({}, t, {state: 'live'}));
       }
       return out;
     }
@@ -34256,7 +34243,8 @@ convApplyTint();
       if (hidden) return 0;
       // Event-driven: a room is written by conv_live.js as messages arrive. There is no pane to
       // read and a read would spawn herdr for nothing.
-      if (!column || column.kind === 'conversation' || column.kind === 'project') return 0;
+      if (!column || column.kind === 'conversation' || column.kind === 'project'
+          || column.kind === 'remote') return 0;
       return focused ? 3000 : 9000;
     }
 
@@ -34268,7 +34256,8 @@ convApplyTint();
     // hides what does not apply, so this is the only place the three are told apart — spec §7.
     // A column with no tab has no composer at all: there is nothing to send to.
     function deskComposerShape(tab) {
-      if (!tab || tab.kind === 'project') return null;
+      // A remote room brings its own composer, inside its frame.
+      if (!tab || tab.kind === 'project' || tab.kind === 'remote') return null;
       if (tab.kind === 'conversation') return 'conversation';
       if (tab.kind === 'terminal') return 'terminal';
       return 'pane';
@@ -34318,6 +34307,7 @@ convApplyTint();
         return typeof shellGlyph === 'function' ? shellGlyph() : '';
       }
       if (kind === 'project') return '<span class="desk-kind-glyph" aria-hidden="true">📄</span>';
+      if (kind === 'remote') return '<span class="remote-r" aria-hidden="true">R</span>';
       return typeof paneGlyph === 'function' ? paneGlyph(pane || {agent: 'x'}) : '';
     }
 
@@ -35239,9 +35229,14 @@ convApplyTint();
           ? cmdTabLabel(t.key, typeof projects !== 'undefined' ? projects : []) : t.label;
         out.push({kind: t.kind, key: t.key, label: label});
       };
-      deskTabPins.forEach(p => add(p, true));
-      deskConvTabs(conv).forEach(t => add(t));
-      lay.extra.forEach(t => add(t));
+      if (DESK_ROOM !== null) {
+        // room.html: the room's own tab and nothing else, before the documents name it too.
+        if (DESK_ROOM) add({kind: 'conversation', key: DESK_ROOM, label: (conv && conv.name) || DESK_ROOM}, true);
+      } else {
+        deskTabPins.forEach(p => add(p, true));
+        deskConvTabs(conv).forEach(t => add(t));
+        lay.extra.forEach(t => add(t));
+      }
       // The same resolution a restored tab gets: a shell that has exited is dropped, a conversation
       // this browser has not been told about yet is kept, and a pane that is gone is marked ended
       // rather than removed — the tab is the last trace that the session happened.
@@ -35292,6 +35287,7 @@ convApplyTint();
     // before this room was selected — then this room's. Capped one below the column limit, because
     // the switchable column is always there and is always the first one.
     function deskSplitKeys() {
+      if (DESK_ROOM !== null) return [];
       const lay = deskConvLayout(deskSelectedConv);
       const live = new Set(deskTabs.map(t => deskTabKey(t.kind, t.key)));
       const out = [];
@@ -35358,6 +35354,11 @@ convApplyTint();
     // was closed, which is what the sidebar's member rows rely on: a member is clicked to be looked
     // at, and whether its tab happens to be open is not something the reader is tracking.
     function deskOpen(kind, key, label) {
+      // room.html has one column and no strip to come back by: anything else is the full app's.
+      if (DESK_ROOM !== null && !(kind === 'conversation' && key === DESK_ROOM)) {
+        showToast('Open the full app for that.', 'info');
+        return;
+      }
       const tabKey = deskTabKey(kind, key);
       const lay = deskConvLayout(deskSelectedConv);
       lay.closed = lay.closed.filter(k => k !== tabKey);
@@ -35566,6 +35567,7 @@ convApplyTint();
     let deskLayoutTimer = null;
 
     function deskSaveLayout() {
+      if (DESK_ROOM !== null) return;
       clearTimeout(deskLayoutTimer);
       deskLayoutTimer = setTimeout(() => {
         try {
@@ -36531,7 +36533,7 @@ convApplyTint();
       // Another machine's Commanders, linked to a Project here, above this machine's rooms;
       // not in the archive or a search. See remote_rooms.js.
       const remote = !list.find.trim() && !list.archiveOn
-        && typeof remoteRoomParts === 'function' ? remoteRoomParts() : [];
+        && typeof remoteRoomParts === 'function' ? remoteRoomParts(true) : [];
       if (!convs.length) {
         // "Waiting" and not "none": an empty list before the documents have arrived is this
         // browser knowing nothing yet, which is a different thing from the fleet having nothing.
@@ -36662,6 +36664,7 @@ convApplyTint();
       document.querySelectorAll('#deskConvRows [data-conv]').forEach(el => {
         el.classList.toggle('active', el.dataset.conv === deskSelectedConv);
       });
+      if (typeof remoteMarkActive === 'function') remoteMarkActive();
     }
 
     // Selecting a room is what loads it: its own tab and one per live member, plus whatever this
@@ -36674,6 +36677,7 @@ convApplyTint();
       // below: a room already selected is a room being looked at, and the log is an order of
       // visits rather than a list of changes — the room restored at boot is the one the reader is
       // standing in, and clicking its row is not a no-op to the question "where was I".
+      if (DESK_ROOM !== null && id !== DESK_ROOM) return;
       if (typeof noteConvVisit === 'function') noteConvVisit(id);
       if (deskSelectedConv === id) return;
       deskSelectedConv = id;
@@ -41276,6 +41280,7 @@ convApplyTint();
     }
 
     function deskSaveSizes() {
+      if (DESK_ROOM !== null) return;
       if (deskColSizes.length) deskSizeBook[deskSizeKey(deskColSizes.length)] = deskColSizes.slice();
       try { localStorage.setItem(DESK_SIZES_KEY, JSON.stringify(deskSizeBook)); } catch (e) {}
     }
@@ -41315,7 +41320,10 @@ convApplyTint();
         // element away — after which arbRender, which finds it by id, would find nothing and the
         // session would lose its controls until a reload. Parked first, hung again below.
         if (typeof deskArbPark === 'function') deskArbPark();
-        box.innerHTML = (deskColumns.length ? deskColumns : [null]).map((c, i) => {
+        const remote = new Map([...box.children].filter(el => el.querySelector('.desk-remote-frame'))
+          .map(el => [el.querySelector('.desk-pane-body').dataset.tab, el]));
+        const template = document.createElement('template');
+        template.innerHTML = (deskColumns.length ? deskColumns : [null]).map((c, i) => {
           const tab = c && deskTabFor(c.tabKey);
           return `<div class="mock-pane" data-col="${i}"` +
             ` data-title="${escapeHtml(tab ? (tab.label || tab.key) : 'empty')}">` +
@@ -41350,11 +41358,31 @@ convApplyTint();
             '</div>' +
             '<div class="desk-pane-body"></div></div>';
         }).join('');
+        // Keep connected remote frames: detaching one discards its socket and in-progress UI.
+        const frames = [...template.content.children].map((fresh, i) => {
+          const kept = remote.get(deskColumns[i] && deskColumns[i].tabKey);
+          if (!kept) return fresh;
+          kept.dataset.col = i;
+          kept.querySelector('[data-grip]')?.remove();
+          const grip = fresh.querySelector('[data-grip]');
+          if (grip) kept.prepend(grip);
+          return kept;
+        });
+        for (const old of [...box.children]) if (!frames.includes(old)) old.remove();
+        let before = box.firstElementChild;
+        for (const frame of frames) {
+          if (frame === before) before = before.nextElementSibling;
+          // shortcut: older browsers reload a frame when remote columns themselves reorder.
+          else if (frame.parentNode === box && box.moveBefore) box.moveBefore(frame, before);
+          else box.insertBefore(frame, before);
+        }
         deskDrawnSig = sig;
       }
       // Once per frame, and never inside the body: deskPaintColumn rewrites that on every read, and
       // a composer under it would lose its draft, its caret and its focus three times a minute.
       document.querySelectorAll('#deskCols .mock-pane').forEach(frame => {
+        const tab = deskTabFor((deskColumns[Number(frame.dataset.col)] || {}).tabKey);
+        if (tab && tab.kind === 'remote') return;
         deskBuildComposer(frame);
         deskBindThread(frame);
       });
@@ -41381,6 +41409,7 @@ convApplyTint();
         el.classList.toggle('focused', i === deskFocus);
       });
       deskComposerFocus();
+      if (typeof remoteMarkActive === 'function') remoteMarkActive();
     }
 
     // A pane, one row per line. The rows are what carry the highlights — blue for what the person
@@ -41447,6 +41476,7 @@ convApplyTint();
       // app's palette and its proportional face — and a pane column is a terminal. One class says
       // which, so the thread's own rules need no second copy scoped to this page.
       body.classList.toggle('desk-conv', !!tab && tab.kind === 'conversation');
+      body.classList.toggle('desk-remote', !!tab && tab.kind === 'remote');
       if (!tab || tab.kind !== 'conversation') deskPaintWorking(frame, i, null);
       deskPaintTint(frame, tab);
 
@@ -41496,6 +41526,10 @@ convApplyTint();
         // rendered as part of it.
         if (typeof convSyncBadges === 'function') convSyncBadges(body);
         deskPaintWorking(frame, i, conv);
+      } else if (tab.kind === 'remote') {
+        // Its room page, framed and left alone: drawn once, so the frame keeps its socket.
+        moved = draw(typeof remoteColumnHtml === 'function' ? remoteColumnHtml(tab.key)
+          : '<p class="desk-empty">This page cannot open another machine’s room.</p>');
       } else if (tab.kind === 'project') {
         moved = draw(typeof cmdProjectHtml === 'function' ? cmdProjectHtml(tab.key)
           : '<p class="desk-empty">This page cannot draw a Project file.</p>');
@@ -41555,6 +41589,8 @@ convApplyTint();
         const uniq = f => Array.from(new Set(values.map(v => v[f]).filter(Boolean)));
         badges = uniq('project').map(proj).join('')
           + memberKindBadges((conv && conv.members) || [], agents).join('');
+      } else if (tab && tab.kind === 'remote' && typeof remoteTabParts === 'function') {
+        badges = ` <span class="remote-badge remote-tag">remote:${escapeHtml(remoteTabParts(tab.key).host)}</span>`;
       } else if (tab && tab.kind === 'project') {
         const pid = typeof cmdTabDoc === 'function' ? cmdTabDoc(tab.key).pid : tab.key;
         const p = (typeof projects !== 'undefined' ? projects : []).find(x => x.id === pid);
@@ -41601,6 +41637,7 @@ convApplyTint();
           const doc = cmdTabDoc(tab.key);
           return doc.path === null ? doc.pid : doc.path;
         }
+        if (tab.kind === 'remote' && typeof remoteTabParts === 'function') return remoteTabParts(tab.key).room;
         if (tab.kind === 'conversation' || tab.kind === 'project') return tab.key;
         const pane = deskPaneOfTab(tab);
         return pane ? (pane.aid || pane.pane_id || '') : '';
@@ -41629,6 +41666,19 @@ convApplyTint();
     // opening a minute late would take the screen off whatever the reader had moved to.
     const DESK_LINK_TRIES = 8;
     let deskLink = String(location.hash || '').replace(/^#/, '');
+
+    // room.html: this page served under another name, showing one room and nothing else — its
+    // thread and composer in one column, no sidebar, no tab strip — for framing in another page
+    // (the remote rooms overlay, a column) without the whole app around it. The room is the
+    // address's `#conv/<id>`, kept on the address so a reload comes back to it; '' on room.html
+    // with none, null on every other page. It writes no layout and no column sizes, so it never
+    // changes what desktop.html opens to in the same browser.
+    const DESK_ROOM = (() => {
+      if (!/\/room\.html$/.test(location.pathname)) return null;
+      try { return /^conv\/(.+)$/.test(deskLink) ? decodeURIComponent(deskLink.slice(5)) : ''; }
+      catch (e) { return ''; }
+    })();
+    if (DESK_ROOM !== null) deskLink = '';
     let deskLinkLeft = DESK_LINK_TRIES;
 
     function deskOpenLink() {
@@ -41666,7 +41716,7 @@ convApplyTint();
       // the rest once it is in front again.
       if (document.hidden) { syncBrowserTab(); return; }
       deskOpenLink();
-      if (!deskSelectedConv) {
+      if (!deskSelectedConv && DESK_ROOM === null) {
         // Something selected beats an empty lower half on first connect, and the top of the list is
         // by definition the conversation this browser was last interested in. Before the tabs are
         // computed, because on this page the selected room is what the strip is made of.
@@ -41757,6 +41807,12 @@ convApplyTint();
         const frame = e.target.closest('[data-col]');
         if (frame) deskSetFocus(Number(frame.dataset.col));
       });
+      // A press inside a remote room's frame never reaches this page; the page only loses focus to
+      // the frame, so that is when the column is taken.
+      window.addEventListener('blur', () => setTimeout(() => {
+        const frame = document.activeElement && document.activeElement.closest('#deskCols [data-col]');
+        if (frame) deskSetFocus(Number(frame.dataset.col));
+      }));
       // And the field the column is written from, once the press is over. Not when the press was
       // aimed at something: another field — the palette's search box — keeps it, and so does every
       // button, because Summary and the step arrows *make* a selection and focusing the field is
@@ -41881,7 +41937,11 @@ convApplyTint();
       // Pins, and one record per room. The columns are not stored: they are derived from those
       // two plus which room is selected, so restoring them would be storing the same fact twice
       // and letting the copies disagree.
-      const saved = deskLoadLayout();
+      const saved = DESK_ROOM === null ? deskLoadLayout() : null;
+      if (DESK_ROOM) deskSelectedConv = DESK_ROOM;
+      if (DESK_ROOM !== null) document.body.classList.add('desk-room');
+      // Framed in another page's column, which already draws the frame and the title around it.
+      if (DESK_ROOM !== null && window.top !== window) document.body.classList.add('desk-room-framed');
       if (saved) {
         deskTabPins = Array.isArray(saved.pins) ? saved.pins : [];
         deskConvLayouts = (saved.convs && typeof saved.convs === 'object') ? saved.convs : {};
@@ -41906,7 +41966,8 @@ convApplyTint();
       // that kept connecting to the old one after the other tab moved it is the whole of the bug
       // this listener exists for.
       window.addEventListener('storage', e => {
-        if (e.key === 'herdr_relay_url' || e.key === 'herdr_relay_token') connect();
+        const prefix = window.STORAGE_NS ? 'ns:' + window.STORAGE_NS + ':' : '';
+        if (e.key === prefix + 'herdr_relay_url' || e.key === prefix + 'herdr_relay_token') connect();
       });
 
       connect();
