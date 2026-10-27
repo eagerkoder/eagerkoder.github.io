@@ -19940,7 +19940,7 @@ convApplyTint();
         const rows = remoteRoomRows([...link.sessions.values()], {projects: ids, as: remoteAs});
         const host = escapeHtml(name);
         const note = !link.connected ? 'not reachable'
-          : [link.via === 'ssh' ? 'over ssh' : link.via === 'wss' ? 'over wss' : '',
+          : [link.via === 'ssh' ? 'over ssh' : link.via === 'wss' ? 'over wss' : link.via === 'ws' ? 'over lan' : '',
             rows.length ? '' : 'no Commanders open'].filter(Boolean).join(' · ');
         parts.push([`remote:${name}`, `<div class="remote-head"><span class="remote-badge">remote</span>` +
           `<span class="remote-host">${host}</span>` +
@@ -20112,9 +20112,11 @@ convApplyTint();
     // which is also the only page the relay takes a `links_put` from. Each machine is reached one
     // way at a time, switchable on its form: over SSH, where its name is how SSH and the browser
     // both reach it unless its SSH or HTTP fields say otherwise (a reverse SSH tunnel, a fixed
-    // address; an empty field takes the default its placeholder names), or over HTTP, its relay's
-    // wss:// tunnel and token. The token goes to the relay once, which keeps it in a file of its
-    // own; it never comes back to this page.
+    // address; an empty field takes the default its placeholder names), over HTTP, its relay's
+    // wss:// tunnel and token, or over the LAN, its relay's open LAN listener at a plain ws://
+    // address with no token. Each route keeps its own fields while the form is open, and Save
+    // writes only the chosen one's, so a token is dropped with the tunnel it belonged to. The
+    // token goes to the relay once, which keeps it in a file of its own; it never comes back.
     const REMOTE_FIELDS = [
       ['ssh_host', 'SSH host', 'the name'], ['ssh_port', 'SSH port', 'from ssh config'],
       ['ssh_user', 'SSH user', 'from ssh config'], ['http_host', 'HTTP host', 'the name'],
@@ -20128,7 +20130,8 @@ convApplyTint();
     function remoteRouteText(name) {
       const link = remoteLinks.get(name);
       if (!link || !link.connected) return 'not reachable';
-      return link.via === 'wss' ? 'http · wss' : link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
+      return link.via === 'wss' ? 'http · wss' : link.via === 'ws' ? 'http · lan'
+        : link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
     }
 
     function remoteInput(k, value, ph, extra = '') {
@@ -20136,22 +20139,34 @@ convApplyTint();
         ` spellcheck="false" autocapitalize="none" autocomplete="off"${extra}>`;
     }
 
+    const REMOTE_ROUTES = {ssh: 'SSH', http: 'HTTP (tunnel)', lan: 'LAN (HTTP)'};
+
+    // The route a saved row is on: a url with its token is the tunnel, a url alone the LAN.
+    function remoteRowRoute(row) {
+      return !row.url ? 'ssh' : row.token_file ? 'http' : 'lan';
+    }
+
     function remoteFormHtml(row) {
-      const http = remoteEdit.route === 'http';
+      const on = remoteRowRoute(row);
+      const fields = r => `<div class="wide remote-route-fields" data-route="${r}"${remoteEdit.route === r ? '' : ' hidden'}>`;
       const route = r => `<label><input type="radio" name="remoteRoute" value="${r}"` +
         `${remoteEdit.route === r ? ' checked' : ''} onchange="remoteEditRoute(this.value)">` +
-        `${r === 'ssh' ? 'SSH' : 'HTTP (tunnel)'}</label>`;
+        `${REMOTE_ROUTES[r]}</label>`;
       return `<div class="remote-links-form" id="remoteLinksForm">` +
         `<label class="wide">Name${remoteInput('name', row.name, 'towshifs-mini')}</label>` +
-        `<div class="wide remote-route" role="radiogroup" aria-label="Reach it over">${route('ssh')}${route('http')}</div>` +
-        `<div class="wide remote-route-fields" data-route="ssh"${http ? ' hidden' : ''}>` +
+        `<div class="wide remote-route" role="radiogroup" aria-label="Reach it over">` +
+        Object.keys(REMOTE_ROUTES).map(route).join('') + `</div>` +
+        fields('ssh') +
         REMOTE_FIELDS.map(([k, label, ph, cls]) => `<label class="${cls || ''}">${label}` +
           remoteInput(k, row.url ? '' : row[k], ph, REMOTE_PORTS.has(k) ? ' inputmode="numeric"' : '') +
           `</label>`).join('') + `</div>` +
-        `<div class="wide remote-route-fields" data-route="http"${http ? '' : ' hidden'}>` +
-        `<label class="wide">Relay link${remoteInput('url', row.url, 'wss://… its tunnel, or ws://<host>:<port> here')}</label>` +
-        `<label class="wide">Auth token${remoteInput('token', '', row.url ? 'saved — blank keeps it'
+        fields('http') +
+        `<label class="wide">Relay link${remoteInput('url', on === 'http' ? row.url : '', 'wss://… its tunnel')}</label>` +
+        `<label class="wide">Auth token${remoteInput('token', '', on === 'http' ? 'saved — blank keeps it'
           : 'its HERDR_RELAY_TOKEN', ' type="password" autocomplete="new-password"')}</label></div>` +
+        fields('lan') +
+        `<label class="wide">Relay address${remoteInput('lan_url', on === 'lan' ? row.url : '', 'ws://<host>:8375 on this network')}</label>` +
+        `<div class="hint wide">No token is sent: that relay must run its LAN listener open (HERDR_LAN_OPEN=1).</div></div>` +
         `<div class="wide remote-links-actions"><button type="button" onclick="remoteEditSave()">Save</button>` +
         `<button type="button" class="nav-key" onclick="remoteEditCancel()">Cancel</button></div></div>`;
     }
@@ -20185,7 +20200,7 @@ convApplyTint();
 
     function remoteEditOpen(i) {
       const row = (remoteConfig.links || [])[i] || {};
-      remoteEdit = {i, focus: true, config: JSON.stringify(remoteConfig), route: row.url ? 'http' : 'ssh'};
+      remoteEdit = {i, focus: true, config: JSON.stringify(remoteConfig), route: remoteRowRoute(row)};
       remoteHint('');
       remoteSettingsRender();
     }
@@ -20225,8 +20240,12 @@ convApplyTint();
       const value = k => (document.querySelector(`#remoteLinksForm input[data-k="${k}"]`) || {}).value?.trim() || '';
       const row = {name: value('name')};
       const tokens = {};
-      if (remoteEdit.route === 'http') {
-        if (value('url')) row.url = value('url');
+      if (remoteEdit.route === 'lan') {
+        // An address typed as http:// is the same listener; the relay is reached by its socket.
+        const url = value('lan_url').replace(/^http:/i, 'ws:');
+        if (url) row.url = url;
+      } else if (remoteEdit.route === 'http') {
+        if (value('url')) row.url = value('url').replace(/^https:/i, 'wss:');
         const token = value('token');
         if (token) tokens[row.name] = token;
         else if (old.url && old.token_file) row.token_file = old.token_file;
