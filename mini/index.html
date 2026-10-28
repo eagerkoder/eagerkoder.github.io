@@ -2185,7 +2185,7 @@
     /* Settings › Remote machines: one row per machine, and the form in its place while editing. */
     .remote-links-row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
       border-bottom: 1px solid var(--border); font-size: 0.8rem; min-width: 0; }
-    .remote-links-name { flex: 1; min-width: 0; font-family: monospace; overflow-wrap: anywhere; }
+    .remote-links-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .remote-links-via { color: var(--muted); font-size: 0.7rem; flex: none; }
     /* Off this machine's own page the name is shown, not edited. */
     #remoteLinksAs:read-only { background: transparent; border-color: transparent; padding-left: 0; }
@@ -19088,6 +19088,9 @@
           return {id: s.id, room: s.conversation, state: s.state || '', linked: tag.test(s.scope || ''),
             title: String(s.scope || s.id).split('\n')[0].replace(tag, '') || s.id,
             project: s.project_id,
+            // Its lead pane's status and when the relay last saw one of its panes change
+            // (remote_room_live), for the dot and the room's place in the list.
+            status: (s.live && s.live.status) || '', at: Number(s.live && s.live.at) || 0,
             kinds: [...new Set(who.map(m => m.agent).filter(Boolean))]};
         })
         .sort((a, b) => (b.linked - a.linked) || a.id.localeCompare(b.id));
@@ -19204,6 +19207,7 @@
     // (`desk`), so it reads as one of this machine's rooms but for the R ahead of its name, which
     // survives the compact view, and the machine's badge: on the card's second line, and on the
     // row's third, which compact drops.
+    const REMOTE_DOT = {blocked: 'var(--dot-blocked)', done: 'var(--dot-done)', working: 'var(--dot-live)'};
     function remoteRoomParts(desk = false) {
       // shortcut: one remote level; nesting needs hierarchical routes and storage namespaces.
       if (window.STORAGE_NS) return [];
@@ -19231,6 +19235,10 @@
           const tag = `<span class="remote-badge remote-tag">remote:${host}</span>`;
           const state = escapeHtml((r.linked ? remoteAs + ' · ' : '') + r.state);
           const live = ['active', 'awaiting', 'running', 'idle'].includes(r.state);
+          // The dot a local room's lead pane paints, from the status alone: no acknowledgement or
+          // recency is kept here for another machine's panes.
+          const dot = REMOTE_DOT[r.status] || 'var(--dot-cold)';
+          const pulse = r.status === 'working' ? ' pulse' : '';
           const mark = `<span class="remote-r" title="On ${host}" aria-label="remote">R</span>`;
           const title = escapeHtml(r.title);
           // The phone opens the room over the page; the desktop in a column of its own, as it
@@ -19247,19 +19255,19 @@
               : ` aria-disabled="true"${refused}>`);
           parts.push([`remote:${name}:${r.id}`, desk
             ? open(`mock-space${live ? '' : ' inactive'}`) +
-              `<span class="mock-dot${live ? '' : ' ended'}" style="background:var(--dot-cold)" aria-hidden="true"></span>` +
+              `<span class="mock-dot${pulse}${live ? '' : ' ended'}" style="background:${dot}" aria-hidden="true"></span>` +
               `<div class="desk-conv-body"><strong>${mark}<span class="desk-name remote-title">${title}</span>` +
               `<span class="desk-chip remote-state">${state}</span></strong>` +
               `<div class="desk-conv-badges remote-kinds">` +
               kinds.map(b => `<span class="desk-badge-agent">${b}</span>`).join('') + ` ${project}</div>` +
               `<small>${tag}</small></div></div>`
             : open('conversation-card') +
-              `<div class="conversation-title"><span class="dot${live ? '' : ' ended'}"` +
-              ` style="background:var(--dot-cold)" aria-hidden="true"></span>${mark}` +
+              `<div class="conversation-title"><span class="dot${pulse}${live ? '' : ' ended'}"` +
+              ` style="background:${dot}" aria-hidden="true"></span>${mark}` +
               `<span class="name remote-title">${title}</span>` +
               `<span class="conversation-tier remote-state">${state}</span></div>` +
               `<div class="conversation-meta kinds remote-kinds">${tag}${kinds.join('')} ${project}</div></div>`,
-            r.project || '']);
+            r.project || '', r.at]);
         }
       }
       return parts;
@@ -19306,18 +19314,19 @@
       return '';
     }
 
-    // The list as drawn from this machine's rows (`[key, html, projectId]`) and the machines'
-    // parts (remoteRoomParts). Grouped, every row is under an @Project separator (or No Project),
-    // in the order each group's first row comes, so the list's first row (a pin) stays first; a
-    // remote room joins its Project
-    // unless the machine sections are on, which keep it under its machine, above. Ungrouped, the
-    // list is as it always was: the machines' rooms, then this machine's.
+    // The list as drawn from this machine's rows (`[key, html, projectId, at]`, newest first) and
+    // the machines' parts (remoteRoomParts). With the machine sections off, a remote room takes its
+    // place among this machine's by `at`: ahead of the first row older than it. Grouped, every row
+    // is then under an @Project separator (or No Project), in the order each group's first row
+    // comes, so the list's first row (a pin) stays first. With the machine sections on, the
+    // machines' rooms stay under their machines, above, and only this machine's are grouped.
     function convListParts(local, remote) {
       const heads = convRemoteHeadsOn();
       const machines = heads ? remote : remote.filter(p => p.length > 2);
-      if (!convListGroupOn()) return machines.concat(local);
+      const rows = heads ? local : convMergeByAt(local, machines);
+      if (!convListGroupOn()) return heads ? machines.concat(local) : rows;
       const groups = new Map();
-      for (const p of heads ? local : local.concat(machines)) {
+      for (const p of rows) {
         const k = p[2] || '';
         if (!groups.has(k)) groups.set(k, []);
         groups.get(k).push(p);
@@ -19330,6 +19339,18 @@
         out.push(...groups.get(k));
       }
       return out;
+    }
+
+    // `local` keeps its order; each of `remote`, newest first, goes ahead of the first local row
+    // older than it. A row with no time (`at` 0) comes after every local one.
+    function convMergeByAt(local, remote) {
+      const out = [];
+      const rest = remote.slice().sort((a, b) => (b[3] || 0) - (a[3] || 0));
+      for (const p of local) {
+        while (rest.length && (rest[0][3] || 0) > (p[3] || 0)) out.push(rest.shift());
+        out.push(p);
+      }
+      return out.concat(rest);
     }
 
     // This page's relay, as net.js connects to it, and its token.
@@ -19546,7 +19567,7 @@
       if (!own) remoteEdit = null;
       const rows = remoteConfig.links || [];
       let html = rows.map((r, i) => remoteEdit && remoteEdit.i === i ? remoteFormHtml(r)
-        : `<div class="remote-links-row"><span class="remote-links-name">${escapeHtml(r.name)}</span>` +
+        : `<div class="remote-links-row"><span class="remote-links-name"><span class="remote-badge remote-tag">${escapeHtml(r.name)}</span></span>` +
           `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span>` +
           (remoteEdit || !own ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
             ` aria-label="Edit ${escapeHtml(r.name)}">Edit</button>` +
@@ -19990,7 +20011,7 @@
         const drift = v && here && v !== here;
         return `<button type="button" class="mach-pick${host === machinesSel ? ' on' : ''}" aria-pressed="${host === machinesSel}"` +
           ` onclick="machinesPick(${escapeHtml(JSON.stringify(host))})">` +
-          `<span class="mach-dot${l.connected ? ' up' : ''}"></span><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
+          `<span class="mach-dot${l.connected ? ' up' : ''}"></span><span class="remote-badge remote-tag">${escapeHtml(host)}</span>` +
           `<span class="mach-via">${escapeHtml(remoteRouteText(host))}${v ? ' · ' + escapeHtml(v) : ''}</span>` +
           (drift ? `<span class="mach-mark mach-dirty" title="this relay is ${escapeHtml(here)}">version differs</span>` : '') +
           `</button>`;
@@ -40567,7 +40588,7 @@ function nlmSourceDelete(source) {
         // Another machine's Commanders, linked to a Project here, mixed in by convListParts:
         // under their Project or machine, or above this machine's rooms. See remote_rooms.js.
         .concat(typeof convListParts === 'function'
-          ? convListParts(drawn.map(r => [r.c.id, card(r, archiveOn), convRoomProject(r.c, agents)]),
+          ? convListParts(drawn.map(r => [r.c.id, card(r, archiveOn), convRoomProject(r.c, agents), r.seen]),
             !archiveOn ? remoteRoomParts() : [])
           : drawn.map(r => [r.c.id, card(r, archiveOn)]))
         .concat(drawn.length ? []
