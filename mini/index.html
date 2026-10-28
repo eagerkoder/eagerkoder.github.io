@@ -19106,6 +19106,7 @@
             // Its lead pane's status and when the relay last saw one of its panes change
             // (remote_room_live), for the dot and the room's place in the list.
             status: (s.live && s.live.status) || '', at: Number(s.live && s.live.at) || 0,
+            alive: s.live ? !!s.live.status : ['active', 'awaiting', 'running', 'idle'].includes(s.state),
             kinds: [...new Set(who.map(m => m.agent).filter(Boolean))]};
         })
         // Newest first, as the list is; among rooms never seen active, this bench's first.
@@ -19250,7 +19251,7 @@
           const project = `<span class="badge proj remote-project">@${escapeHtml(label(r.project))}</span>`;
           const tag = `<span class="remote-badge remote-tag">remote:${host}</span>`;
           const state = escapeHtml((r.linked ? remoteAs + ' · ' : '') + r.state);
-          const live = ['active', 'awaiting', 'running', 'idle'].includes(r.state);
+          const live = r.alive;
           // The dot a local room's lead pane paints, from the status alone: no acknowledgement or
           // recency is kept here for another machine's panes.
           const dot = REMOTE_DOT[r.status] || 'var(--dot-cold)';
@@ -19373,7 +19374,7 @@
       const label = k => k ? '@' + ((projs.find(p => p.id === k) || {}).label || k) : 'No Project';
       const out = [];
       for (const [k, list] of groups) {
-        out.push([`proj:${pre}${k}`, `<div class="conv-proj-head" role="separator">` +
+        out.push([`${pre}proj:${k}`, `<div class="conv-proj-head" role="separator">` +
           `<span class="conv-proj-name">${escapeHtml(label(k))}</span>` +
           `<span class="conv-proj-count">${list.length}</span></div>`]);
         out.push(...list);
