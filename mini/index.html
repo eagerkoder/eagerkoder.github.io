@@ -2155,9 +2155,24 @@
     .remote-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
       padding: 1px 5px; border-radius: 4px; background: var(--accent, #6b8afd); color: #fff;
       flex: none; }
-    /* The @Project separator over a Project's rooms in the conversation list (convListParts). */
-    .conv-proj-head { padding: 8px 4px 4px; font-size: 12px; font-weight: 600; color: var(--muted);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The @Project separator over a Project's rooms in the conversation list (convListParts): the
+       name, a hairline, and the count of rooms under it. The Inactive fold is drawn the same way,
+       as a button with a chevron. */
+    .conv-proj-head, .conv-fold { display: flex; align-items: center; gap: 8px; min-width: 0;
+      padding: 12px 4px 6px; font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--muted); }
+    .conv-proj-head::after, .conv-fold::after { content: ''; order: 1; flex: 1; height: 1px;
+      background: var(--border); }
+    .conv-proj-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conv-proj-count { order: 2; flex: none; min-width: 18px; padding: 0 6px; border-radius: 9px;
+      border: 1px solid var(--border); font-size: 10px; font-weight: 500; line-height: 16px;
+      text-align: center; font-variant-numeric: tabular-nums; }
+    .conv-fold { width: 100%; margin-top: 6px; background: none; border: 0; font-family: inherit;
+      cursor: pointer; text-align: left; }
+    .conv-fold:hover { color: var(--text); }
+    .conv-fold:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+    .conv-fold-chev { display: inline-block; width: 10px; font-size: 14px; line-height: 1;
+      transition: transform .15s; }
+    .conv-fold[aria-expanded="true"] .conv-fold-chev { transform: rotate(90deg); }
     .remote-head, .remote-overlay-head { display: flex; align-items: center;
       gap: 8px; min-width: 0; }
     .remote-head { flex-wrap: wrap; row-gap: 2px; padding: 6px 4px; font-size: 12px; opacity: .85; }
@@ -19093,7 +19108,8 @@
             status: (s.live && s.live.status) || '', at: Number(s.live && s.live.at) || 0,
             kinds: [...new Set(who.map(m => m.agent).filter(Boolean))]};
         })
-        .sort((a, b) => (b.linked - a.linked) || a.id.localeCompare(b.id));
+        // Newest first, as the list is; among rooms never seen active, this bench's first.
+        .sort((a, b) => (b.at - a.at) || (b.linked - a.linked) || a.id.localeCompare(b.id));
     }
 
     // Where the copy of this app that opens a machine's room connects: this page's own relay at
@@ -19165,7 +19181,7 @@
       if (typeof indexedDB === 'undefined' || !indexedDB.databases) return;
       indexedDB.databases().then(dbs => dbs.forEach(d => {
         const m = /^herdr:(.+)$/.exec(d.name || '');
-        if (m && !keep.has(m[1])) drop(m[1]);
+        if (m && !remoteRoutes.has(m[1])) drop(m[1]);
       }), () => {});
     }
 
@@ -19267,17 +19283,20 @@
               `<span class="name remote-title">${title}</span>` +
               `<span class="conversation-tier remote-state">${state}</span></div>` +
               `<div class="conversation-meta kinds remote-kinds">${tag}${kinds.join('')} ${project}</div></div>`,
-            r.project || '', r.at]);
+            r.project || '', r.at, !live]);
         }
       }
       return parts;
     }
 
-    // The conversation list's two options, under ⋯ on both pages and shared by them (one origin,
-    // one storage): @Project separators, on unless turned off, and a section per machine, off
-    // unless turned on — the R on a row already says it is remote.
+    // The conversation list's options, under ⋯ on both pages and shared by them (one origin, one
+    // storage): @Project separators, on unless turned off; a section per machine, off unless turned
+    // on — the R on a row already says it is remote; and the inactive rooms folded below the active
+    // ones, off unless turned on. Whether that fold is open is kept too.
     const CONV_GROUP_KEY = 'herdr_conv_group';
     const CONV_REMOTE_HEADS_KEY = 'herdr_conv_remote_heads';
+    const CONV_FOLD_KEY = 'herdr_conv_fold_inactive';
+    const CONV_FOLD_OPEN_KEY = 'herdr_conv_inactive_open';
 
     function convListGroupOn() {
       try { return localStorage.getItem(CONV_GROUP_KEY) !== 'off'; }
@@ -19286,8 +19305,10 @@
 
     function convRemoteHeadsOn() { return compactOn(CONV_REMOTE_HEADS_KEY); }
 
+    function convFoldOn() { return compactOn(CONV_FOLD_KEY); }
+
     function convListToggle(key) {
-      const on = key === CONV_GROUP_KEY ? convListGroupOn() : convRemoteHeadsOn();
+      const on = key === CONV_GROUP_KEY ? convListGroupOn() : compactOn(key);
       try { localStorage.setItem(key, on ? 'off' : 'on'); }
       catch (e) { /* storage blocked: the default stays */ }
       if (typeof renderConversations === 'function') renderConversations();
@@ -19314,17 +19335,34 @@
       return '';
     }
 
-    // The list as drawn from this machine's rows (`[key, html, projectId, at]`, newest first) and
-    // the machines' parts (remoteRoomParts). With the machine sections off, a remote room takes its
-    // place among this machine's by `at`: ahead of the first row older than it. Grouped, every row
-    // is then under an @Project separator (or No Project), in the order each group's first row
-    // comes, so the list's first row (a pin) stays first. With the machine sections on, the
-    // machines' rooms stay under their machines, above, and only this machine's are grouped.
+    // The list as drawn from this machine's rows (`[key, html, projectId, at, inactive]`, newest
+    // first) and the machines' parts (remoteRoomParts). With the machine sections off, a remote room
+    // takes its place among this machine's by `at`: ahead of the first row older than it. Grouped,
+    // every row is then under an @Project separator (or No Project), in the order each group's
+    // first row comes, so the list's first row (a pin) stays first. With the machine sections on,
+    // the machines' rooms stay under their machines, above, and only this machine's are grouped.
+    // With the fold on, the rows marked inactive are drawn below the rest, under one Inactive
+    // button, grouped the same way, and only while it is open.
     function convListParts(local, remote) {
       const heads = convRemoteHeadsOn();
       const machines = heads ? remote : remote.filter(p => p.length > 2);
       const rows = heads ? local : convMergeByAt(local, machines);
-      if (!convListGroupOn()) return heads ? machines.concat(local) : rows;
+      const fold = convFoldOn();
+      const idle = fold ? rows.filter(p => p[4]) : [];
+      const out = (heads ? machines : []).concat(convGroupParts(fold ? rows.filter(p => !p[4]) : rows, ''));
+      if (!idle.length) return out;
+      const open = compactOn(CONV_FOLD_OPEN_KEY);
+      out.push(['fold:inactive', `<button type="button" class="conv-fold" aria-expanded="${open}"` +
+        ` onclick="convListToggle(CONV_FOLD_OPEN_KEY)">` +
+        `<span class="conv-fold-chev" aria-hidden="true">\u203a</span>Inactive` +
+        `<span class="conv-proj-count">${idle.length}</span></button>`]);
+      return open ? out.concat(convGroupParts(idle, 'idle:')) : out;
+    }
+
+    // Rows under an @Project separator each, when grouping is on: the separator names the Project
+    // and counts its rows. `pre` keeps the folded part's separators apart from the active part's.
+    function convGroupParts(rows, pre) {
+      if (!convListGroupOn()) return rows;
       const groups = new Map();
       for (const p of rows) {
         const k = p[2] || '';
@@ -19333,10 +19371,12 @@
       }
       const projs = (typeof projects !== 'undefined' && projects) || [];
       const label = k => k ? '@' + ((projs.find(p => p.id === k) || {}).label || k) : 'No Project';
-      const out = heads ? machines.slice() : [];
-      for (const k of groups.keys()) {
-        out.push([`proj:${k}`, `<div class="conv-proj-head" role="separator">${escapeHtml(label(k))}</div>`]);
-        out.push(...groups.get(k));
+      const out = [];
+      for (const [k, list] of groups) {
+        out.push([`proj:${pre}${k}`, `<div class="conv-proj-head" role="separator">` +
+          `<span class="conv-proj-name">${escapeHtml(label(k))}</span>` +
+          `<span class="conv-proj-count">${list.length}</span></div>`]);
+        out.push(...list);
       }
       return out;
     }
@@ -40588,7 +40628,10 @@ function nlmSourceDelete(source) {
         // Another machine's Commanders, linked to a Project here, mixed in by convListParts:
         // under their Project or machine, or above this machine's rooms. See remote_rooms.js.
         .concat(typeof convListParts === 'function'
-          ? convListParts(drawn.map(r => [r.c.id, card(r, archiveOn), convRoomProject(r.c, agents), r.seen]),
+          ? convListParts(drawn.map(r => [r.c.id, card(r, archiveOn), convRoomProject(r.c, agents), r.seen,
+            // Folded when nothing runs in it and the fold is on; never in the archive, all of
+            // which is inactive.
+            !archiveOn && !r.livePanes.length]),
             !archiveOn ? remoteRoomParts() : [])
           : drawn.map(r => [r.c.id, card(r, archiveOn)]))
         .concat(drawn.length ? []
@@ -40625,6 +40668,8 @@ function nlmSourceDelete(source) {
         item(CONV_GROUP_KEY, convListGroupOn(), 'Group by Project', 'An @Project separator over each Project\u2019s rooms') +
         item(CONV_REMOTE_HEADS_KEY, convRemoteHeadsOn(), 'Remote sections',
           'Each linked machine\u2019s rooms under a heading of their own') +
+        item(CONV_FOLD_KEY, convFoldOn(), 'Fold inactive',
+          'Rooms with nothing running in them under one Inactive fold, below the rest') +
         '</div></details>';
     }
 
