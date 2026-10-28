@@ -2144,6 +2144,8 @@
       background: color-mix(in srgb, var(--blue) 10%, var(--bg)); color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
     .mach-more:hover { color: var(--text); }
     .mach-note { padding: 6px 8px; border-top: 1px solid var(--border); color: var(--muted); overflow-wrap: anywhere; }
+    .mach-proj-acts { display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px 18px; font-size: 0.72rem; }
+    .mach-says { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
     /* On a phone a branch's moves take a line of their own under its two commits. */
     @media (max-width: 480px) {
       .mach-branch { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
@@ -2153,6 +2155,9 @@
     .remote-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
       padding: 1px 5px; border-radius: 4px; background: var(--accent, #6b8afd); color: #fff;
       flex: none; }
+    /* The @Project separator over a Project's rooms in the conversation list (convListParts). */
+    .conv-proj-head { padding: 8px 4px 4px; font-size: 12px; font-weight: 600; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .remote-head, .remote-overlay-head { display: flex; align-items: center;
       gap: 8px; min-width: 0; }
     .remote-head { flex-wrap: wrap; row-gap: 2px; padding: 6px 4px; font-size: 12px; opacity: .85; }
@@ -2994,6 +2999,10 @@
     }
 
     .launcher-restart-item:hover { border-color: var(--orange); }
+
+    /* The conversation list's ⋯ reuses the Restart menu; its items are on/off, ticked in a slot of
+       their own so the two labels line up. */
+    .conv-more-tick { display: inline-block; width: 1.2em; color: var(--blue); }
 
     .agent {
       background: var(--surface);
@@ -18907,6 +18916,7 @@
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        if (typeof remoteNativeDrawn === 'function') remoteNativeDrawn();
         // A link the page was loaded on that named something only a snapshot can resolve — an
         // agent id, a landing section, a pane. After the render, which is what fills those lists.
         if (typeof hashResume === 'function') hashResume();
@@ -19128,10 +19138,32 @@
       }
       for (const [host, w] of remoteRoutes) {
         const link = remoteLinks.get(host);
-        if (link) link.via = w.via;
-        else remoteLinks.set(host, {via: w.via, connected: false, sessions: new Map()});
+        if (link) Object.assign(link, {via: w.via, paused: !!w.paused});
+        else remoteLinks.set(host, {via: w.via, paused: !!w.paused, connected: false, sessions: new Map()});
       }
+      remoteStorageSweep();
       remoteRoomsRepaint();
+    }
+
+    // A machine's copy of this app keeps its storage under `ns:<machine>:` and its transcripts in
+    // IndexedDB `herdr:<machine>` (storage_ns.js). Once that machine is no longer linked, nothing
+    // reads them: dropped on each `links` message, from this page only, never from a copy.
+    function remoteStorageSweep() {
+      if (window.STORAGE_NS) return;
+      const keep = new Set(remoteRoutes.keys()), gone = new Set();
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i), m = k && /^ns:([^:]+):/.exec(k);
+          if (m && !keep.has(m[1])) { localStorage.removeItem(k); gone.add(m[1]); }
+        }
+      } catch (e) { /* storage blocked: nothing to sweep */ }
+      const drop = name => { try { indexedDB.deleteDatabase('herdr:' + name); } catch (e) { /* none */ } };
+      gone.forEach(drop);
+      if (typeof indexedDB === 'undefined' || !indexedDB.databases) return;
+      indexedDB.databases().then(dbs => dbs.forEach(d => {
+        const m = /^herdr:(.+)$/.exec(d.name || '');
+        if (m && !keep.has(m[1])) drop(m[1]);
+      }), () => {});
     }
 
     // A machine's rooms, passed through by this page's own relay.
@@ -19166,8 +19198,8 @@
       });
     }
 
-    // The section's rows, as `[key, html]` pairs for paintList: one header per host, then its
-    // rooms. Empty when nothing is linked, so a relay without links draws exactly what it did.
+    // The section's rows, as pairs for paintList: one header per host (`[key, html]`), then its
+    // rooms (`[key, html, projectId]`, the third read by convListParts). Empty when nothing is linked, so a relay without links draws exactly what it did.
     // A room is drawn in the list's own markup, the phone's card or the desktop sidebar's row
     // (`desk`), so it reads as one of this machine's rooms but for the R ahead of its name, which
     // survives the compact view, and the machine's badge: on the card's second line, and on the
@@ -19182,7 +19214,7 @@
       for (const [name, link] of remoteLinks) {
         const rows = remoteRoomRows([...link.sessions.values()], {projects: ids, as: remoteAs});
         const host = escapeHtml(name);
-        const note = !link.connected ? 'not reachable'
+        const note = link.paused ? 'paused' : !link.connected ? 'not reachable'
           : [link.via === 'ssh' ? 'over ssh' : link.via === 'wss' ? 'over wss' : link.via === 'ws' ? 'over lan' : '',
             rows.length ? '' : 'no Commanders open'].filter(Boolean).join(' · ');
         parts.push([`remote:${name}`, `<div class="remote-head"><span class="remote-badge">remote</span>` +
@@ -19226,10 +19258,78 @@
               ` style="background:var(--dot-cold)" aria-hidden="true"></span>${mark}` +
               `<span class="name remote-title">${title}</span>` +
               `<span class="conversation-tier remote-state">${state}</span></div>` +
-              `<div class="conversation-meta kinds remote-kinds">${tag}${kinds.join('')} ${project}</div></div>`]);
+              `<div class="conversation-meta kinds remote-kinds">${tag}${kinds.join('')} ${project}</div></div>`,
+            r.project || '']);
         }
       }
       return parts;
+    }
+
+    // The conversation list's two options, under ⋯ on both pages and shared by them (one origin,
+    // one storage): @Project separators, on unless turned off, and a section per machine, off
+    // unless turned on — the R on a row already says it is remote.
+    const CONV_GROUP_KEY = 'herdr_conv_group';
+    const CONV_REMOTE_HEADS_KEY = 'herdr_conv_remote_heads';
+
+    function convListGroupOn() {
+      try { return localStorage.getItem(CONV_GROUP_KEY) !== 'off'; }
+      catch (e) { return true; }
+    }
+
+    function convRemoteHeadsOn() { return compactOn(CONV_REMOTE_HEADS_KEY); }
+
+    function convListToggle(key) {
+      const on = key === CONV_GROUP_KEY ? convListGroupOn() : convRemoteHeadsOn();
+      try { localStorage.setItem(key, on ? 'off' : 'on'); }
+      catch (e) { /* storage blocked: the default stays */ }
+      if (typeof renderConversations === 'function') renderConversations();
+      if (typeof deskRenderConvs === 'function') deskRenderConvs();
+    }
+
+    // The Project a local room is listed under: a bench room's own, else its first member's —
+    // the live pane's `project_id`, the member's, or its `project` matched to a Project by id or
+    // label, the raw name when none matches. '' when no member names one.
+    // ponytail: one Project a room; a room of two Projects is listed under the first only.
+    function convRoomProject(c, panes) {
+      const projs = (typeof projects !== 'undefined' && projects) || [];
+      const id = String(c.id || '');
+      if (id.startsWith('c_bench_') && projs.some(p => p.id === id.slice(8))) return id.slice(8);
+      for (const m of c.members || []) {
+        const live = m.aid ? (panes || []).find(a => convMemberKey(a) === m.aid) : null;
+        if (live && live.project_id) return live.project_id;
+        if (m.project_id) return m.project_id;
+        const name = m.project || (live && live.project) || '';
+        if (!name) continue;
+        const hit = projs.find(p => p.id === name) || projs.find(p => p.label === name);
+        return hit ? hit.id : name;
+      }
+      return '';
+    }
+
+    // The list as drawn from this machine's rows (`[key, html, projectId]`) and the machines'
+    // parts (remoteRoomParts). Grouped, every row is under an @Project separator (or No Project),
+    // in the order each group's first row comes, so the list's first row (a pin) stays first; a
+    // remote room joins its Project
+    // unless the machine sections are on, which keep it under its machine, above. Ungrouped, the
+    // list is as it always was: the machines' rooms, then this machine's.
+    function convListParts(local, remote) {
+      const heads = convRemoteHeadsOn();
+      const machines = heads ? remote : remote.filter(p => p.length > 2);
+      if (!convListGroupOn()) return machines.concat(local);
+      const groups = new Map();
+      for (const p of heads ? local : local.concat(machines)) {
+        const k = p[2] || '';
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(p);
+      }
+      const projs = (typeof projects !== 'undefined' && projects) || [];
+      const label = k => k ? '@' + ((projs.find(p => p.id === k) || {}).label || k) : 'No Project';
+      const out = heads ? machines.slice() : [];
+      for (const k of groups.keys()) {
+        out.push([`proj:${k}`, `<div class="conv-proj-head" role="separator">${escapeHtml(label(k))}</div>`]);
+        out.push(...groups.get(k));
+      }
+      return out;
     }
 
     // This page's relay, as net.js connects to it, and its token.
@@ -19264,10 +19364,25 @@
       else deskOpen('remote', key, title || room);
     }
 
+    // A frame is a whole app on this page's thread. Restored columns would boot theirs alongside
+    // this page's own, so none is drawn until this page has drawn its first snapshot and gone idle.
+    let remoteFramesReady = false;
+    function remoteNativeDrawn() {
+      if (remoteFramesReady || remoteNativeDrawn.pending) return;
+      remoteNativeDrawn.pending = true;
+      const go = () => {
+        remoteFramesReady = true;
+        if (typeof deskPaintColumn !== 'function') return;
+        deskColumns.forEach((c, i) => { const t = deskTabFor(c.tabKey); if (t && t.kind === 'remote') deskPaintColumn(i); });
+      };
+      if (window.requestIdleCallback) requestIdleCallback(go, {timeout: 1500});
+      else setTimeout(go, 300);
+    }
+
     // What a column holding a remote room draws: room.html for it, framed through this relay.
     function remoteColumnHtml(key) {
       const {host, room} = remoteTabParts(key);
-      if (!remoteSynced) return '<p class="desk-empty">Waiting for the relay…</p>';
+      if (!remoteSynced || !remoteFramesReady) return '<p class="desk-empty">Waiting for the relay…</p>';
       if (!remoteLinks.has(host)) return `<p class="desk-empty">${escapeHtml(host)} is not linked here any more.</p>`;
       if (!remoteEditable || !remoteAppPrepare(host)) {
         return '<p class="desk-empty">Connect with this relay’s token to open remote rooms.</p>';
@@ -19372,6 +19487,7 @@
     // The route the relay holds, and whether its socket to that machine is up.
     function remoteRouteText(name) {
       const link = remoteLinks.get(name);
+      if (link && link.paused) return 'paused';
       if (!link || !link.connected) return 'not reachable';
       return link.via === 'wss' ? 'http · wss' : link.via === 'ws' ? 'http · lan'
         : link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
@@ -19488,6 +19604,7 @@
       const old = (remoteConfig.links || [])[remoteEdit.i] || {};
       const value = k => (document.querySelector(`#remoteLinksForm input[data-k="${k}"]`) || {}).value?.trim() || '';
       const name = value('name'), tokens = {};
+      const route = remoteEdit.route || remoteRowRoute(old);
       // Each route as the form holds it. An address typed as http:// is the same listener; the
       // relay is reached by its socket.
       const routes = {ssh: {}, http: {}, lan: {}};
@@ -19505,21 +19622,22 @@
       const oldSsh = remoteRouteRow(old, 'ssh');
       for (const k of Object.keys(oldSsh)) if (!(k in routes.ssh) && !['name', 'spare'].includes(k)
         && !REMOTE_FIELDS.some(f => f[0] === k)) routes.ssh[k] = oldSsh[k];
-      if (remoteEdit.route === 'http') {
+      if (route === 'http') {
         const token = value('token');
         if (token) { tokens[name] = token; delete routes.http.token_file; }
         else if (!routes.http.token_file) { remoteHint("Paste the remote relay's auth token."); return; }
       }
-      const row = {name, ...routes[remoteEdit.route]};
+      const row = {name, ...routes[route]};
       // The others, kept for switching back: a tunnel only with its saved token, which a token
       // typed but not saved is not.
       const spare = {};
       for (const r of ['ssh', 'http', 'lan']) {
-        if (r === remoteEdit.route || !Object.keys(routes[r]).length) continue;
+        if (r === route || !Object.keys(routes[r]).length) continue;
         if (r === 'http' && !(routes.http.url && routes.http.token_file)) continue;
         spare[r] = routes[r];
       }
       if (Object.keys(spare).length) row.spare = spare;
+      if (old.paused) row.paused = true;
       const links = (remoteConfig.links || []).slice();
       if (remoteEdit.i === -1) links.push(row); else links[remoteEdit.i] = row;
       remotePut({as: remoteConfig.as || 'laptop', links}, tokens);
@@ -19660,19 +19778,50 @@
       machinesRepaint();
     }
 
-    const MACHINE_VERBS = {send: 'Send ▸', bring: '◂ Bring', pull_here: 'Pull here', pull: 'Pull there'};
+    const MACHINE_VERBS = {send: 'Send ▸', bring: '◂ Bring', pull_here: 'Pull here', pull: 'Pull there',
+      setup: 'Set up there', sync_all: 'Sync all'};
     const MACHINE_SAYS = {
       send: 'That machine fast-forwards its branch to this one',
       bring: 'This checkout fast-forwards its branch to that machine\'s',
       pull_here: 'Fast-forward this checkout\'s branch to origin\'s',
-      pull: 'That machine fast-forwards its branch to origin\'s'};
+      pull: 'That machine fast-forwards its branch to origin\'s',
+      setup: 'That machine clones this Project from origin at the same path and adds it to its Projects',
+      sync_all: 'Runs the highlighted move of each kept-in-step branch (the default branch and the ones ' +
+        'checked out), one after another, fast-forward only. Diverged and worktree branches are left alone'};
 
-    function machinesRun(host, project, verb, branch) {
+    // The moves one branch offers. A Project only the other machine has has no checkout here to
+    // move a branch into, so it offers none. The default branch is sent and brought only over SSH:
+    // through a relay, both would push it to origin.
+    function machineMoves(host, row, r) {
+      if (row.only_there) return [];
+      const across = !r.main || machinesOverSsh(host);
+      return [across && r.here && 'send', across && r.there && 'bring',
+        r.here && r.here.behind && 'pull_here', r.there && r.there.behind && 'pull'].filter(Boolean);
+    }
+
+    // What Sync all runs for a Project: each kept-in-step branch's own move, where it offers one.
+    function machineSyncMoves(host, row) {
+      if (!row.here || !row.there) return [];
+      return machineBranchRows(row.here, row.there).filter(r => r.core && r.go && machineMoves(host, row, r).includes(r.go))
+        .map(r => ({verb: r.go, branch: r.name}));
+    }
+
+    function machinesRun(host, project, verb, branch = '') {
       const m = machinesOf(host);
-      if (m.busy || !machinesSend({machine: host, project, action: verb, branch})) return;
-      m.busy = `${verb} ${branch}`;
+      if (m.busy || !machinesSend({machine: host, project, action: verb, ...(branch ? {branch} : {})})) return;
+      m.busy = branch ? `${verb} ${branch}` : verb;
       m.note = '';
       machinesRepaint();
+    }
+
+    // Sync all: the moves one at a time, each on the answer to the last, stopping at a refusal.
+    function machinesSyncAll(host, project) {
+      const m = machinesOf(host);
+      const row = (m.projects || []).find(r => r.id === project);
+      const moves = row ? machineSyncMoves(host, row) : [];
+      if (m.busy || !moves.length) return;
+      m.queue = {project, moves: moves.slice(1), done: 0};
+      machinesRun(host, project, moves[0].verb, moves[0].branch);
     }
 
     // The relay's answer to a link_git. A move that worked is followed by a fresh comparison, so
@@ -19687,11 +19836,26 @@
         m.at = Date.now();
       } else {
         const r = msg.result || {};
-        m.note = `${MACHINE_VERBS[msg.action] || msg.action} ${msg.branch}: done` +
-          (r.reboot ? '. Relay code changed: reboot that relay to load it.' : '');
+        m.reboot = m.reboot || !!r.reboot;
+        const q = m.queue;
+        if (q && q.moves.length) {
+          q.done++;
+          const next = q.moves.shift();
+          machinesRun(msg.machine, q.project, next.verb, next.branch);
+          return;
+        }
+        m.note = (q ? `Sync all: ${q.done + 1} move${q.done ? 's' : ''} done`
+          : msg.action === 'setup' ? `Set up: ${r.cloned ? 'cloned' : 'checkout already there'}` +
+            `${r.added ? ', added to its Projects' : ''}`
+          : `${MACHINE_VERBS[msg.action] || msg.action} ${msg.branch}: done`) +
+          (m.reboot ? '. Relay code changed: reboot that relay to load it.' : '');
+        m.queue = null;
+        m.reboot = false;
         machinesCompare(msg.machine);
         return;
       }
+      m.queue = null;
+      m.reboot = false;
       machinesRepaint();
     }
 
@@ -19708,13 +19872,16 @@
       return `<code>${escapeHtml(String(b.commit || '').slice(0, 7))}</code>${marks.join('')}`;
     }
 
+    // A two-tap button for one move: `branch` empty for a Project's own (Set up, Sync all).
     function machinesButton(host, project, verb, branch, primary) {
       const key = `mach:${host}:${project}:${verb}:${branch}`;
       const armed = typeof armButtonArmed === 'function' && armButtonArmed(key);
-      const run = `machinesRun(${escapeHtml(JSON.stringify(host))}, ${escapeHtml(JSON.stringify(project))}, '${verb}', ${escapeHtml(JSON.stringify(branch))})`;
+      const args = `${escapeHtml(JSON.stringify(host))}, ${escapeHtml(JSON.stringify(project))}`;
+      const run = verb === 'sync_all' ? `machinesSyncAll(${args})`
+        : `machinesRun(${args}, '${verb}', ${escapeHtml(JSON.stringify(branch))})`;
       return `<button type="button" class="mach-go arm-btn${primary ? ' primary' : ''}" data-arm-key="${escapeHtml(key)}"` +
         (armed ? ' data-armed="1"' : '') +
-        ` title="${escapeHtml(MACHINE_SAYS[verb])}" aria-label="${escapeHtml(`${MACHINE_SAYS[verb]}: ${branch}`)}"` +
+        ` title="${escapeHtml(MACHINE_SAYS[verb])}" aria-label="${escapeHtml(`${MACHINE_SAYS[verb]}${branch ? ': ' + branch : ''}`)}"` +
         ` onclick="armButton(this, '', () => ${run}, ${escapeHtml(JSON.stringify(key))})">${MACHINE_VERBS[verb]}</button>`;
     }
 
@@ -19729,14 +19896,9 @@
       return !!row && !row.url;
     }
 
-    // One branch: this machine's copy, the other's, and the moves. A Project only the other
-    // machine has has no checkout here to move a branch into, so it offers none. The default
-    // branch is sent and brought only over SSH: through a relay, both would push it to origin.
+    // One branch: this machine's copy, the other's, and the moves (`machineMoves`).
     function machinesBranchHtml(host, row, r, busy) {
-      const go = v => machinesButton(host, row.id, v, r.name, r.go === v);
-      const across = !r.main || machinesOverSsh(host);
-      const acts = busy || row.only_there ? [] : [across && r.here && go('send'), across && r.there && go('bring'),
-        r.here && r.here.behind && go('pull_here'), r.there && r.there.behind && go('pull')].filter(Boolean);
+      const acts = busy ? [] : machineMoves(host, row, r).map(v => machinesButton(host, row.id, v, r.name, r.go === v));
       return `<div class="mach-row mach-branch">` +
         `<div class="mach-cell"><span class="mach-name">${MACHINE_BRANCH_ICON}${escapeHtml(r.name)}</span>${machinesShort(r.here)}</div>` +
         `<div class="mach-cell">${machinesShort(r.there)}</div>` +
@@ -19766,8 +19928,23 @@
         `${side(row.here, row.only_there ? 'not on this machine' : 'not a checkout')}</span>` +
         `<span class="mach-cell" title="${escapeHtml(row.there_error || '')}">${side(row.there, there)}</span>` +
         `<span class="mach-cell mach-acts"><span class="mach-chip" data-state="${sum.state}">${escapeHtml(sum.label)}</span></span></button>` +
-        branches + (open && !row.there && row.there_error ? `<div class="mach-note">${escapeHtml(row.there_error)}</div>` : '') +
+        machinesProjectActs(host, m, row, sum) + branches + (open && !row.there && row.there_error ? `<div class="mach-note">${escapeHtml(row.there_error)}</div>` : '') +
         `</div>`;
+    }
+
+    // A Project's own moves, under its row: Set up on a machine that lacks it, and Sync all while
+    // any kept-in-step branch has a move waiting, with what it will run spelled out beside it.
+    function machinesProjectActs(host, m, row, sum) {
+      if (m.busy) return '';
+      if (sum.state === 'here' && row.here && !row.only_there) {
+        return `<div class="mach-proj-acts">${machinesButton(host, row.id, 'setup', '', true)}` +
+          `<span class="mach-says">${escapeHtml(MACHINE_SAYS.setup)}.</span></div>`;
+      }
+      const moves = machineSyncMoves(host, row);
+      if (!moves.length) return '';
+      const list = moves.map(x => `${MACHINE_VERBS[x.verb].replace(/[▸◂]/g, '').trim()} ${x.branch}`).join(', ');
+      return `<div class="mach-proj-acts">${machinesButton(host, row.id, 'sync_all', '', true)}` +
+        `<span class="mach-says">${escapeHtml(list)}</span></div>`;
     }
 
     // The section's frame, drawn once: the comparison (`#machinesBody`, redrawn) and the links
@@ -19809,11 +19986,11 @@
       const here = typeof relayVersions !== 'undefined' && relayVersions.relay;
       const chip = host => {
         const l = remoteLinks.get(host) || {};
-        const v = l.versions && l.versions.relay;
+        const v = !l.paused && l.versions && l.versions.relay;
         const drift = v && here && v !== here;
         return `<button type="button" class="mach-pick${host === machinesSel ? ' on' : ''}" aria-pressed="${host === machinesSel}"` +
           ` onclick="machinesPick(${escapeHtml(JSON.stringify(host))})">` +
-          `<span class="mach-dot${l.connected ? ' up' : ''}"></span>${escapeHtml(host)}` +
+          `<span class="mach-dot${l.connected ? ' up' : ''}"></span><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
           `<span class="mach-via">${escapeHtml(remoteRouteText(host))}${v ? ' · ' + escapeHtml(v) : ''}</span>` +
           (drift ? `<span class="mach-mark mach-dirty" title="this relay is ${escapeHtml(here)}">version differs</span>` : '') +
           `</button>`;
@@ -19821,9 +19998,19 @@
       const m = machinesOf(machinesSel);
       const h = escapeHtml(JSON.stringify(machinesSel));
       const live = (remoteLinks.get(machinesSel) || {}).connected;
+      const paused = !!(remoteLinks.get(machinesSel) || {}).paused;
+      const pause = remoteEditable && !window.STORAGE_NS
+        ? `<button type="button" class="section-action" onclick="machinesPause(${h}, ${!paused})"` +
+          ` title="${paused ? 'Reach this machine again: its rooms, git and handoffs'
+            : 'Stop reaching this machine: no rooms, no git, no handoffs, until resumed'}">${paused ? 'Resume link' : 'Pause link'}</button>` : '';
+      if (paused) {
+        return head(pause) + `<div class="mach-picks">${hosts.map(chip).join('')}</div>` +
+          `<div class="mach-status" role="status">${escapeHtml(machinesSel)} is paused: this relay holds no socket to it, ` +
+          'lists none of its rooms and runs no git or handoff to it until it is resumed.</div>';
+      }
       // A Project that is a git checkout on neither machine has nothing to compare: left out.
       const rows = (m.projects || []).filter(r => r.here || r.there || r.only_there);
-      return head((live && remoteEditable && !window.STORAGE_NS
+      return head(pause + (live && remoteEditable && !window.STORAGE_NS
           ? `<button type="button" class="section-action" onclick="remoteRoomOpen({host: ${h}})">Open its app</button>` : '') +
         `<button type="button" class="section-action" onclick="machinesCompare(${h})"${m.busy ? ' disabled' : ''}>` +
         `${m.busy === 'status' ? 'Comparing…' : m.projects ? 'Compare again' : 'Compare'}</button>`) +
@@ -19837,6 +20024,19 @@
             (rows.length ? rows.map(row => machinesProjectHtml(machinesSel, m, row)).join('')
               : '<div class="cfg-empty">No Projects to compare.</div>') + `</div>`
           : '');
+    }
+
+    // Pause or resume a machine's link: the row stays in the links file with `paused`, and the
+    // relay stops reaching it (`link_route`).
+    function machinesPause(host, on) {
+      if (!remoteConfig) return;
+      const links = (remoteConfig.links || []).map(l => {
+        if (l.name !== host) return l;
+        const row = {...l};
+        if (on) row.paused = true; else delete row.paused;
+        return row;
+      });
+      remotePut({as: remoteConfig.as || 'laptop', links});
     }
 
     // Opening the section or the sheet only draws it: comparing is the person's to start.
@@ -40363,10 +40563,14 @@ function nlmSourceDelete(source) {
       const parts = [['head', `<div class="section-header">` +
         `${archiveOn ? 'Archived conversations' : autoOn ? 'Auto conversations' : 'Conversations'}` +
         `${mode ? (archiveOn ? archiveControl : autoControl) + compactControl
-          : compactControl + autoControl + archiveControl + newControl}</div>`]]
-        // Another machine's Commanders, linked to a Project here. See remote_rooms.js.
-        .concat(!archiveOn && typeof remoteRoomParts === 'function' ? remoteRoomParts() : [])
-        .concat(drawn.length ? drawn.map(r => [r.c.id, card(r, archiveOn)])
+          : compactControl + autoControl + archiveControl + newControl}${convMoreHtml()}</div>`]]
+        // Another machine's Commanders, linked to a Project here, mixed in by convListParts:
+        // under their Project or machine, or above this machine's rooms. See remote_rooms.js.
+        .concat(typeof convListParts === 'function'
+          ? convListParts(drawn.map(r => [r.c.id, card(r, archiveOn), convRoomProject(r.c, agents)]),
+            !archiveOn ? remoteRoomParts() : [])
+          : drawn.map(r => [r.c.id, card(r, archiveOn)]))
+        .concat(drawn.length ? []
           : [['empty', '<p class="pair-empty">No conversations yet. Start one here, or record a '
             + 'pane into one from its own menu.</p>']]);
       // Only when it moved, and only the cards that did: this runs on every snapshot and every
@@ -40374,6 +40578,33 @@ function nlmSourceDelete(source) {
       // to open. See paintList.
       paintList(el, parts.map(p => p[1]).join(''), parts);
       applySections();
+    }
+
+    // The section's ⋯: the list's two options, the ones desktop.html keeps under its own ⋯ (see
+    // convListParts). Its open state is held here, as the launcher's Restart menu holds its own,
+    // so a redraw between opening and choosing does not shut it.
+    let convMoreOpen = false;
+
+    document.addEventListener('click', (e) => {
+      if (!convMoreOpen || (e.target.closest && e.target.closest('.conv-more'))) return;
+      convMoreOpen = false;
+      for (const el of document.querySelectorAll('.conv-more[open]')) el.open = false;
+    }, true);
+
+    function convMoreHtml() {
+      if (typeof convListGroupOn !== 'function') return '';
+      const item = (key, on, label, title) =>
+        `<button type="button" class="launcher-restart-item" role="menuitemcheckbox"` +
+        ` aria-checked="${on}" title="${title}"` +
+        ` onclick="convMoreOpen = false; convListToggle('${key}')"><span class="conv-more-tick" aria-hidden="true">${on ? '\u2713' : ''}</span>${label}</button>`;
+      return `<details class="section-action launcher-restart conv-more"${convMoreOpen ? ' open' : ''}` +
+        ' ontoggle="convMoreOpen = this.open">' +
+        '<summary aria-label="List options" aria-haspopup="menu" title="List options">\u22ef</summary>' +
+        '<div class="launcher-restart-items" role="menu">' +
+        item(CONV_GROUP_KEY, convListGroupOn(), 'Group by Project', 'An @Project separator over each Project\u2019s rooms') +
+        item(CONV_REMOTE_HEADS_KEY, convRemoteHeadsOn(), 'Remote sections',
+          'Each linked machine\u2019s rooms under a heading of their own') +
+        '</div></details>';
     }
 
     // An empty conversation, opened on its roster with the picker already down: the thing the

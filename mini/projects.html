@@ -11912,6 +11912,7 @@ function convWebModeOf(conv) {
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        if (typeof remoteNativeDrawn === 'function') remoteNativeDrawn();
         // A link the page was loaded on that named something only a snapshot can resolve — an
         // agent id, a landing section, a pane. After the render, which is what fills those lists.
         if (typeof hashResume === 'function') hashResume();
