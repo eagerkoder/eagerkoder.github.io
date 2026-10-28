@@ -4191,42 +4191,52 @@
     .remote-close { background: none; border: 0; color: inherit; font-size: 16px; cursor: pointer; }
     .remote-frame { flex: 1; border: 0; width: 100%; background: var(--bg, #111); }
     /* Settings › Remote machines: one row per machine, and the form in its place while editing. */
-    /* Name and route on the left, the row's switches centred, Edit and Remove small on the right. */
+    /* One row at every width: name and route on the left, the row's switches centred, Edit and
+       Remove on the right. Every control, and the name's badge, is one height and one font. */
     .remote-links-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center; gap: 8px; padding: 6px 0;
-      border-bottom: 1px solid var(--border); font-size: 0.8rem; min-width: 0; }
+      border-bottom: 1px solid var(--border); font-size: 11px; min-width: 0; }
     .remote-links-id { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
-    .remote-links-name { min-width: 0; overflow-wrap: anywhere; }
-    .remote-links-via { color: var(--muted); font-size: 0.7rem; }
+    .remote-links-name { display: flex; min-width: 0; max-width: 100%; }
+    .remote-links-name .remote-badge { font-size: 11px; font-weight: 500; line-height: 20px; height: 22px;
+      padding: 1px 7px; border-radius: 6px; box-sizing: border-box; min-width: 0; flex: 0 1 auto;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .remote-links-via { color: var(--muted); font-size: 10px; }
     /* Off this machine's own page the name is shown, not edited. */
     #remoteLinksAs:read-only { background: transparent; border-color: transparent; padding-left: 0; }
-    .setting-group .remote-links-row button { margin: 0; padding: 4px 10px; flex: none;
-      background: var(--bg); border: 1px solid var(--border); color: var(--text); font-weight: 500; }
+    .setting-group .remote-links-row button { margin: 0; padding: 0 8px; height: 22px; flex: none;
+      box-sizing: border-box; font: inherit; font-size: 11px; font-weight: 500; line-height: 20px;
+      border-radius: 6px; background: var(--bg); border: 1px solid var(--border); color: var(--text); }
     .remote-links-row.off .remote-links-id { opacity: .55; }
-    .remote-links-ctl { display: flex; align-items: center; gap: 8px; }
+    .remote-links-ctl { display: flex; align-items: center; gap: 6px; }
     .remote-links-edit { display: flex; justify-content: flex-end; gap: 4px; }
-    .setting-group .remote-links-edit button { padding: 2px 8px; font-size: 0.7rem; border-radius: 6px;
-      color: var(--muted); }
+    .setting-group .remote-links-edit button { color: var(--muted); }
     .setting-group .remote-links-edit button:hover { color: var(--text); }
     .remote-links-seg { display: inline-flex; }
-    .setting-group .remote-links-seg button { padding: 3px 8px; font-size: 0.7rem; border-radius: 0;
-      margin-left: -1px; color: var(--muted); }
+    .setting-group .remote-links-seg button { border-radius: 0; margin-left: -1px; color: var(--muted); }
     .setting-group .remote-links-seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
     .setting-group .remote-links-seg button:last-child { border-radius: 0 6px 6px 0; }
     .setting-group .remote-links-seg button[aria-pressed="true"] { background: var(--blue);
       border-color: var(--blue); color: var(--bg); position: relative; }
     .setting-group .remote-links-seg button:disabled { opacity: .35; cursor: default; }
-    .setting-group .remote-links-row .remote-links-on { width: 32px; height: 18px; padding: 0;
-      border-radius: 9px; position: relative; background: var(--border); border-color: var(--border); }
-    .remote-links-knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+    .setting-group .remote-links-row .remote-links-on { width: 34px; padding: 0; border-radius: 11px;
+      position: relative; background: var(--border); border-color: var(--border); }
+    .remote-links-knob { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
       border-radius: 50%; background: var(--bg); transition: left .15s; }
     .setting-group .remote-links-row .remote-links-on[aria-checked="true"] { background: var(--green);
       border-color: var(--green); }
-    .remote-links-on[aria-checked="true"] .remote-links-knob { left: 16px; }
-    /* Too narrow for three columns: the switches take a centred row of their own under the name. */
+    .remote-links-on[aria-checked="true"] .remote-links-knob { left: 15px; }
+    /* A phone: still one row. The route under the name gives way (the machine's chip above says it),
+       the name shortens before anything else does, and the gaps close up. */
     @media (max-width: 520px) {
-      .remote-links-row { grid-template-columns: minmax(0, 1fr) auto; }
-      .remote-links-ctl { grid-row: 2; grid-column: 1 / -1; justify-content: center; }
+      .remote-links-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
+      .remote-links-via { display: none; }
+      .setting-group .remote-links-row button { padding: 0 6px; }
+      .setting-group .remote-links-row .remote-links-on { width: 34px; padding: 0; }
+      /* Edit and Remove as glyphs, their names kept in aria-label, so the machine's name keeps room. */
+      .setting-group .remote-links-edit button { width: 22px; padding: 0; font-size: 0; }
+      .remote-links-edit button:first-child::before { content: "✎"; font-size: 12px; }
+      .remote-links-edit button:last-child::before { content: "✕"; font-size: 11px; }
     }
     .remote-links-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px;
       padding: 8px 0; border-bottom: 1px solid var(--border); }
