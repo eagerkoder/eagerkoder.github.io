@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-27">
+  <meta name="app-built" content="2026-10-28">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -249,7 +249,7 @@
       --bot: #6b46c1;
       --agent-claude: #b74208;
       --agent-agy: #6a3ec4;
-      --agent-kiro: #b0126e;
+      --agent-kiro: #a3197f;
       --agent-opencode: #116e66;
       --agent-devin: #a67c00;
       /* The same hues, darkened to clear 4.5:1 against this theme's --bg, exactly as the accents
@@ -423,7 +423,7 @@
       --blue: #2461da;
       --agent-claude: #b74208;
       --agent-agy: #6a3ec4;
-      --agent-kiro: #b0126e;
+      --agent-kiro: #a3197f;
       --agent-opencode: #116e66;
       --agent-devin: #a67c00;
       /* The same hues, darkened to clear 4.5:1 against this theme's --bg, exactly as the accents
@@ -3267,12 +3267,21 @@
       margin-left: auto;
     }
 
-    /* The selection bar. It is there only while something is highlighted, so it carries a hairline
-       above it to say a panel arrived rather than a button appearing out of a rail. */
+    /* The selection bar. It is there only while something is highlighted, so it floats over the
+       foot of the thread, above the composer, rather than taking a row in it: a row would grow the
+       composer and push the thread up under the reader's mouse the moment the selection was made.
+       Left, because the hang buttons hold the right edge. */
     .desk-acts-bar {
-      padding: 0.25rem 0.4ch;
+      position: absolute;
+      left: 0.6ch;
+      bottom: calc(100% + 4px);
+      z-index: 4;
+      padding: 4px;
       flex-wrap: nowrap;
-      border-top: 1px solid color-mix(in srgb, var(--term-border) 60%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
     }
 
     .desk-acts-bar[hidden] { display: none; }
@@ -3382,6 +3391,16 @@
     }
 
     .desk-rails .desk-pill-primary:hover:not(:disabled) { color: var(--term-bg); }
+
+    /* Copy, filled in green: what most selections end in, and told from Transfer by its colour. */
+    .desk-rails .desk-pill-copy {
+      border-color: var(--green);
+      background: var(--green);
+      color: var(--term-bg);
+      font-weight: 700;
+    }
+
+    .desk-rails .desk-pill-copy:hover:not(:disabled) { color: var(--term-bg); }
 
     /* One button, named rather than coloured. The badge at the other end of this rail is the pane
        the composer writes to and wears that agent's accent; a second accented badge here was read
@@ -4072,7 +4091,7 @@
     .mach-pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; min-width: 0;
       border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
       font: inherit; font-size: 0.8rem; cursor: pointer; }
-    .mach-pick.on { border-color: var(--accent, #6b8afd); }
+    .mach-pick.on { border-color: var(--blue); }
     .mach-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
     .mach-dot.up { background: var(--green, #3fb950); }
     .mach-via { color: var(--muted); font-size: 0.7rem; }
@@ -4101,7 +4120,7 @@
     .mach-chip[data-state="same"] { color: var(--green, #3fb950); border-color: currentColor; }
     .mach-chip[data-state="ahead"], .mach-chip[data-state="here"],
     .mach-chip[data-state="behind"], .mach-chip[data-state="there"],
-    .mach-chip[data-state="stale"] { color: var(--accent, #6b8afd); border-color: currentColor; }
+    .mach-chip[data-state="stale"] { color: var(--blue); border-color: currentColor; }
     .mach-chip[data-state="diverged"] { color: var(--red, #f85149); border-color: currentColor; }
     .mach-mark { font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
     .mach-cell code { white-space: nowrap; }
@@ -4110,7 +4129,7 @@
     .mach-none { color: var(--muted); }
     .mach-go { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg);
       color: var(--text); font: inherit; font-size: 0.72rem; cursor: pointer; white-space: nowrap; }
-    .mach-go.primary { border-color: var(--accent, #6b8afd); color: var(--accent, #6b8afd); font-weight: 600; }
+    .mach-go.primary { border-color: var(--blue); color: var(--blue); font-weight: 600; }
     .mach-more { display: block; width: 100%; padding: 6px 8px 6px 18px; border: 0; border-top: 1px solid var(--border);
       background: color-mix(in srgb, var(--blue) 10%, var(--bg)); color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
     .mach-more:hover { color: var(--text); }
@@ -4124,7 +4143,7 @@
     }
     /* Remote rooms (remote_rooms.js): another machine's Commanders, and its app in an overlay. */
     .remote-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
-      padding: 1px 5px; border-radius: 4px; background: var(--accent, #6b8afd); color: #fff;
+      padding: 1px 5px; border-radius: 4px; background: var(--blue); color: #fff;
       flex: none; }
     /* The @Project separator over a Project's rooms in the conversation list (convListParts): the
        name, a hairline, and the count of rooms under it. The Inactive fold is drawn the same way,
@@ -4163,7 +4182,7 @@
     .remote-tag { text-transform: none; letter-spacing: 0; }
     /* The R ahead of a remote room's name, in the slot a local room's mark takes. */
     .remote-r { flex: none; display: inline-grid; place-items: center; width: 1.35em; height: 1.35em;
-      border-radius: 4px; background: var(--accent, #6b8afd); color: #fff; font-size: 0.7rem;
+      border-radius: 4px; background: var(--blue); color: #fff; font-size: 0.7rem;
       font-weight: 700; line-height: 1; }
     .remote-room.disabled { opacity: .6; cursor: default; }
     .remote-kinds .remote-badge { margin-right: 4px; }
@@ -4172,14 +4191,43 @@
     .remote-close { background: none; border: 0; color: inherit; font-size: 16px; cursor: pointer; }
     .remote-frame { flex: 1; border: 0; width: 100%; background: var(--bg, #111); }
     /* Settings › Remote machines: one row per machine, and the form in its place while editing. */
-    .remote-links-row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    /* Name and route on the left, the row's switches centred, Edit and Remove small on the right. */
+    .remote-links-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center; gap: 8px; padding: 6px 0;
       border-bottom: 1px solid var(--border); font-size: 0.8rem; min-width: 0; }
-    .remote-links-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-    .remote-links-via { color: var(--muted); font-size: 0.7rem; flex: none; }
+    .remote-links-id { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+    .remote-links-name { min-width: 0; overflow-wrap: anywhere; }
+    .remote-links-via { color: var(--muted); font-size: 0.7rem; }
     /* Off this machine's own page the name is shown, not edited. */
     #remoteLinksAs:read-only { background: transparent; border-color: transparent; padding-left: 0; }
     .setting-group .remote-links-row button { margin: 0; padding: 4px 10px; flex: none;
       background: var(--bg); border: 1px solid var(--border); color: var(--text); font-weight: 500; }
+    .remote-links-row.off .remote-links-id { opacity: .55; }
+    .remote-links-ctl { display: flex; align-items: center; gap: 8px; }
+    .remote-links-edit { display: flex; justify-content: flex-end; gap: 4px; }
+    .setting-group .remote-links-edit button { padding: 2px 8px; font-size: 0.7rem; border-radius: 6px;
+      color: var(--muted); }
+    .setting-group .remote-links-edit button:hover { color: var(--text); }
+    .remote-links-seg { display: inline-flex; }
+    .setting-group .remote-links-seg button { padding: 3px 8px; font-size: 0.7rem; border-radius: 0;
+      margin-left: -1px; color: var(--muted); }
+    .setting-group .remote-links-seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+    .setting-group .remote-links-seg button:last-child { border-radius: 0 6px 6px 0; }
+    .setting-group .remote-links-seg button[aria-pressed="true"] { background: var(--blue);
+      border-color: var(--blue); color: var(--bg); position: relative; }
+    .setting-group .remote-links-seg button:disabled { opacity: .35; cursor: default; }
+    .setting-group .remote-links-row .remote-links-on { width: 32px; height: 18px; padding: 0;
+      border-radius: 9px; position: relative; background: var(--border); border-color: var(--border); }
+    .remote-links-knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+      border-radius: 50%; background: var(--bg); transition: left .15s; }
+    .setting-group .remote-links-row .remote-links-on[aria-checked="true"] { background: var(--green);
+      border-color: var(--green); }
+    .remote-links-on[aria-checked="true"] .remote-links-knob { left: 16px; }
+    /* Too narrow for three columns: the switches take a centred row of their own under the name. */
+    @media (max-width: 520px) {
+      .remote-links-row { grid-template-columns: minmax(0, 1fr) auto; }
+      .remote-links-ctl { grid-row: 2; grid-column: 1 / -1; justify-content: center; }
+    }
     .remote-links-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px;
       padding: 8px 0; border-bottom: 1px solid var(--border); }
     .setting-group .remote-links-form label { margin: 0; }
@@ -5886,6 +5934,7 @@
     .recents,
     .conversations,
     .web-agents,
+    .machines,
     .launcher {
       padding: 0 12px 12px;
     }
@@ -9062,7 +9111,7 @@
            -->
       <div class="desk-rails desk-acts-bar" data-role="acts" hidden>
         <span class="desk-rail-gap"></span>
-        <button class="desk-pill" data-role="copy" aria-label="Copy the selection">Copy</button>
+        <button class="desk-pill desk-pill-copy" data-role="copy" aria-label="Copy the selection">Copy</button>
         <button class="desk-pill desk-pill-primary" data-role="xfer"
           aria-label="Transfer the selection">⇥ Transfer</button>
       </div>
@@ -10020,10 +10069,14 @@
     // --green until kiro got a badge of its own, and a reader cannot tell two kinds apart by one
     // colour. devin wears claude's orange by default — the person's call; `--agent-devin` stays
     // defined because the palette's theme blocks are anchored on it.
+    //
+    // The third entry is the palette token that draws the same colour, in both themes, so the
+    // picker can name each harness's default among its swatches and a person can choose it.
     const KIND_COLORS = [
-      ['claude', 'var(--agent-claude)'], ['codex', 'var(--blue)'], ['devin', 'var(--agent-claude)'],
-      ['kiro', 'var(--agent-kiro)'], ['opencode', 'var(--agent-opencode)'], ['pi', 'var(--green)'],
-      ['agy', 'var(--agent-agy)'],
+      ['claude', 'var(--agent-claude)', 'orange'], ['codex', 'var(--blue)', 'blue'],
+      ['devin', 'var(--agent-claude)', 'orange'], ['kiro', 'var(--agent-kiro)', 'magenta'],
+      ['opencode', 'var(--agent-opencode)', 'teal'], ['pi', 'var(--green)', 'green'],
+      ['agy', 'var(--agent-agy)', 'violet'],
     ];
 
     function agentColor(agent) {
@@ -10045,8 +10098,7 @@
       return typeof token === 'string' && /^[a-z]{3,12}$/.test(token) ? `var(--ac-${token})` : '';
     }
 
-    // The colour an alias wears. The relay resolved it — the token the user chose, or the one its
-    // model's family implies — so this is a lookup and not a second copy of that rule.
+    // The colour an alias wears: the token the user chose, or nothing, and then the harness's.
     function aliasColor(config) {
       const row = config && typeof agentConfigRow === 'function' ? agentConfigRow(config) : null;
       return row ? colorVar(row.color) : '';
@@ -12490,7 +12542,9 @@
     // pattern written twice is a pattern that drifts. Each is anchored at exactly one space rather
     // than `^\s*`: see the profile for why that is the whole of how a quoted call is told from a
     // real one. Ported from _DEVIN_CALL and friends in relay/pane_summary.py.
-    const DEVIN_CALL = /^ [●└]\s/, DEVIN_BAR = /^ │/, DEVIN_PROMPT = /^❭/;
+    // devin v3000.11 draws a call as one line with no output: ` ✓ …` done, ` ✗ …` failed, ` ⏺ …`
+    // running. Missing from the class, a reply under a run of them opened nothing.
+    const DEVIN_CALL = /^ [●└✓✗⏺]\s/, DEVIN_BAR = /^ │/, DEVIN_PROMPT = /^❭/;
     const DEVIN_RULE = /^─{20,}/, DEVIN_TIP = /^ ✱\s/;
 
     const GUTTERS = {
@@ -12608,9 +12662,10 @@
       // — `afterTool` asks "has it said anything since the last *call*", and a tip is not one.
       devin: {
         speaker: null, result: [], user: [], composer: false, afterTool: true,
-        opens: /^ [●└]\s|^❭/, chrome: DEVIN_RULE,
+        opens: new RegExp(DEVIN_CALL.source + '|^❭'), chrome: DEVIN_RULE,
         toolLine: (row, rows, i) => devinTool(row, rows, i),
-        endLine: (row, rows, i) => devinTool(row, rows, i) || DEVIN_TIP.test(row || ''),
+        endLine: (row, rows, i) => devinTool(row, rows, i) || DEVIN_TIP.test(row || '') ||
+          devinFooter(row, rows, i),
         userLine: (row, rows, i) => devinUser(row, rows, i),
       },
     };
@@ -12619,7 +12674,7 @@
     // above; this is the port of `_devin_tool_line` in relay/pane_summary.py.
     function devinTool(row, rows, i) {
       row = row || '';
-      if (DEVIN_CALL.test(row)) return true;
+      if (DEVIN_CALL.test(row)) return !devinFooter(row, rows, i);
       if (!DEVIN_BAR.test(row)) return false;
       if (!rows) return true;   // no context to walk; output is the commoner reading of a bare `│`
       for (let j = i - 1; j >= 0; j--) {
@@ -12627,6 +12682,15 @@
         return DEVIN_CALL.test(rows[j] || '');
       }
       return false;             // the run reaches the top of the read with no call above it
+    }
+
+    // The ` ⏺ <cwd>` line devin v3000.11 prints directly above its footer rule once a turn ends.
+    // The glyph of a running call, so read alone it is one, and `afterTool` then refused every
+    // finished turn. A running call has the spinner line under it, never the rule. Port of
+    // `_devin_footer` in relay/pane_summary.py.
+    function devinFooter(row, rows, i) {
+      return (row || '').startsWith(' ⏺ ') && !!rows && i + 1 < rows.length &&
+        DEVIN_RULE.test(rows[i + 1] || '');
     }
 
     // Whether this `❭` line is a prompt that was *sent* rather than the live composer. devin draws
@@ -12821,7 +12885,9 @@
         const gap = j < i - 1;
         // A shape rather than a gutter character, for a harness whose openers and whose prompt are
         // in different columns. Read off the whole line, so no single gutter has to serve both.
-        if (g.opens.test) return g.opens.test(above) && gap;
+        // A sent prompt's continuation opens too: a reply straight under a multi-line prompt has
+        // only that line above it, not the `❭`.
+        if (g.opens.test) return (g.opens.test(above) || !!(g.userLine && g.userLine(above, rows, j))) && gap;
         for (let k = j; k >= 0; k--) {
           const line = rows[k] || '';
           if (!line.trim()) return false;
@@ -12874,7 +12940,8 @@
         }
         // The agent's reply ends the turn as surely as its glyph would. On agy that reply carries
         // no glyph and is not in column 0, so without this the blue rule runs on into it.
-        else if (endsBlock(row, g, rows, i) || startsBlock(rows, g, i)) inTurn = false;
+        // Its held blanks were trailing, not interior: kept, the next prompt claimed them.
+        else if (endsBlock(row, g, rows, i) || startsBlock(rows, g, i)) { inTurn = false; pending = []; }
         if (!inTurn) return;
         // A blank line inside the turn is part of it only if more of the turn follows. Trailing
         // blanks are the gap before the agent answers, and a rule running down empty rows reads
@@ -17529,7 +17596,7 @@ function markdownHtml(source) {
         const config = foreign ? '' : (live && live.config) || spawn.config || me.config || '';
         // `color` is carried by an entry that is not a pane at all — a web provider, whose
         // identifying colour is its own mark's and not any harness's.
-        const color = convEntryColor(e, agentColor(agent));
+        const color = convEntryColor(e, aliasColor(config) || agentColor(agent));
         // The name it goes by now, not the one stamped when the words were recorded — see
         // convMemberName. An ended member has no live pane and keeps its stamp.
         const name = escapeHtml(foreign ? (e.label || '')
@@ -17786,7 +17853,7 @@ function markdownHtml(source) {
         const name = escapeHtml(paneLabel(a) || a.pane_id || 'Agent');
         const badge = a.agent ? paneBadge(a) : '';
         const key = convMemberKey(a);
-        const accent = agentColor(a.agent) || 'var(--text)';
+        const accent = paneColor(a) || 'var(--text)';
         // A button, because it does something: the badge says who is working and pressing it goes
         // to the last thing they said, which is the message the one being written continues.
         return `<button type="button" class="conv-working-chip" data-key="${escapeHtml(key)}" ` +
@@ -17898,7 +17965,7 @@ function markdownHtml(source) {
       // Nothing is coming until the pane is working. An empty draft over a pane that finished its
       // turn is a promise the thread cannot keep.
       if (!live || live.status !== 'working') return '';
-      const color = agentColor(a.agent) || 'var(--muted)';
+      const color = paneColor(live) || 'var(--muted)';
       const dot = statusColor(live);
       const who = `<span class="dot pulse" style="background:${dot}"></span>` +
         `${escapeHtml(paneLabel(a) || '')}${paneBadge(a)}`;
@@ -19521,6 +19588,15 @@ convApplyTint();
         }
         else showToast(`That pane did not confirm the send — check ${where}.`);
       }
+      // The relay is holding a start while the person answers a folder-trust check, which can take
+      // minutes: the start is kept in flight, and the reader is pointed at the pane that asks.
+      else if (msg.type === 'start_status' && msg.waiting === 'trust') {
+        const held = msg.ref && typeof startsInFlight !== 'undefined' && startsInFlight.get(msg.ref);
+        if (held) held.at = Date.now() + Math.max(0, Number(msg.timeout_ms) || 0);
+        const text = `Waiting for folder trust — answer the "trust ${msg.kind}" pane in Needs you.`;
+        if (typeof showSpawnStatus === 'function') showSpawnStatus(text, 'busy');
+        else showToast(text);
+      }
       else if (msg.type === 'command_result' &&
                (msg.command === 'start_agent' || msg.command === 'open_terminal')) {
         document.getElementById('startSubmit').disabled = false;
@@ -19993,7 +20069,7 @@ convApplyTint();
       for (const [name, link] of remoteLinks) {
         const rows = remoteRoomRows([...link.sessions.values()], {projects: ids, as: remoteAs});
         const host = escapeHtml(name);
-        const note = link.paused ? 'paused' : !link.connected ? 'not reachable'
+        const note = link.paused ? 'off' : !link.connected ? 'not reachable'
           : [link.via === 'ssh' ? 'over ssh' : link.via === 'wss' ? 'over wss' : link.via === 'ws' ? 'over lan' : '',
             rows.length ? '' : 'no Commanders open'].filter(Boolean).join(' · ');
         parts.push([`remote:${name}`, `<div class="remote-head"><span class="remote-badge">remote</span>` +
@@ -20074,14 +20150,19 @@ convApplyTint();
       if (typeof deskRenderConvs === 'function') deskRenderConvs();
     }
 
-    // The Project a local room is listed under: a bench room's own, else its first member's —
-    // the live pane's `project_id`, the member's, or its `project` matched to a Project by id or
-    // label, the raw name when none matches. '' when no member names one.
+    // The Project a local room is listed under: a bench room's own, else its open Commander's —
+    // the General's room is under `home`, as the relay fixes it, whatever folder its first member
+    // ran in — else its first member's: the live pane's `project_id`, the member's, or its
+    // `project` matched to a Project by id or label, the raw name when none matches. '' when no
+    // member names one.
     // ponytail: one Project a room; a room of two Projects is listed under the first only.
     function convRoomProject(c, panes) {
       const projs = (typeof projects !== 'undefined' && projects) || [];
       const id = String(c.id || '');
       if (id.startsWith('c_bench_') && projs.some(p => p.id === id.slice(8))) return id.slice(8);
+      const sessions = (typeof cmdSessions !== 'undefined' && cmdSessions) || [];
+      const cmd = sessions.find(s => s.conversation === id && s.project_id);
+      if (cmd) return cmd.project_id;
       for (const m of c.members || []) {
         const live = m.aid ? (panes || []).find(a => convMemberKey(a) === m.aid) : null;
         if (live && live.project_id) return live.project_id;
@@ -20307,7 +20388,7 @@ convApplyTint();
     // The route the relay holds, and whether its socket to that machine is up.
     function remoteRouteText(name) {
       const link = remoteLinks.get(name);
-      if (link && link.paused) return 'paused';
+      if (link && link.paused) return 'off';
       if (!link || !link.connected) return 'not reachable';
       return link.via === 'wss' ? 'http · wss' : link.via === 'ws' ? 'http · lan'
         : link.via === 'ssh' ? 'ssh · forward' : 'ssh · lan';
@@ -20366,12 +20447,15 @@ convApplyTint();
       if (!own) remoteEdit = null;
       const rows = remoteConfig.links || [];
       let html = rows.map((r, i) => remoteEdit && remoteEdit.i === i ? remoteFormHtml(r)
-        : `<div class="remote-links-row"><span class="remote-links-name"><span class="remote-badge remote-tag">${escapeHtml(r.name)}</span></span>` +
-          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span>` +
+        : `<div class="remote-links-row${r.paused ? ' off' : ''}"><span class="remote-links-id">` +
+          `<span class="remote-links-name"><span class="remote-badge remote-tag">${escapeHtml(r.name)}</span></span>` +
+          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span></span>` +
+          `<span class="remote-links-ctl">${own && !remoteEdit ? remoteSwitchHtml(r, i) : ''}</span>` +
+          `<span class="remote-links-edit">` +
           (remoteEdit || !own ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
             ` aria-label="Edit ${escapeHtml(r.name)}">Edit</button>` +
             `<button type="button" onclick="remoteRemove(${i})"` +
-            ` aria-label="Remove ${escapeHtml(r.name)}">Remove</button>`) + `</div>`).join('');
+            ` aria-label="Remove ${escapeHtml(r.name)}">Remove</button>`) + `</span></div>`).join('');
       if (remoteEdit && remoteEdit.i === -1) html += remoteFormHtml({});
       if (!remoteEdit && own) html += `<button type="button" class="nav-key" onclick="remoteEditOpen(-1)">Add machine</button>`;
       list.innerHTML = html;
@@ -20381,6 +20465,49 @@ convApplyTint();
       if (!own) remoteHint('Read-only here. Edit them on the relay\'s own page, or connected with its token.');
       const first = list.querySelector('#remoteLinksForm input');
       if (first && remoteEdit && remoteEdit.focus) { remoteEdit.focus = false; first.focus(); }
+    }
+
+    // A row's own switches: the route it is reached over, among those it has settings for (the
+    // others greyed until its form gives them some), and whether it is reached at all (`paused`).
+    const REMOTE_SWITCH = {ssh: 'SSH', http: 'WSS', lan: 'WS'};
+    function remoteSwitchHtml(row, i) {
+      const on = remoteRowRoute(row), spare = row.spare || {};
+      const name = escapeHtml(row.name);
+      return `<span class="remote-links-seg" role="group" aria-label="Reach ${name} over">` +
+        Object.entries(REMOTE_SWITCH).map(([r, label]) => {
+          const set = r === on || r in spare;
+          return `<button type="button" aria-pressed="${r === on}"${set ? '' : ' disabled'}` +
+            ` title="${set ? `Reach ${name} over ${label}` : `No ${label} settings: add them with Edit`}"` +
+            ` onclick="remoteSetRoute(${i}, '${r}')">${label}</button>`;
+        }).join('') + `</span>` +
+        `<button type="button" class="remote-links-on" role="switch" aria-checked="${!row.paused}"` +
+        ` aria-label="Reach ${name}" title="${row.paused ? `Off: no rooms, git or handoffs to ${name}`
+          : `On: turn off to stop reaching ${name}`}" onclick="remoteSetOn(${i}, ${!!row.paused})">` +
+        `<span class="remote-links-knob"></span></button>`;
+    }
+
+    // Switch a row to a route it has settings for: that route's spare becomes the row, and the
+    // route it was on becomes a spare, token file and all.
+    function remoteSetRoute(i, route) {
+      const old = (remoteConfig.links || [])[i];
+      const from = old && remoteRowRoute(old);
+      if (!old || from === route || !(route in (old.spare || {}))) return;
+      const {name, spare: oldSpare, paused, ...fields} = old;
+      const spare = {...oldSpare, [from]: fields};
+      delete spare[route];
+      const row = {name, ...oldSpare[route], spare};
+      if (paused) row.paused = true;
+      remotePut({as: remoteConfig.as || 'laptop', links: remoteConfig.links.map((l, j) => j === i ? row : l)});
+    }
+
+    // Turn a row on or off: off keeps it in the links file with `paused`, and the relay stops
+    // reaching it (`link_route`).
+    function remoteSetOn(i, on) {
+      const old = (remoteConfig.links || [])[i];
+      if (!old) return;
+      const row = {...old};
+      if (on) delete row.paused; else row.paused = true;
+      remotePut({as: remoteConfig.as || 'laptop', links: remoteConfig.links.map((l, j) => j === i ? row : l)});
     }
 
     function remoteEditOpen(i) {
@@ -20452,7 +20579,9 @@ convApplyTint();
       // typed but not saved is not.
       const spare = {};
       for (const r of ['ssh', 'http', 'lan']) {
-        if (r === route || !Object.keys(routes[r]).length) continue;
+        // An SSH route on its defaults has no fields, and is kept if the row had it.
+        const had = r === 'ssh' && !!old.name && (remoteRowRoute(old) === 'ssh' || 'ssh' in (old.spare || {}));
+        if (r === route || (!Object.keys(routes[r]).length && !had)) continue;
         if (r === 'http' && !(routes.http.url && routes.http.token_file)) continue;
         spare[r] = routes[r];
       }
@@ -20822,18 +20951,14 @@ convApplyTint();
       const h = escapeHtml(JSON.stringify(machinesSel));
       const live = (remoteLinks.get(machinesSel) || {}).connected;
       const paused = !!(remoteLinks.get(machinesSel) || {}).paused;
-      const pause = remoteEditable && !window.STORAGE_NS
-        ? `<button type="button" class="section-action" onclick="machinesPause(${h}, ${!paused})"` +
-          ` title="${paused ? 'Reach this machine again: its rooms, git and handoffs'
-            : 'Stop reaching this machine: no rooms, no git, no handoffs, until resumed'}">${paused ? 'Resume link' : 'Pause link'}</button>` : '';
       if (paused) {
-        return head(pause) + `<div class="mach-picks">${hosts.map(chip).join('')}</div>` +
-          `<div class="mach-status" role="status">${escapeHtml(machinesSel)} is paused: this relay holds no socket to it, ` +
-          'lists none of its rooms and runs no git or handoff to it until it is resumed.</div>';
+        return head('') + `<div class="mach-picks">${hosts.map(chip).join('')}</div>` +
+          `<div class="mach-status" role="status">${escapeHtml(machinesSel)} is off: this relay holds no socket to it, ` +
+          'lists none of its rooms and runs no git or handoff to it until it is turned on under Linked machines.</div>';
       }
       // A Project that is a git checkout on neither machine has nothing to compare: left out.
       const rows = (m.projects || []).filter(r => r.here || r.there || r.only_there);
-      return head(pause + (live && remoteEditable && !window.STORAGE_NS
+      return head((live && remoteEditable && !window.STORAGE_NS
           ? `<button type="button" class="section-action" onclick="remoteRoomOpen({host: ${h}})">Open its app</button>` : '') +
         `<button type="button" class="section-action" onclick="machinesCompare(${h})"${m.busy ? ' disabled' : ''}>` +
         `${m.busy === 'status' ? 'Comparing…' : m.projects ? 'Compare again' : 'Compare'}</button>`) +
@@ -20847,19 +20972,6 @@ convApplyTint();
             (rows.length ? rows.map(row => machinesProjectHtml(machinesSel, m, row)).join('')
               : '<div class="cfg-empty">No Projects to compare.</div>') + `</div>`
           : '');
-    }
-
-    // Pause or resume a machine's link: the row stays in the links file with `paused`, and the
-    // relay stops reaching it (`link_route`).
-    function machinesPause(host, on) {
-      if (!remoteConfig) return;
-      const links = (remoteConfig.links || []).map(l => {
-        if (l.name !== host) return l;
-        const row = {...l};
-        if (on) row.paused = true; else delete row.paused;
-        return row;
-      });
-      remotePut({as: remoteConfig.as || 'laptop', links});
     }
 
     // Opening the section or the sheet only draws it: comparing is the person's to start.
@@ -23240,9 +23352,15 @@ convApplyTint();
     function colorSwatchesHtml(current, autoFill, autoTitle, pick) {
       const palette = agentConfigColors();
       if (!palette.length) return '';
+      // A swatch that is some harness's default says so, so that colour can be chosen by name.
+      const kinds = typeof KIND_COLORS === 'undefined' ? [] : KIND_COLORS;
+      const name = token => {
+        const of = kinds.filter(k => k[2] === token).map(k => k[0]);
+        return of.length ? `${token} — ${of.join(', ')} default` : token;
+      };
       const swatch = (token, on) =>
         `<button type="button" class="cfg-swatch" style="--swatch:${colorVar(token)}"`
-        + ` aria-pressed="${on}" aria-label="${escapeHtml(token)}" title="${escapeHtml(token)}"`
+        + ` aria-pressed="${on}" aria-label="${escapeHtml(name(token))}" title="${escapeHtml(name(token))}"`
         + ` onclick="${pick.replace('$', escapeHtml(token))}"></button>`;
       return '<div class="start-field">Colour<div class="cfg-swatches">'
         + `<button type="button" class="cfg-swatch auto" aria-pressed="${!current}"`
@@ -23253,11 +23371,13 @@ convApplyTint();
         + '</div></div>';
     }
 
-    // An alias's Auto is the model's family, which the relay has already worked out.
+    // An alias's Auto is its harness's colour: the stock agent it was derived from.
     function agentConfigColorHtml(d) {
       const row = d.id && typeof agentConfigRow === 'function' ? agentConfigRow(d.id) : null;
-      const derived = row && !row.color_set ? colorVar(row.color) : '';
-      return colorSwatchesHtml(d.color, derived, 'Automatic — the colour of this model’s family',
+      const kind = (row && row.kind)
+        || (agentConfigProviders().find(p => p.id === d.provider) || {}).kind || '';
+      return colorSwatchesHtml(d.color, typeof agentColor === 'function' ? agentColor(kind) : '',
+                               `Automatic — ${kind || 'the harness'}’s own colour`,
                                "agentConfigSet('color', '$')");
     }
 

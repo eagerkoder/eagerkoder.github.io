@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-27">
+  <meta name="app-built" content="2026-10-28">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -4523,10 +4523,14 @@
     // --green until kiro got a badge of its own, and a reader cannot tell two kinds apart by one
     // colour. devin wears claude's orange by default — the person's call; `--agent-devin` stays
     // defined because the palette's theme blocks are anchored on it.
+    //
+    // The third entry is the palette token that draws the same colour, in both themes, so the
+    // picker can name each harness's default among its swatches and a person can choose it.
     const KIND_COLORS = [
-      ['claude', 'var(--agent-claude)'], ['codex', 'var(--blue)'], ['devin', 'var(--agent-claude)'],
-      ['kiro', 'var(--agent-kiro)'], ['opencode', 'var(--agent-opencode)'], ['pi', 'var(--green)'],
-      ['agy', 'var(--agent-agy)'],
+      ['claude', 'var(--agent-claude)', 'orange'], ['codex', 'var(--blue)', 'blue'],
+      ['devin', 'var(--agent-claude)', 'orange'], ['kiro', 'var(--agent-kiro)', 'magenta'],
+      ['opencode', 'var(--agent-opencode)', 'teal'], ['pi', 'var(--green)', 'green'],
+      ['agy', 'var(--agent-agy)', 'violet'],
     ];
 
     function agentColor(agent) {
@@ -4548,8 +4552,7 @@
       return typeof token === 'string' && /^[a-z]{3,12}$/.test(token) ? `var(--ac-${token})` : '';
     }
 
-    // The colour an alias wears. The relay resolved it — the token the user chose, or the one its
-    // model's family implies — so this is a lookup and not a second copy of that rule.
+    // The colour an alias wears: the token the user chose, or nothing, and then the harness's.
     function aliasColor(config) {
       const row = config && typeof agentConfigRow === 'function' ? agentConfigRow(config) : null;
       return row ? colorVar(row.color) : '';
@@ -6280,7 +6283,9 @@
     // pattern written twice is a pattern that drifts. Each is anchored at exactly one space rather
     // than `^\s*`: see the profile for why that is the whole of how a quoted call is told from a
     // real one. Ported from _DEVIN_CALL and friends in relay/pane_summary.py.
-    const DEVIN_CALL = /^ [●└]\s/, DEVIN_BAR = /^ │/, DEVIN_PROMPT = /^❭/;
+    // devin v3000.11 draws a call as one line with no output: ` ✓ …` done, ` ✗ …` failed, ` ⏺ …`
+    // running. Missing from the class, a reply under a run of them opened nothing.
+    const DEVIN_CALL = /^ [●└✓✗⏺]\s/, DEVIN_BAR = /^ │/, DEVIN_PROMPT = /^❭/;
     const DEVIN_RULE = /^─{20,}/, DEVIN_TIP = /^ ✱\s/;
 
     const GUTTERS = {
@@ -6398,9 +6403,10 @@
       // — `afterTool` asks "has it said anything since the last *call*", and a tip is not one.
       devin: {
         speaker: null, result: [], user: [], composer: false, afterTool: true,
-        opens: /^ [●└]\s|^❭/, chrome: DEVIN_RULE,
+        opens: new RegExp(DEVIN_CALL.source + '|^❭'), chrome: DEVIN_RULE,
         toolLine: (row, rows, i) => devinTool(row, rows, i),
-        endLine: (row, rows, i) => devinTool(row, rows, i) || DEVIN_TIP.test(row || ''),
+        endLine: (row, rows, i) => devinTool(row, rows, i) || DEVIN_TIP.test(row || '') ||
+          devinFooter(row, rows, i),
         userLine: (row, rows, i) => devinUser(row, rows, i),
       },
     };
@@ -6409,7 +6415,7 @@
     // above; this is the port of `_devin_tool_line` in relay/pane_summary.py.
     function devinTool(row, rows, i) {
       row = row || '';
-      if (DEVIN_CALL.test(row)) return true;
+      if (DEVIN_CALL.test(row)) return !devinFooter(row, rows, i);
       if (!DEVIN_BAR.test(row)) return false;
       if (!rows) return true;   // no context to walk; output is the commoner reading of a bare `│`
       for (let j = i - 1; j >= 0; j--) {
@@ -6417,6 +6423,15 @@
         return DEVIN_CALL.test(rows[j] || '');
       }
       return false;             // the run reaches the top of the read with no call above it
+    }
+
+    // The ` ⏺ <cwd>` line devin v3000.11 prints directly above its footer rule once a turn ends.
+    // The glyph of a running call, so read alone it is one, and `afterTool` then refused every
+    // finished turn. A running call has the spinner line under it, never the rule. Port of
+    // `_devin_footer` in relay/pane_summary.py.
+    function devinFooter(row, rows, i) {
+      return (row || '').startsWith(' ⏺ ') && !!rows && i + 1 < rows.length &&
+        DEVIN_RULE.test(rows[i + 1] || '');
     }
 
     // Whether this `❭` line is a prompt that was *sent* rather than the live composer. devin draws
@@ -6611,7 +6626,9 @@
         const gap = j < i - 1;
         // A shape rather than a gutter character, for a harness whose openers and whose prompt are
         // in different columns. Read off the whole line, so no single gutter has to serve both.
-        if (g.opens.test) return g.opens.test(above) && gap;
+        // A sent prompt's continuation opens too: a reply straight under a multi-line prompt has
+        // only that line above it, not the `❭`.
+        if (g.opens.test) return (g.opens.test(above) || !!(g.userLine && g.userLine(above, rows, j))) && gap;
         for (let k = j; k >= 0; k--) {
           const line = rows[k] || '';
           if (!line.trim()) return false;
@@ -6664,7 +6681,8 @@
         }
         // The agent's reply ends the turn as surely as its glyph would. On agy that reply carries
         // no glyph and is not in column 0, so without this the blue rule runs on into it.
-        else if (endsBlock(row, g, rows, i) || startsBlock(rows, g, i)) inTurn = false;
+        // Its held blanks were trailing, not interior: kept, the next prompt claimed them.
+        else if (endsBlock(row, g, rows, i) || startsBlock(rows, g, i)) { inTurn = false; pending = []; }
         if (!inTurn) return;
         // A blank line inside the turn is part of it only if more of the turn follows. Trailing
         // blanks are the gap before the agent answers, and a rule running down empty rows reads
@@ -11744,6 +11762,15 @@ function convWebModeOf(conv) {
         }
         else showToast(`That pane did not confirm the send — check ${where}.`);
       }
+      // The relay is holding a start while the person answers a folder-trust check, which can take
+      // minutes: the start is kept in flight, and the reader is pointed at the pane that asks.
+      else if (msg.type === 'start_status' && msg.waiting === 'trust') {
+        const held = msg.ref && typeof startsInFlight !== 'undefined' && startsInFlight.get(msg.ref);
+        if (held) held.at = Date.now() + Math.max(0, Number(msg.timeout_ms) || 0);
+        const text = `Waiting for folder trust — answer the "trust ${msg.kind}" pane in Needs you.`;
+        if (typeof showSpawnStatus === 'function') showSpawnStatus(text, 'busy');
+        else showToast(text);
+      }
       else if (msg.type === 'command_result' &&
                (msg.command === 'start_agent' || msg.command === 'open_terminal')) {
         document.getElementById('startSubmit').disabled = false;
@@ -13930,9 +13957,15 @@ function convWebModeOf(conv) {
     function colorSwatchesHtml(current, autoFill, autoTitle, pick) {
       const palette = agentConfigColors();
       if (!palette.length) return '';
+      // A swatch that is some harness's default says so, so that colour can be chosen by name.
+      const kinds = typeof KIND_COLORS === 'undefined' ? [] : KIND_COLORS;
+      const name = token => {
+        const of = kinds.filter(k => k[2] === token).map(k => k[0]);
+        return of.length ? `${token} — ${of.join(', ')} default` : token;
+      };
       const swatch = (token, on) =>
         `<button type="button" class="cfg-swatch" style="--swatch:${colorVar(token)}"`
-        + ` aria-pressed="${on}" aria-label="${escapeHtml(token)}" title="${escapeHtml(token)}"`
+        + ` aria-pressed="${on}" aria-label="${escapeHtml(name(token))}" title="${escapeHtml(name(token))}"`
         + ` onclick="${pick.replace('$', escapeHtml(token))}"></button>`;
       return '<div class="start-field">Colour<div class="cfg-swatches">'
         + `<button type="button" class="cfg-swatch auto" aria-pressed="${!current}"`
@@ -13943,11 +13976,13 @@ function convWebModeOf(conv) {
         + '</div></div>';
     }
 
-    // An alias's Auto is the model's family, which the relay has already worked out.
+    // An alias's Auto is its harness's colour: the stock agent it was derived from.
     function agentConfigColorHtml(d) {
       const row = d.id && typeof agentConfigRow === 'function' ? agentConfigRow(d.id) : null;
-      const derived = row && !row.color_set ? colorVar(row.color) : '';
-      return colorSwatchesHtml(d.color, derived, 'Automatic — the colour of this model’s family',
+      const kind = (row && row.kind)
+        || (agentConfigProviders().find(p => p.id === d.provider) || {}).kind || '';
+      return colorSwatchesHtml(d.color, typeof agentColor === 'function' ? agentColor(kind) : '',
+                               `Automatic — ${kind || 'the harness'}’s own colour`,
                                "agentConfigSet('color', '$')");
     }
 
