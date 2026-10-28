@@ -20663,14 +20663,17 @@ convApplyTint();
           machinesRun(msg.machine, q.project, next.verb, next.branch);
           return;
         }
-        m.note = (q ? `Sync all: ${q.done + 1} move${q.done ? 's' : ''} done`
+        const note = (q ? `Sync all: ${q.done + 1} move${q.done ? 's' : ''} done`
           : msg.action === 'setup' ? `Set up: ${r.cloned ? 'cloned' : 'checkout already there'}` +
             `${r.added ? ', added to its Projects' : ''}`
           : `${MACHINE_VERBS[msg.action] || msg.action} ${msg.branch}: done`) +
           (m.reboot ? '. Relay code changed: reboot that relay to load it.' : '');
         m.queue = null;
         m.reboot = false;
+        // Written after the comparison starts, which clears the note for a Compare pressed by hand.
         machinesCompare(msg.machine);
+        m.note = note;
+        machinesRepaint();
         return;
       }
       m.queue = null;
