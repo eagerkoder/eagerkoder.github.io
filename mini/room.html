@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-28">
+  <meta name="app-built" content="2026-10-29">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -4178,7 +4178,24 @@
       box-shadow: 0 10px 40px rgba(0,0,0,.5); overflow: hidden;
       /* On body, outside `.desk`, so it brings the shell's type and text colour with it. */
       color: var(--text); font: 13px 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .remote-overlay-head { padding: 8px 12px; border-bottom: 1px solid var(--border, rgba(127,127,127,.3)); }
+    /* The overlay's head: one thin blue line — the machine, the title cut short rather than
+       wrapped, an icon to open it in a tab, and a large close at the right. */
+    .remote-overlay-head { flex: none; gap: 6px; min-height: 34px; padding: 0 0 0 10px;
+      padding-top: env(safe-area-inset-top, 0px); background: var(--blue); color: #fff;
+      font-size: 13px; line-height: 1; white-space: nowrap; }
+    .remote-overlay-head .remote-tag { background: rgba(255,255,255,.2); }
+    .remote-overlay-head .remote-title { flex: 1; min-width: 0; overflow: hidden;
+      text-overflow: ellipsis; font-weight: 600; }
+    .remote-overlay-head .remote-open, .remote-overlay-head .remote-close { flex: none;
+      display: grid; place-items: center; align-self: stretch; margin: 0; padding: 0;
+      color: #fff; background: none; border: 0; cursor: pointer; text-decoration: none; }
+    .remote-overlay-head .remote-open { width: 34px; }
+    .remote-overlay-head .remote-open svg { width: 17px; height: 17px; fill: none;
+      stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .remote-overlay-head .remote-close { width: 44px; font-size: 22px; }
+    .remote-overlay-head .remote-open:hover, .remote-overlay-head .remote-close:hover {
+      background: rgba(255,255,255,.15); }
+    .remote-overlay-head :focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
     .remote-tag { text-transform: none; letter-spacing: 0; }
     /* The R ahead of a remote room's name, in the slot a local room's mark takes. */
     .remote-r { flex: none; display: inline-grid; place-items: center; width: 1.35em; height: 1.35em;
@@ -20344,8 +20361,10 @@ convApplyTint();
         box.setAttribute('aria-label', `${room ? 'Room' : 'App'} on ${host}`);
         box.innerHTML = `<div class="remote-overlay-head"><span class="remote-badge remote-tag">remote:${escapeHtml(host)}</span>` +
           `<span class="remote-title">${escapeHtml(title || host)}</span>` +
-          `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener">Open in tab ↗</a>` +
-          `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close">✕</button></div>` +
+          `<a class="remote-open" href="${escapeHtml(src)}" target="_blank" rel="noopener" ` +
+          `aria-label="Open in new tab" title="Open in new tab"><svg viewBox="0 0 24 24" aria-hidden="true">` +
+          `<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>` +
+          `<button type="button" class="remote-close" onclick="remoteRoomClose()" aria-label="Close" title="Close">✕</button></div>` +
           `<iframe class="remote-frame" title="${escapeHtml(title || host)} on ${escapeHtml(host)}" src="${escapeHtml(src)}"></iframe>`;
         document.body.appendChild(box);
       }
@@ -20391,7 +20410,7 @@ convApplyTint();
     // token goes to the relay once, which keeps it in a file of its own; it never comes back.
     const REMOTE_FIELDS = [
       ['ssh_host', 'SSH host', 'the name'], ['ssh_port', 'SSH port', 'from ssh config'],
-      ['ssh_user', 'SSH user', 'from ssh config'], ['http_host', 'HTTP host', 'the name'],
+      ['ssh_user', 'SSH user', 'from ssh config'], ['http_host', 'HTTP host', 'the name, then SSH host'],
       ['http_port', 'HTTP port', 'the relay port'], ['relay_port', 'Relay port there', '8375'],
       ['forward_port', 'Forward port here', 'automatic'], ['python', 'Python there', 'python3', 'wide'],
     ];
