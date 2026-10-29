@@ -2196,24 +2196,24 @@
     .remote-overlay { position: fixed; inset: 4vh 4vw; z-index: 1000; display: flex;
       flex-direction: column; background: var(--bg, #111); border-radius: 10px;
       box-shadow: 0 10px 40px rgba(0,0,0,.5); overflow: hidden; }
-    /* The overlay's head: one thin blue line — the machine, the title cut short rather than
-       wrapped, an icon to open it in a tab, and a large close at the right. */
+    /* The overlay's head: one thin line, the app's own colour a shade darker — the machine, the
+       title cut short rather than wrapped, an icon to open it in a tab, and a large close. */
     .remote-overlay-head { flex: none; gap: 6px; min-height: 34px; padding: 0 0 0 10px;
-      padding-top: env(safe-area-inset-top, 0px); background: var(--blue); color: #fff;
-      font-size: 13px; line-height: 1; white-space: nowrap; }
-    .remote-overlay-head .remote-tag { background: rgba(255,255,255,.2); }
+      padding-top: env(safe-area-inset-top, 0px); background: color-mix(in srgb, var(--bg) 82%, #000);
+      color: var(--text); border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1;
+      white-space: nowrap; }
     .remote-overlay-head .remote-title { flex: 1; min-width: 0; overflow: hidden;
       text-overflow: ellipsis; font-weight: 600; }
     .remote-overlay-head .remote-open, .remote-overlay-head .remote-close { flex: none;
       display: grid; place-items: center; align-self: stretch; margin: 0; padding: 0;
-      color: #fff; background: none; border: 0; cursor: pointer; text-decoration: none; }
+      color: inherit; background: none; border: 0; cursor: pointer; text-decoration: none; }
     .remote-overlay-head .remote-open { width: 34px; }
     .remote-overlay-head .remote-open svg { width: 17px; height: 17px; fill: none;
       stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .remote-overlay-head .remote-close { width: 44px; font-size: 22px; }
     .remote-overlay-head .remote-open:hover, .remote-overlay-head .remote-close:hover {
-      background: rgba(255,255,255,.15); }
-    .remote-overlay-head :focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+      background: color-mix(in srgb, var(--text) 12%, transparent); }
+    .remote-overlay-head :focus-visible { outline: 2px solid var(--blue); outline-offset: -3px; }
     .remote-tag { text-transform: none; letter-spacing: 0; }
     /* The R ahead of a remote room's name, in the slot a local room's mark takes. */
     .remote-r { flex: none; display: inline-grid; place-items: center; width: 1.35em; height: 1.35em;
@@ -18170,6 +18170,7 @@
         phoneRoomShow();
         return;
       }
+      if (typeof remoteOpen === 'object' && remoteOpen) remoteRoomHide();
       // closeTerminal puts the list up itself, and does the rest of the teardown a pane needs.
       if (activePane) { closeTerminal(); return; }
       hidePanels();
@@ -19612,11 +19613,24 @@
     const remoteKept = new Map();
     const REMOTE_KEEP = 3;
 
+    // The titles of rooms opened here, so a step forward onto one names it again.
+    const remoteTitles = new Map();
+
+    // The overlay as a stop on the phone's back-and-forward walk (history.js): `remote:<host>/<room>`,
+    // or `remote:<host>/` for the whole app. Back off it is the page beneath; Forward opens it again.
+    function remoteNavId({host, room = ''}) { return `remote:${host}/${room}`; }
+    function remoteNavParse(id) {
+      const at = id.indexOf('/');
+      return {host: id.slice(7, at), room: id.slice(at + 1)};
+    }
+
     // The machine's own app, at the room (the phone's room page) or whole, framed over this page.
     function remoteRoomOpen({host, room = '', title = ''}) {
       if (window.STORAGE_NS || !remoteEditable || !remoteLinks.has(host) || !remoteAppPrepare(host)) return;
-      remoteRoomClose();
+      remoteRoomHide();
       remoteOpen = {host, room};
+      if (title) remoteTitles.set(remoteNavId(remoteOpen), title);
+      else title = remoteTitles.get(remoteNavId(remoteOpen)) || '';
       const src = remoteAppHref(location.href, host, room, true);
       let box = remoteKept.get(src);
       remoteKept.delete(src);
@@ -19644,19 +19658,28 @@
       box.id = 'remoteRoomOverlay';
       box.hidden = false;
       box.querySelector('.remote-close').focus();
+      if (typeof noteVisit === 'function') noteVisit(remoteNavId(remoteOpen));
     }
 
-    function remoteRoomClose() {
+    function remoteRoomHide() {
       remoteOpen = null;
       const box = document.getElementById('remoteRoomOverlay');
       if (!box) return;
       box.hidden = true;
       box.removeAttribute('id');
+      if (typeof syncNavBtns === 'function') syncNavBtns();
+    }
+
+    // Closing is a step back, as closing a panel is, so the browser's cursor leaves the overlay's
+    // entry too and the next Back does not land on it again. The desktop has no walk.
+    function remoteRoomClose() {
+      if (remoteOpen && typeof goBack === 'function') goBack();
+      else remoteRoomHide();
     }
 
     // A machine no longer linked takes its kept overlays with it.
     function remoteRoomDrop(host) {
-      if (remoteOpen && remoteOpen.host === host) remoteRoomClose();
+      if (remoteOpen && remoteOpen.host === host) remoteRoomHide();
       for (const [k, box] of remoteKept) {
         if (box.dataset.host === host) { box.remove(); remoteKept.delete(k); }
       }
@@ -45776,9 +45799,12 @@ function studioCardHtml() {
     // whatever entry the browser actually arrives on must not open itself — a depth that has
     // drifted would otherwise put a pane back up one tick after the user left it.
     let navLanding = false;
+    // A framed copy (a remote room over this page) keeps its walk to itself: a frame's pushes land
+    // in the top page's session history, where they would sit between the top page's own entries
+    // and move its cursor under it.
     function navBrowserHistory() {
-      return typeof window === 'object' && window && window.history &&
-        typeof window.history.pushState === 'function' ? window.history : null;
+      if (typeof window !== 'object' || !window || window.top !== window) return null;
+      return window.history && typeof window.history.pushState === 'function' ? window.history : null;
     }
 
     function navPushState() {
@@ -45852,8 +45878,10 @@ function studioCardHtml() {
     //   'w1:p1'             a pane
     //   'conv:<id>'         a conversation window
     //   'panel:settingsView' a panel
+    //   'remote:<host>/<room>' another machine's room, framed over the page (remote_rooms.js)
     //   'landing'           screen marker only; never a history entry
-    const NAV_CONV = 'conv:', NAV_PANEL = 'panel:', NAV_LANDING = 'landing';
+    const NAV_CONV = 'conv:', NAV_PANEL = 'panel:', NAV_REMOTE = 'remote:', NAV_LANDING = 'landing';
+    function navIsRemote(id) { return typeof id === 'string' && id.startsWith(NAV_REMOTE); }
     function navIsConv(id) { return typeof id === 'string' && id.startsWith(NAV_CONV); }
     function navConvId(id) { return id.slice(NAV_CONV.length); }
     function navIsPanel(id) { return typeof id === 'string' && id.startsWith(NAV_PANEL); }
@@ -45880,6 +45908,7 @@ function studioCardHtml() {
     function navAlive(id) {
       if (navIsConv(id)) return loadConvIndex().some(c => c.id === navConvId(id));
       if (navIsPanel(id) || id === NAV_LANDING) return true;
+      if (navIsRemote(id)) return typeof remoteLinks === 'object' && remoteLinks.has(remoteNavParse(id).host);
       return !!paneOf(id);
     }
 
@@ -45891,6 +45920,7 @@ function studioCardHtml() {
     // Where the walk currently stands, read off the screen rather than remembered. Passed to
     // navStep so a step never re-opens what is already open.
     function navHere() {
+      if (typeof remoteOpen === 'object' && remoteOpen) return remoteNavId(remoteOpen);
       if (activePane) return activePane;
       const panel = openPanelId();
       if (panel === 'convView') return convViewId ? NAV_CONV + convViewId : NAV_LANDING;
@@ -45919,7 +45949,10 @@ function studioCardHtml() {
       navigating = true;
       const id = navHistory[i];
       try {
-        if (navIsConv(id)) openConversation(navConvId(id));
+        // The overlay sits over whatever was beneath it, which is where a step off it lands.
+        if (!navIsRemote(id) && typeof remoteOpen === 'object' && remoteOpen) remoteRoomHide();
+        if (navIsRemote(id)) remoteRoomOpen(remoteNavParse(id));
+        else if (navIsConv(id)) openConversation(navConvId(id));
         else if (navIsPanel(id)) openPanel(navPanelId(id));
         else if (id === NAV_LANDING) showLanding();
         else openTerminal(id);
@@ -45990,6 +46023,10 @@ function studioCardHtml() {
     function navName(id) {
       if (id === NAV_LANDING) return 'the agent list';
       if (navIsPanel(id)) return NAV_NAMES[navPanelId(id)] || navPanelId(id);
+      if (navIsRemote(id)) {
+        const at = remoteNavParse(id);
+        return remoteTitles.get(id) || (at.room ? `the room on ${at.host}` : `the app on ${at.host}`);
+      }
       if (!navIsConv(id)) return paneLabel(paneOf(id)) || id;
       const conv = loadConvIndex().find(c => c.id === navConvId(id));
       return (conv && conv.name) || 'the conversation';
