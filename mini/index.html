@@ -2182,6 +2182,16 @@
       white-space: nowrap; }
     .remote-open { margin-left: auto; color: inherit; font: inherit; font-size: 12px; flex: none;
       background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+    /* phone-room.html: one room and its members' panes, never the landing page, the app's own
+       header or the Recent switcher, which lead elsewhere. agent_order.js's PHONE_ROOM. */
+    html.phone-room #agentListView, html.phone-room body > .header,
+    html.phone-room .conv-view-head .back, html.phone-room #recentBtn,
+    html.phone-room #recentFloat, html.phone-room #landingSearch { display: none !important; }
+    /* Until the room's conversation has come from its relay, which can take a few snapshots. */
+    html.phone-room body:not(.conversation-open):not(.terminal-open) > .status-bar { display: none; }
+    html.phone-room body:not(.conversation-open):not(.terminal-open)::after {
+      content: 'Opening room…'; position: fixed; inset: 0; display: grid; place-items: center;
+      color: var(--muted); font-size: 14px; pointer-events: none; }
     .remote-overlay[hidden] { display: none; }
     .remote-overlay { position: fixed; inset: 4vh 4vw; z-index: 1000; display: flex;
       flex-direction: column; background: var(--bg, #111); border-radius: 10px;
@@ -2203,6 +2213,7 @@
     .remote-links-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center; gap: 8px; padding: 6px 0;
       border-bottom: 1px solid var(--border); font-size: 11px; min-width: 0; }
+    .remote-links-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .remote-links-id { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
     .remote-links-name { display: flex; min-width: 0; max-width: 100%; }
     .remote-links-name .remote-badge { font-size: 11px; font-weight: 500; line-height: 20px; height: 22px;
@@ -18072,6 +18083,7 @@
     function panelIsOpen() { return !!openPanelId(); }
 
     function openPanel(id) {
+      if (PHONE_ROOM !== null && id !== 'convView') return;
       // Only leave the pane on the way in. Switching Settings → Activity has no pane to close, and
       // the walk already holds where the pane was.
       if (!panelIsOpen() && activePane) closeTerminal();
@@ -18107,7 +18119,40 @@
       navRewind();
     }
 
+    // phone-room.html: this page served under another name, showing one room and nothing else — its
+    // thread, composer and send buttons, and its members' panes a tap away — for framing in
+    // another page (the remote rooms overlay) without the app around it. The room is the address's
+    // `#conv/<id>`; '' on phone-room.html with none, null on every other page. The landing page is
+    // never shown: every way back to it comes back to the room instead.
+    const PHONE_ROOM = (() => {
+      if (typeof location !== 'object' || !/\/phone-room\.html$/.test(location.pathname)) return null;
+      const at = String(location.hash || '').replace(/^#/, '');
+      try { return /^conv\/(.+)$/.test(at) ? decodeURIComponent(at.slice(5)) : ''; }
+      catch (e) { return ''; }
+    })();
+    if (PHONE_ROOM !== null && typeof document === 'object') {
+      document.documentElement.classList.add('phone-room');
+    }
+
+    // Puts the room up when nothing else is: at boot once its conversation has arrived, which can
+    // be several snapshots after the socket, and wherever the landing page would have been.
+    function phoneRoomShow() {
+      if (!PHONE_ROOM || activePane || panelIsOpen()) return;
+      if (loadConvIndex().some(c => c.id === PHONE_ROOM)) openConversation(PHONE_ROOM);
+    }
+
+    function phoneRoomMember(a) {
+      if (PHONE_ROOM === null) return true;
+      const conv = loadConvIndex().find(c => c.id === PHONE_ROOM);
+      return !!a && ((conv && conv.members) || []).some(m => m.aid === convMemberKey(a));
+    }
+
     function landNow() {
+      if (PHONE_ROOM !== null) {
+        if (activePane) closeTerminal();
+        phoneRoomShow();
+        return;
+      }
       // closeTerminal puts the list up itself, and does the rest of the teardown a pane needs.
       if (activePane) { closeTerminal(); return; }
       hidePanels();
@@ -18275,7 +18320,7 @@
       // of its own reads as the strip having lost it.
       // One order for agents and terminals, not an agent block followed by a terminal block. The
       // pin sort below is stable, so this decides every unpinned tab's place.
-      const all = orderedAgents(agents.concat(shells));
+      const all = orderedAgents(agents.concat(shells).filter(phoneRoomMember));
       let live = all.filter(a => all.filter(x => x.pane_id === a.pane_id).length === 1);
       // Scoped to the open pane's Project, when that is the setting and something is open. The
       // open pane is exempt from its own filter — a strip that cannot show the pane on screen is
@@ -19002,6 +19047,7 @@
         // A link the page was loaded on that named something only a snapshot can resolve — an
         // agent id, a landing section, a pane. After the render, which is what fills those lists.
         if (typeof hashResume === 'function') hashResume();
+        if (typeof phoneRoomShow === 'function') phoneRoomShow();
         if (typeof renderBandwidth === 'function') renderBandwidth();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.
@@ -19186,10 +19232,11 @@
       return String(relay).split('?')[0].replace(/\/+$/, '') + '/link/' + encodeURIComponent(machine);
     }
 
-    // That copy's address, beside this page and in the machine's storage namespace: room.html at
-    // the room when one is named (its thread and composer alone), else the whole app, index.html.
-    function remoteAppHref(page, machine, room) {
-      const url = new URL(room ? 'room.html' : 'index.html', page);
+    // That copy's address, beside this page and in the machine's storage namespace: the room alone
+    // when one is named, its thread and composer — phone-room.html for the phone's overlay,
+    // room.html for a desktop column — else the whole app, index.html.
+    function remoteAppHref(page, machine, room, phone) {
+      const url = new URL(room ? (phone ? 'phone-room.html' : 'room.html') : 'index.html', page);
       url.search = '?ns=' + encodeURIComponent(machine);
       url.hash = room ? '#conv/' + encodeURIComponent(room) : '';
       return url.href;
@@ -19548,12 +19595,12 @@
     const remoteKept = new Map();
     const REMOTE_KEEP = 3;
 
-    // The machine's own app, at the room or whole, framed over this page.
+    // The machine's own app, at the room (the phone's room page) or whole, framed over this page.
     function remoteRoomOpen({host, room = '', title = ''}) {
       if (window.STORAGE_NS || !remoteEditable || !remoteLinks.has(host) || !remoteAppPrepare(host)) return;
       remoteRoomClose();
       remoteOpen = {host, room};
-      const src = remoteAppHref(location.href, host, room);
+      const src = remoteAppHref(location.href, host, room, true);
       let box = remoteKept.get(src);
       remoteKept.delete(src);
       if (!box) {
@@ -19680,10 +19727,11 @@
       if (!own) remoteEdit = null;
       const rows = remoteConfig.links || [];
       let html = rows.map((r, i) => remoteEdit && remoteEdit.i === i ? remoteFormHtml(r)
-        : `<div class="remote-links-row${r.paused ? ' off' : ''}"><span class="remote-links-id">` +
+        : `<div class="remote-links-row${r.paused ? ' off' : ''}"><span class="remote-links-lead">` +
+          (own && !remoteEdit ? remoteOnHtml(r, i) : '') + `<span class="remote-links-id">` +
           `<span class="remote-links-name"><span class="remote-badge remote-tag">${escapeHtml(r.name)}</span></span>` +
-          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span></span>` +
-          `<span class="remote-links-ctl">${own && !remoteEdit ? remoteSwitchHtml(r, i) : ''}</span>` +
+          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span></span></span>` +
+          `<span class="remote-links-ctl">${own && !remoteEdit ? remoteSegHtml(r, i) : ''}</span>` +
           `<span class="remote-links-edit">` +
           (remoteEdit || !own ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
             ` aria-label="Edit ${escapeHtml(r.name)}">Edit</button>` +
@@ -19700,10 +19748,11 @@
       if (first && remoteEdit && remoteEdit.focus) { remoteEdit.focus = false; first.focus(); }
     }
 
-    // A row's own switches: the route it is reached over, among those it has settings for (the
-    // others greyed until its form gives them some), and whether it is reached at all (`paused`).
+    // A row's own switches: whether it is reached at all (`paused`), first in the row, and the
+    // route it is reached over, among those it has settings for (the others greyed until its form
+    // gives them some).
     const REMOTE_SWITCH = {ssh: 'SSH', http: 'WSS', lan: 'WS'};
-    function remoteSwitchHtml(row, i) {
+    function remoteSegHtml(row, i) {
       const on = remoteRowRoute(row), spare = row.spare || {};
       const name = escapeHtml(row.name);
       return `<span class="remote-links-seg" role="group" aria-label="Reach ${name} over">` +
@@ -19712,8 +19761,11 @@
           return `<button type="button" aria-pressed="${r === on}"${set ? '' : ' disabled'}` +
             ` title="${set ? `Reach ${name} over ${label}` : `No ${label} settings: add them with Edit`}"` +
             ` onclick="remoteSetRoute(${i}, '${r}')">${label}</button>`;
-        }).join('') + `</span>` +
-        `<button type="button" class="remote-links-on" role="switch" aria-checked="${!row.paused}"` +
+        }).join('') + `</span>`;
+    }
+    function remoteOnHtml(row, i) {
+      const name = escapeHtml(row.name);
+      return `<button type="button" class="remote-links-on" role="switch" aria-checked="${!row.paused}"` +
         ` aria-label="Reach ${name}" title="${row.paused ? `Off: no rooms, git or handoffs to ${name}`
           : `On: turn off to stop reaching ${name}`}" onclick="remoteSetOn(${i}, ${!!row.paused})">` +
         `<span class="remote-links-knob"></span></button>`;
@@ -20476,7 +20528,7 @@
     // `aid` where the caller has the agent in hand. Optional because most callers have only a pane
     // id — a notification, a transfer's destination — and a pane id alone still opens the pane.
     function jumpToPane(paneId, aid) {
-      hidePanels();
+      if (typeof PHONE_ROOM === 'undefined' || PHONE_ROOM === null) hidePanels();
       openTerminal(paneId, aid);
     }
 
@@ -31995,7 +32047,8 @@ convApplyTint();
     // means "the first". A stored id that names nothing this pane is in any more falls back the
     // same way — a stale preference must never make a recorded pane look empty.
     function convViewConv(a) {
-      const mine = convsForPane(a);
+      const mine = convsForPane(a).filter(c => typeof PHONE_ROOM === 'undefined' || PHONE_ROOM === null
+        || c.id === PHONE_ROOM);
       if (!mine.length) return null;
       const want = convViews()[convMemberKey(a)];
       // A choice already made wins, and one is made for you on the way in: opening a pane *from* a
@@ -32409,6 +32462,8 @@ convApplyTint();
     // as it takes this to run. A joint thread has every member's entries on screen already and
     // passes -1 to say so.
     function convHeadHtml(conv, key, count, total, mine) {
+      if (typeof PHONE_ROOM !== 'undefined' && PHONE_ROOM !== null)
+        mine = (mine || []).filter(c => c.id === PHONE_ROOM);
       const n = total >= 0 ? total : (conv.members || []).reduce(
         (t, m) => t + (count >= 0 && m.aid === key ? count : (m.messages || 0)), 0);
       // A select and not a tap-to-cycle: cycling hides how many groupings this pane is in, and the
@@ -40832,6 +40887,11 @@ function nlmSourceDelete(source) {
     // it outlives every pane that wrote it. Read-only — the pane is one tap further on, for the
     // members that still have one.
     function openConversation(id) {
+      // phone-room.html shows its one room: any other belongs to the full app.
+      if (typeof PHONE_ROOM !== 'undefined' && PHONE_ROOM !== null && id !== PHONE_ROOM) {
+        showToast('Open the full app for that.', 'info');
+        return;
+      }
       const conv = loadConvIndex().find(c => c.id === id);
       if (!conv) return;
       stashConvDraft();   // before the id moves, or the draft is filed under where it is going
@@ -41600,7 +41660,8 @@ function nlmSourceDelete(source) {
       const list = shown.some(c => c.id === here)
         ? shown : shown.concat(loadConvIndex().filter(c => c.id === here));
       const live = new Set(agents.map(x => convMemberKey(x)));
-      const rows = list.map(c => {
+      const rows = list.filter(c => typeof PHONE_ROOM === 'undefined' || PHONE_ROOM === null
+        || c.id === PHONE_ROOM).map(c => {
         const on = (c.members || []).map(m => agents.find(a => live.has(m.aid) && convMemberKey(a) === m.aid))
           .filter(Boolean);
         const lead = on.find(a => a.status === 'blocked') || on.find(a => a.status === 'working')
@@ -41870,6 +41931,8 @@ function nlmSourceDelete(source) {
       // nothing — a composer typing into a pane that does not exist — and the snapshot's "that
       // pane ended" cleanup cannot take it down again, being guarded on activePane being set.
       if (!paneId) return;
+      if (typeof PHONE_ROOM !== 'undefined' && PHONE_ROOM !== null && !phoneRoomMember(
+        aid ? agents.find(a => a.aid === aid && a.pane_id === paneId) : paneOf(paneId))) return;
       // Opening over an already-open pane leaves the old poller running otherwise, and every
       // switch adds another read_pane every 3s. Cleared here rather than in each caller, because
       // switchToPartner and the header chips both land straight on this without closing first.
@@ -46448,6 +46511,13 @@ function studioCardHtml() {
       if (typeof location !== 'object' || !location) return;
       if (typeof history !== 'object' || !history || typeof history.replaceState !== 'function')
         return;
+      // Here the fragment names the page itself, not a preference about its current view.
+      if (typeof PHONE_ROOM !== 'undefined' && PHONE_ROOM !== null) {
+        hashLast = hashPart('conv', PHONE_ROOM);
+        if (location.hash !== hashLast)
+          history.replaceState(history.state, '', location.pathname + location.search + hashLast);
+        return;
+      }
       // A link still being resolved owns the address bar until it lands or is given up on.
       if (hashPending) return;
       // A fragment this file did not write is somebody arriving, not the screen moving. This runs

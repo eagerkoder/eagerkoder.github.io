@@ -4196,6 +4196,7 @@
     .remote-links-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center; gap: 8px; padding: 6px 0;
       border-bottom: 1px solid var(--border); font-size: 11px; min-width: 0; }
+    .remote-links-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .remote-links-id { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
     .remote-links-name { display: flex; min-width: 0; max-width: 100%; }
     .remote-links-name .remote-badge { font-size: 11px; font-weight: 500; line-height: 20px; height: 22px;
@@ -19779,6 +19780,7 @@ convApplyTint();
         // A link the page was loaded on that named something only a snapshot can resolve — an
         // agent id, a landing section, a pane. After the render, which is what fills those lists.
         if (typeof hashResume === 'function') hashResume();
+        if (typeof phoneRoomShow === 'function') phoneRoomShow();
         if (typeof renderBandwidth === 'function') renderBandwidth();
         // Approvals and the back/forward targets both follow the snapshot: a session that just
         // blocked, or one that just ended, changes what the bar should offer.
@@ -19963,10 +19965,11 @@ convApplyTint();
       return String(relay).split('?')[0].replace(/\/+$/, '') + '/link/' + encodeURIComponent(machine);
     }
 
-    // That copy's address, beside this page and in the machine's storage namespace: room.html at
-    // the room when one is named (its thread and composer alone), else the whole app, index.html.
-    function remoteAppHref(page, machine, room) {
-      const url = new URL(room ? 'room.html' : 'index.html', page);
+    // That copy's address, beside this page and in the machine's storage namespace: the room alone
+    // when one is named, its thread and composer — phone-room.html for the phone's overlay,
+    // room.html for a desktop column — else the whole app, index.html.
+    function remoteAppHref(page, machine, room, phone) {
+      const url = new URL(room ? (phone ? 'phone-room.html' : 'room.html') : 'index.html', page);
       url.search = '?ns=' + encodeURIComponent(machine);
       url.hash = room ? '#conv/' + encodeURIComponent(room) : '';
       return url.href;
@@ -20325,12 +20328,12 @@ convApplyTint();
     const remoteKept = new Map();
     const REMOTE_KEEP = 3;
 
-    // The machine's own app, at the room or whole, framed over this page.
+    // The machine's own app, at the room (the phone's room page) or whole, framed over this page.
     function remoteRoomOpen({host, room = '', title = ''}) {
       if (window.STORAGE_NS || !remoteEditable || !remoteLinks.has(host) || !remoteAppPrepare(host)) return;
       remoteRoomClose();
       remoteOpen = {host, room};
-      const src = remoteAppHref(location.href, host, room);
+      const src = remoteAppHref(location.href, host, room, true);
       let box = remoteKept.get(src);
       remoteKept.delete(src);
       if (!box) {
@@ -20457,10 +20460,11 @@ convApplyTint();
       if (!own) remoteEdit = null;
       const rows = remoteConfig.links || [];
       let html = rows.map((r, i) => remoteEdit && remoteEdit.i === i ? remoteFormHtml(r)
-        : `<div class="remote-links-row${r.paused ? ' off' : ''}"><span class="remote-links-id">` +
+        : `<div class="remote-links-row${r.paused ? ' off' : ''}"><span class="remote-links-lead">` +
+          (own && !remoteEdit ? remoteOnHtml(r, i) : '') + `<span class="remote-links-id">` +
           `<span class="remote-links-name"><span class="remote-badge remote-tag">${escapeHtml(r.name)}</span></span>` +
-          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span></span>` +
-          `<span class="remote-links-ctl">${own && !remoteEdit ? remoteSwitchHtml(r, i) : ''}</span>` +
+          `<span class="remote-links-via">${escapeHtml(remoteRouteText(r.name))}</span></span></span>` +
+          `<span class="remote-links-ctl">${own && !remoteEdit ? remoteSegHtml(r, i) : ''}</span>` +
           `<span class="remote-links-edit">` +
           (remoteEdit || !own ? '' : `<button type="button" onclick="remoteEditOpen(${i})"` +
             ` aria-label="Edit ${escapeHtml(r.name)}">Edit</button>` +
@@ -20477,10 +20481,11 @@ convApplyTint();
       if (first && remoteEdit && remoteEdit.focus) { remoteEdit.focus = false; first.focus(); }
     }
 
-    // A row's own switches: the route it is reached over, among those it has settings for (the
-    // others greyed until its form gives them some), and whether it is reached at all (`paused`).
+    // A row's own switches: whether it is reached at all (`paused`), first in the row, and the
+    // route it is reached over, among those it has settings for (the others greyed until its form
+    // gives them some).
     const REMOTE_SWITCH = {ssh: 'SSH', http: 'WSS', lan: 'WS'};
-    function remoteSwitchHtml(row, i) {
+    function remoteSegHtml(row, i) {
       const on = remoteRowRoute(row), spare = row.spare || {};
       const name = escapeHtml(row.name);
       return `<span class="remote-links-seg" role="group" aria-label="Reach ${name} over">` +
@@ -20489,8 +20494,11 @@ convApplyTint();
           return `<button type="button" aria-pressed="${r === on}"${set ? '' : ' disabled'}` +
             ` title="${set ? `Reach ${name} over ${label}` : `No ${label} settings: add them with Edit`}"` +
             ` onclick="remoteSetRoute(${i}, '${r}')">${label}</button>`;
-        }).join('') + `</span>` +
-        `<button type="button" class="remote-links-on" role="switch" aria-checked="${!row.paused}"` +
+        }).join('') + `</span>`;
+    }
+    function remoteOnHtml(row, i) {
+      const name = escapeHtml(row.name);
+      return `<button type="button" class="remote-links-on" role="switch" aria-checked="${!row.paused}"` +
         ` aria-label="Reach ${name}" title="${row.paused ? `Off: no rooms, git or handoffs to ${name}`
           : `On: turn off to stop reaching ${name}`}" onclick="remoteSetOn(${i}, ${!!row.paused})">` +
         `<span class="remote-links-knob"></span></button>`;
