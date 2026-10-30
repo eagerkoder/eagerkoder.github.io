@@ -8731,6 +8731,12 @@
           <div class="hint">Run <code>./relay/start.sh</code> to get a URL.</div>
         </div>
 
+        <div class="setting-group" id="tunnelPickGroup" hidden>
+          <label id="tunnelPickLabel">Tunnel</label>
+          <div id="tunnelPick" role="radiogroup" aria-labelledby="tunnelPickLabel"></div>
+          <div class="hint" id="tunnelPickHint"></div>
+        </div>
+
         <div class="setting-group">
           <label id="tintLabel">Background · <span id="tintNow">Night (default)</span></label>
           <div class="tint-pick" id="tintPick" role="radiogroup" aria-labelledby="tintLabel"></div>
@@ -19243,15 +19249,96 @@ convApplyTint();
     // token and all, is sent.
     const QUICK_TUNNEL = /^wss:\/\/[a-z0-9-]+\.trycloudflare\.com$/;
 
-    function followTunnel(url) {
-      const next = cleanRelayUrl(String(url || ''));
+    // The tunnels the relay on this socket runs, from its `tunnel` message: {providers, domain,
+    // tunnels}, every address already checked against its provider's pattern. Reset by connect():
+    // a map is never authority for the next socket, which may be another relay.
+    let tunnelInfo = null;
+    // The address this socket was opened on, without its token. Where the page really is, which
+    // storage alone cannot say: another tab may have written it since.
+    let wsBase = '';
+    const TUNNEL_PROVIDERS = ['cloudflare', 'reflector'];
+    // A bare DNS name, as the relay checks it before advertising it: it is written into a pattern.
+    const TUNNEL_DOMAIN = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+    // The one address shape each provider may send this page to. Reflector's is pinned to the
+    // domain this relay advertises; with no valid domain, no Reflector address validates.
+    function tunnelPattern(provider, domain) {
+      if (provider === 'cloudflare') return QUICK_TUNNEL;
+      if (provider !== 'reflector' || !TUNNEL_DOMAIN.test(domain || '')) return null;
+      return new RegExp('^wss://[a-z0-9]{1,20}-[a-z2-7]{10}\\.' + domain.replace(/\./g, '\\.') + '$');
+    }
+
+    // The entries of a map whose provider is enabled and whose value is exactly its address shape.
+    // Not cleanRelayUrl: that pulls an address out of prose, and this is a control message.
+    function validTunnels(map, providers, domain) {
+      const out = {};
+      if (!map || typeof map !== 'object') return out;
+      for (const p of providers) {
+        const re = tunnelPattern(p, domain);
+        if (re && typeof map[p] === 'string' && re.test(map[p])) out[p] = map[p];
+      }
+      return out;
+    }
+
+    function moveRelayTo(url, toast) {
+      localStorage.setItem('herdr_relay_url', url);
+      const box = document.getElementById('relayUrl');
+      if (box) box.value = url;
+      showToast(toast, 'ok');
+      connect();
+    }
+
+    // The provider whose address in any of `maps` this page is reaching the relay through, or '' for a LAN,
+    // self-served or framed page. Only when the stored address is the one this socket was opened
+    // on: a tab whose storage another tab rewrote is on neither.
+    function tunnelOn(providers, ...maps) {
+      const cur = localStorage.getItem('herdr_relay_url') || '';
+      if (!cur || cur !== wsBase) return '';
+      return providers.find(p => maps.some(m => m[p] === cur)) || '';
+    }
+
+    // From a relay with a tunnel map: the page moves only off an address of that map (or of the
+    // map before it, which a page connecting during a restart's grace is still on), and only to the
+    // same provider's new address — or, that provider gone, to the preferred or first one running.
+    // A previous address can say where this page came from, never where it goes. From an older
+    // relay, a bare url: today's rule, quick tunnel to quick tunnel.
+    function followTunnel(msg) {
+      if (msg && typeof msg === 'object' && msg.tunnels && typeof msg.tunnels === 'object') {
+        const providers = (Array.isArray(msg.tunnel_providers) ? msg.tunnel_providers : ['cloudflare'])
+          .filter((p, i, a) => TUNNEL_PROVIDERS.includes(p) && a.indexOf(p) === i);
+        const domain = typeof msg.reflector_domain === 'string' ? msg.reflector_domain : '';
+        const now = validTunnels(msg.tunnels, providers, domain);
+        const from = tunnelOn(providers, now, tunnelInfo ? tunnelInfo.tunnels : {},
+                              validTunnels(msg.previous_tunnels, providers, domain));
+        tunnelInfo = {providers, domain, tunnels: now};
+        if (typeof renderTunnelPick === 'function') renderTunnelPick();
+        if (!from || now[from] === wsBase) return;
+        const pref = localStorage.getItem('herdr_tunnel_provider');
+        const to = now[from] || (providers.includes(pref) && now[pref]) || providers.map(p => now[p]).find(Boolean);
+        if (to) moveRelayTo(to, 'Tunnel moved — reconnecting…');
+        return;
+      }
+      const next = cleanRelayUrl(String((msg && typeof msg === 'object' ? msg.url : msg) || ''));
       const cur = localStorage.getItem('herdr_relay_url') || '';
       if (!QUICK_TUNNEL.test(next) || !QUICK_TUNNEL.test(cur) || next === cur) return;
-      localStorage.setItem('herdr_relay_url', next);
-      const box = document.getElementById('relayUrl');
-      if (box) box.value = next;
-      showToast('Tunnel moved — reconnecting…', 'ok');
-      connect();
+      moveRelayTo(next, 'Tunnel moved — reconnecting…');
+    }
+
+    // What the Settings toggle draws: the tunnels this relay runs, which one this page is on, and
+    // whether it can move at all. null when there is nothing to choose between.
+    function tunnelChoices() {
+      if (!tunnelInfo || tunnelInfo.providers.length < 2) return null;
+      return {providers: tunnelInfo.providers, tunnels: tunnelInfo.tunnels, current: tunnelOn(tunnelInfo.providers, tunnelInfo.tunnels)};
+    }
+
+    // The toggle. Moves this page to the provider's running address; the token is unchanged, and
+    // the relay's tunnels are left as they are.
+    function useTunnel(provider) {
+      const choices = tunnelChoices();
+      if (!choices || !choices.current || !choices.tunnels[provider]) return;
+      try { localStorage.setItem('herdr_tunnel_provider', provider); } catch (e) { /* private mode */ }
+      if (choices.current === provider) return;
+      moveRelayTo(choices.tunnels[provider], 'Switching tunnel — reconnecting…');
     }
 
     // 2: this page keeps a snapshot's `shells` and `retired` when a later snapshot leaves them out,
@@ -19333,6 +19420,10 @@ convApplyTint();
       if (ws) ws.close();
       // start_options is a per-connection capability advertisement, never cached state.
       startOptions = null;
+      // The tunnel map too: the next `tunnel` message on this socket says what it is.
+      tunnelInfo = null;
+      wsBase = url;
+      if (typeof renderTunnelPick === 'function') renderTunnelPick();
       // Same rule, same reason: arbitration is a capability of the relay on the other end of this
       // socket, and the next socket may be a different relay.
       if (typeof arbReset === 'function') arbReset();
@@ -19752,7 +19843,7 @@ convApplyTint();
                   : 'herdr restarted — every agent is back', msg.ok && !missing.length ? 'ok' : '');
       }
       else if (msg.type === 'tunnel') {
-        followTunnel(msg.url);
+        followTunnel(msg);
       }
       else if (msg.type === 'command_result'
                && (msg.command === 'create_project' || msg.command === 'add_project')) {
@@ -19981,6 +20072,43 @@ convApplyTint();
           if (pane && convRecordable(msg)) recordPane(pane, (msg.content || '').split('\n'));
         }
       }
+    }
+
+  </script>
+  <script>
+    // Settings' Tunnel toggle: which of the relay's public tunnels this page reaches it through.
+    //
+    // Drawn from net.js's tunnel map (tunnelChoices), so it shows only for a relay running two or
+    // more. A page on none of them — the LAN, or served by the relay itself — sees the group but
+    // cannot move, and says why. Moving the page leaves the relay's tunnels as they are.
+    //
+    // Nothing here runs at load: net.js and this file load in different orders on index.html and
+    // desktop.html, so the only shared thing is a function each side calls when it has to.
+    function renderTunnelPick() {
+      const group = document.getElementById('tunnelPickGroup');
+      const pick = document.getElementById('tunnelPick');
+      const hint = document.getElementById('tunnelPickHint');
+      if (!group || !pick || !hint) return;
+      const choices = typeof tunnelChoices === 'function' ? tunnelChoices() : null;
+      group.hidden = !choices;
+      if (!choices) { pick.replaceChildren(); return; }
+      const names = {cloudflare: 'Cloudflare', reflector: 'Reflector'};
+      pick.replaceChildren(...choices.providers.map(p => {
+        const label = document.createElement('label');
+        label.className = 'toggle-option';
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'tunnelPick';
+        input.value = p;
+        input.checked = choices.current === p;
+        input.disabled = !choices.current || !choices.tunnels[p];
+        input.onchange = () => useTunnel(p);
+        label.append(input, ' ' + (names[p] || p) + (choices.tunnels[p] ? '' : ' — not running'));
+        return label;
+      }));
+      hint.textContent = choices.current
+        ? 'Moves this page to that tunnel. Both stay up, and the token is the same.'
+        : 'This page reaches the relay on the LAN or from the relay itself, not through a tunnel, so there is nothing to switch.';
     }
 
   </script>
