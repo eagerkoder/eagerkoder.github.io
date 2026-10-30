@@ -21859,6 +21859,155 @@ convApplyTint();
 
   </script>
   <script>
+    // Model & effort: switch a running agent's model and reasoning effort without leaving the pane.
+    //
+    // A dialog over the harness's own slash commands, sent through the ordinary send path the `/`
+    // palette uses. The lists are the relay's — `start_options.providers`, one per harness, the
+    // same ones the alias editor offers — so a phone page of any age shows what the relay knows.
+    // Both pages load it and it builds its own markup, because the phone's sheets and a desktop
+    // column share none.
+    //
+    // What each harness takes, read off claude 2.1.282 and codex 0.165 on 2026-10-30:
+    //   claude  `/model <name>` and `/effort <level>`, two commands. Both also save the choice as
+    //           claude's default for new sessions, which is claude's own rule and left alone.
+    //   codex   `/model [<name>] [--reasoning=<level>]`, one command, this session only.
+
+    const MODEL_EFFORT_LINES = {
+      claude: (model, effort) => [model && `/model ${model}`, effort && `/effort ${effort}`],
+      codex: (model, effort) => [(model || effort)
+        && ['/model', model, effort && `--reasoning=${effort}`].filter(Boolean).join(' ')],
+    };
+
+    const MODEL_EFFORT_NOTE = {
+      claude: 'Claude also saves these as its default for new Claude sessions.',
+      codex: 'For this session only.',
+    };
+
+    // The harness this pane runs, when it is one the dialog can drive and the relay has said what to
+    // offer for it — a relay sending no `start_options` would leave a dialog of two "Keep current"s.
+    function modelEffortKind(pane) {
+      const agent = String((pane && pane.agent) || '').toLowerCase();
+      const kind = Object.keys(MODEL_EFFORT_LINES).find(k => agent.startsWith(k)) || '';
+      const {models, efforts} = kind ? modelEffortLists(kind) : {models: [], efforts: []};
+      return models.length || efforts.length ? kind : '';
+    }
+
+    // The relay's lists for a harness: the stock provider's, else the first of that kind with any.
+    function modelEffortLists(kind) {
+      const providers = ((typeof startOptions !== 'undefined' && startOptions) || {}).providers || [];
+      const of = providers.filter(p => p.kind === kind);
+      const p = of.find(x => x.id === `stock-${kind}`) || of.find(x => (x.models || []).length) || {};
+      return {models: p.models || [], efforts: p.efforts || of.map(x => x.efforts || []).find(e => e.length) || []};
+    }
+
+    // The lines a choice sends, in order. Empty strings are "keep", so they send nothing.
+    function modelEffortCommands(kind, model, effort) {
+      const build = MODEL_EFFORT_LINES[kind];
+      return build ? build(model || '', effort || '').filter(Boolean) : [];
+    }
+
+    let modelEffortState = null;
+
+    const MODEL_EFFORT_CSS = `
+      #modelEffort { border: 1px solid var(--border); border-radius: 12px; padding: 0;
+        background: var(--bg); color: var(--text); width: min(520px, calc(100vw - 32px)); }
+      #modelEffort::backdrop { background: rgba(0, 0, 0, .45); }
+      #modelEffort h2 { font-size: 15px; margin: 0; padding: 14px 16px 4px; }
+      #modelEffort .me-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; padding: 8px 16px; }
+      #modelEffort .me-col { display: flex; flex-direction: column; gap: 2px; min-width: 0;
+        max-height: min(50vh, 360px); overflow-y: auto; }
+      #modelEffort .me-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+        color: var(--muted); padding: 4px 0; }
+      #modelEffort .me-opt { display: flex; align-items: center; gap: 8px; min-height: 36px;
+        padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: inherit;
+        font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+      #modelEffort .me-opt:hover { background: var(--surface); }
+      #modelEffort .me-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #modelEffort .me-opt .me-tick { flex: 0 0 14px; color: var(--blue); font-weight: 700; }
+      #modelEffort .me-opt[aria-checked="true"] { color: var(--blue); }
+      #modelEffort .me-keep { color: var(--muted); }
+      #modelEffort .me-note { font-size: 12px; color: var(--muted); padding: 4px 16px 0; }
+      #modelEffort .me-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 14px; }
+      #modelEffort .me-actions button { min-height: 36px; padding: 0 14px; border-radius: 8px;
+        border: 1px solid var(--border); background: var(--bg); color: inherit; font: inherit; cursor: pointer; }
+      #modelEffort .me-actions .me-apply { border-color: var(--blue); background: var(--blue); color: var(--bg); }
+      #modelEffort .me-actions .me-apply:disabled { opacity: .45; cursor: default; }
+    `;
+
+    function modelEffortMount() {
+      let el = document.getElementById('modelEffort');
+      if (el) return el;
+      const style = document.createElement('style');
+      style.textContent = MODEL_EFFORT_CSS;
+      document.head.appendChild(style);
+      el = document.createElement('dialog');
+      el.id = 'modelEffort';
+      el.setAttribute('aria-labelledby', 'modelEffortTitle');
+      el.addEventListener('click', e => {
+        if (e.target === el) { el.close(); return; }   // the backdrop
+        const opt = e.target.closest('[data-pick]');
+        if (opt) {
+          modelEffortState[opt.dataset.pick] = opt.dataset.value;
+          modelEffortPaint();
+          return;
+        }
+        const act = e.target.closest('[data-act]');
+        if (!act) return;
+        if (act.dataset.act === 'apply') modelEffortApply();
+        el.close();
+      });
+      document.body.appendChild(el);
+      return el;
+    }
+
+    function modelEffortPaint() {
+      const s = modelEffortState;
+      const el = document.getElementById('modelEffort');
+      if (!s || !el) return;
+      const {models, efforts} = modelEffortLists(s.kind);
+      const opt = (field, value, label) => {
+        const on = s[field] === value;
+        return `<button type="button" class="me-opt${value ? '' : ' me-keep'}" role="menuitemradio"`
+          + ` aria-checked="${on}" data-pick="${field}" data-value="${escapeHtml(value)}">`
+          + `<span class="me-tick" aria-hidden="true">${on ? '✓' : ''}</span>`
+          + `<span>${escapeHtml(label)}</span></button>`;
+      };
+      const col = (head, field, list) => `<div class="me-col" role="group" aria-label="${head}">`
+        + `<div class="me-head">${head}</div>` + opt(field, '', 'Keep current')
+        + list.map(v => opt(field, v, v)).join('') + '</div>';
+      const lines = modelEffortCommands(s.kind, s.model, s.effort);
+      el.innerHTML = `<h2 id="modelEffortTitle">Model &amp; effort — ${escapeHtml(s.label)}</h2>`
+        + '<div class="me-cols">' + col('Model', 'model', models)
+        + col(s.kind === 'codex' ? 'Reasoning' : 'Effort', 'effort', efforts) + '</div>'
+        + `<div class="me-note">${escapeHtml(lines.length ? 'Sends ' + lines.join(' then ') + '. ' : '')}`
+        + `${escapeHtml(MODEL_EFFORT_NOTE[s.kind] || '')}</div>`
+        + '<div class="me-actions"><button type="button" data-act="cancel">Cancel</button>'
+        + `<button type="button" class="me-apply" data-act="apply"${lines.length ? '' : ' disabled'}>`
+        + 'Apply</button></div>';
+    }
+
+    // Opened from the `/` palette, on either page, for the pane it was opened over.
+    function openModelEffort(pane) {
+      const kind = modelEffortKind(pane);
+      if (!kind) return;
+      modelEffortState = {pane, kind, model: '', effort: '',
+                          label: (typeof paneLabel === 'function' && paneLabel(pane)) || pane.agent};
+      const el = modelEffortMount();
+      modelEffortPaint();
+      if (!el.open) el.showModal();
+    }
+
+    // One command at a time, each through the same send a palette row makes. The second waits for
+    // the first to have been taken: two submits in one breath can land in one composer as one line.
+    function modelEffortApply() {
+      const s = modelEffortState;
+      if (!s) return;
+      const lines = modelEffortCommands(s.kind, s.model, s.effort);
+      lines.forEach((line, n) => setTimeout(() => submitText(s.pane, line), n * 1500));
+    }
+
+  </script>
+  <script>
     // --- Sounds ---
     // The store is read inside window.cue, in the head, so nothing here has to reach the call
     // sites — all twenty-odd of them route through that one function and are already guarded.
@@ -23576,7 +23725,8 @@ convApplyTint();
       const row = id ? agentConfigRow(id) : null;
       const stored = loadAgentConfigs().find(a => a.id === id)
         || (row ? {id: row.id, label: row.label, provider: row.provider, model: row.model,
-                   model_option: row.model_option, key: row.key, off: row.off,
+                   model_option: row.model_option, effort: row.effort || '', key: row.key,
+                   off: row.off,
                    // The relay's `color` is *resolved* and may be one it derived from the model.
                    // Adopting that into the draft would turn a derivation into a choice the
                    // moment the dialog opened, and pin the colour against a later model change.
@@ -23585,7 +23735,7 @@ convApplyTint();
       // rename afterwards must not silently become a different config.
       agentConfigDraft = stored ? Object.assign({saved: true}, stored)
         : {id: '', label: '', provider: (providers[0] || {}).id || '',
-           model: '', model_option: '', key: ''};
+           model: '', model_option: '', effort: '', key: ''};
       drawAgentConfig();
       const box = document.getElementById('launcherModal');
       if (box) box.style.display = 'block';
@@ -23603,6 +23753,7 @@ convApplyTint();
         // old value in the draft would save a setting the new provider silently ignores.
         if (provider.has_model === false) agentConfigDraft.model = '';
         if (provider.has_model_option === false) agentConfigDraft.model_option = '';
+        if (!(provider.efforts || []).includes(agentConfigDraft.effort)) agentConfigDraft.effort = '';
       }
       drawAgentConfig();
     }
@@ -23648,6 +23799,19 @@ convApplyTint();
         + (provider.has_model ? field('Model', 'model', list[0] || 'claude-opus-5') : '')
         + (provider.has_model_option
           ? field('Model option', 'model_option', list[1] || '') : '');
+    }
+
+    // Effort is the relay's list for this harness, passed on argv at spawn for that session only.
+    // Default names none, so the harness runs at whatever it has saved as its own default.
+    function agentConfigEffortHtml(provider, d) {
+      const levels = provider.efforts || [];
+      if (!levels.length) return '';
+      return '<div class="start-field">Effort<div class="badge-strip">'
+        + [''].concat(levels).map(level => badgeHtml(level || 'Default', (d.effort || '') === level,
+            `agentConfigSet('effort', '${escapeHtml(level)}')`,
+            {proj: true, title: level ? `Start at ${level} effort` : 'The harness’s own default'}))
+          .join('')
+        + '</div></div>';
     }
 
     // The palette is the relay's list and not this file's: the relay is what refuses an unknown
@@ -23723,6 +23887,7 @@ convApplyTint();
             + ' — set in the relay\'s config file, not here.</div>'
           : '')
         + agentConfigModelHtml(provider, d)
+        + agentConfigEffortHtml(provider, d)
         + agentConfigColorHtml(d)
         + (keys.length
           ? '<div class="start-field">Key<div class="badge-strip">'
@@ -23792,6 +23957,7 @@ convApplyTint();
       const row = {id: d.id, label: d.label || d.id, provider: d.provider,
                    model: d.model || '', model_option: d.model_option || '', key: d.key || ''};
       if (d.off) row.off = true;
+      if (d.effort) row.effort = d.effort;
       // Only when chosen: an alias that never picked one gains no field, and the relay keeps
       // deriving its colour from the model. A written empty string would be indistinguishable
       // from a choice in the document and would outlive a later change of model.
@@ -38509,8 +38675,11 @@ convApplyTint();
       // Commands are a fact about the harness in this column's pane, so the pane is what is asked
       // — never `activeAgent()`, which describes whichever column has focus.
       const pane = deskSendPane(i);
-      return commandsFor(pane && pane.agent).map(c =>
-        ({label: c.cmd, desc: c.desc, text: c.cmd, danger: c.danger}));
+      const me = modelEffortKind(pane)
+        ? [{label: 'Model & effort…', desc: 'Switch model and reasoning effort', modelEffort: true}]
+        : [];
+      return me.concat(commandsFor(pane && pane.agent).map(c =>
+        ({label: c.cmd, desc: c.desc, text: c.cmd, danger: c.danger})));
     }
 
     function deskPaletteOpen(root, mode) {
@@ -38573,6 +38742,7 @@ convApplyTint();
       // Saving one keeps the palette open on the list it was added to: the reader is looking at
       // their commands, and closing the panel to show them the result of editing it is backwards.
       if (it.add) { if (deskAddCommand()) deskPalettePaint(root, i); return; }
+      if (it.modelEffort) { deskCloseDocks(root); openModelEffort(deskSendPane(i)); return; }
       if (!it.text) return;
       // Recorded whatever the setting says, the same as a press on the rail — the two are the same
       // act, and a list that only counted half of them would sort by half the evidence.

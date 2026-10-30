@@ -14084,7 +14084,8 @@ function convWebModeOf(conv) {
       const row = id ? agentConfigRow(id) : null;
       const stored = loadAgentConfigs().find(a => a.id === id)
         || (row ? {id: row.id, label: row.label, provider: row.provider, model: row.model,
-                   model_option: row.model_option, key: row.key, off: row.off,
+                   model_option: row.model_option, effort: row.effort || '', key: row.key,
+                   off: row.off,
                    // The relay's `color` is *resolved* and may be one it derived from the model.
                    // Adopting that into the draft would turn a derivation into a choice the
                    // moment the dialog opened, and pin the colour against a later model change.
@@ -14093,7 +14094,7 @@ function convWebModeOf(conv) {
       // rename afterwards must not silently become a different config.
       agentConfigDraft = stored ? Object.assign({saved: true}, stored)
         : {id: '', label: '', provider: (providers[0] || {}).id || '',
-           model: '', model_option: '', key: ''};
+           model: '', model_option: '', effort: '', key: ''};
       drawAgentConfig();
       const box = document.getElementById('launcherModal');
       if (box) box.style.display = 'block';
@@ -14111,6 +14112,7 @@ function convWebModeOf(conv) {
         // old value in the draft would save a setting the new provider silently ignores.
         if (provider.has_model === false) agentConfigDraft.model = '';
         if (provider.has_model_option === false) agentConfigDraft.model_option = '';
+        if (!(provider.efforts || []).includes(agentConfigDraft.effort)) agentConfigDraft.effort = '';
       }
       drawAgentConfig();
     }
@@ -14156,6 +14158,19 @@ function convWebModeOf(conv) {
         + (provider.has_model ? field('Model', 'model', list[0] || 'claude-opus-5') : '')
         + (provider.has_model_option
           ? field('Model option', 'model_option', list[1] || '') : '');
+    }
+
+    // Effort is the relay's list for this harness, passed on argv at spawn for that session only.
+    // Default names none, so the harness runs at whatever it has saved as its own default.
+    function agentConfigEffortHtml(provider, d) {
+      const levels = provider.efforts || [];
+      if (!levels.length) return '';
+      return '<div class="start-field">Effort<div class="badge-strip">'
+        + [''].concat(levels).map(level => badgeHtml(level || 'Default', (d.effort || '') === level,
+            `agentConfigSet('effort', '${escapeHtml(level)}')`,
+            {proj: true, title: level ? `Start at ${level} effort` : 'The harness’s own default'}))
+          .join('')
+        + '</div></div>';
     }
 
     // The palette is the relay's list and not this file's: the relay is what refuses an unknown
@@ -14231,6 +14246,7 @@ function convWebModeOf(conv) {
             + ' — set in the relay\'s config file, not here.</div>'
           : '')
         + agentConfigModelHtml(provider, d)
+        + agentConfigEffortHtml(provider, d)
         + agentConfigColorHtml(d)
         + (keys.length
           ? '<div class="start-field">Key<div class="badge-strip">'
@@ -14300,6 +14316,7 @@ function convWebModeOf(conv) {
       const row = {id: d.id, label: d.label || d.id, provider: d.provider,
                    model: d.model || '', model_option: d.model_option || '', key: d.key || ''};
       if (d.off) row.off = true;
+      if (d.effort) row.effort = d.effort;
       // Only when chosen: an alias that never picked one gains no field, and the relay keeps
       // deriving its colour from the model. A written empty string would be indistinguishable
       // from a choice in the document and would outlive a later change of model.
