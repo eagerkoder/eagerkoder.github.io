@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-29">
+  <meta name="app-built" content="2026-10-30">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -19201,9 +19201,9 @@ convApplyTint();
     function cleanRelayUrl(raw) {
       let s = String(raw == null ? '' : raw).trim();
       if (!s) return '';
-      // ?relay= first — in an app link the real address is in there, and the github.io URL
-      // wrapping it would otherwise win the scheme match below.
-      const rel = s.match(/[?&]relay=([^&\s'"`<>]+)/i);
+      // relay= first, after ? or # — in an app link the real address is in there, and the
+      // github.io URL wrapping it would otherwise win the scheme match below.
+      const rel = s.match(/[?&#]relay=([^&\s'"`<>]+)/i);
       if (rel) { try { s = decodeURIComponent(rel[1]); } catch (e) { s = rel[1]; } }
       // The first thing that looks like an address, and nothing either side of it.
       const m = s.match(/(?:wss?|https?):\/\/[^\s'"`<>\\]+/i);
@@ -19411,13 +19411,37 @@ convApplyTint();
       document.body.appendChild(bar);
     }
 
+    // The token as a WebSocket subprotocol offer, never in the URL: a request line is what proxies
+    // and tunnel edges log, and Sec-WebSocket-Protocol is the one header a page may set on a socket.
+    // base64url without padding, because a subprotocol must be an HTTP token and a configured secret
+    // need not be one. The relay answers with the bare `herdr`, never the token offer.
+    function tokenSubprotocols(token) {
+      const bytes = new TextEncoder().encode(token);
+      let bin = '';
+      for (const b of bytes) bin += String.fromCharCode(b);
+      const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      return ['herdr', 'herdr.token.' + b64];
+    }
+
     // Connection
     function connect() {
       const selfRelay = !location.hostname.includes('pages.dev') && !location.hostname.includes('github.io');
       const autoRelayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
       let url = localStorage.getItem('herdr_relay_url') || (selfRelay ? autoRelayUrl : '');
       if (!url) { showSetup(); return; }
+      let token = localStorage.getItem('herdr_relay_token') || '';
+      const address = new URL(url);
+      if (address.searchParams.has('token')) {
+        token = token || address.searchParams.get('token') || '';
+        address.searchParams.delete('token');
+        url = address.pathname === '/' ? address.origin + address.search + address.hash : address.href;
+        localStorage.setItem('herdr_relay_url', url);
+        if (token) localStorage.setItem('herdr_relay_token', token);
+        document.getElementById('relayUrl').value = url;
+        document.getElementById('relayToken').value = token;
+      }
       if (ws) ws.close();
+      if (typeof pushStatusReceive === 'function') pushStatusReceive({});
       // start_options is a per-connection capability advertisement, never cached state.
       startOptions = null;
       // The tunnel map too: the next `tunnel` message on this socket says what it is.
@@ -19437,15 +19461,11 @@ convApplyTint();
       if (typeof closeStart === 'function') closeStart();
       render();
       setStatus('connecting');
-      // Append token as query param if stored separately
-      const token = localStorage.getItem('herdr_relay_token');
-      let wsUrl = url;
-      if (token) wsUrl += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
       // Which page this is, so a relay that has moved past it can refuse it outright rather than
       // take half of what it sends. Bumped with WEB_PROTOCOL in relay/herdr_relay.py.
-      wsUrl += (wsUrl.includes('?') ? '&' : '?') + 'proto=' + WEB_PROTOCOL;
+      const wsUrl = url + (url.includes('?') ? '&' : '?') + 'proto=' + WEB_PROTOCOL;
       snapshotFirst = true;
-      ws = new WebSocket(wsUrl);
+      ws = new WebSocket(wsUrl, token ? tokenSubprotocols(token) : undefined);
       const socket = ws;
       // Central wire accounting. Every caller goes through this socket, so instrumenting it here
       // catches polls, sends, pushes and commands without duplicating counters at each call site.
@@ -19611,6 +19631,7 @@ convApplyTint();
         if (typeof recipeReceivePreview === 'function') recipeReceivePreview(msg);
       }
       else if (msg.type === 'push_status') {
+        if (typeof pushStatusReceive === 'function') pushStatusReceive(msg);
         if (typeof loopPushStatus === 'function') loopPushStatus(msg);
       }
       // The Commander half of the same two messages. A separate family so a client is told about
@@ -21876,17 +21897,26 @@ convApplyTint();
     // A push carries its pane in the URL. Keep it until the relay snapshot proves that the pane
     // exists; opening immediately would race the initial websocket connection.
     let notificationPane = q.get('pane') || '';
-    const urlRelay = q.get('relay');
+    // start.sh prints the link with both after `#`, which the browser never sends to the server
+    // hosting the page; `?` is still read, for links printed before that. Read here, before
+    // hashroute.js, which would take a `#relay=` fragment for a deep link it cannot open.
+    const h = new URLSearchParams(location.hash.slice(1));
+    const inHash = h.has('relay') || h.has('token');
+    const credentials = inHash ? h : q;
+    const urlRelay = credentials.get('relay');
     if (urlRelay && /^wss?:\/\/[^\s]+$/i.test(urlRelay)) localStorage.setItem('herdr_relay_url', urlRelay);
-    const urlToken = q.get('token');
+    const urlToken = credentials.get('token');
     if (urlToken) localStorage.setItem('herdr_relay_token', urlToken);
     // Both are credentials in a URL: they persist in the address bar, in history, and in any
     // screenshot of the phone. Stored, then stripped — everything downstream reads localStorage.
     if (urlRelay || urlToken) {
       q.delete('relay');
       q.delete('token');
+      h.delete('relay');
+      h.delete('token');
       const rest = q.toString();
-      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+      const frag = inHash ? h.toString() : location.hash.slice(1);
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + (frag ? '#' + frag : ''));
     }
     const savedUrl = localStorage.getItem('herdr_relay_url') || (isSelfRelay ? autoRelayUrl : '');
     const savedToken = localStorage.getItem('herdr_relay_token') || '';
