@@ -7454,6 +7454,11 @@
    browser they were white boxes in a dark sheet — the catalogue's selects and prompt paths
    included, which is where this was first missed. */
 .cmd-def select, .cmd-def input[type="text"], .cmd-def textarea {
+  /* One face and one size for every field in a block, and the size of the labels beside them:
+     left to the browser a select was Arial at 11px, a text box Arial at 13px and a textarea
+     monospace, all in one row. */
+  font-family: inherit;
+  font-size: 0.72rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -7462,7 +7467,7 @@
 }
 .rcp-x { flex: 0 0 auto; padding: 2px 8px; }
 .rcp-roles { margin-top: 6px; }
-.rcp-check { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; }
+.rcp-check { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; }
 .rcp-parts { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .rcp-parts .rcp-check { font-size: 0.8rem; text-transform: none; letter-spacing: normal; font-weight: normal; color: var(--text); }
 .rcp-check:has(input:disabled) { opacity: 0.55; }
@@ -18407,9 +18412,16 @@ convApplyTint();
     // with its `agent_detail` rows (`detail`) -- what a Claude or devin pane said mid-turn and lost
     // from its window before the turn ended. Those rows are always fetched and only drawn in
     // `detail`, so switching it costs no ask.
+    //
+    // Never chosen means the record, wherever this relay keeps one: it is the thread every other
+    // browser and every agent reads, and it is what a room opened for the first time should show.
+    // A relay with the record off has nothing to read, so it stays this browser's transcript there.
     function convLiveState() {
       try {
         const v = localStorage.getItem(CONV_LIVE_KEY);
+        if (v === null) {
+          return typeof convActivityRecorded === 'function' && convActivityRecorded() ? 'on' : 'off';
+        }
         return v === 'on' || v === 'detail' ? v : 'off';
       } catch (e) { return 'off'; }
     }
@@ -18943,8 +18955,9 @@ convApplyTint();
     // browsers.
     const CONV_COMMITS_KEY = 'herdr_conv_commits';
 
+    // On until switched off: it is offered only over the relay's record, which is on by default.
     function convCommitsOn() {
-      try { return localStorage.getItem(CONV_COMMITS_KEY) === 'on'; }
+      try { return localStorage.getItem(CONV_COMMITS_KEY) !== 'off'; }
       catch (e) { return false; }
     }
 
@@ -23675,12 +23688,9 @@ convApplyTint();
       const limits = [1, 2, 3, 4, 5, 6].map(n =>
         `<option value="${n}"${Number(policy('worker_limit')) === n ? ' selected' : ''}>`
         + `${n}</option>`).join('');
-      const generals = Array.from({length: 30}, (_, i) => i + 1).map(n =>
-        `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
-        + `${n}</option>`).join('');
       // The bench's seats first: what a Project's standing agents start on is read before what a
       // Commander staffs itself with.
-      return benchDefaultsHtml(doc, stored)
+      return benchDefaultsHtml(doc, stored) + generalDefaultsHtml(policy)
         + '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
         + '<div class="cfg-note">What a Commander starts when it decides it needs an agent. It'
         + ' names one of these at the moment it wants that kind of agent — nothing here starts'
@@ -23689,11 +23699,82 @@ convApplyTint();
         + '<div class="cmd-def"><div class="cmd-def-fields cmd-def-policy">'
         + '<label>At most <select onchange="commanderDefaultSet(\'worker_limit\','
         + ' Number(this.value))">' + limits + '</select> workers at once</label>'
-        + '<label>The General runs at most <select onchange="commanderDefaultSet(\'general_limit\','
-        + ' Number(this.value))">' + generals + '</select> children at once</label>'
         + commanderSwitch('unattended', policy('unattended'),
                           'Start them with their own approval prompts off')
         + '</div></div>' + rows + '</div>';
+    }
+
+    // --- The General ---
+    // Which General recipe the launcher's tile starts, and the harness that recipe starts the
+    // General on. The recipe is the truth for the harness — the relay starts the Commander a
+    // recipe names — so the pick here writes that recipe, exactly as its editor's Commander row
+    // does. Which recipe is this browser's choice, kept in the same document as the limits.
+
+    // The General recipes this relay offers, with the one a broken document still names.
+    function generalRecipeRows() {
+      const rows = (typeof recipeRelayRows === 'function' && recipeRelayRows()) || [];
+      return rows.filter(r => r && r.recipe && r.recipe.tier === 'general');
+    }
+
+    // What the tile starts: the stored pick while the relay still offers it, else `general`.
+    function generalRecipeId() {
+      const want = loadCommanderDefaults().general_recipe;
+      return generalRecipeRows().some(r => r.id === want) ? want : 'general';
+    }
+
+    // The recipe as it will be started: this browser's edit first, then the relay's copy.
+    function generalRecipe(id) {
+      const doc = typeof loadRecipeDoc === 'function' ? loadRecipeDoc() : null;
+      if (doc && recipeStored(doc, id)) return doc.recipes[id];
+      const row = generalRecipeRows().find(r => r.id === id);
+      return row ? row.recipe : null;
+    }
+
+    function generalDefaultsHtml(policy) {
+      const rows = generalRecipeRows();
+      if (!rows.length) return '';
+      const id = generalRecipeId();
+      const recipe = generalRecipe(id) || {};
+      const c = recipe.commander && recipe.commander.kind ? recipe.commander : {kind: '', config: ''};
+      const row = rows.find(r => r.id === id) || {};
+      const blocking = (row.problems || []).filter(p => p.blocking);
+      const limits = Array.from({length: 30}, (_, i) => i + 1).map(n =>
+        `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
+        + `${n}</option>`).join('');
+      return '<div class="section-header" style="margin-top:18px">General defaults</div>'
+        + '<div class="cfg-note">What the General tile starts. Its harness is the recipe\'s'
+        + ' Commander, so a change here is an edit of that recipe. A General already running keeps'
+        + ' the harness it has.</div>'
+        + '<div class="cfg-list"><div class="cmd-def" data-general-defaults>'
+        + '<div class="cmd-def-head">General</div><div class="cmd-def-fields">'
+        + commanderPick('recipe', 'recipe', rows.map(r => [r.id, (r.recipe && r.recipe.label) || r.id]),
+                        id, 'generalDefaultSet')
+        + harnessPicks('general', c.kind, c.config || '', 'generalDefaultSet')
+        + '</div><div class="cmd-def-fields cmd-def-policy">'
+        + '<label>It runs at most <select onchange="commanderDefaultSet(\'general_limit\','
+        + ' Number(this.value))">' + limits + '</select> children at once</label></div>'
+        + (blocking.length ? '<div class="cfg-note cmd-def-problem">'
+          + escapeHtml(blocking.map(recipeProblemLine).join(' ')) + '</div>' : '')
+        + '</div></div>';
+    }
+
+    function generalDefaultSet(name, field, value) {
+      if (field === 'recipe') { commanderDefaultSet('general_recipe', value); return; }
+      const id = generalRecipeId();
+      const base = generalRecipe(id);
+      if (!base || typeof loadRecipeDoc !== 'function') return;
+      const doc = loadRecipeDoc();
+      // Through the editor's own cleaner, so what is stored is what its Save would store.
+      const draft = JSON.parse(JSON.stringify(base));
+      draft.seats = Array.isArray(draft.seats) ? draft.seats : [];
+      draft.chain = recipeChain(draft).slice();
+      const next = recipeClean(draft);
+      const was = next.commander && next.commander.kind ? next.commander : {kind: '', config: ''};
+      // A config is for one harness, and the relay refuses one named for another.
+      next.commander = field === 'kind' ? {kind: value, config: ''} : {kind: was.kind, config: value};
+      doc.recipes[id] = next;
+      doc.deleted = doc.deleted.filter(x => x !== id);
+      if (saveRecipeDoc(doc) && typeof renderLauncher === 'function') renderLauncher();
     }
 
     // What the bench's two built-in seats start on, in every Project that has not picked its own
@@ -30119,7 +30200,8 @@ convApplyTint();
 
     function cmdGeneralStart() {
       cmdGeneralAsked = Date.now();
-      arbSend({type: 'cmd_start', recipe: 'general', scope: 'General', conversation: 'c_general',
+      const recipe = typeof generalRecipeId === 'function' ? generalRecipeId() : 'general';
+      arbSend({type: 'cmd_start', recipe: recipe, scope: 'General', conversation: 'c_general',
                coordinator: {}, members: []});
       showToast('Starting the General… this can take a minute.');
       cmdGeneralChanged();

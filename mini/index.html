@@ -395,6 +395,7 @@
     input,
     textarea,
     select {
+      font-family: inherit;
       font-size: var(--input-font, 13px);
     }
 
@@ -2065,7 +2066,11 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
-    .cmd-def-head .cfg-sub { font-weight: 400; font-family: inherit; }
+    .cmd-def-head .cfg-sub {
+      font-weight: 400;
+      font-family: -apple-system, system-ui, -webkit-system-font, sans-serif;
+      font-size: 0.68rem;
+    }
 
     .cmd-def-fields {
       display: flex;
@@ -2076,7 +2081,6 @@
     }
 
     .cmd-def-fields select {
-      font-size: 0.7rem;
       padding: 3px 4px;
       max-width: 40vw;
     }
@@ -2314,6 +2318,11 @@
    browser they were white boxes in a dark sheet — the catalogue's selects and prompt paths
    included, which is where this was first missed. */
 .cmd-def select, .cmd-def input[type="text"], .cmd-def textarea {
+  /* One face and one size for every field in a block, and the size of the labels beside them:
+     left to the browser a select was Arial at 11px, a text box Arial at 13px and a textarea
+     monospace, all in one row. */
+  font-family: inherit;
+  font-size: 0.72rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -2322,7 +2331,7 @@
 }
 .rcp-x { flex: 0 0 auto; padding: 2px 8px; }
 .rcp-roles { margin-top: 6px; }
-.rcp-check { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; }
+.rcp-check { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; }
 .rcp-parts { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .rcp-parts .rcp-check { font-size: 0.8rem; text-transform: none; letter-spacing: normal; font-weight: normal; color: var(--text); }
 .rcp-check:has(input:disabled) { opacity: 0.55; }
@@ -7497,11 +7506,9 @@
       flex: 0 1 auto;
     }
 
-    /* Keep the pane identity readable on a phone; its controls get their own compact line. */
-    @media (max-width: 767px) {
-      .conv-roster-row, .arb-roster-row { flex-wrap: wrap; }
-      .conv-roster-acts { flex-basis: 100%; justify-content: flex-start; }
-    }
+    /* One line a row at every width: a member row carries Open and its menu and nothing else,
+       which a phone has room for beside the name. */
+    .conv-roster-row .conv-roster-acts { flex-wrap: nowrap; margin-left: auto; }
 
     .conv-roster-row.gone .tag,
     .arb-roster-row.gone .tag {
@@ -7532,15 +7539,50 @@
 
     .conv-roster-actions {
       display: flex;
-      /* Four actions do not fit a phone on one row, and a button pushed off the edge is a button
-         that does not exist. */
       flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
       padding-top: 4px;
     }
 
-    /* The one action in this row that ends something. Coloured rather than moved apart — the row
-       wraps on a phone, so a gap cannot be relied on to keep it away from the others. */
+    /* Add pane and New agent are what a reader opens this panel to do: drawn as the actions,
+       where More is a way to the rest. */
+    .conv-roster-actions > button:not(.conv-roster-more) {
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    .conv-roster-actions .conv-roster-more { margin-left: auto; }
+
+    .conv-roster-actions .conv-roster-more[aria-expanded="true"] {
+      color: var(--text);
+      border-color: var(--text);
+    }
+
+    /* Laid out rather than floated: the pane's roster scrolls inside its own box, and a panel
+       positioned over it would be cut off at that box's foot. Three groups — what the
+       conversation is, every member at once, and Delete alone — divided by a rule each. */
+    .conv-roster-more-items {
+      flex-basis: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .conv-roster-more-items[hidden] { display: none; }
+
+    .conv-roster-more-group:first-child button { color: var(--text); }
+
+    .conv-roster-more-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* The one action here that destroys something. Coloured rather than moved apart, and alone
+       in its group at the foot. */
     .conv-roster-actions .conv-del {
       color: var(--red);
       border-color: var(--red);
@@ -7595,7 +7637,24 @@
       list-style: none;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      min-width: 30px;
+      font-size: 0.9rem;
+      line-height: 1;
+      color: var(--muted);
+      border-color: var(--border);
     }
+
+    .conv-roster .conv-menu[open] > .conv-restart-open {
+      color: var(--blue);
+      border-color: var(--blue);
+    }
+
+    /* Inside a member's menu each item wears the colour it wears everywhere else: Pause orange,
+       Remove red, Restart blue. */
+    .conv-roster .conv-menu-items .conv-end { color: var(--orange); border-color: var(--orange); }
+    .conv-roster .conv-menu-items .conv-drop { color: var(--red); border-color: var(--red); }
+    .conv-roster .conv-menu-items .conv-drop:not(:first-child) { margin-top: 4px; }
 
     .conv-roster .conv-restart-open::-webkit-details-marker { display: none; }
 
@@ -23942,12 +24001,9 @@
       const limits = [1, 2, 3, 4, 5, 6].map(n =>
         `<option value="${n}"${Number(policy('worker_limit')) === n ? ' selected' : ''}>`
         + `${n}</option>`).join('');
-      const generals = Array.from({length: 30}, (_, i) => i + 1).map(n =>
-        `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
-        + `${n}</option>`).join('');
       // The bench's seats first: what a Project's standing agents start on is read before what a
       // Commander staffs itself with.
-      return benchDefaultsHtml(doc, stored)
+      return benchDefaultsHtml(doc, stored) + generalDefaultsHtml(policy)
         + '<div class="section-header" style="margin-top:18px">Commander defaults</div>'
         + '<div class="cfg-note">What a Commander starts when it decides it needs an agent. It'
         + ' names one of these at the moment it wants that kind of agent — nothing here starts'
@@ -23956,11 +24012,82 @@
         + '<div class="cmd-def"><div class="cmd-def-fields cmd-def-policy">'
         + '<label>At most <select onchange="commanderDefaultSet(\'worker_limit\','
         + ' Number(this.value))">' + limits + '</select> workers at once</label>'
-        + '<label>The General runs at most <select onchange="commanderDefaultSet(\'general_limit\','
-        + ' Number(this.value))">' + generals + '</select> children at once</label>'
         + commanderSwitch('unattended', policy('unattended'),
                           'Start them with their own approval prompts off')
         + '</div></div>' + rows + '</div>';
+    }
+
+    // --- The General ---
+    // Which General recipe the launcher's tile starts, and the harness that recipe starts the
+    // General on. The recipe is the truth for the harness — the relay starts the Commander a
+    // recipe names — so the pick here writes that recipe, exactly as its editor's Commander row
+    // does. Which recipe is this browser's choice, kept in the same document as the limits.
+
+    // The General recipes this relay offers, with the one a broken document still names.
+    function generalRecipeRows() {
+      const rows = (typeof recipeRelayRows === 'function' && recipeRelayRows()) || [];
+      return rows.filter(r => r && r.recipe && r.recipe.tier === 'general');
+    }
+
+    // What the tile starts: the stored pick while the relay still offers it, else `general`.
+    function generalRecipeId() {
+      const want = loadCommanderDefaults().general_recipe;
+      return generalRecipeRows().some(r => r.id === want) ? want : 'general';
+    }
+
+    // The recipe as it will be started: this browser's edit first, then the relay's copy.
+    function generalRecipe(id) {
+      const doc = typeof loadRecipeDoc === 'function' ? loadRecipeDoc() : null;
+      if (doc && recipeStored(doc, id)) return doc.recipes[id];
+      const row = generalRecipeRows().find(r => r.id === id);
+      return row ? row.recipe : null;
+    }
+
+    function generalDefaultsHtml(policy) {
+      const rows = generalRecipeRows();
+      if (!rows.length) return '';
+      const id = generalRecipeId();
+      const recipe = generalRecipe(id) || {};
+      const c = recipe.commander && recipe.commander.kind ? recipe.commander : {kind: '', config: ''};
+      const row = rows.find(r => r.id === id) || {};
+      const blocking = (row.problems || []).filter(p => p.blocking);
+      const limits = Array.from({length: 30}, (_, i) => i + 1).map(n =>
+        `<option value="${n}"${Number(policy('general_limit')) === n ? ' selected' : ''}>`
+        + `${n}</option>`).join('');
+      return '<div class="section-header" style="margin-top:18px">General defaults</div>'
+        + '<div class="cfg-note">What the General tile starts. Its harness is the recipe\'s'
+        + ' Commander, so a change here is an edit of that recipe. A General already running keeps'
+        + ' the harness it has.</div>'
+        + '<div class="cfg-list"><div class="cmd-def" data-general-defaults>'
+        + '<div class="cmd-def-head">General</div><div class="cmd-def-fields">'
+        + commanderPick('recipe', 'recipe', rows.map(r => [r.id, (r.recipe && r.recipe.label) || r.id]),
+                        id, 'generalDefaultSet')
+        + harnessPicks('general', c.kind, c.config || '', 'generalDefaultSet')
+        + '</div><div class="cmd-def-fields cmd-def-policy">'
+        + '<label>It runs at most <select onchange="commanderDefaultSet(\'general_limit\','
+        + ' Number(this.value))">' + limits + '</select> children at once</label></div>'
+        + (blocking.length ? '<div class="cfg-note cmd-def-problem">'
+          + escapeHtml(blocking.map(recipeProblemLine).join(' ')) + '</div>' : '')
+        + '</div></div>';
+    }
+
+    function generalDefaultSet(name, field, value) {
+      if (field === 'recipe') { commanderDefaultSet('general_recipe', value); return; }
+      const id = generalRecipeId();
+      const base = generalRecipe(id);
+      if (!base || typeof loadRecipeDoc !== 'function') return;
+      const doc = loadRecipeDoc();
+      // Through the editor's own cleaner, so what is stored is what its Save would store.
+      const draft = JSON.parse(JSON.stringify(base));
+      draft.seats = Array.isArray(draft.seats) ? draft.seats : [];
+      draft.chain = recipeChain(draft).slice();
+      const next = recipeClean(draft);
+      const was = next.commander && next.commander.kind ? next.commander : {kind: '', config: ''};
+      // A config is for one harness, and the relay refuses one named for another.
+      next.commander = field === 'kind' ? {kind: value, config: ''} : {kind: was.kind, config: value};
+      doc.recipes[id] = next;
+      doc.deleted = doc.deleted.filter(x => x !== id);
+      if (saveRecipeDoc(doc) && typeof renderLauncher === 'function') renderLauncher();
     }
 
     // What the bench's two built-in seats start on, in every Project that has not picked its own
@@ -38017,9 +38144,16 @@ function nlmSourceDelete(source) {
     // with its `agent_detail` rows (`detail`) -- what a Claude or devin pane said mid-turn and lost
     // from its window before the turn ended. Those rows are always fetched and only drawn in
     // `detail`, so switching it costs no ask.
+    //
+    // Never chosen means the record, wherever this relay keeps one: it is the thread every other
+    // browser and every agent reads, and it is what a room opened for the first time should show.
+    // A relay with the record off has nothing to read, so it stays this browser's transcript there.
     function convLiveState() {
       try {
         const v = localStorage.getItem(CONV_LIVE_KEY);
+        if (v === null) {
+          return typeof convActivityRecorded === 'function' && convActivityRecorded() ? 'on' : 'off';
+        }
         return v === 'on' || v === 'detail' ? v : 'off';
       } catch (e) { return 'off'; }
     }
@@ -38553,8 +38687,9 @@ function nlmSourceDelete(source) {
     // browsers.
     const CONV_COMMITS_KEY = 'herdr_conv_commits';
 
+    // On until switched off: it is offered only over the relay's record, which is on by default.
     function convCommitsOn() {
-      try { return localStorage.getItem(CONV_COMMITS_KEY) === 'on'; }
+      try { return localStorage.getItem(CONV_COMMITS_KEY) !== 'off'; }
       catch (e) { return false; }
     }
 
@@ -41268,6 +41403,7 @@ function nlmSourceDelete(source) {
       convRosterHtmlLast = '';
       convStripSig = '';
       convRosterOpen = false;
+      convRosterMore = false;
       openPanel('convView');
       syncNavBtns();   // the walk is standing somewhere new, and its arrows are on screen here too
       // Tabs come from the index and live snapshot, not transcript storage. Draw them before the
@@ -41355,6 +41491,7 @@ function nlmSourceDelete(source) {
 
     function toggleConvRoster() {
       convRosterOpen = !convRosterOpen;
+      if (!convRosterOpen) convRosterMore = false;
       renderConvStandalone(false);
     }
 
@@ -41364,6 +41501,7 @@ function nlmSourceDelete(source) {
 
     function toggleConvPaneRoster() {
       convPaneRoster = !convPaneRoster;
+      if (!convPaneRoster) convRosterMore = false;
       renderConvView();
     }
 
@@ -41439,49 +41577,37 @@ function nlmSourceDelete(source) {
           kindBadge((rec.spawn || {}).agent || (live.get(m.aid) || {}).agent || '',
                     live.get(m.aid), (rec.spawn || {}).config) +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'paused')}</span>` +
-          // The actions in a group of their own, so a row that runs out of width wraps them
-          // together underneath instead of pushing the last one off the edge — the name, the badge
-          // and the state stay on one line whatever the row holds.
+          // Two things on the row and no more: the way in, and one menu holding everything that
+          // changes the member. Six buttons a row was a phone screen of controls with the names
+          // squeezed out of it, and a row is read for who is here far more often than it is acted on.
           `<span class="conv-roster-acts">` +
-          // Pause, then Reset, then the two ways to restart, then Remove, and only then the way
-          // in. The ones that take something away sit together; Open is not one of them. Pause is
-          // offered only where there is something running — a paused row carries Restart in the
-          // same place, which is the other half of the same control: this row is where a member is
-          // sent away and brought back.
-          (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.aid,
-            pane: (live.get(m.aid) || {}).pane_id, data: ` data-key="${escapeHtml(m.aid)}"`,
-            aria: "Pause this member's session, keeping its seat and its thread",
-            fire: 'endConvMember(this.dataset.key)'}) : '') +
-          // Same pane, back at its first turn: the harness's own clear, then the words this
-          // session was started with. Asked twice — what it throws away is the agent's context,
-          // which nothing here can bring back.
-          //
-          // Not drawn at all in a room that grants web providers. Clearing a bound agent throws
-          // away the one-time brief naming its room and grant, and nothing restores it; Restart is
-          // the control that does this safely. `convResetMember` refuses one anyway, but a button
-          // that is drawn and then refuses is a button somebody presses.
-          (on && !respawnWebRoom(m.aid)
-            ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
-            ` onclick="armButton(this, '', () => convResetMember(this.dataset.key))"` +
-            ` aria-label="Clear this member's session and start it over in the same pane">` +
-            `Reset</button>` : '') +
-          // One control, both halves of a row's life: a live member is ended first and a paused
-          // one is not, and either way what lands continues this member. The two variants — the
-          // same agent, or the harness left open — are items under it rather than buttons beside
-          // it: what used to be Restart, Swap, Start as… and Start again is one word on the row.
-          //
-          // Opening the menu is the first of the two taps every destructive control here takes,
-          // so an item fires on its own tap and nothing is armed. What it will start is written
-          // above the items, where the toast that used to carry it could not be read twice.
-          restartMenuHtml(m.aid, rec, on) +
-          `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.aid)}"` +
-          ` onclick="armButton(this, '', () => convRemoveMember(this.dataset.key))"` +
-          ` aria-label="Remove this member from the conversation">Remove</button>` +
           // Every live member, not only whichever one the header's button would pick: the header
           // opens the first, and a conversation of four is exactly where that is the wrong one.
           (on ? `<button class="conv-open" data-key="${escapeHtml(m.aid)}"` +
             ` onclick="openConvMemberPane(this.dataset.key)"` +
             ` aria-label="Open this member's pane">Open</button>` : '') +
+          // Pause, then Reset, then the ways to restart, then Remove. Pause is offered only where
+          // there is something running — a paused row's menu leads with Restart instead, which is
+          // the other half of the same control.
+          restartMenuHtml(m.aid, rec, on,
+            (on ? endBtnHtml({cls: 'conv-end', key: 'end-member:' + m.aid,
+              pane: (live.get(m.aid) || {}).pane_id, data: ` data-key="${escapeHtml(m.aid)}"`,
+              aria: "Pause this member's session, keeping its seat and its thread",
+              fire: 'endConvMember(this.dataset.key)'}) : '') +
+            // Same pane, back at its first turn: the harness's own clear, then the words this
+            // session was started with. Asked twice — what it throws away is the agent's context.
+            //
+            // Not drawn at all in a room that grants web providers. Clearing a bound agent throws
+            // away the one-time brief naming its room and grant, and nothing restores it; Restart
+            // is the control that does this safely.
+            (on && !respawnWebRoom(m.aid)
+              ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
+              ` onclick="armButton(this, '', () => convResetMember(this.dataset.key))"` +
+              ` aria-label="Clear this member's session and start it over in the same pane">` +
+              `Reset</button>` : ''),
+            `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.aid)}"` +
+            ` onclick="armButton(this, '', () => convRemoveMember(this.dataset.key))"` +
+            ` aria-label="Remove this member from the conversation">Remove</button>`) +
           `</span></div>`;
       }).join('');
       // The tier, said where the button that changes it is. "How do I make this one mine" is the
@@ -41512,48 +41638,11 @@ function nlmSourceDelete(source) {
           ` aria-label="The providers this conversation talks to, and the repairs for each">` +
           `Open</button></span></div>`
         : '';
+      // What a reader comes here to do is add somebody, so those two are on the line. Everything
+      // else is one press further, under More: the edits, the reads, and the four that act on
+      // every member at once — Delete last and red, alone at the foot.
+      const more = convRosterMore;
       return `<div class="conv-roster">${rows}${arb}${web}<div class="conv-roster-actions">` +
-        // Destructive action first, followed by the two ways to preserve the grouping, then edits.
-        `<button class="conv-del arm-btn" onclick="armButton(this, '', deleteConversation)"` +
-        ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
-        // Beside Delete because both end something, and apart from it in colour because they end
-        // very different things: Delete destroys the record, Pause stops the sessions and leaves
-        // it.
-        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id,
-          rest: 'Pause all', going: 'Pausing…',
-          panes: Array.from(live.values()).map(a => a.pane_id),
-          aria: 'Pause every session in this conversation, keeping the transcripts',
-          fire: 'endConversation(convViewId)'}) +
-        // Beside Pause all, because they are the same question asked of every member at once. Reset
-        // keeps the panes and clears what is in them; Restart replaces them. Absent in a room that
-        // grants web providers, for the reason the row's own Reset is: every member of one holds a
-        // binding brief that a clear would throw away.
-        (convWebRoomOf(convViewId) ? '' :
-          `<button class="conv-reset arm-btn" onclick="armButton(this, '', () => convResetAll(convViewId))"` +
-          ` aria-label="Clear every session in this conversation and start each one over">` +
-          `Reset all</button>`) +
-        `<button class="conv-restart arm-btn" onclick="armButton(this, '', () => convRestartAll(convViewId))"` +
-        ` aria-label="Pause every session in this conversation and start each one again">` +
-        `Restart all</button>` +
-        `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
-        // Beside Copy, and for the same reason: neither one changes anything. What a member *is*
-        // — the agent id it is followed by, the pane it is in now — is nowhere on the row, and it
-        // is exactly what somebody needs when a row is drawn in a place they did not expect.
-        `<button onclick="openConvIds()" aria-label="Show each member's agent id and pane">` +
-        `List</button>` +
-        `<button class="arm-btn" onclick="armButton(this, '', duplicateConversation)"` +
-        ` aria-label="Copy this conversation so panes can be added without changing this one">` +
-        `Duplicate</button>` +
-        `<button onclick="renameConversation()">Rename</button>` +
-        // Which web providers this conversation may spend. Beside Rename because it is the same
-        // kind of edit — what the conversation is, rather than what is running in it — and drawn
-        // only where there is a grant to edit. An agent conversation's is rewritten under the
-        // agent: the binding is reconciled against every snapshot, so widening or narrowing it
-        // takes without restarting anything.
-        (typeof convWebBadge === 'function' && convWebBadge(conv)
-          ? `<button onclick="webchatEditProviders(convViewId)"` +
-            ` aria-label="Change which web providers this conversation talks to">Providers</button>`
-          : '') +
         `<button onclick="convToggleAdd()">Add pane</button>` +
         // Starting one is offered next to adding one, not only inside the picker: from a pane's
         // roster the picker is two taps away, and "there is nobody to add yet" is exactly the
@@ -41561,7 +41650,63 @@ function nlmSourceDelete(source) {
         (canStartFromConv()
           ? `<button onclick="openNewAgent()" aria-label="Start a new agent in this conversation">` +
             `New agent</button>` : '') +
-        `</div>${tier}</div>`;
+        `<button class="conv-roster-more" aria-expanded="${more ? 'true' : 'false'}"` +
+        ` onclick="convToggleMore()">More ${more ? '\u25b4' : '\u25be'}</button>` +
+        `<div class="conv-roster-more-items"${more ? '' : ' hidden'}>` +
+        `<div class="conv-roster-more-group">` +
+        `<button onclick="renameConversation()">Rename</button>` +
+        // Which web providers this conversation may spend: the same kind of edit as Rename — what
+        // the conversation is, rather than what is running in it — and drawn only where there is
+        // a grant to edit. The binding is reconciled against every snapshot, so widening or
+        // narrowing it takes without restarting anything.
+        (typeof convWebBadge === 'function' && convWebBadge(conv)
+          ? `<button onclick="webchatEditProviders(convViewId)"` +
+            ` aria-label="Change which web providers this conversation talks to">Providers</button>`
+          : '') +
+        `<button class="arm-btn" onclick="armButton(this, '', duplicateConversation)"` +
+        ` aria-label="Copy this conversation so panes can be added without changing this one">` +
+        `Duplicate</button>` +
+        `<button id="convCopyBtn" onclick="convCopy()">Copy</button>` +
+        // Beside Copy, and for the same reason: neither one changes anything. What a member *is*
+        // — the agent id it is followed by, the pane it is in now — is nowhere on the row, and it
+        // is exactly what somebody needs when a row is drawn in a place they did not expect.
+        `<button onclick="openConvIds()" aria-label="Show each member's agent id and pane">` +
+        `List</button></div>` +
+        `<div class="conv-roster-more-group">` +
+        // Pause stops the sessions and leaves the record; Restart replaces them; Reset keeps the
+        // panes and clears what is in them. Reset is absent in a room that grants web providers,
+        // for the reason the row's own Reset is: every member of one holds a binding brief that a
+        // clear would throw away.
+        endBtnHtml({cls: 'conv-end', key: 'end-conversation:' + conv.id,
+          rest: 'Pause all', going: 'Pausing…',
+          panes: Array.from(live.values()).map(a => a.pane_id),
+          aria: 'Pause every session in this conversation, keeping the transcripts',
+          fire: 'endConversation(convViewId)'}) +
+        `<button class="conv-restart arm-btn" onclick="armButton(this, '', () => convRestartAll(convViewId))"` +
+        ` aria-label="Pause every session in this conversation and start each one again">` +
+        `Restart all</button>` +
+        (convWebRoomOf(convViewId) ? '' :
+          `<button class="conv-reset arm-btn" onclick="armButton(this, '', () => convResetAll(convViewId))"` +
+          ` aria-label="Clear every session in this conversation and start each one over">` +
+          `Reset all</button>`) +
+        `</div><div class="conv-roster-more-group">` +
+        `<button class="conv-del arm-btn" onclick="armButton(this, '', deleteConversation)"` +
+        ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
+        `</div></div></div>${tier}</div>`;
+    }
+
+    // Whether the roster's More is open. One flag for both rosters: they are never on screen
+    // together. Flipped in place rather than through a render, which would rebuild every row; the
+    // next render draws the same state from the flag.
+    let convRosterMore = false;
+
+    function convToggleMore() {
+      convRosterMore = !convRosterMore;
+      for (const el of document.querySelectorAll('.conv-roster-more-items')) el.hidden = !convRosterMore;
+      for (const el of document.querySelectorAll('.conv-roster-more')) {
+        el.setAttribute('aria-expanded', convRosterMore ? 'true' : 'false');
+        el.textContent = `More ${convRosterMore ? '\u25b4' : '\u25be'}`;
+      }
     }
 
     // --- Member identities ---------------------------------------------------------------------
@@ -41701,18 +41846,21 @@ function nlmSourceDelete(source) {
         `${escapeHtml(o.rest)}</button>`;
     }
 
-    function restartMenuHtml(key, rec, on) {
+    // A member's one menu: `lead` above the ways to restart and `tail` under them, so what ends
+    // or clears a session and what removes the member bracket what brings one back.
+    function restartMenuHtml(key, rec, on, lead, tail) {
       const again = canRespawn(spawnOf(key));
       const other = canStartFromConv();
-      if (!again && !other) return '';
+      if (!again && !other && !lead && !tail) return '';
       const k = escapeHtml(key);
-      const note = again ? respawnNote(key) : 'Opens the Start dialog to pick what to start.';
+      const note = again ? respawnNote(key)
+        : (other ? 'Opens the Start dialog to pick what to start.' : '');
       return `<details class="conv-menu" data-key="${k}"${convRestartMenuKey === key ? ' open' : ''}` +
         ` ontoggle="convRestartMenuToggle(this)">` +
         `<summary class="conv-restart-open"` +
-        ` aria-label="Restart this member${on ? ', ending what is running' : ''}, keeping its thread">` +
-        `Restart \u25be</summary>` +
-        `<div class="conv-menu-items">` +
+        ` aria-label="Pause, reset, restart or remove this member">` +
+        `\u22ef</summary>` +
+        `<div class="conv-menu-items">` + (lead || '') +
         (note ? `<p class="conv-menu-note">${escapeHtml(note)}</p>` : '') +
         (again ? menuItemHtml({cls: 'conv-restart', key: key, arm: 'restart-member:' + key,
           rest: on ? 'Restart \u2014 ends this session first' : 'Restart',
@@ -41725,7 +41873,7 @@ function nlmSourceDelete(source) {
         (other ? menuItemHtml({cls: 'conv-swap', key: key, arm: 'restart-as:' + key,
           rest: 'Restart as\u2026',
           fire: 'convStartAs(this.dataset.key)'}) : '') +
-        `</div></details>`;
+        (tail || '') + `</div></details>`;
     }
 
 
@@ -50733,7 +50881,8 @@ function studioCardHtml() {
 
     function cmdGeneralStart() {
       cmdGeneralAsked = Date.now();
-      arbSend({type: 'cmd_start', recipe: 'general', scope: 'General', conversation: 'c_general',
+      const recipe = typeof generalRecipeId === 'function' ? generalRecipeId() : 'general';
+      arbSend({type: 'cmd_start', recipe: recipe, scope: 'General', conversation: 'c_general',
                coordinator: {}, members: []});
       showToast('Starting the General… this can take a minute.');
       cmdGeneralChanged();
