@@ -21715,7 +21715,7 @@ convApplyTint();
         { cmd: '/status', desc: 'Show version and connectivity', common: true },
         { cmd: '/context', desc: 'Visualize context-window usage', common: true },
         { cmd: '/review', desc: 'Review a pull request', common: true },
-        { cmd: '/diff', desc: 'Show uncommitted changes', common: false },
+        { cmd: '/diff', desc: 'Show uncommitted changes', common: true },
         { cmd: '/resume', desc: 'Resume previous conversation', common: false },
         { cmd: '/help', desc: 'Show all commands', common: false },
       ],
@@ -21908,28 +21908,45 @@ convApplyTint();
 
     let modelEffortState = null;
 
+    // The app's own look rather than a native <dialog>: the page's reset takes `margin: 0` off every
+    // element, which is the margin a modal dialog is centred by, and its type is the page's.
     const MODEL_EFFORT_CSS = `
-      #modelEffort { border: 1px solid var(--border); border-radius: 12px; padding: 0;
-        background: var(--bg); color: var(--text); width: min(520px, calc(100vw - 32px)); }
-      #modelEffort::backdrop { background: rgba(0, 0, 0, .45); }
-      #modelEffort h2 { font-size: 15px; margin: 0; padding: 14px 16px 4px; }
-      #modelEffort .me-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; padding: 8px 16px; }
-      #modelEffort .me-col { display: flex; flex-direction: column; gap: 2px; min-width: 0;
-        max-height: min(50vh, 360px); overflow-y: auto; }
-      #modelEffort .me-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-        color: var(--muted); padding: 4px 0; }
+      #modelEffort { position: fixed; left: 0; right: 0; top: var(--vv-top, 0px);
+        height: var(--vv-height, 100dvh); z-index: 120; display: grid; place-items: center;
+        padding: 16px; background: rgba(0, 0, 0, .5);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        font-size: 14px; line-height: 1.4; color: var(--text); }
+      #modelEffort[hidden] { display: none; }
+      #modelEffort .me-box { width: min(460px, 100%); max-height: 100%; display: flex;
+        flex-direction: column; background: var(--surface); border: 1px solid var(--border);
+        border-radius: 16px; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); }
+      #modelEffort .me-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+        border-bottom: 1px solid var(--border); }
+      #modelEffort .me-head span { flex: 1; font-size: 0.8rem; font-weight: 600; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #modelEffort .me-x { background: none; border: 0; color: var(--muted); font-size: 1.2rem;
+        line-height: 1; cursor: pointer; padding: 0 2px; }
+      #modelEffort .me-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 12px;
+        padding: 10px 16px; min-height: 0; overflow-y: auto; }
+      #modelEffort .me-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      #modelEffort .me-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .06em; color: var(--muted); padding: 2px 8px 4px; }
       #modelEffort .me-opt { display: flex; align-items: center; gap: 8px; min-height: 36px;
-        padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: inherit;
-        font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
-      #modelEffort .me-opt:hover { background: var(--surface); }
+        padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--text);
+        font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer; }
+      #modelEffort .me-opt:hover { background: var(--border); }
+      #modelEffort .me-opt:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
       #modelEffort .me-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      #modelEffort .me-opt .me-tick { flex: 0 0 14px; color: var(--blue); font-weight: 700; }
-      #modelEffort .me-opt[aria-checked="true"] { color: var(--blue); }
+      #modelEffort .me-tick { flex: 0 0 14px; color: var(--blue); font-weight: 700; }
+      #modelEffort .me-opt[aria-checked="true"] { color: var(--blue); font-weight: 600; }
       #modelEffort .me-keep { color: var(--muted); }
-      #modelEffort .me-note { font-size: 12px; color: var(--muted); padding: 4px 16px 0; }
-      #modelEffort .me-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 14px; }
-      #modelEffort .me-actions button { min-height: 36px; padding: 0 14px; border-radius: 8px;
-        border: 1px solid var(--border); background: var(--bg); color: inherit; font: inherit; cursor: pointer; }
+      #modelEffort .me-note { font-size: 0.75rem; color: var(--muted); padding: 0 16px; }
+      #modelEffort .me-note:empty { display: none; }
+      #modelEffort .me-keys { font-size: 0.7rem; color: var(--muted); padding: 0 16px 12px; margin-top: -4px; }
+      #modelEffort .me-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; }
+      #modelEffort .me-actions button { padding: 10px 16px; border-radius: 8px; font: inherit;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+        background: none; color: var(--text); }
       #modelEffort .me-actions .me-apply { border-color: var(--blue); background: var(--blue); color: var(--bg); }
       #modelEffort .me-actions .me-apply:disabled { opacity: .45; cursor: default; }
     `;
@@ -21940,11 +21957,14 @@ convApplyTint();
       const style = document.createElement('style');
       style.textContent = MODEL_EFFORT_CSS;
       document.head.appendChild(style);
-      el = document.createElement('dialog');
+      el = document.createElement('div');
       el.id = 'modelEffort';
+      el.hidden = true;
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
       el.setAttribute('aria-labelledby', 'modelEffortTitle');
       el.addEventListener('click', e => {
-        if (e.target === el) { el.close(); return; }   // the backdrop
+        if (e.target === el) { closeModelEffort(); return; }   // the scrim
         const opt = e.target.closest('[data-pick]');
         if (opt) {
           modelEffortState[opt.dataset.pick] = opt.dataset.value;
@@ -21954,10 +21974,48 @@ convApplyTint();
         const act = e.target.closest('[data-act]');
         if (!act) return;
         if (act.dataset.act === 'apply') modelEffortApply();
-        el.close();
+        closeModelEffort();
       });
+      // Captured and kept: it is modal, so a page's own shortcuts behind the scrim see no key.
+      document.addEventListener('keydown', e => {
+        if (el.hidden) return;
+        modelEffortKey(e);
+        e.stopPropagation();
+      }, true);
       document.body.appendChild(el);
       return el;
+    }
+
+    // The keyboard: ↑↓ within a list, ←→ to the other list's choice, Space picks the row under
+    // focus (a button's own click) and Enter applies, from anywhere but a button that means
+    // something else. Escape closes.
+    function modelEffortKey(e) {
+      const el = document.getElementById('modelEffort');
+      if (e.key === 'Escape') { e.preventDefault(); closeModelEffort(); return; }
+      const opt = document.activeElement && document.activeElement.closest('#modelEffort .me-opt');
+      if (e.key === 'Enter' && (opt || !el.contains(document.activeElement))) {
+        e.preventDefault();
+        const apply = el.querySelector('.me-apply');
+        if (apply && !apply.disabled) apply.click();
+        return;
+      }
+      if (!opt) return;
+      const col = opt.closest('.me-col');
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const opts = [...col.querySelectorAll('.me-opt')];
+        const next = opts[opts.indexOf(opt) + (e.key === 'ArrowUp' ? -1 : 1)];
+        e.preventDefault();
+        if (next) next.focus();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const other = [...el.querySelectorAll('.me-col')].find(c => c !== col);
+        e.preventDefault();
+        if (other) other.querySelector('.me-opt[aria-checked="true"]').focus();
+      }
+    }
+
+    function closeModelEffort() {
+      const el = document.getElementById('modelEffort');
+      if (el) el.hidden = true;
     }
 
     function modelEffortPaint() {
@@ -21973,20 +22031,33 @@ convApplyTint();
           + `<span>${escapeHtml(label)}</span></button>`;
       };
       const col = (head, field, list) => `<div class="me-col" role="group" aria-label="${head}">`
-        + `<div class="me-head">${head}</div>` + opt(field, '', 'Keep current')
+        + `<div class="me-label">${head}</div>` + opt(field, '', 'Keep current')
         + list.map(v => opt(field, v, v)).join('') + '</div>';
       const lines = modelEffortCommands(s.kind, s.model, s.effort);
-      el.innerHTML = `<h2 id="modelEffortTitle">Model &amp; effort — ${escapeHtml(s.label)}</h2>`
+      // A repaint replaces every row, so the one under focus is found again by what it names.
+      const had = document.activeElement && el.contains(document.activeElement)
+        ? document.activeElement.closest('[data-pick]') : null;
+      const keep = had && [had.dataset.pick, had.dataset.value];
+      el.innerHTML = '<div class="me-box">'
+        + `<div class="me-head"><span id="modelEffortTitle">Model &amp; effort · ${escapeHtml(s.label)}</span>`
+        + '<button type="button" class="me-x" data-act="cancel" aria-label="Close">✕</button></div>'
         + '<div class="me-cols">' + col('Model', 'model', models)
         + col(s.kind === 'codex' ? 'Reasoning' : 'Effort', 'effort', efforts) + '</div>'
         + `<div class="me-note">${escapeHtml(lines.length ? 'Sends ' + lines.join(' then ') + '. ' : '')}`
         + `${escapeHtml(MODEL_EFFORT_NOTE[s.kind] || '')}</div>`
         + '<div class="me-actions"><button type="button" data-act="cancel">Cancel</button>'
         + `<button type="button" class="me-apply" data-act="apply"${lines.length ? '' : ' disabled'}>`
-        + 'Apply</button></div>';
+        + 'Apply</button></div>'
+        + (matchMedia('(hover: hover) and (pointer: fine)').matches
+          ? '<div class="me-keys">↑↓ move · ←→ switch list · Space select · Enter apply · Esc close</div>' : '')
+        + '</div>';
+      const back = keep && [...el.querySelectorAll('[data-pick]')]
+        .find(b => b.dataset.pick === keep[0] && b.dataset.value === keep[1]);
+      if (back) back.focus();
     }
 
-    // Opened from the `/` palette, on either page, for the pane it was opened over.
+    // Opened from the `/` palette, on either page, and from a conversation's agent list, for the
+    // pane it was opened over.
     function openModelEffort(pane) {
       const kind = modelEffortKind(pane);
       if (!kind) return;
@@ -21994,7 +22065,8 @@ convApplyTint();
                           label: (typeof paneLabel === 'function' && paneLabel(pane)) || pane.agent};
       const el = modelEffortMount();
       modelEffortPaint();
-      if (!el.open) el.showModal();
+      el.hidden = false;
+      el.querySelector('.me-opt[aria-checked="true"]').focus();
     }
 
     // One command at a time, each through the same send a palette row makes. The second waits for
@@ -38744,6 +38816,14 @@ convApplyTint();
       if (it.add) { if (deskAddCommand()) deskPalettePaint(root, i); return; }
       if (it.modelEffort) { deskCloseDocks(root); openModelEffort(deskSendPane(i)); return; }
       if (!it.text) return;
+      // A room's command goes to its addressed member as it is, rather than into the room's
+      // composer, where a send is a message to the room.
+      if (root.dataset.shape === 'conversation' && root.dataset.mode === 'commands') {
+        const pane = deskSendPane(i);
+        deskCloseDocks(root);
+        if (pane) submitText(pane, it.text);
+        return;
+      }
       // Recorded whatever the setting says, the same as a press on the rail — the two are the same
       // act, and a list that only counted half of them would sort by half the evidence.
       if (it.at) noteDockUse('chip', it.at);
@@ -39093,7 +39173,8 @@ convApplyTint();
       const at = deskRole(root, 'at');
       at.textContent = shape === 'terminal' ? '$' : '@';
       at.setAttribute('aria-label', shape === 'terminal' ? 'Recent commands' : 'Prompts');
-      deskRole(root, 'slash').hidden = shape === 'conversation';
+      // A room's `/` is its addressed member's commands; keys and ^C stay the pane's own.
+      deskRole(root, 'slash').hidden = false;
       deskRole(root, 'keys').hidden = shape === 'conversation';
       deskRole(root, 'ctrl').hidden = shape === 'conversation';
     }
@@ -39415,9 +39496,7 @@ convApplyTint();
       // without reaching for the rail — the same key the mobile page's button stands in for.
       input.addEventListener('beforeinput', e => {
         if (input.value !== '' || (e.data !== '/' && e.data !== '@')) return;
-        // `/` is a harness's own command and a room is not a harness, so a room keeps `@` and not
-        // the slash — which is the same split the rails under the field draw.
-        if (root.dataset.shape === 'conversation' && e.data !== '@') return;
+        // A room's `/` is its addressed member's commands, the way its rail's `/` is.
         e.preventDefault();
         deskPaletteOpen(root, e.data === '@' ? 'prompts' : 'commands');
       });

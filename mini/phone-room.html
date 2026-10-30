@@ -13379,7 +13379,7 @@
             <textarea id="convInput" rows="1" maxlength="16000" placeholder="Message…  ⌘/Ctrl+Enter sends"
               autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
               oninput="autoGrow(this); keepConvCaret(); stickConvLatest(); syncDockTokens()"
-              onkeydown="convInputKey(event)"
+              onkeydown="convInputKey(event)" onbeforeinput="convSlashKey(event)"
               onkeyup="syncConvCursor()" onclick="syncConvCursor()" onselect="syncConvCursor()"
               onfocus="syncConvCursor(); stickConvLatest()" onblur="syncConvCursor()"
               onscroll="syncConvCursor()"></textarea>
@@ -43514,7 +43514,31 @@ function nlmSourceDelete(source) {
         `<button class="xfer-chip more" onclick="toggleDockMenu()" ` +
         `aria-expanded="${dockMenuOpen()}" ` +
         `title="Every instruction, as a list" aria-label="Every instruction, as a list">@+</button>` +
-        fillBtn + send + `</div>`;
+        dockSlashBtnHtml(target) + fillBtn + send + `</div>`;
+    }
+
+    // The addressed agent's own slash commands — the pane view's `/` sheet, pointed at this member.
+    function dockSlashBtnHtml(target) {
+      const to = paneOf(target);
+      if (!to || !to.agent || typeof openPalette !== 'function') return '';
+      return `<button class="xfer-chip slash" onclick="openConvCommands()" ` +
+        `title="${escapeHtml(paneLabel(to))}'s commands" aria-label="Commands for ${escapeHtml(paneLabel(to))}">/</button>`;
+    }
+
+    // A `/` typed into an empty box is the addressed member's commands, as it is in a pane's
+    // composer on the desktop page — the same sheet the `/` button opens.
+    function convSlashKey(e) {
+      if (e.data !== '/' || e.target.value !== '') return;
+      const to = paneOf(dockAddressed());
+      if (!to || !to.agent || typeof openPalette !== 'function') return;
+      e.preventDefault();
+      openConvCommands();
+    }
+
+    function openConvCommands() {
+      closeDockMenu();
+      const to = paneOf(dockAddressed());
+      if (to) openPalette('commands', to);
     }
 
     // The same instructions as a list, for a row that has scrolled past the edge of a phone and for
@@ -43549,6 +43573,12 @@ function nlmSourceDelete(source) {
           `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
           `${name}${paneBadge(a)}</button>`;
       }).join('') +
+        // The addressed agent's model and effort, from the list that says who is addressed.
+        (typeof modelEffortKind === 'function' && modelEffortKind(paneOf(target))
+          ? `<button class="menu-item" role="menuitem" onclick="closeDockMenu('whoMenu'); ` +
+            `openModelEffort(paneOf('${escapeHtml(target)}'))">` +
+            `<span class="tick">⚙</span>Model &amp; effort · ${escapeHtml(paneLabel(paneOf(target)))}</button>`
+          : '') +
         // Last, under the membership: another agent in this conversation is one more of the same
         // list, and the place that answers "who is in this" is the place to add to it.
         (canStartFromConv()
@@ -55050,7 +55080,7 @@ function studioCardHtml() {
         { cmd: '/status', desc: 'Show version and connectivity', common: true },
         { cmd: '/context', desc: 'Visualize context-window usage', common: true },
         { cmd: '/review', desc: 'Review a pull request', common: true },
-        { cmd: '/diff', desc: 'Show uncommitted changes', common: false },
+        { cmd: '/diff', desc: 'Show uncommitted changes', common: true },
         { cmd: '/resume', desc: 'Resume previous conversation', common: false },
         { cmd: '/help', desc: 'Show all commands', common: false },
       ],
@@ -55243,28 +55273,45 @@ function studioCardHtml() {
 
     let modelEffortState = null;
 
+    // The app's own look rather than a native <dialog>: the page's reset takes `margin: 0` off every
+    // element, which is the margin a modal dialog is centred by, and its type is the page's.
     const MODEL_EFFORT_CSS = `
-      #modelEffort { border: 1px solid var(--border); border-radius: 12px; padding: 0;
-        background: var(--bg); color: var(--text); width: min(520px, calc(100vw - 32px)); }
-      #modelEffort::backdrop { background: rgba(0, 0, 0, .45); }
-      #modelEffort h2 { font-size: 15px; margin: 0; padding: 14px 16px 4px; }
-      #modelEffort .me-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; padding: 8px 16px; }
-      #modelEffort .me-col { display: flex; flex-direction: column; gap: 2px; min-width: 0;
-        max-height: min(50vh, 360px); overflow-y: auto; }
-      #modelEffort .me-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-        color: var(--muted); padding: 4px 0; }
+      #modelEffort { position: fixed; left: 0; right: 0; top: var(--vv-top, 0px);
+        height: var(--vv-height, 100dvh); z-index: 120; display: grid; place-items: center;
+        padding: 16px; background: rgba(0, 0, 0, .5);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        font-size: 14px; line-height: 1.4; color: var(--text); }
+      #modelEffort[hidden] { display: none; }
+      #modelEffort .me-box { width: min(460px, 100%); max-height: 100%; display: flex;
+        flex-direction: column; background: var(--surface); border: 1px solid var(--border);
+        border-radius: 16px; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); }
+      #modelEffort .me-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+        border-bottom: 1px solid var(--border); }
+      #modelEffort .me-head span { flex: 1; font-size: 0.8rem; font-weight: 600; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #modelEffort .me-x { background: none; border: 0; color: var(--muted); font-size: 1.2rem;
+        line-height: 1; cursor: pointer; padding: 0 2px; }
+      #modelEffort .me-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 12px;
+        padding: 10px 16px; min-height: 0; overflow-y: auto; }
+      #modelEffort .me-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      #modelEffort .me-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .06em; color: var(--muted); padding: 2px 8px 4px; }
       #modelEffort .me-opt { display: flex; align-items: center; gap: 8px; min-height: 36px;
-        padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: inherit;
-        font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
-      #modelEffort .me-opt:hover { background: var(--surface); }
+        padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--text);
+        font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer; }
+      #modelEffort .me-opt:hover { background: var(--border); }
+      #modelEffort .me-opt:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
       #modelEffort .me-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      #modelEffort .me-opt .me-tick { flex: 0 0 14px; color: var(--blue); font-weight: 700; }
-      #modelEffort .me-opt[aria-checked="true"] { color: var(--blue); }
+      #modelEffort .me-tick { flex: 0 0 14px; color: var(--blue); font-weight: 700; }
+      #modelEffort .me-opt[aria-checked="true"] { color: var(--blue); font-weight: 600; }
       #modelEffort .me-keep { color: var(--muted); }
-      #modelEffort .me-note { font-size: 12px; color: var(--muted); padding: 4px 16px 0; }
-      #modelEffort .me-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 14px; }
-      #modelEffort .me-actions button { min-height: 36px; padding: 0 14px; border-radius: 8px;
-        border: 1px solid var(--border); background: var(--bg); color: inherit; font: inherit; cursor: pointer; }
+      #modelEffort .me-note { font-size: 0.75rem; color: var(--muted); padding: 0 16px; }
+      #modelEffort .me-note:empty { display: none; }
+      #modelEffort .me-keys { font-size: 0.7rem; color: var(--muted); padding: 0 16px 12px; margin-top: -4px; }
+      #modelEffort .me-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; }
+      #modelEffort .me-actions button { padding: 10px 16px; border-radius: 8px; font: inherit;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+        background: none; color: var(--text); }
       #modelEffort .me-actions .me-apply { border-color: var(--blue); background: var(--blue); color: var(--bg); }
       #modelEffort .me-actions .me-apply:disabled { opacity: .45; cursor: default; }
     `;
@@ -55275,11 +55322,14 @@ function studioCardHtml() {
       const style = document.createElement('style');
       style.textContent = MODEL_EFFORT_CSS;
       document.head.appendChild(style);
-      el = document.createElement('dialog');
+      el = document.createElement('div');
       el.id = 'modelEffort';
+      el.hidden = true;
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
       el.setAttribute('aria-labelledby', 'modelEffortTitle');
       el.addEventListener('click', e => {
-        if (e.target === el) { el.close(); return; }   // the backdrop
+        if (e.target === el) { closeModelEffort(); return; }   // the scrim
         const opt = e.target.closest('[data-pick]');
         if (opt) {
           modelEffortState[opt.dataset.pick] = opt.dataset.value;
@@ -55289,10 +55339,48 @@ function studioCardHtml() {
         const act = e.target.closest('[data-act]');
         if (!act) return;
         if (act.dataset.act === 'apply') modelEffortApply();
-        el.close();
+        closeModelEffort();
       });
+      // Captured and kept: it is modal, so a page's own shortcuts behind the scrim see no key.
+      document.addEventListener('keydown', e => {
+        if (el.hidden) return;
+        modelEffortKey(e);
+        e.stopPropagation();
+      }, true);
       document.body.appendChild(el);
       return el;
+    }
+
+    // The keyboard: ↑↓ within a list, ←→ to the other list's choice, Space picks the row under
+    // focus (a button's own click) and Enter applies, from anywhere but a button that means
+    // something else. Escape closes.
+    function modelEffortKey(e) {
+      const el = document.getElementById('modelEffort');
+      if (e.key === 'Escape') { e.preventDefault(); closeModelEffort(); return; }
+      const opt = document.activeElement && document.activeElement.closest('#modelEffort .me-opt');
+      if (e.key === 'Enter' && (opt || !el.contains(document.activeElement))) {
+        e.preventDefault();
+        const apply = el.querySelector('.me-apply');
+        if (apply && !apply.disabled) apply.click();
+        return;
+      }
+      if (!opt) return;
+      const col = opt.closest('.me-col');
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const opts = [...col.querySelectorAll('.me-opt')];
+        const next = opts[opts.indexOf(opt) + (e.key === 'ArrowUp' ? -1 : 1)];
+        e.preventDefault();
+        if (next) next.focus();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const other = [...el.querySelectorAll('.me-col')].find(c => c !== col);
+        e.preventDefault();
+        if (other) other.querySelector('.me-opt[aria-checked="true"]').focus();
+      }
+    }
+
+    function closeModelEffort() {
+      const el = document.getElementById('modelEffort');
+      if (el) el.hidden = true;
     }
 
     function modelEffortPaint() {
@@ -55308,20 +55396,33 @@ function studioCardHtml() {
           + `<span>${escapeHtml(label)}</span></button>`;
       };
       const col = (head, field, list) => `<div class="me-col" role="group" aria-label="${head}">`
-        + `<div class="me-head">${head}</div>` + opt(field, '', 'Keep current')
+        + `<div class="me-label">${head}</div>` + opt(field, '', 'Keep current')
         + list.map(v => opt(field, v, v)).join('') + '</div>';
       const lines = modelEffortCommands(s.kind, s.model, s.effort);
-      el.innerHTML = `<h2 id="modelEffortTitle">Model &amp; effort — ${escapeHtml(s.label)}</h2>`
+      // A repaint replaces every row, so the one under focus is found again by what it names.
+      const had = document.activeElement && el.contains(document.activeElement)
+        ? document.activeElement.closest('[data-pick]') : null;
+      const keep = had && [had.dataset.pick, had.dataset.value];
+      el.innerHTML = '<div class="me-box">'
+        + `<div class="me-head"><span id="modelEffortTitle">Model &amp; effort · ${escapeHtml(s.label)}</span>`
+        + '<button type="button" class="me-x" data-act="cancel" aria-label="Close">✕</button></div>'
         + '<div class="me-cols">' + col('Model', 'model', models)
         + col(s.kind === 'codex' ? 'Reasoning' : 'Effort', 'effort', efforts) + '</div>'
         + `<div class="me-note">${escapeHtml(lines.length ? 'Sends ' + lines.join(' then ') + '. ' : '')}`
         + `${escapeHtml(MODEL_EFFORT_NOTE[s.kind] || '')}</div>`
         + '<div class="me-actions"><button type="button" data-act="cancel">Cancel</button>'
         + `<button type="button" class="me-apply" data-act="apply"${lines.length ? '' : ' disabled'}>`
-        + 'Apply</button></div>';
+        + 'Apply</button></div>'
+        + (matchMedia('(hover: hover) and (pointer: fine)').matches
+          ? '<div class="me-keys">↑↓ move · ←→ switch list · Space select · Enter apply · Esc close</div>' : '')
+        + '</div>';
+      const back = keep && [...el.querySelectorAll('[data-pick]')]
+        .find(b => b.dataset.pick === keep[0] && b.dataset.value === keep[1]);
+      if (back) back.focus();
     }
 
-    // Opened from the `/` palette, on either page, for the pane it was opened over.
+    // Opened from the `/` palette, on either page, and from a conversation's agent list, for the
+    // pane it was opened over.
     function openModelEffort(pane) {
       const kind = modelEffortKind(pane);
       if (!kind) return;
@@ -55329,7 +55430,8 @@ function studioCardHtml() {
                           label: (typeof paneLabel === 'function' && paneLabel(pane)) || pane.agent};
       const el = modelEffortMount();
       modelEffortPaint();
-      if (!el.open) el.showModal();
+      el.hidden = false;
+      el.querySelector('.me-opt[aria-checked="true"]').focus();
     }
 
     // One command at a time, each through the same send a palette row makes. The second waits for
@@ -55353,6 +55455,11 @@ function studioCardHtml() {
     // two lived in spent half the screen on four buttons with nothing to search them by.
     const PALETTE_TITLES = { commands: 'Commands', prompts: 'Prompts', terminal: 'Commands' };
     let paletteMode = 'commands';
+    // The agent the commands are for when it is not the open pane: a conversation's composer
+    // addresses one member of the room, which is not whatever `activePane` last held.
+    let paletteTarget = null;
+
+    function paletteAgent() { return paletteTarget || activeAgent(); }
 
     // idx is the index into the array a row acts on, so the row can call the existing
     // insertShortcut / runShortcut / deleteShortcut unchanged.
@@ -55362,14 +55469,16 @@ function studioCardHtml() {
       if (paletteMode === 'terminal')
         return termShortcuts.map((s, i) => ({ cmd: s.label, desc: s.text, idx: i, danger: s.danger }));
       // Model & effort first: it opens a dialog rather than typing one command.
-      const me = modelEffortKind(activeAgent())
+      const agent = paletteAgent();
+      const me = modelEffortKind(agent)
         ? [{cmd: 'Model & effort…', desc: 'Switch model and reasoning effort', common: true,
             modelEffort: true}] : [];
-      return me.concat(getAgentCommands());
+      return me.concat(agent ? commandsFor(agent.agent) : []);
     }
 
-    function openPalette(mode) {
+    function openPalette(mode, target) {
       paletteMode = mode;
+      paletteTarget = target || null;
       if (window.cue) cue('page');
       document.getElementById('paletteTitle').textContent = PALETTE_TITLES[mode];
       document.getElementById('cmdPalette').style.display = '';
@@ -55417,7 +55526,7 @@ function studioCardHtml() {
       }
       el.innerHTML = filtered.map(c => {
         const armed = paletteMode === 'terminal' && shortcutArmed === c.idx;
-        const act = c.modelEffort ? 'closePalette(); openModelEffort(activeAgent())'
+        const act = c.modelEffort ? 'closePalette(); openModelEffort(paletteAgent())'
           : paletteMode === 'commands' ? `runCommand('${c.cmd}')`
           : paletteMode === 'prompts' ? `insertShortcut(${c.idx})`
             : `runShortcut(${c.idx})`;
@@ -55433,6 +55542,8 @@ function studioCardHtml() {
 
     function runCommand(cmd) {
       closePalette();
+      // A conversation's member: sent to it and read back in the thread, not in a pane view.
+      if (paletteTarget) { if (ws) submitText(paletteTarget, cmd); return; }
       if (!ws || !activePane) return;
       submitText(activePane, cmd);
       setTimeout(refreshPane, 500);
