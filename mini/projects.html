@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-10-28">
+  <meta name="app-built" content="2026-10-29">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -3429,9 +3429,19 @@
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
         <!-- Drawn only when there is a choice to make: one root is not a question. -->
         <div id="newProjectRootRow" hidden style="display:none"></div>
-        <label class="start-field">Folder name<input id="newProjectName" type="text" maxlength="64"
+        <!-- New folder or existing folder; drawn only when there is a root to make one under. -->
+        <div id="newProjectModeRow" hidden style="display:none"></div>
+        <label class="start-field" id="newProjectNameRow">Folder name<input id="newProjectName" type="text" maxlength="64"
             autocapitalize="none" autocomplete="off" placeholder="what this project is called"
             onkeydown="if(event.key==='Enter')submitNewProject()" /></label>
+        <!-- Anywhere on the relay's machine. Added as it is: nothing in the folder is changed. -->
+        <label class="start-field" id="newProjectPathRow" style="display:none">Folder path<input id="newProjectPath"
+            type="text" autocapitalize="none" autocomplete="off" spellcheck="false"
+            placeholder="/Users/you/code/repo" onkeydown="if(event.key==='Enter')submitNewProject()" /></label>
+        <!-- Each harness the General's recipes use is started once in the new folder, so its
+             trust prompt is answered now rather than in front of a waiting Commander. -->
+        <label class="start-check"><input type="checkbox" id="newProjectTrust" checked />
+          <span>Approve harness trust now</span></label>
         <p id="newProjectError" style="display:none;color:var(--red);font-size:0.75rem;margin:0"></p>
         <button id="newProjectSubmit" onclick="submitNewProject()"
           style="padding:12px;border-radius:8px;border:none;background:var(--blue);color:var(--bg);font-weight:600;font-size:0.85rem;cursor:pointer">Create
@@ -10538,9 +10548,9 @@ function convWebModeOf(conv) {
     }
 
     // Three states: this browser's transcript (`off`), the relay's record (`on`), and the record
-    // with its `agent_detail` rows (`detail`) -- what a Claude pane said mid-turn and lost from its
-    // window before the turn ended. Those rows are always fetched and only drawn in `detail`, so
-    // switching it costs no ask.
+    // with its `agent_detail` rows (`detail`) -- what a Claude or devin pane said mid-turn and lost
+    // from its window before the turn ended. Those rows are always fetched and only drawn in
+    // `detail`, so switching it costs no ask.
     function convLiveState() {
       try {
         const v = localStorage.getItem(CONV_LIVE_KEY);
@@ -11771,6 +11781,51 @@ function convWebModeOf(conv) {
         if (typeof showSpawnStatus === 'function') showSpawnStatus(text, 'busy');
         else showToast(text);
       }
+      // A start of an agent this relay briefed, refused so it comes back through `respawn` — a
+      // browser older than the hint, or one whose snapshot had not caught up. Sent again under the
+      // same ref, so the intent it is held under lands it, and with no starter of this page's.
+      else if (msg.type === 'command_result' && msg.command === 'start_agent'
+               && msg.code === 'use_respawn' && msg.aid && msg.request_ref
+               && typeof startsInFlight !== 'undefined' && startsInFlight.has(msg.request_ref)) {
+        const held = startsInFlight.get(msg.request_ref);
+        held.prompt = '';
+        held.starter = '';
+        ws.send(JSON.stringify({type: 'respawn', aid: msg.aid, ref: msg.request_ref,
+                                resume: !!held.resume}));
+      }
+      else if (msg.type === 'command_result' && msg.command === 'respawn') {
+        // bench.open may join an earlier start: the request ref is ours, the pane ref is its.
+        if (msg.ok && msg.ref && msg.ref !== msg.request_ref
+            && typeof startsInFlight !== 'undefined' && startsInFlight.has(msg.request_ref)) {
+          startsInFlight.set(msg.ref, startsInFlight.get(msg.request_ref));
+          startsInFlight.delete(msg.request_ref);
+          const pending = typeof convFindPending === 'function' && convFindPending(msg.request_ref);
+          if (pending) convNotePending(pending.conv.id, msg.ref, pending.key, '');
+          if (typeof landStarted === 'function') landStarted();
+        }
+        const landed = (msg.ref || msg.request_ref) && typeof startAwaiting === 'function'
+          && !startAwaiting(msg.ref || msg.request_ref);
+        const unseen = (msg.ok && Array.isArray(msg.unseen)) ? msg.unseen.length : 0;
+        if (unseen) {
+          // A member back in its seat has read none of the work its old pane held. Handing it on
+          // again is the session owner's call, never the relay's.
+          showSpawnStatus(`Back in its seat. ${unseen} assignment${unseen === 1 ? '' : 's'} it `
+                          + 'held went with its old pane — hand it on again if it is still wanted.',
+                          'warning');
+        } else if (msg.ok && msg.as === 'seat') {
+          if (!landed) showSpawnStatus('Back in its seat — opening…', 'busy');
+        } else if (msg.ok && msg.briefed === false) {
+          showSpawnStatus('Back, but its brief was not confirmed — check its pane.', 'warning');
+        } else if (msg.ok) {
+          if (!landed) showSpawnStatus('Session started — opening…', 'busy');
+        } else {
+          showSpawnStatus(withRetryHint(msg.error || 'restart failed'), 'error');
+          if (typeof startsInFlight !== 'undefined' && msg.request_ref) {
+            startsInFlight.delete(msg.request_ref);
+          }
+          if (typeof convDropPending === 'function') convDropPending(msg.request_ref);
+        }
+      }
       else if (msg.type === 'command_result' &&
                (msg.command === 'start_agent' || msg.command === 'open_terminal')) {
         document.getElementById('startSubmit').disabled = false;
@@ -11849,7 +11904,8 @@ function convWebModeOf(conv) {
       else if (msg.type === 'tunnel') {
         followTunnel(msg.url);
       }
-      else if (msg.type === 'command_result' && msg.command === 'create_project') {
+      else if (msg.type === 'command_result'
+               && (msg.command === 'create_project' || msg.command === 'add_project')) {
         newProjectResult(msg);
       }
       else if (msg.type === 'command_result' && msg.command === 'trust_check') {
@@ -12526,7 +12582,7 @@ function convWebModeOf(conv) {
       if (!ws || !msg) return '';
       msg.ref = msg.ref || newStartRef();
       startsInFlight.set(msg.ref, {intent: startIntent, prompt: startPrompt,
-                                   starter: startStarter, at: Date.now()});
+                                   starter: startStarter, resume: !!msg.resume, at: Date.now()});
       // Cleared as they are captured. A press that has said what it wants must not leave it lying
       // where the next press reads it — that is the whole of the defect this replaces.
       startIntent = null;
@@ -13185,10 +13241,12 @@ function convWebModeOf(conv) {
 
     // --- New project ---
     //
-    // A Project is a directory under a root, so making one is a mkdir the relay does and nothing
-    // more: the next scan lists the root, finds the directory, and derives the same row it would
-    // have derived for one made by hand. No pane, no agent, nothing to place.
+    // Two ways in. A new folder under a root is a mkdir the relay does and nothing more: the next
+    // scan lists the root, finds the directory, and derives the same row it would have derived for
+    // one made by hand. An existing folder, anywhere on the relay's machine, is named by its path
+    // and written into the Projects file as it is (`add_project`); nothing inside it is touched.
     let newProjectRoot = null;
+    let newProjectMode = 'new';
 
     function newProjectRoots() { return projects.filter(p => p.root); }
 
@@ -13196,7 +13254,7 @@ function convWebModeOf(conv) {
       const row = document.getElementById('newProjectRootRow');
       const roots = newProjectRoots();
       // One root is not a question. Asking it anyway would be a tap that has one answer.
-      const show = roots.length > 1;
+      const show = roots.length > 1 && newProjectMode === 'new';
       row.hidden = !show;
       row.style.display = show ? '' : 'none';
       row.innerHTML = show
@@ -13207,26 +13265,55 @@ function convWebModeOf(conv) {
         : '';
     }
 
+    // With no root there is nothing to make a folder under, so the one way in is not asked.
+    function renderNewProjectMode() {
+      const roots = newProjectRoots();
+      if (!roots.length) newProjectMode = 'existing';
+      const row = document.getElementById('newProjectModeRow');
+      const choose = roots.length > 0;
+      row.hidden = !choose;
+      row.style.display = choose ? '' : 'none';
+      row.innerHTML = choose
+        ? '<div class="badge-strip">'
+          + badgeHtml('New folder', newProjectMode === 'new', "pickNewProjectMode('new')")
+          + badgeHtml('Existing folder', newProjectMode === 'existing', "pickNewProjectMode('existing')")
+          + '</div>'
+        : '';
+      const existing = newProjectMode === 'existing';
+      document.getElementById('newProjectNameRow').style.display = existing ? 'none' : '';
+      document.getElementById('newProjectPathRow').style.display = existing ? '' : 'none';
+      document.getElementById('newProjectSubmit').textContent = existing ? 'Add project' : 'Create project';
+      renderNewProjectRoots();
+    }
+
     function pickNewProjectRoot(id) {
       newProjectRoot = id;
       renderNewProjectRoots();
     }
 
+    function pickNewProjectMode(mode) {
+      newProjectMode = mode;
+      setNewProjectError('');
+      renderNewProjectMode();
+      document.getElementById(mode === 'existing' ? 'newProjectPath' : 'newProjectName').focus();
+    }
+
     function openNewProject(ev) {
       if (ev) ev.stopPropagation();
       const roots = newProjectRoots();
-      if (!roots.length) return;
       // Opens under the Project being looked at when that Project is itself a root — the common
       // case for "another one of these" — and on the first root otherwise.
       const here = roots.find(p => p.id === activeProject);
-      newProjectRoot = (here || roots[0]).id;
+      newProjectRoot = roots.length ? (here || roots[0]).id : null;
+      newProjectMode = 'new';
       document.getElementById('newProjectName').value = '';
+      document.getElementById('newProjectPath').value = '';
       document.getElementById('newProjectTrust').checked = true;
       setNewProjectError('');
       document.getElementById('newProjectSubmit').disabled = false;
-      renderNewProjectRoots();
+      renderNewProjectMode();
       document.getElementById('newProjectSheet').style.display = 'block';
-      document.getElementById('newProjectName').focus();
+      document.getElementById(newProjectMode === 'existing' ? 'newProjectPath' : 'newProjectName').focus();
     }
 
     function closeNewProject() {
@@ -13241,7 +13328,17 @@ function convWebModeOf(conv) {
     }
 
     function submitNewProject() {
-      if (!ws || !newProjectRoot) return;
+      if (!ws) return;
+      const trust = !!document.getElementById('newProjectTrust').checked;
+      if (newProjectMode === 'existing') {
+        const path = (document.getElementById('newProjectPath').value || '').trim();
+        if (!path) { setNewProjectError("Give the folder's full path"); return; }
+        setNewProjectError('');
+        document.getElementById('newProjectSubmit').disabled = true;
+        ws.send(JSON.stringify({type: 'add_project', path: path, trust: trust}));
+        return;
+      }
+      if (!newProjectRoot) return;
       // Trimmed, like the start dialog's folder field and the Name field beside it. Whitespace is
       // not in the relay's charset, so this widens nothing — it only decides whether a phone's
       // stray space costs a round trip and an error about a word that reads correctly on screen.
@@ -13253,16 +13350,20 @@ function convWebModeOf(conv) {
       setNewProjectError('');
       document.getElementById('newProjectSubmit').disabled = true;
       ws.send(JSON.stringify({type: 'create_project', project_id: newProjectRoot, name: name,
-                              trust: !!document.getElementById('newProjectTrust').checked}));
+                              trust: trust}));
     }
 
     // The roster arrives on its own `projects` broadcast, so there is nothing to add here: the
-    // sheet closes and the Project it made is selected, which the broadcast has already drawn.
+    // sheet closes and the Project it made or added is selected, which the broadcast has drawn.
     function newProjectResult(msg) {
       const el = document.getElementById('newProjectSheet');
       if (!el || el.style.display === 'none') return;
       document.getElementById('newProjectSubmit').disabled = false;
-      if (!msg.ok) { setNewProjectError(msg.error || 'Could not create that project'); return; }
+      if (!msg.ok) {
+        setNewProjectError(msg.error || (msg.command === 'add_project' ? 'Could not add that folder'
+                                         : 'Could not create that project'));
+        return;
+      }
       closeNewProject();
       // The landing page's project filter, which is what "go and look at it" means on the phone.
       // Guarded rather than assumed: the desktop page has no project filter to move — its sidebar
@@ -18810,6 +18911,11 @@ function convWebModeOf(conv) {
           : '') +
         `<button type="button" class="badge pick proj" onclick="cmdOpenEdit()">Edit</button>` +
         `<button type="button" class="badge pick proj" onclick="cmdRebrief(this)">Re-brief</button>` +
+        (cmdCoordinatorGone(s)
+          ? `<button type="button" class="badge pick on" onclick="cmdRespawn(this)">` +
+            `${s.manual ? 'Restart its standby' : s.tier === 'general' ? 'Restart the General'
+              : 'Restart its Commander'}</button>`
+          : '') +
         (paused
           ? `<button type="button" class="badge pick on" onclick="cmdResume()">Resume</button>`
           : `<button type="button" class="badge pick proj" onclick="cmdPause()">Pause</button>`) +
@@ -18849,6 +18955,23 @@ function convWebModeOf(conv) {
     function cmdResume() {
       const s = cmdSessionHere();
       if (s) arbSend({type: 'cmd_resume', session: s.id});
+    }
+
+    // A coordinator with no pane: killed, or herdr restarted under it. The session keeps its id,
+    // roster and work, and the relay brings the same agent back briefed for it (`respawn`).
+    function cmdCoordinatorGone(s) {
+      const aid = (s.coordinator || {}).aid;
+      return !!aid && !agents.some(a => a.aid === aid);
+    }
+
+    function cmdRespawn(btn) {
+      const s = cmdSessionHere();
+      if (!s || !cmdCoordinatorGone(s)) return;
+      btn.disabled = true;
+      // Minted here: the Projects page loads this file without conv_lifecycle.js's own.
+      const ref = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+      arbSend({type: 'respawn', aid: s.coordinator.aid, ref: ref});
+      showToast('Starting it again — it is briefed when it is up.', 'info');
     }
 
     // Both armed: one clears the pane a Commander's whole context is in, and the other ends it.
