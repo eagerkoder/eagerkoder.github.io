@@ -55506,6 +55506,15 @@ function studioCardHtml() {
     function modelEffortKey(e) {
       const el = document.getElementById('modelEffort');
       if (e.key === 'Escape') { e.preventDefault(); closeModelEffort(); return; }
+      if (e.key === 'Tab') {
+        const buttons = [...el.querySelectorAll('button:not(:disabled)')];
+        const at = buttons.indexOf(document.activeElement);
+        if (at < 0 || (e.shiftKey ? at === 0 : at === buttons.length - 1)) {
+          e.preventDefault();
+          buttons[e.shiftKey ? buttons.length - 1 : 0].focus();
+        }
+        return;
+      }
       const opt = document.activeElement && document.activeElement.closest('#modelEffort .me-opt');
       if (e.key === 'Enter' && (opt || !el.contains(document.activeElement))) {
         e.preventDefault();
@@ -55530,6 +55539,8 @@ function studioCardHtml() {
     function closeModelEffort() {
       const el = document.getElementById('modelEffort');
       if (el) el.hidden = true;
+      const back = modelEffortState && modelEffortState.focus;
+      if (back && back.isConnected && back.getClientRects().length) back.focus();
     }
 
     function modelEffortPaint() {
@@ -55576,6 +55587,7 @@ function studioCardHtml() {
       const kind = modelEffortKind(pane);
       if (!kind) return;
       modelEffortState = {pane, kind, model: '', effort: '',
+                          focus: document.activeElement,
                           label: (typeof paneLabel === 'function' && paneLabel(pane)) || pane.agent};
       const el = modelEffortMount();
       modelEffortPaint();
