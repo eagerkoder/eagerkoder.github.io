@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-03">
+  <meta name="app-built" content="2026-11-05">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -12957,7 +12957,7 @@
     const DEVIN_RULE = /^─{20,}/, DEVIN_TIP = /^ ✱\s/;
 
     const GUTTERS = {
-      claude: { speaker: '⏺', result: ['⎿'], user: ['❯', '>'], tool: CLAUDE_TOOL },
+      claude: { speaker: '⏺●', result: ['⎿'], user: ['❯', '>'], tool: CLAUDE_TOOL },
       // codex hangs a tip off its closing message with the result glyph, which is a footer under
       // what it said rather than the output of a command it ran.
       codex: { speaker: '•', result: ['└', '│'], user: ['›'], endLine: /^\s*└ Tip:(?:\s|$)/ },
@@ -13186,7 +13186,7 @@
       if (/^\S/.test(row || '')) return true;
       if (!g.indent) return false;
       const ch = gutterOf(row, g);
-      return ch === g.speaker || (g.user || []).includes(ch) ||
+      return (!!ch && !!g.speaker && g.speaker.includes(ch)) || (g.user || []).includes(ch) ||
         g.result.includes(ch) || (g.ends || []).includes(ch);
     }
 
@@ -13280,7 +13280,7 @@
       const row = rows[i] || '';
       // A line that closes a block is a marker, and never opens one.
       if (isEndLine(g, row, rows, i)) return false;
-      if (g.speaker) return gutterOf(row, g) === g.speaker;
+      if (g.speaker) { const ch = gutterOf(row, g); return !!ch && g.speaker.includes(ch); }
       if (!row.trim() || gutterOf(row, g).trim()) return false;
       // The user's own line never opens the agent's. A prompt drawn in column 0 is already excluded
       // by the gutter test above; this is for its continuations, which are indented exactly as a
@@ -13824,7 +13824,7 @@ function convWebModeOf(conv) {
     // Gutter glyph, the box side it may sit inside, and the leading space. Same characters as
     // _MARGIN in relay/pane_summary.py, and for the same reason: what is left is where the text
     // starts.
-    const CONV_MARGIN = /^[\s│┃⏺•❯>›⋯❭]+/;
+    const CONV_MARGIN = /^[\s│┃⏺●•❯>›⋯❭]+/;
 
     function convLine(row) {
       return String(row == null ? '' : row).replace(/\s+$/, '').replace(/[│┃]+$/, '')
