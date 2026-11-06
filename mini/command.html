@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-05">
+  <meta name="app-built" content="2026-11-06">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -13972,8 +13972,13 @@ function convWebModeOf(conv) {
     const CONV_CLAUDE_BANNER = /^\s*[\u2580-\u259f]/;
     const CONV_CLAUDE_QUEUE = /^\s*(?:ctrl\+enter to send now|Press up to edit queued messages)\s*$/;
 
+    // What codex draws in its speaker gutter that it did not say: the live status line under a
+    // working turn and the compaction marker. Same rule as `_CODEX_CHROME` in pane_summary.py.
+    const CONV_CODEX_CHROME = /^(?:.+ \(.* • esc to interrupt\)|Context compacted)(?: · .*)?$/;
+
     // Keep prose before a call or result, even without a blank separator.
     function convClean(who, text, agent) {
+      if (agent === 'codex' && who === 'agent' && CONV_CODEX_CHROME.test((text || '').trim())) return '';
       if (agent !== 'claude' || !text) return text;
       if (who === 'user') {
         // A slash command's output and an @-mention's read hang under the prompt; not typed.
@@ -14882,7 +14887,8 @@ function convWebModeOf(conv) {
     }
 
     // Another machine's room opened here keeps its transcripts apart (storage_ns.js).
-    const CONV_DB_NAME = 'herdr' + (window.STORAGE_NS ? ':' + window.STORAGE_NS : ''), CONV_DB_STORE = 'transcripts';
+    const CONV_DB_NAME = 'herdr' + (typeof window !== 'undefined' && window.STORAGE_NS
+      ? ':' + window.STORAGE_NS : ''), CONV_DB_STORE = 'transcripts';
     // The relay's own record, kept beside the transcripts rather than mixed into them. They are two
     // sources for one conversation and they must never be folded together: one is what this browser
     // witnessed, the other is what the relay wrote for every pane whether anyone was watching. Its
@@ -18773,7 +18779,7 @@ convApplyTint();
     }
 
     // Three states: this browser's transcript (`off`), the relay's record (`on`), and the record
-    // with its `agent_detail` rows (`detail`) -- what a Claude or devin pane said mid-turn and lost
+    // with its `agent_detail` rows (`detail`) -- what a Claude, devin or codex pane said mid-turn and lost
     // from its window before the turn ended. Those rows are always fetched and only drawn in
     // `detail`, so switching it costs no ask.
     //
