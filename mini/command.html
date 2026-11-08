@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-06">
+  <meta name="app-built" content="2026-11-08">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -13975,10 +13975,18 @@ function convWebModeOf(conv) {
     // What codex draws in its speaker gutter that it did not say: the live status line under a
     // working turn and the compaction marker. Same rule as `_CODEX_CHROME` in pane_summary.py.
     const CONV_CODEX_CHROME = /^(?:.+ \(.* • esc to interrupt\)|Context compacted)(?: · .*)?$/;
+    // The footer under a block, and a file edit with its diff. `_CODEX_FOOTER` and `_CODEX_EDIT`.
+    const CONV_CODEX_FOOTER = /^(?:Worked for (?:\d+[hms] ?)+(?: • .*)?|\d+ background terminals? running(?: · .*)?)$/;
+    const CONV_CODEX_EDIT = /^(?:Added|Edited|Deleted|Moved) \S.* \(\+\d+ -\d+\)$/;
 
     // Keep prose before a call or result, even without a blank separator.
     function convClean(who, text, agent) {
-      if (agent === 'codex' && who === 'agent' && CONV_CODEX_CHROME.test((text || '').trim())) return '';
+      if (agent === 'codex' && who === 'agent' && text) {
+        if (CONV_CODEX_EDIT.test(text.trim().split('\n')[0])) return '';
+        return text.split(/\n[ \t]*\n/)
+          .filter(p => !CONV_CODEX_CHROME.test(p.trim()) && !CONV_CODEX_FOOTER.test(p.trim()))
+          .join('\n\n').trim();
+      }
       if (agent !== 'claude' || !text) return text;
       if (who === 'user') {
         // A slash command's output and an @-mention's read hang under the prompt; not typed.

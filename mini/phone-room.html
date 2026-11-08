@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-06">
+  <meta name="app-built" content="2026-11-08">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -10882,6 +10882,40 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* A claude question's answers: one to a line, neutral, the whole label left-aligned. A row of
+       five at a fifth of a phone each cut every label to its first word. */
+    .quick-actions button.btn-q {
+      flex: 1 0 100%;
+      justify-content: flex-start;
+      min-width: 0;
+      min-height: 44px;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      text-align: left;
+    }
+
+    /* Drawn on every row, empty where there is no mark, so the labels share one left edge. */
+    .btn-q-mark {
+      flex: none;
+      width: 1.2em;
+      font-size: 1.15em;
+      line-height: 1;
+      color: var(--blue);
+    }
+
+    .btn-q-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .quick-actions button.btn-q-submit {
+      flex: 1 0 100%;
+      min-height: 44px;
     }
 
     .term-input {
@@ -28354,10 +28388,18 @@ function convWebModeOf(conv) {
     // What codex draws in its speaker gutter that it did not say: the live status line under a
     // working turn and the compaction marker. Same rule as `_CODEX_CHROME` in pane_summary.py.
     const CONV_CODEX_CHROME = /^(?:.+ \(.* • esc to interrupt\)|Context compacted)(?: · .*)?$/;
+    // The footer under a block, and a file edit with its diff. `_CODEX_FOOTER` and `_CODEX_EDIT`.
+    const CONV_CODEX_FOOTER = /^(?:Worked for (?:\d+[hms] ?)+(?: • .*)?|\d+ background terminals? running(?: · .*)?)$/;
+    const CONV_CODEX_EDIT = /^(?:Added|Edited|Deleted|Moved) \S.* \(\+\d+ -\d+\)$/;
 
     // Keep prose before a call or result, even without a blank separator.
     function convClean(who, text, agent) {
-      if (agent === 'codex' && who === 'agent' && CONV_CODEX_CHROME.test((text || '').trim())) return '';
+      if (agent === 'codex' && who === 'agent' && text) {
+        if (CONV_CODEX_EDIT.test(text.trim().split('\n')[0])) return '';
+        return text.split(/\n[ \t]*\n/)
+          .filter(p => !CONV_CODEX_CHROME.test(p.trim()) && !CONV_CODEX_FOOTER.test(p.trim()))
+          .join('\n\n').trim();
+      }
       if (agent !== 'claude' || !text) return text;
       if (who === 'user') {
         // A slash command's output and an @-mention's read hang under the prompt; not typed.
@@ -46761,7 +46803,8 @@ function studioCardHtml() {
         // own numbered menu where there was one, and nothing at all otherwise — a codex pane used
         // to arrive wearing claude's buttons, and pressing one typed a sentence at a menu that
         // wanted a number.
-        middle = (a.options || []).map(approvalHtml).join('');
+        const options = a.options || [];
+        middle = isQuestionMenu(options) ? questionHtml(options) : options.map(approvalHtml).join('');
       }
       // Approvals first and on their own line, nav underneath: the row order is what puts the
       // thing that needs answering closest to the terminal it is about.
@@ -46792,6 +46835,41 @@ function studioCardHtml() {
       const choice = escapeHtml(JSON.stringify(String(o)));
       return `<button class="btn-${kind}${num ? ' btn-choice' : ''}" title="${escapeHtml(body)}"` +
         ` onclick="respond(${choice})">${icon} ${escapeHtml(label)}</button>`;
+    }
+
+    // claude's question menu (AskUserQuestion) always ends in `Chat about this`. Its rows are
+    // answers, not approvals, so they are drawn neutral and one to a line with their own words. A
+    // multi-select (`[ ]` rows) ticks a row per press and is sent on by a Submit of its own, and
+    // `Type something` asks for the answer here. The relay turns each into the keys the menu takes.
+    function isQuestionMenu(options) {
+      return options.some(o => /^[1-9][.)]\s*chat about this$/i.test(String(o)));
+    }
+
+    function questionHtml(options) {
+      const multi = options.some(o => /^[1-9][.)]\s*\[.\]\s/.test(String(o)));
+      const rows = options.map(o => {
+        const body = String(o).replace(/^[1-9][.)]\s*/, '');
+        const box = /^\[(.)\]\s*(.*)$/.exec(body);
+        const label = box ? box[2] : body;
+        const typed = /^type something\.?$/i.test(label);
+        const chat = /^chat about this$/i.test(label);
+        const mark = box ? (box[1].trim() ? '☑' : '☐') : typed ? '✎' : '';
+        const choice = escapeHtml(JSON.stringify(String(o)));
+        // Every row but Chat leaves the menu on screen (the next question, or the review), so the
+        // buttons stay until the relay sends the screen that follows.
+        const call = typed ? `respondTyped(${choice})` : `respond(${choice}, null, ${!chat})`;
+        return `<button class="btn-q" title="${escapeHtml(label)}" onclick="${call}">` +
+          `<span class="btn-q-mark" aria-hidden="true">${mark}</span>` +
+          `<span class="btn-q-label">${escapeHtml(label)}</span></button>`;
+      }).join('');
+      return rows + (multi
+        ? `<button class="btn-yes btn-q-submit" onclick="respond('submit', null, true)">Submit</button>`
+        : '');
+    }
+
+    function respondTyped(choice) {
+      const answer = window.prompt('Your answer');
+      if (answer && answer.trim()) respond(choice, answer.trim(), true);
     }
 
     let paneLines = 200;
@@ -55138,15 +55216,20 @@ function studioCardHtml() {
 
     function toggleArrows() { }
     function hideArrows() { }
-    function respond(t) {
+    // `input` is a typed answer for a question menu's `Type something` row. `stays` says the menu
+    // goes on after this press (a tick, the next question), so its buttons are kept for the relay's
+    // next `blocked` to redraw.
+    function respond(t, input, stays) {
       if (!ws || !activePane) return;
       if (window.cue) cue('success');
-      ws.send(JSON.stringify(Object.assign({ type: 'respond', text: t }, paneAddr(activeAgent() || activePane))));
+      const msg = { type: 'respond', text: t };
+      if (input) msg.input = input;
+      ws.send(JSON.stringify(Object.assign(msg, paneAddr(activeAgent() || activePane))));
       // Optimistic, and corrected by the next poll: the prompt has been answered, so the approval
       // buttons go now rather than lingering for up to three seconds over an agent that is
       // already working. Re-rendered rather than emptied, so back and forward survive it.
       const a = activeAgent();
-      if (a) a.status = 'busy';
+      if (a && !stays) a.status = 'busy';
       renderQuickActions();
       setTimeout(refreshPane, 500);
     }
