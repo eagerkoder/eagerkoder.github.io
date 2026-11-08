@@ -9589,6 +9589,106 @@
       z-index: 5;
     }
 
+    /* The selection bar floats over the pane's foot, and a finished agent's closing message is
+       selected for the reader on arrival, so the bar is there more often than not. The two corners
+       stand on it rather than under it: covered, `Last` could not be pressed at all. */
+    #termWrap:has(> .sel-bar:not([hidden])) > .hang-corner,
+    #termWrap:has(> .sel-bar:not([hidden])) > .hang-who {
+      bottom: 58px;
+    }
+
+    /* The members list, in the corner across from `.hang-corner`: same height off the foot, and
+       the list opens upward over the thread, the way the dock's menus do. */
+    .hang-who {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 5;
+    }
+
+    .hang-who-btn {
+      width: auto;
+      padding: 0 8px;
+    }
+
+    .hang-who-n:empty {
+      display: none;
+    }
+
+    .hang-who-list {
+      position: absolute;
+      left: 0;
+      bottom: 34px;
+      min-width: 200px;
+      max-width: min(300px, calc(100vw - 32px));
+      max-height: 50vh;
+      overflow-y: auto;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .hang-who-list[hidden] {
+      display: none;
+    }
+
+    .hang-who-row {
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    .hang-who-row button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text);
+      font-size: var(--input-font, 13px);
+      cursor: pointer;
+    }
+
+    .hang-who-row button:hover,
+    .hang-who-row.current .hang-who-thread {
+      background: var(--bg);
+    }
+
+    .hang-who-thread {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      text-align: left;
+    }
+
+    .hang-who-thread .dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .hang-who-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .hang-who-row.current .hang-who-name {
+      font-weight: 600;
+    }
+
+    .hang-who-term {
+      flex: none;
+      width: 44px;
+      color: var(--muted) !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
     /* The terminal's own history: a disclosure in the floating row, not a control of its own. The
        button rides the row and the list drops beneath it, which is the pattern the pane menu and
        the QUIT fold already use — and it puts the newest command directly under the finger that
@@ -13443,6 +13543,14 @@
       <div class="conv-thread" id="convViewThread"></div>
       <button class="hang-btn hang-last hang-corner" id="convLast" onclick="hangToLastConv()"
         aria-label="Jump to the newest message">↓ Last</button>
+      <!-- The conversation's members, in the corner across from Last: a row is its thread, the
+           >_ beside it its terminal. See hangWhoToggle. -->
+      <div class="hang-who" id="convWho">
+        <div class="hang-who-list" id="convWhoList" role="menu" aria-label="Agents in this conversation" hidden></div>
+        <button class="hang-btn hang-who-btn" id="convWhoBtn" onclick="hangWhoToggle('conv')"
+          aria-haspopup="menu" aria-expanded="false" aria-controls="convWhoList"
+          aria-label="Agents in this conversation"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /><path d="M16 5.2a3 3 0 0 1 0 5.6M18 13.8c1.8.7 3 2.4 3 5.2" /></svg><span class="hang-who-n"></span></button>
+      </div>
     </div>
     <!-- The dock: who you are talking to, what is added to what you send, and the composer it all
          modifies. Sits statically at the bottom of the conversation view. -->
@@ -13696,6 +13804,14 @@
            the text — bottom right, where a thumb already is. -->
       <button class="hang-btn hang-last hang-corner" id="paneLast" onclick="hangToLast()"
         aria-label="Jump to the newest message">↓ Last</button>
+      <!-- The conversation's members, in the corner across from Last: a row is its thread, the
+           >_ beside it its terminal. See hangWhoToggle. -->
+      <div class="hang-who" id="paneWho">
+        <div class="hang-who-list" id="paneWhoList" role="menu" aria-label="Agents in this conversation" hidden></div>
+        <button class="hang-btn hang-who-btn" id="paneWhoBtn" onclick="hangWhoToggle('pane')"
+          aria-haspopup="menu" aria-expanded="false" aria-controls="paneWhoList"
+          aria-label="Agents in this conversation"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /><path d="M16 5.2a3 3 0 0 1 0 5.6M18 13.8c1.8.7 3 2.4 3 5.2" /></svg><span class="hang-who-n"></span></button>
+      </div>
       <div class="hang-working" id="paneWorking" aria-live="polite"></div>
       <div class="hang-pill" id="paneSyncing" role="status" hidden>Syncing…</div>
       <!-- The selection bar floats over the foot of the thread rather than taking a row under it:
@@ -54227,6 +54343,8 @@ function studioCardHtml() {
       // and the guard does not stand in front of those.
       hangSyncGuard(document.getElementById('convGuard'), !!convViewId && recorded);
       hangSyncPara(document.getElementById('panePara'), !!thread && !thread.hidden);
+      hangSyncWho('conv');
+      hangSyncWho('pane');
     }
 
     // A conversation the relay could have written something about: one with members, which means
@@ -54392,6 +54510,103 @@ function studioCardHtml() {
         if (btn) btn.classList.remove('busy');
       }
     }
+
+    // --- Who is in this conversation, bottom left ---
+    //
+    // The other corner from `Last`, and the answer to the question a phone makes slow: "take me to
+    // that one". Each row is a member that has a live pane: the row itself is its thread (addressed
+    // in the conversation), the `>_` beside it is its terminal. Over a pane the list is the
+    // conversation that pane's thread is showing, and the row for the pane on screen is marked.
+
+    // The conversation each corner's list is about, or null.
+    function hangWhoConv(where) {
+      if (typeof loadConvIndex !== 'function') return null;
+      if (where === 'conv') return convViewId ? loadConvIndex().find(c => c.id === convViewId) || null : null;
+      const a = activePane && !isShell(activePane) ? activeAgent() : null;
+      return a ? convViewConv(a) : null;
+    }
+
+    // Its members with a live pane, in roster order, less the ones the reader folded away.
+    function hangWhoMembers(conv) {
+      if (!conv) return [];
+      const hidden = convHidden(conv.id);
+      return (conv.members || []).filter(m => !hidden.has(m.aid))
+        .map(m => agents.find(a => convMemberKey(a) === m.aid)).filter(Boolean);
+    }
+
+    // The conversation offers it whenever it has a pane to go to. A pane only when there is
+    // somebody else: a list holding the pane itself goes nowhere the header does not.
+    function hangSyncWho(where) {
+      const btn = document.getElementById(where + 'WhoBtn');
+      if (!btn) return;
+      const n = hangWhoMembers(hangWhoConv(where)).length;
+      const on = where === 'conv' ? n > 0 : !!activePane && n > 1;
+      btn.classList.toggle('on', on);
+      btn.querySelector('.hang-who-n').textContent = String(n);
+      if (!on) hangWhoClose(where);
+    }
+
+    function hangWhoClose(where) {
+      const list = document.getElementById(where + 'WhoList');
+      const btn = document.getElementById(where + 'WhoBtn');
+      if (list) list.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function hangWhoToggle(where) {
+      const list = document.getElementById(where + 'WhoList');
+      if (!list) return;
+      if (!list.hidden) { hangWhoClose(where); return; }
+      const conv = hangWhoConv(where);
+      // Who is "here": the addressed member in the conversation, the pane on screen over a pane.
+      const here = where === 'conv' ? (typeof dockAddressed === 'function' ? dockAddressed() : '')
+        : activePane;
+      list.innerHTML = hangWhoMembers(conv).map(a => {
+        const id = escapeHtml(a.pane_id), name = escapeHtml(paneLabel(a));
+        const cur = a.pane_id === here;
+        return `<div class="hang-who-row${cur ? ' current' : ''}" role="none">` +
+          `<button class="hang-who-thread" role="menuitem" ${cur ? 'aria-current="true" ' : ''}` +
+          `onclick="hangWhoThread('${where}', '${id}')" aria-label="${name}'s thread">` +
+          `<span class="dot" style="background:${statusColor(a)}" aria-hidden="true"></span>` +
+          `<span class="hang-who-name">${name}</span>${paneBadge(a)}</button>` +
+          `<button class="hang-who-term" role="menuitem" onclick="hangWhoTerm('${where}', '${id}')" ` +
+          `title="Open ${name}'s terminal" aria-label="Open ${name}'s terminal">&gt;_</button></div>`;
+      }).join('');
+      list.hidden = false;
+      document.getElementById(where + 'WhoBtn').setAttribute('aria-expanded', 'true');
+      if (window.cue) cue('tick');
+    }
+
+    // The thread: that member addressed in the conversation, opening the conversation first when
+    // the list was opened over a pane.
+    function hangWhoThread(where, paneId) {
+      const conv = hangWhoConv(where);
+      hangWhoClose(where);
+      if (!conv) return;
+      if (where === 'pane') openConversation(conv.id);
+      setDockTarget(paneId);
+    }
+
+    // The terminal: that member's pane, its thread set to this conversation, as a roster row does.
+    function hangWhoTerm(where, paneId) {
+      const conv = hangWhoConv(where);
+      const live = agents.find(a => a.pane_id === paneId);
+      hangWhoClose(where);
+      if (!conv || !live) return;
+      convSetView(live, conv.id);
+      jumpToPane(live.pane_id, live.aid);
+    }
+
+    // A tap anywhere else folds an open list, and so does Escape.
+    document.addEventListener('click', e => {
+      for (const where of ['conv', 'pane']) {
+        const list = document.getElementById(where + 'WhoList');
+        if (list && !list.hidden && !e.target.closest('#' + where + 'Who')) hangWhoClose(where);
+      }
+    }, true);
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { hangWhoClose('conv'); hangWhoClose('pane'); }
+    });
 
     // Scroll says where the reader is; a resize of the content says the thread grew under them,
     // which changes the same answer without a scroll event ever firing.
