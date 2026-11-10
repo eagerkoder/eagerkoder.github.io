@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-08">
+  <meta name="app-built" content="2026-11-09">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -20146,6 +20146,9 @@ convApplyTint();
         ws.send(JSON.stringify({type: 'respawn', aid: msg.aid, ref: msg.request_ref,
                                 resume: !!held.resume}));
       }
+      else if (msg.type === 'command_result' && msg.command === 'rebrief') {
+        showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
+      }
       else if (msg.type === 'command_result' && msg.command === 'respawn') {
         // bench.open may join an earlier start: the request ref is ours, the pane ref is its.
         if (msg.ok && msg.ref && msg.ref !== msg.request_ref
@@ -26047,6 +26050,23 @@ convApplyTint();
     // palette lists; `/clear` for most, and the two that call it something else are pi and
     // opencode. An unknown harness gets `/clear`, which is the majority spelling.
     const RESET_CMD = {pi: '/new', opencode: '/new'};
+
+    // Re-brief: the brief the relay gave an agent it briefed, typed again into its context as it
+    // stands. Reset is the other answer to an agent that has lost its brief and clears first; this
+    // keeps everything, for a long-lived one whose compactions have summarised the brief away.
+    // Offered only where there is a live pane and a role the relay holds a brief for.
+    function convCanRebrief(key) {
+      const managed = respawnManaged(key);
+      return !!(managed && RELAY_RESPAWNS.includes(managed.as)
+                && agents.some(x => convMemberKey(x) === key));
+    }
+
+    function convRebriefMember(key) {
+      if (!convCanRebrief(key)) return false;
+      ws.send(JSON.stringify({type: 'rebrief', aid: key}));
+      showToast('Sending its brief again…');
+      return true;
+    }
 
     function convResetMember(key) {
       const live = agents.find(x => convMemberKey(x) === key);
@@ -37959,6 +37979,9 @@ convApplyTint();
         live && !respawnWebRoom(aid) && {label: 'Reset', arm: true,
                  hint: 'clears the session and says its opening words again',
                  run: () => { if (convResetMember(aid) === false) showToast('Nothing was reset.'); }},
+        live && convCanRebrief(aid) && {label: 'Re-brief', arm: true,
+                 hint: 'types its brief again, keeping the session',
+                 run: () => convRebriefMember(aid)},
         {label: 'Restart', arm: true, disabled: !again || !convId,
          hint: again && convId ? note : 'nothing on record to start again',
          run: () => convRestart(aid)},

@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-08">
+  <meta name="app-built" content="2026-11-09">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -5209,10 +5209,13 @@
       display: none;
     }
 
+    /* Above everything the thread under it raises — a message's Copy (2), the branch badge (4) —
+       since the roster's menu opens down over the thread. Level with the thread's, Copy painted
+       through the open menu. */
     .conv-view-top {
       flex-shrink: 0;
       position: relative;
-      z-index: 2;
+      z-index: 5;
     }
 
     /* The dock sits statically at the bottom of the conversation view, never rubber-banding or
@@ -7518,6 +7521,7 @@
     .conv-roster .conv-drop,
     .conv-roster .conv-restart-open,
     .conv-roster .conv-reset,
+    .conv-roster .conv-rebrief,
     .conv-roster .conv-restart,
     .conv-roster .conv-open,
     .conv-roster .conv-end,
@@ -7620,6 +7624,7 @@
     /* Reset neither ends a session nor brings one back — it leaves the pane exactly where it is
        and empties it. Muted, because it is the third thing. */
     .conv-roster .conv-reset,
+    .conv-roster .conv-rebrief,
     .conv-roster-actions .conv-reset {
       color: var(--muted);
       border-color: var(--border);
@@ -19240,6 +19245,9 @@
         held.starter = '';
         ws.send(JSON.stringify({type: 'respawn', aid: msg.aid, ref: msg.request_ref,
                                 resume: !!held.resume}));
+      }
+      else if (msg.type === 'command_result' && msg.command === 'rebrief') {
+        showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
       }
       else if (msg.type === 'command_result' && msg.command === 'respawn') {
         // bench.open may join an earlier start: the request ref is ours, the pane ref is its.
@@ -40702,6 +40710,23 @@ function nlmSourceDelete(source) {
     // opencode. An unknown harness gets `/clear`, which is the majority spelling.
     const RESET_CMD = {pi: '/new', opencode: '/new'};
 
+    // Re-brief: the brief the relay gave an agent it briefed, typed again into its context as it
+    // stands. Reset is the other answer to an agent that has lost its brief and clears first; this
+    // keeps everything, for a long-lived one whose compactions have summarised the brief away.
+    // Offered only where there is a live pane and a role the relay holds a brief for.
+    function convCanRebrief(key) {
+      const managed = respawnManaged(key);
+      return !!(managed && RELAY_RESPAWNS.includes(managed.as)
+                && agents.some(x => convMemberKey(x) === key));
+    }
+
+    function convRebriefMember(key) {
+      if (!convCanRebrief(key)) return false;
+      ws.send(JSON.stringify({type: 'rebrief', aid: key}));
+      showToast('Sending its brief again…');
+      return true;
+    }
+
     function convResetMember(key) {
       const live = agents.find(x => convMemberKey(x) === key);
       if (!live) return false;
@@ -41768,7 +41793,14 @@ function nlmSourceDelete(source) {
               ? `<button class="conv-reset arm-btn" data-key="${escapeHtml(m.aid)}"` +
               ` onclick="armButton(this, '', () => convResetMember(this.dataset.key))"` +
               ` aria-label="Clear this member's session and start it over in the same pane">` +
-              `Reset</button>` : ''),
+              `Reset</button>` : '') +
+            // The brief the relay gave it, typed again with nothing cleared: for a long-lived agent
+            // whose compactions have summarised it away.
+            (on && convCanRebrief(m.aid)
+              ? `<button class="conv-rebrief arm-btn" data-key="${escapeHtml(m.aid)}"` +
+              ` onclick="armButton(this, '', () => convRebriefMember(this.dataset.key))"` +
+              ` aria-label="Send this member's brief again, keeping its session">` +
+              `Re-brief</button>` : ''),
             `<button class="conv-drop arm-btn" data-key="${escapeHtml(m.aid)}"` +
             ` onclick="armButton(this, '', () => convRemoveMember(this.dataset.key))"` +
             ` aria-label="Remove this member from the conversation">Remove</button>`) +

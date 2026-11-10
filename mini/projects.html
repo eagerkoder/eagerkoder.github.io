@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-08">
+  <meta name="app-built" content="2026-11-09">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -11920,6 +11920,9 @@ function convWebModeOf(conv) {
         held.starter = '';
         ws.send(JSON.stringify({type: 'respawn', aid: msg.aid, ref: msg.request_ref,
                                 resume: !!held.resume}));
+      }
+      else if (msg.type === 'command_result' && msg.command === 'rebrief') {
+        showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
       }
       else if (msg.type === 'command_result' && msg.command === 'respawn') {
         // bench.open may join an earlier start: the request ref is ours, the pane ref is its.
