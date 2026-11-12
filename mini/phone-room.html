@@ -2294,7 +2294,20 @@
     @media (max-width: 360px) { .remote-links-form, .remote-route-fields { grid-template-columns: 1fr; } }
     @media (max-width: 600px) { .remote-overlay { inset: 0; border-radius: 0; } }
 
-    </style>
+    /* Resume on another config (conv_lifecycle.js). */
+    #resumeOnBody { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .resume-on-note { margin: 0; font-size: 0.75rem; color: var(--muted); line-height: 1.4; }
+    .resume-on-list { display: flex; flex-direction: column; gap: 6px; }
+    .resume-on-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
+    .resume-on-row span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .resume-on-row small { color: var(--muted); font-size: 0.7rem; overflow-wrap: anywhere; }
+    .resume-on-row:has(input:checked) { border-color: var(--blue); }
+    .resume-on-row.off { opacity: 0.5; cursor: not-allowed; }
+    .resume-on-go { padding: 12px; border-radius: 8px; border: none; background: var(--blue);
+      color: var(--bg); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .resume-on-go:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
     <!-- Both pages open the recipe editor, so its rules are one file. Linked here, in
          the middle of this stylesheet, because that is where they were. -->
     <style>
@@ -14391,6 +14404,20 @@
        sheet rather than a banner on the log: the log is a reading of everything the session did
        and keeps growing, and this is the one question asked at the one moment somebody is stood
        at a stopped session with a finger over a button. -->
+  <!-- Resume on another config: the member's last session reopened under another alias of the
+       provider it ran on. conv_lifecycle.js draws the body. -->
+  <div id="resumeOnSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeResumeOn()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="resumeOnTitle">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span id="resumeOnTitle" style="font-size:0.8rem;font-weight:600;flex:1">Resume on another config</span>
+        <button onclick="closeResumeOn()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="resumeOnBody"></div>
+    </div>
+  </div>
+
   <div id="arbResumeSheet" class="app-overlay" style="display:none;z-index:100;">
     <div onclick="closeArbResume()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div class="sheet wide">
@@ -19244,7 +19271,9 @@
         held.prompt = '';
         held.starter = '';
         ws.send(JSON.stringify({type: 'respawn', aid: msg.aid, ref: msg.request_ref,
-                                resume: !!held.resume}));
+                                resume: !!held.resume,
+                                ...(held.resume && held.config !== undefined
+                                  ? {config: held.config} : {})}));
       }
       else if (msg.type === 'command_result' && msg.command === 'rebrief') {
         showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
@@ -21948,7 +21977,8 @@
       if (!ws || !msg) return '';
       msg.ref = msg.ref || newStartRef();
       startsInFlight.set(msg.ref, {intent: startIntent, prompt: startPrompt,
-                                   starter: startStarter, resume: !!msg.resume, at: Date.now()});
+                                   starter: startStarter, resume: !!msg.resume,
+                                   config: msg.config, at: Date.now()});
       // Cleared as they are captured. A press that has said what it wants must not leave it lying
       // where the next press reads it — that is the whole of the defect this replaces.
       startIntent = null;
@@ -40578,8 +40608,9 @@ function nlmSourceDelete(source) {
     }
 
     // `resume` reopens the harness's last session instead of starting a fresh one. Nothing else
-    // about the restart differs: same config, same flags, same opening words, same thread.
-    function convRespawn(key, resume) {
+    // about the restart differs: same config, same flags, same opening words, same thread — unless
+    // `config` names another alias to reopen it on (Resume on another config).
+    function convRespawn(key, resume, config) {
       const conv = loadConvIndex().find(c => c.id === convLifeConvId(key));
       const rec = (convLifeRecs() || []).find(r => r.key === key) || {};
       const spawn = spawnOf(key);
@@ -40610,6 +40641,7 @@ function nlmSourceDelete(source) {
         startPrompt = '';
         startStarter = '';
         const msg = {type: 'respawn', aid: key, ref: startIntent.ref, resume: !!resume};
+        if (resume && config !== undefined) msg.config = config;
         showSpawnStatus(`Continuing "${conv.name}"…`, 'busy');
         convNotePending(conv.id, msg.ref, key, '');
         sendStart(msg);
@@ -40650,14 +40682,16 @@ function nlmSourceDelete(source) {
       // reader recognises is the one outcome worth refusing outright — so the Start dialog opens
       // on that Project with the custom row unfolded, and this restart continues from whatever is
       // picked there. startIntent is set after the open, which clears it.
-      if (spawn.config && !agentConfigLive(spawn.config, spawn.agent)) {
+      const chosenConfig = resume && config !== undefined ? config : spawn.config;
+      if (chosenConfig && !agentConfigLive(chosenConfig, spawn.agent)) {
         convSwapMember(key, {
           kind: spawn.agent,
-          note: `Agent config "${spawn.config}" is gone. Pick what to start instead.`,
+          note: `Agent config "${chosenConfig}" is gone. Pick what to start instead.`,
         });
         return;
       }
       if (spawn.config) msg.config = spawn.config;
+      if (resume && config !== undefined) msg.config = config;
       // And how it was launched. Recorded against the agent by the relay at the start that made
       // it, so this is what that start said and not a guess from something else about it: the
       // duplicate path used to read "it had an alias" as "it skipped approvals", which is wrong in
@@ -40790,7 +40824,7 @@ function nlmSourceDelete(source) {
     // by a start, in one press — and on a member that is already paused, the start alone. One
     // control for both halves of a row's life: what it means is the same either way, and which
     // half a member is in is not a question the reader should have to answer before pressing.
-    function convRestart(key, resume) {
+    function convRestart(key, resume, config) {
       if (typeof closeRestartMenu === 'function') closeRestartMenu();
       // Everything convRespawn can refuse on, asked before anything is ended. It refuses in
       // silence — a socket that is not open, a record it cannot start from — and by then the
@@ -40809,8 +40843,112 @@ function nlmSourceDelete(source) {
         return false;
       }
       if (live && !endPane(live.pane_id)) return false;
-      convRespawn(key, resume);
+      convRespawn(key, resume, config);
       return true;
+    }
+
+    // --- Resume on another config ---
+    //
+    // The same harness session reopened under another alias of the provider it ran on: a key out
+    // of quota swapped for the next, the conversation kept. The session is a file in that
+    // provider's config directory, and another provider's endpoint refuses a transcript carrying
+    // this one's signed thinking, so the relay takes only the same provider
+    // (`resume_config_error`) and this offers nothing else. Its own item and its own sheet rather
+    // than a variant of Restart original session: which key an agent continues on is a choice
+    // made with care, after reading what each one is.
+
+    // The alias this agent's last session ran under: the live pane's, else the retired row's,
+    // else what the record says it was started as. '' is the stock harness.
+    function resumeConfigNow(key) {
+      const spawn = spawnOf(key) || {};
+      const rows = (typeof retiredAgents !== 'undefined' && retiredAgents) || [];
+      const row = agents.find(a => convMemberKey(a) === key) || rows.find(x => x.aid === key);
+      return (row && row.agent === spawn.agent && row.config) || spawn.config || '';
+    }
+
+    // The other aliases its session may reopen on: same harness, same provider, switched on.
+    // ponytail: stock '' is never a target — a pane carrying no config leaves the relay's record
+    // on the alias it had, so the next restart would put the old one back. Offer it once the
+    // registry can record "no config".
+    function resumeConfigChoices(key) {
+      if (typeof agentConfigOffered !== 'function' || !resumableSession(key)) return [];
+      const kind = (spawnOf(key) || {}).agent || '';
+      const now = resumeConfigNow(key);
+      const row = now ? agentConfigRow(now) : null;
+      if (now && !row) return [];                   // its alias is gone: there is no group to read
+      const provider = row ? row.provider : 'stock-' + kind;
+      return agentConfigOffered().filter(r => r.provider === provider && r.kind === kind
+        && r.id !== now);
+    }
+
+    let resumeOnKey = '', resumeOnPick = '';
+
+    function openResumeOn(key) {
+      if (typeof closeRestartMenu === 'function') closeRestartMenu();
+      const el = document.getElementById('resumeOnSheet');
+      const choices = resumeConfigChoices(key);
+      if (!el || !choices.length) {
+        showToast('No other config of this provider to resume on.');
+        return;
+      }
+      resumeOnKey = key;
+      resumeOnPick = '';
+      renderResumeOn();
+      el.style.display = '';
+    }
+
+    function closeResumeOn() {
+      const el = document.getElementById('resumeOnSheet');
+      if (el) el.style.display = 'none';
+      resumeOnKey = '';
+      resumeOnPick = '';
+    }
+
+    function pickResumeOn(id) {
+      resumeOnPick = id;
+      renderResumeOn();
+    }
+
+    function renderResumeOn() {
+      const body = document.getElementById('resumeOnBody');
+      if (!body || !resumeOnKey) return;
+      const key = resumeOnKey;
+      const now = resumeConfigNow(key);
+      const nowRow = now ? agentConfigRow(now) : null;
+      const live = agents.find(a => convMemberKey(a) === key);
+      const name = (nowRow && nowRow.label) || now || 'stock ' + ((spawnOf(key) || {}).agent || '');
+      // A key the keystore does not hold is a start that fails at the endpoint: drawn, so the
+      // reader sees why it is not offered, and not pickable.
+      const rows = resumeConfigChoices(key).map(r => {
+        const usable = !r.key || r.key_set;
+        const facts = [r.model, r.key ? (usable ? 'key ' + r.key : r.key + ' not in keystore') : '']
+          .filter(Boolean).join(' · ');
+        return `<label class="resume-on-row${usable ? '' : ' off'}">` +
+          `<input type="radio" name="resumeOnPick" value="${escapeHtml(r.id)}"` +
+          `${resumeOnPick === r.id ? ' checked' : ''}${usable ? '' : ' disabled'}` +
+          ` onchange="pickResumeOn(this.value)">` +
+          `<span><strong>${escapeHtml(r.label || r.id)}</strong>` +
+          (facts ? `<small>${escapeHtml(facts)}</small>` : '') + `</span></label>`;
+      }).join('');
+      const picked = resumeConfigChoices(key).find(r => r.id === resumeOnPick && (!r.key || r.key_set));
+      body.innerHTML =
+        `<p class="resume-on-note">Reopens this agent's last session, its context kept, on another ` +
+        `config of ${escapeHtml((nowRow && nowRow.provider_label) || 'the same provider')}. ` +
+        `It runs on ${escapeHtml(name)} now.` +
+        (live ? ' The running session is ended first, and a turn in progress is lost.' : '') +
+        `</p><div class="resume-on-list" role="radiogroup" aria-label="Config to resume on">` +
+        rows + `</div>` +
+        `<button type="button" class="resume-on-go" onclick="submitResumeOn()"` +
+        `${picked ? '' : ' disabled'}>` +
+        escapeHtml(picked ? `Resume on ${picked.label || picked.id}` : 'Pick a config') +
+        `</button>`;
+    }
+
+    function submitResumeOn() {
+      const key = resumeOnKey, id = resumeOnPick;
+      if (!key || !id || !resumeConfigChoices(key).some(r => r.id === id && (!r.key || r.key_set))) return;
+      closeResumeOn();
+      convRestart(key, true, id);
     }
 
     // --- the whole room at once ---
@@ -42079,6 +42217,9 @@ function nlmSourceDelete(source) {
           rest: on ? 'Restart original session \u2014 ends this one first'
             : 'Restart original session',
           fire: 'convRestart(this.dataset.key, true)'}) : '') +
+        (again && typeof resumeConfigChoices === 'function' && resumeConfigChoices(key).length
+          ? menuItemHtml({cls: 'conv-resume-on', key: key, arm: 'resume-on:' + key,
+            rest: 'Resume on another config\u2026', fire: 'openResumeOn(this.dataset.key)'}) : '') +
         (other ? menuItemHtml({cls: 'conv-swap', key: key, arm: 'restart-as:' + key,
           rest: 'Restart as\u2026',
           fire: 'convStartAs(this.dataset.key)'}) : '') +

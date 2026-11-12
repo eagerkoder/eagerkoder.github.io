@@ -11931,7 +11931,9 @@ function convWebModeOf(conv) {
         held.prompt = '';
         held.starter = '';
         ws.send(JSON.stringify({type: 'respawn', aid: msg.aid, ref: msg.request_ref,
-                                resume: !!held.resume}));
+                                resume: !!held.resume,
+                                ...(held.resume && held.config !== undefined
+                                  ? {config: held.config} : {})}));
       }
       else if (msg.type === 'command_result' && msg.command === 'rebrief') {
         showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
@@ -12734,7 +12736,8 @@ function convWebModeOf(conv) {
       if (!ws || !msg) return '';
       msg.ref = msg.ref || newStartRef();
       startsInFlight.set(msg.ref, {intent: startIntent, prompt: startPrompt,
-                                   starter: startStarter, resume: !!msg.resume, at: Date.now()});
+                                   starter: startStarter, resume: !!msg.resume,
+                                   config: msg.config, at: Date.now()});
       // Cleared as they are captured. A press that has said what it wants must not leave it lying
       // where the next press reads it — that is the whole of the defect this replaces.
       startIntent = null;
