@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-09">
+  <meta name="app-built" content="2026-11-12">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -8144,6 +8144,18 @@ function convWebModeOf(conv) {
       if (mb >= 0.01) return mb.toFixed(2) + ' MB';
       if (b < 1024) return b + ' B';
       return (b / 1024).toFixed(1) + ' KB';
+    }
+
+    // A member's Project as its badge names it. A member row says `project` by id (a bench room,
+    // and every row the relay writes) or by label (older rows, and a live pane, whose `project` is
+    // the agent registry's label), so a Project whose label is not its id wore two badges in one
+    // header: `@mylife-claudia` and `@mylife Claudia`. Named by the label whichever one arrived; a
+    // name no Project knows is drawn as it is.
+    function convProjectName(name, projs = typeof projects !== 'undefined' ? projects : []) {
+      if (!name) return '';
+      const list = Array.isArray(projs) ? projs : [];
+      const hit = list.find(p => p.id === name) || list.find(p => p.label === name);
+      return hit ? String(hit.label || hit.id) : name;
     }
     // --- Conversation recorder (pure) --- end
 

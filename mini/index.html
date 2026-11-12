@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-09">
+  <meta name="app-built" content="2026-11-12">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -29343,6 +29343,18 @@ function convWebModeOf(conv) {
       if (b < 1024) return b + ' B';
       return (b / 1024).toFixed(1) + ' KB';
     }
+
+    // A member's Project as its badge names it. A member row says `project` by id (a bench room,
+    // and every row the relay writes) or by label (older rows, and a live pane, whose `project` is
+    // the agent registry's label), so a Project whose label is not its id wore two badges in one
+    // header: `@mylife-claudia` and `@mylife Claudia`. Named by the label whichever one arrived; a
+    // name no Project knows is drawn as it is.
+    function convProjectName(name, projs = typeof projects !== 'undefined' ? projects : []) {
+      if (!name) return '';
+      const list = Array.isArray(projs) ? projs : [];
+      const hit = list.find(p => p.id === name) || list.find(p => p.label === name);
+      return hit ? String(hit.label || hit.id) : name;
+    }
     // --- Conversation recorder (pure) --- end
 
     // The pending transfer, and where a classified send waits for the recorder to find it. Both
@@ -34322,7 +34334,8 @@ function webchatRoomBadges(conv, kindsOnly) {
   const found = members.map(member => {
     const pane = live.find(a => typeof convMemberKey === 'function'
       && convMemberKey(a) === member.aid) || {};
-    return {agent: member.agent || pane.agent || '', project: member.project || pane.project || ''};
+    return {agent: member.agent || pane.agent || '',
+      project: convProjectName(member.project || pane.project || '')};
   });
   const unique = field => Array.from(new Set(found.map(one => one[field]).filter(Boolean)));
   return memberKindBadges(members, live).join('')
@@ -41347,7 +41360,7 @@ function nlmSourceDelete(source) {
         const badgeValues = members.map(m => {
           const pane = byKey.get(m.aid) || {};
           return { agent: m.agent || pane.agent || '',
-            project: m.project || pane.project || '' };
+            project: convProjectName(m.project || pane.project || '') };
         });
         // Unique, because a conversation of four claudes in one Project is one badge and one
         // Project — the card says what is in it, not how many.
@@ -42524,7 +42537,8 @@ function nlmSourceDelete(source) {
       for (const m of members) {
         const rec = composed.recs.find(r => r.key === m.aid);
         const pane = live.get(m.aid);
-        const project = ((rec && rec.spawn) || {}).project || (pane && pane.project) || m.project || '';
+        const project = convProjectName(((rec && rec.spawn) || {}).project || (pane && pane.project)
+          || m.project || '');
         if (project && !projects.includes(project)) projects.push(project);
       }
       document.getElementById('convViewAgents').innerHTML =

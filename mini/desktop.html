@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-09">
+  <meta name="app-built" content="2026-11-12">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -14805,6 +14805,18 @@ function convWebModeOf(conv) {
       if (mb >= 0.01) return mb.toFixed(2) + ' MB';
       if (b < 1024) return b + ' B';
       return (b / 1024).toFixed(1) + ' KB';
+    }
+
+    // A member's Project as its badge names it. A member row says `project` by id (a bench room,
+    // and every row the relay writes) or by label (older rows, and a live pane, whose `project` is
+    // the agent registry's label), so a Project whose label is not its id wore two badges in one
+    // header: `@mylife-claudia` and `@mylife Claudia`. Named by the label whichever one arrived; a
+    // name no Project knows is drawn as it is.
+    function convProjectName(name, projs = typeof projects !== 'undefined' ? projects : []) {
+      if (!name) return '';
+      const list = Array.isArray(projs) ? projs : [];
+      const hit = list.find(p => p.id === name) || list.find(p => p.label === name);
+      return hit ? String(hit.label || hit.id) : name;
     }
     // --- Conversation recorder (pure) --- end
 
@@ -38521,7 +38533,8 @@ convApplyTint();
         // badge and one Project: the row says what is in the room, not how many.
         const values = members.map(m => {
           const pane = agents.find(a => convMemberKey(a) === m.aid) || {};
-          return {agent: m.agent || pane.agent || '', project: m.project || pane.project || ''};
+          return {agent: m.agent || pane.agent || '',
+            project: convProjectName(m.project || pane.project || '')};
         });
         const unique = f => Array.from(new Set(values.map(v => v[f]).filter(Boolean)));
         // Two kinds, marked apart: what is in the room, and where it works. A compact row keeps
@@ -40806,7 +40819,7 @@ convApplyTint();
       const values = members.map(m => {
         const pane = live.find(p => convMemberKey(p) === m.aid) || {};
         return {agent: m.agent || pane.agent || '',
-                project: m.project || pane.project || pane.project_id || ''};
+                project: convProjectName(m.project || pane.project || pane.project_id || '')};
       });
       const unique = f => Array.from(new Set(values.map(v => v[f]).filter(Boolean)));
       const badges = memberKindBadges(members, live)
@@ -43989,7 +44002,8 @@ convApplyTint();
         // one Project, because the title says what is in the room and not how many.
         const values = ((conv && conv.members) || []).map(m => {
           const pane = agents.find(a => convMemberKey(a) === m.aid) || {};
-          return {agent: m.agent || pane.agent || '', project: m.project || pane.project || ''};
+          return {agent: m.agent || pane.agent || '',
+            project: convProjectName(m.project || pane.project || '')};
         });
         const uniq = f => Array.from(new Set(values.map(v => v[f]).filter(Boolean)));
         badges = uniq('project').map(proj).join('')
