@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-12">
+  <meta name="app-built" content="2026-11-13">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -2665,6 +2665,23 @@
 
     .desk-pin.on { color: var(--accent); }
 
+    /* A roster row's menu. Faint until the row is pointed at or the button has focus, so a list of
+       members does not read as a list of buttons. */
+    #deskRosterRows .mock-agent { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+    .desk-row-more {
+      align-self: start;
+      background: none;
+      border: 0;
+      padding: 0 0.6ch;
+      cursor: pointer;
+      color: var(--term-dim);
+      font: inherit;
+      font-weight: 700;
+      opacity: 0.6;
+    }
+    .mock-agent:hover .desk-row-more,
+    .desk-row-more:focus-visible { opacity: 1; color: var(--term-text); }
+
     .desk-tab-x {
       margin-left: 0.6ch;
       background: none;
@@ -4317,7 +4334,10 @@
     .resume-on-list { display: flex; flex-direction: column; gap: 6px; }
     .resume-on-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
       border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
-    .resume-on-row span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .resume-on-row > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .resume-on-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .resume-on-mark { color: var(--muted); }
+    .resume-on-row.now { cursor: default; border-style: dashed; }
     .resume-on-row small { color: var(--muted); font-size: 0.7rem; overflow-wrap: anywhere; }
     .resume-on-row:has(input:checked) { border-color: var(--blue); }
     .resume-on-row.off { opacity: 0.5; cursor: not-allowed; }
@@ -26258,19 +26278,32 @@ convApplyTint();
       const nowRow = now ? agentConfigRow(now) : null;
       const live = agents.find(a => convMemberKey(a) === key);
       const name = (nowRow && nowRow.label) || now || 'stock ' + ((spawnOf(key) || {}).agent || '');
-      // A key the keystore does not hold is a start that fails at the endpoint: drawn, so the
-      // reader sees why it is not offered, and not pickable.
-      const rows = resumeConfigChoices(key).map(r => {
-        const usable = !r.key || r.key_set;
-        const facts = [r.model, r.key ? (usable ? 'key ' + r.key : r.key + ' not in keystore') : '']
-          .filter(Boolean).join(' · ');
-        return `<label class="resume-on-row${usable ? '' : ' off'}">` +
+      const kind = (spawnOf(key) || {}).agent || '';
+      // Each row is named by the badge its pane would wear: the alias's label in its colour.
+      // Guarded: the slices that test this sheet load no utils.js.
+      const badge = r => (typeof paneBadge === 'function' && paneBadge({agent: kind, config: r.id}, false))
+        || `<strong>${escapeHtml(r.label || r.id)}</strong>`;
+      const row = (r, usable, mark) => {
+        const keyFact = !r.key ? '' : r.key_set ? 'key ' + r.key : r.key + ' not in keystore';
+        const facts = [r.model, keyFact].filter(Boolean).join(' · ');
+        const cls = mark === 'current' ? ' now' : usable ? '' : ' off';
+        return `<label class="resume-on-row${cls}">` +
           `<input type="radio" name="resumeOnPick" value="${escapeHtml(r.id)}"` +
           `${resumeOnPick === r.id ? ' checked' : ''}${usable ? '' : ' disabled'}` +
           ` onchange="pickResumeOn(this.value)">` +
-          `<span><strong>${escapeHtml(r.label || r.id)}</strong>` +
+          `<span><span class="resume-on-head">${badge(r)}` +
+          (mark ? ` <span class="badge resume-on-mark">${mark}` +
+            (mark === 'current' && r.key && !r.key_set ? ' · no key' : '') + `</span>` : '') + `</span>` +
           (facts ? `<small>${escapeHtml(facts)}</small>` : '') + `</span></label>`;
-      }).join('');
+      };
+      // The config it runs on now heads the list, drawn and not pickable: resuming on it is
+      // Restart original session. A key the keystore does not hold is a start that fails at the
+      // endpoint: drawn, so the reader sees why it is not offered, and not pickable.
+      const rows = row(nowRow || {id: now, label: name}, false, 'current') +
+        resumeConfigChoices(key).map(r => {
+          const usable = !r.key || r.key_set;
+          return row(r, usable, usable ? '' : 'no key');
+        }).join('');
       const picked = resumeConfigChoices(key).find(r => r.id === resumeOnPick && (!r.key || r.key_set));
       body.innerHTML =
         `<p class="resume-on-note">Reopens this agent's last session, its context kept, on another ` +
@@ -37862,6 +37895,7 @@ convApplyTint();
     // is: there is one pointer.
 
     let deskMenuItems = [];
+    let deskMenuFocus = null;
 
     // Where the last menu was opened. A menu that opens a second menu — "Pair with…" — must put it
     // where the pointer is, and by then the pointer's own event is gone.
@@ -37905,6 +37939,7 @@ convApplyTint();
     function deskMenuOpen(x, y, items) {
       const el = document.getElementById('deskMenu');
       if (!el) return;
+      if (!el.contains(document.activeElement)) deskMenuFocus = document.activeElement;
       deskMenuItems = items.filter(Boolean);
       if (deskMenuArmTimer) { clearTimeout(deskMenuArmTimer); deskMenuArmTimer = null; }
       deskMenuArmed = -1;
@@ -37918,6 +37953,7 @@ convApplyTint();
       const top = Math.max(4, Math.min(y, window.innerHeight - box.height - 4));
       el.style.left = left + 'px';
       el.style.top = top + 'px';
+      el.querySelector('button:not(:disabled)')?.focus();
     }
 
     // Drawn from `deskMenuItems`, so arming an item repaints in place rather than reopening: the
@@ -37925,6 +37961,7 @@ convApplyTint();
     function deskMenuPaint() {
       const el = document.getElementById('deskMenu');
       if (!el) return;
+      const focused = el.contains(document.activeElement) ? document.activeElement.dataset.item : null;
       el.innerHTML = deskMenuItems.map((it, i) => {
         if (it === 'sep') return '<hr>';
         if (!it.run) return `<strong>${escapeHtml(it.label)}</strong>`;
@@ -37936,11 +37973,15 @@ convApplyTint();
           `>${escapeHtml(it.label)}` +
           (it.hint ? `<small>${escapeHtml(it.hint)}</small>` : '') + '</button>';
       }).join('');
+      if (focused != null) el.querySelector(`[data-item="${focused}"]`)?.focus();
     }
 
     function deskMenuClose() {
       const el = document.getElementById('deskMenu');
+      const focused = el && el.contains(document.activeElement);
       if (el && !el.hidden) { el.hidden = true; el.innerHTML = ''; }
+      if (focused && deskMenuFocus && deskMenuFocus.isConnected) deskMenuFocus.focus();
+      deskMenuFocus = null;
       deskMenuItems = [];
       deskMenuArmed = -1;
       if (deskMenuArmTimer) { clearTimeout(deskMenuArmTimer); deskMenuArmTimer = null; }
@@ -38844,6 +38885,10 @@ convApplyTint();
           // member is doing and nothing it already said.
           `<small>${escapeHtml(r.status)}` +
           `${r.guest ? ' · in this project' : ''}</small></div>` +
+          // The member's menu, which right-click also opens: Re-brief, Restart and Resume on
+          // another config live there, and a right-click is not something a reader finds.
+          `<button class="desk-row-more" data-more="${escapeHtml(r.aid)}"` +
+          ` aria-label="Actions for ${escapeHtml(r.label)}" title="Actions">⋯</button>` +
           '</div>';
       }).join('');
       if (html !== deskRosterSig) { box.innerHTML = html; deskRosterSig = html; }
@@ -38973,12 +39018,20 @@ convApplyTint();
         deskOpenSplit('conversation', c.id, c.name || c.id);
       });
       document.getElementById('deskRosterRows').addEventListener('click', e => {
+        const more = e.target.closest('[data-more]');
+        if (more) {
+          const row = more.closest('[data-member]');
+          const box = more.getBoundingClientRect();
+          deskMemberMenu(row.dataset.member, row.dataset.kind, box.left, box.bottom);
+          return;
+        }
         if (e.detail > 1) return;
         const row = e.target.closest('[data-member]');
         if (!row) return;
         deskOpenMember(row.dataset.member, row.dataset.kind, false);
       });
       document.getElementById('deskRosterRows').addEventListener('dblclick', e => {
+        if (e.target.closest('[data-more]')) return;
         const row = e.target.closest('[data-member]');
         if (!row) return;
         deskOpenMember(row.dataset.member, row.dataset.kind, true);

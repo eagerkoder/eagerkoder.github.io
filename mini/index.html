@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-12">
+  <meta name="app-built" content="2026-11-13">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -2300,7 +2300,10 @@
     .resume-on-list { display: flex; flex-direction: column; gap: 6px; }
     .resume-on-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
       border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
-    .resume-on-row span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .resume-on-row > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .resume-on-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .resume-on-mark { color: var(--muted); }
+    .resume-on-row.now { cursor: default; border-style: dashed; }
     .resume-on-row small { color: var(--muted); font-size: 0.7rem; overflow-wrap: anywhere; }
     .resume-on-row:has(input:checked) { border-color: var(--blue); }
     .resume-on-row.off { opacity: 0.5; cursor: not-allowed; }
@@ -40917,19 +40920,32 @@ function nlmSourceDelete(source) {
       const nowRow = now ? agentConfigRow(now) : null;
       const live = agents.find(a => convMemberKey(a) === key);
       const name = (nowRow && nowRow.label) || now || 'stock ' + ((spawnOf(key) || {}).agent || '');
-      // A key the keystore does not hold is a start that fails at the endpoint: drawn, so the
-      // reader sees why it is not offered, and not pickable.
-      const rows = resumeConfigChoices(key).map(r => {
-        const usable = !r.key || r.key_set;
-        const facts = [r.model, r.key ? (usable ? 'key ' + r.key : r.key + ' not in keystore') : '']
-          .filter(Boolean).join(' · ');
-        return `<label class="resume-on-row${usable ? '' : ' off'}">` +
+      const kind = (spawnOf(key) || {}).agent || '';
+      // Each row is named by the badge its pane would wear: the alias's label in its colour.
+      // Guarded: the slices that test this sheet load no utils.js.
+      const badge = r => (typeof paneBadge === 'function' && paneBadge({agent: kind, config: r.id}, false))
+        || `<strong>${escapeHtml(r.label || r.id)}</strong>`;
+      const row = (r, usable, mark) => {
+        const keyFact = !r.key ? '' : r.key_set ? 'key ' + r.key : r.key + ' not in keystore';
+        const facts = [r.model, keyFact].filter(Boolean).join(' · ');
+        const cls = mark === 'current' ? ' now' : usable ? '' : ' off';
+        return `<label class="resume-on-row${cls}">` +
           `<input type="radio" name="resumeOnPick" value="${escapeHtml(r.id)}"` +
           `${resumeOnPick === r.id ? ' checked' : ''}${usable ? '' : ' disabled'}` +
           ` onchange="pickResumeOn(this.value)">` +
-          `<span><strong>${escapeHtml(r.label || r.id)}</strong>` +
+          `<span><span class="resume-on-head">${badge(r)}` +
+          (mark ? ` <span class="badge resume-on-mark">${mark}` +
+            (mark === 'current' && r.key && !r.key_set ? ' · no key' : '') + `</span>` : '') + `</span>` +
           (facts ? `<small>${escapeHtml(facts)}</small>` : '') + `</span></label>`;
-      }).join('');
+      };
+      // The config it runs on now heads the list, drawn and not pickable: resuming on it is
+      // Restart original session. A key the keystore does not hold is a start that fails at the
+      // endpoint: drawn, so the reader sees why it is not offered, and not pickable.
+      const rows = row(nowRow || {id: now, label: name}, false, 'current') +
+        resumeConfigChoices(key).map(r => {
+          const usable = !r.key || r.key_set;
+          return row(r, usable, usable ? '' : 'no key');
+        }).join('');
       const picked = resumeConfigChoices(key).find(r => r.id === resumeOnPick && (!r.key || r.key_set));
       body.innerHTML =
         `<p class="resume-on-note">Reopens this agent's last session, its context kept, on another ` +
