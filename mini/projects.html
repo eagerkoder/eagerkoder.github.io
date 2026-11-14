@@ -3218,6 +3218,120 @@
   color: var(--muted);
 }
 
+/* The Brief sheet's roles: the files a bench entry is briefed from, ticked, or a roster member's
+   role in words; saved, the sheet reads the brief again. */
+.rebrief-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.rebrief-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.rebrief-role:has(input:checked) {
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  color: var(--blue);
+}
+
+.rebrief-roles input[type="text"],
+#rebriefRoleText {
+  flex: 1 1 14ch;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.rebrief-save {
+  padding: 3px 10px;
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.rebrief-roles-note { color: var(--muted); }
+
+/* A role chip that opens the brief: the chip, pressable. */
+button.conv-role {
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+/* A bench room's member: on the bench, or in the room only. */
+.conv-bench {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.conv-bench::before { content: '\2610'; }
+.conv-bench[aria-checked="true"] { color: var(--green); }
+.conv-bench[aria-checked="true"]::before { content: '\2611'; }
+
+.conv-bench-legend {
+  margin: 6px 2px 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+/* Putting a member on the bench: which seat, and its role files. */
+.bench-seat-roles {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bench-seat-roles legend { padding: 0 4px; }
+
+.bench-seat-roles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+}
+
+.bench-seat-note { margin: 0; color: var(--muted); font-size: 0.75rem; }
+
+/* The desktop roster's second line holds them inline, after what the member is doing. */
+.mock-agent small .conv-role,
+.mock-agent small .conv-bench {
+  margin-left: 5px;
+  vertical-align: 1px;
+}
+
   </style>
   <!-- The bar every scroller on every page gets. This page had none of its own, so all four of its
        columns were drawing the OS default. -->
@@ -11817,6 +11931,7 @@ function convWebModeOf(conv) {
         // `command` is new, so an older relay still falls through to the toast below.
         if (msg.command === 'cmd_start' && typeof cmdNoteStartResult === 'function'
             && cmdNoteStartResult(msg)) return;
+        if (msg.command === 'cmd_edit' && typeof rebriefEdited === 'function') rebriefEdited(msg);
         showToast(typeof loopRefusal === 'function'
           ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
@@ -11859,6 +11974,16 @@ function convWebModeOf(conv) {
       }
       else if (msg.type === 'command_result' && msg.command === 'bench_edit') {
         if (typeof benchEditResult === 'function') benchEditResult(msg);
+        if (typeof rebriefEdited === 'function') rebriefEdited(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_adopt') {
+        if (typeof benchSeatResult === 'function') benchSeatResult(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_release') {
+        if (!msg.ok) showToast(`${msg.name}: ${msg.error || 'not let go'}`);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'cmd_edit') {
+        if (typeof rebriefEdited === 'function') rebriefEdited(msg);
       }
       else if (msg.type === 'start_options') {
         startOptions = msg;
@@ -15588,6 +15713,9 @@ function convWebModeOf(conv) {
       if (typeof cmdTakenPanes === 'function') {
         cmdTakenPanes(except).forEach(paneId => out.add(paneId));
       }
+      // A bench agent is never seated on a roster (the relay's `standing_agent`), so it is taken
+      // for every picker here; arbBenchNote names the ones a picker leaves out.
+      agents.forEach(a => { if (a.bench && a.pane_id) out.add(a.pane_id); });
       return out;
     }
 
@@ -16824,6 +16952,15 @@ function convWebModeOf(conv) {
       return `<span class="dot" style="background:${colour}" aria-hidden="true"></span>` +
         glyph + `<span class="arb-pick-name">${escapeHtml(row.label)}</span>` +
         `<span class="arb-pick-tags">${badge}${project}</span>`;
+    }
+
+    // The bench agents of a Project, under a picker that leaves them out, so one missing from it
+    // is not a mystery. '' when there are none.
+    function arbBenchNote(project) {
+      const on = agents.filter(a => a.bench && (a.project_id || '') === (project || ''));
+      return on.length ? '<span class="arb-note">Not offered, on the bench: ' +
+        on.map(a => escapeHtml(paneLabel(a))).join(', ') +
+        '. A bench agent answers to you and is never seated on a roster.</span>' : '';
     }
 
     // One agent on a roster, drawn the way the picker draws a choice — dot, glyph, name, badges —
@@ -18342,7 +18479,7 @@ function convWebModeOf(conv) {
           '<span class="arb-note">' + (live ? 'Pick another to hand it the plan. ' : '') +
           'The pane that plans. Pick one that is running, or ' +
           '<b>+ New</b> to start one — it comes up on claude with the Commander prompt and lands ' +
-          'back in this slot. It is not one of the agents below.</span>',
+          'back in this slot. It is not one of the agents below.</span>' + arbBenchNote(project),
           cmdSign(16) + ' ') + '</div>' +
         '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
         ' placeholder="What this Commander owns, and when it is done.">' +
@@ -19191,6 +19328,15 @@ function convWebModeOf(conv) {
     // Add member is a small form of its own rather than a row in the panel, because the panel is
     // redrawn by every broadcast about the session and would throw away a role half typed.
     // `cmdEditing` is what stops that redraw, exactly as for the Edit form.
+    // The room roster's Add to roster: a loop's Members, or the Commander's Add a member.
+    function cmdRosterAdd() {
+      const s = cmdSessionHere();
+      if (!s) return;
+      if (s.manual && typeof loopOpenMembers === 'function') { loopOpenMembers(); return; }
+      cmdOpenFromConv();
+      cmdAddOpen();
+    }
+
     function cmdAddOpen() {
       const s = cmdSessionHere();
       const conv = loadConvIndex().find(c => c.id === cmdSetupConv);
@@ -19208,7 +19354,8 @@ function convWebModeOf(conv) {
               'words and may not repeat one this roster already holds. A seat is filled with ' +
               'Staff.</span>'
             : '<span class="arb-note">Its role is your own words: what the Commander should use ' +
-              'it for. It is named in every assignment this member is sent.</span>')) +
+              'it for. It is named in every assignment this member is sent.</span>') +
+          arbBenchNote(s.project_id)) +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="cmdAddMember()">Add</button></div>',

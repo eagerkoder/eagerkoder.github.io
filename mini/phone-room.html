@@ -2669,6 +2669,120 @@
   color: var(--muted);
 }
 
+/* The Brief sheet's roles: the files a bench entry is briefed from, ticked, or a roster member's
+   role in words; saved, the sheet reads the brief again. */
+.rebrief-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.rebrief-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.rebrief-role:has(input:checked) {
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  color: var(--blue);
+}
+
+.rebrief-roles input[type="text"],
+#rebriefRoleText {
+  flex: 1 1 14ch;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.rebrief-save {
+  padding: 3px 10px;
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.rebrief-roles-note { color: var(--muted); }
+
+/* A role chip that opens the brief: the chip, pressable. */
+button.conv-role {
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+/* A bench room's member: on the bench, or in the room only. */
+.conv-bench {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.conv-bench::before { content: '\2610'; }
+.conv-bench[aria-checked="true"] { color: var(--green); }
+.conv-bench[aria-checked="true"]::before { content: '\2611'; }
+
+.conv-bench-legend {
+  margin: 6px 2px 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+/* Putting a member on the bench: which seat, and its role files. */
+.bench-seat-roles {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bench-seat-roles legend { padding: 0 4px; }
+
+.bench-seat-roles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+}
+
+.bench-seat-note { margin: 0; color: var(--muted); font-size: 0.75rem; }
+
+/* The desktop roster's second line holds them inline, after what the member is doing. */
+.mock-agent small .conv-role,
+.mock-agent small .conv-bench {
+  margin-left: 5px;
+  vertical-align: 1px;
+}
+
   </style>
     <style>
 
@@ -14544,7 +14658,7 @@
     <div onclick="closeRebrief()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="rebriefTitle">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span id="rebriefTitle" style="font-size:0.8rem;font-weight:600;flex:1">Re-brief</span>
+        <span id="rebriefTitle" style="font-size:0.8rem;font-weight:600;flex:1">Brief</span>
         <button onclick="closeRebrief()" aria-label="Close"
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
@@ -19197,6 +19311,7 @@
         // `command` is new, so an older relay still falls through to the toast below.
         if (msg.command === 'cmd_start' && typeof cmdNoteStartResult === 'function'
             && cmdNoteStartResult(msg)) return;
+        if (msg.command === 'cmd_edit' && typeof rebriefEdited === 'function') rebriefEdited(msg);
         showToast(typeof loopRefusal === 'function'
           ? loopRefusal(msg) : (msg.message || 'The relay refused that.'));
       }
@@ -19239,6 +19354,16 @@
       }
       else if (msg.type === 'command_result' && msg.command === 'bench_edit') {
         if (typeof benchEditResult === 'function') benchEditResult(msg);
+        if (typeof rebriefEdited === 'function') rebriefEdited(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_adopt') {
+        if (typeof benchSeatResult === 'function') benchSeatResult(msg);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'bench_release') {
+        if (!msg.ok) showToast(`${msg.name}: ${msg.error || 'not let go'}`);
+      }
+      else if (msg.type === 'command_result' && msg.command === 'cmd_edit') {
+        if (typeof rebriefEdited === 'function') rebriefEdited(msg);
       }
       else if (msg.type === 'start_options') {
         startOptions = msg;
@@ -25668,11 +25793,15 @@
       benchOpening.clear();
       benchFolds.clear();
       document.getElementById('benchAdd')?.close();
+      document.getElementById('benchSeat')?.close();
+      benchSeatSent = null;
     }
 
     function benchReceive(msg) {
       benchProjects = msg.projects || {};
       if (typeof renderLauncher === 'function') renderLauncher();
+      // The rosters' bench switches and role chips read it too.
+      if (typeof roomMarksChanged === 'function') roomMarksChanged();
     }
 
     const BENCH_STATE = {live: 'live', away: 'away', 'not started': 'not started', linked: 'linked'};
@@ -25816,6 +25945,7 @@
     }
 
     function benchEditResult(msg) {
+      if (benchSeatResult(msg)) return;
       const add = benchAddSent && benchAddSent.project_id === msg.project_id
         && benchAddSent.name === msg.name ? benchAddSent : null;
       if (add) benchAddSent = null;
@@ -25886,6 +26016,178 @@
         return;
       }
       if (paneId && typeof openTerminal === 'function') openTerminal(paneId);
+    }
+
+    // --- a room member on the bench, and off it -------------------------------------------------
+    //
+    // The bench room's roster says, member by member, whether the bench holds it: a member the
+    // person added is in the room only, and on the bench once an entry takes it. Putting one on is
+    // this dialog — which seat, and the role files that write its brief — then `bench_adopt`, then
+    // `bench_edit` for the roles, then its brief to read and send. Nothing is typed at the agent
+    // until the person sends that brief. Letting one go is `bench_release`: it stays in the room.
+
+    // The Project a bench room is for, or ''.
+    function benchRoomProject(conv) {
+      if (!conv) return '';
+      if (conv.bench) return String(conv.bench);
+      return String(conv.id || '').startsWith('c_bench_') ? String(conv.id).slice(8) : '';
+    }
+
+    // The entry holding this agent on that Project's bench, or null.
+    function benchEntryOf(pid, aid) {
+      return aid ? ((benchProjects || {})[pid] || []).find(e => e.aid === aid && e.state !== 'linked') || null : null;
+    }
+
+    // The roster's switch for one member of a bench room. Only a running agent can be put on — an
+    // entry adopts the agent as it is — and only a relay that sends the bench offers it at all.
+    function benchMemberSwitchHtml(conv, aid, live) {
+      const pid = benchRoomProject(conv);
+      if (!pid || !benchProjects || !Array.isArray(benchProjects[pid])) return '';
+      const e = benchEntryOf(pid, aid);
+      // A shell is never a bench agent: only an agent the relay names can be adopted.
+      if (!e && !(live && agents.some(a => a.aid && a.aid === aid))) return '';
+      return `<button class="conv-bench${e ? ' arm-btn' : ''}" role="switch" aria-checked="${e ? 'true' : 'false'}"` +
+        ` aria-label="${e ? 'On the bench' : 'In this room only'}"` +
+        ` data-pid="${escapeHtml(pid)}" data-key="${escapeHtml(aid)}"` +
+        (e ? ` data-name="${escapeHtml(e.name)}" onclick="armButton(this, '', () => benchLetGo(this.dataset.pid, this.dataset.name, this.dataset.key))"` +
+             ` title="On the bench as ${escapeHtml(e.label || e.name)}. Press twice to let it go; it stays in this room."`
+           : ` onclick="benchSeatOpen(this.dataset.pid, this.dataset.key)"` +
+             ` title="In this room only. Put it on the bench, with the roles that write its brief."`) +
+        `></button>`;
+    }
+
+    // What the boxes mean, once, under a bench room's roster.
+    function benchRosterLegendHtml(conv) {
+      const pid = benchRoomProject(conv);
+      if (!pid || !benchProjects || !Array.isArray(benchProjects[pid])) return '';
+      return '<p class="conv-bench-legend"><span aria-hidden="true">\u2611</span> on the bench \u00b7 ' +
+        '<span aria-hidden="true">\u2610</span> in this room only. Tick to put one on the bench; ' +
+        'its role opens its brief.</p>';
+    }
+
+    function benchLetGo(pid, name, aid) {
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was changed.'); return; }
+      ws.send(JSON.stringify({type: 'bench_release', project_id: pid, name: name, if_aid: aid}));
+    }
+
+    // The seat being taken, from the press to the brief: `{pid, name, aid, label, kind, roles}`.
+    let benchSeatSent = null;
+
+    function benchSeatOpen(pid, aid) {
+      if (benchSeatSent) { showToast('Wait for the bench change to finish.'); return; }
+      const pane = agents.find(a => convMemberKey(a) === aid);
+      if (!pane) { showToast('Only a running agent can be put on the bench.'); return; }
+      let dlg = document.getElementById('benchSeat');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'benchSeat';
+        dlg.className = 'bench-add-dialog';
+        dlg.setAttribute('aria-labelledby', 'benchSeatTitle');
+        document.body.appendChild(dlg);
+      }
+      const project = (typeof projects !== 'undefined' ? projects : []).find(p => p.id === pid);
+      const free = ((benchProjects || {})[pid] || []).filter(e => !e.aid && e.state !== 'linked');
+      const lib = ((typeof startOptions !== 'undefined' && startOptions) || {}).recipe_roles || [];
+      dlg.dataset.pid = pid;
+      dlg.dataset.aid = aid;
+      dlg.innerHTML = '<form method="dialog" onsubmit="benchSeatSubmit(event)">'
+        + `<div id="benchSeatTitle" class="bench-add-title">Put ${escapeHtml(paneLabel(pane))} on the bench of `
+        + `${escapeHtml(project ? project.label || pid : pid)}</div>`
+        + '<label class="bench-add-field">Seat<select name="seat" onchange="benchSeatPick(this.form)">'
+        + free.map(e => `<option value="${escapeHtml(e.name)}">${escapeHtml(e.label || e.name)}</option>`).join('')
+        + '<option value="">New seat…</option></select></label>'
+        + '<label class="bench-add-field" data-new>Name<input name="name" maxlength="32"'
+        + ' pattern="[a-z][a-z0-9\\-]{0,31}" autocapitalize="none" autocomplete="off" spellcheck="false"'
+        + ' placeholder="critic" title="a-z, 0-9 and -, starting with a letter"></label>'
+        + (lib.length ? '<fieldset class="bench-add-field bench-seat-roles"><legend>Roles — the files that write its brief</legend>'
+          + lib.map(r => `<label><input type="checkbox" name="role" value="${escapeHtml(r)}">${escapeHtml(r)}</label>`).join('')
+          + '</fieldset>' : '')
+        + '<p class="bench-seat-note">It keeps its context. Its brief is shown next, and sent only when you say.</p>'
+        + '<div class="ql-actions"><button type="button" class="ql-secondary"'
+        + ' onclick="this.closest(\'dialog\').close()">Cancel</button>'
+        + '<button type="submit" class="ql-primary">Put on bench</button></div></form>';
+      benchSeatPick(dlg.querySelector('form'));
+      dlg.showModal();
+    }
+
+    // A free seat brings its own roles; a new one starts from none.
+    function benchSeatPick(form) {
+      const pid = form.closest('dialog').dataset.pid;
+      const e = ((benchProjects || {})[pid] || []).find(x => x.name === form.elements.seat.value);
+      const fresh = !e;
+      form.querySelector('[data-new]').hidden = !fresh;
+      form.elements.name.required = fresh;
+      const have = new Set((e && e.roles) || []);
+      for (const box of form.querySelectorAll('input[name="role"]')) box.checked = have.has(box.value);
+    }
+
+    function benchSeatSubmit(ev) {
+      ev.preventDefault();
+      if (benchSeatSent) { showToast('Wait for the bench change to finish.'); return; }
+      const form = ev.target;
+      const dlg = form.closest('dialog');
+      const {pid, aid} = dlg.dataset;
+      const fresh = !form.elements.seat.value;
+      const name = fresh ? form.elements.name.value.trim() : form.elements.seat.value;
+      if (fresh && !BENCH_NAME.test(name)) { showToast('A seat name is a-z, 0-9 and -, starting with a letter.'); return; }
+      if (fresh && ((benchProjects || {})[pid] || []).some(x => x.name === name)) {
+        showToast(`${name} is already on this bench.`);
+        return;
+      }
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was changed.'); return; }
+      const pane = agents.find(a => convMemberKey(a) === aid);
+      if (!pane) { showToast('That agent is no longer running.'); return; }
+      const kinds = ((typeof startOptions !== 'undefined' && startOptions) || {}).agents || [];
+      benchSeatSent = {pid, name, aid,
+        command: 'bench_adopt', request_id: newStartRef(), config: fresh ? pane.config || '' : null,
+        roles: Array.from(form.querySelectorAll('input[name="role"]')).filter(b => b.checked).map(b => b.value),
+        // A new seat is named and set to start on what this agent runs, for when it is let go and
+        // opened again; a free seat keeps its own.
+        label: fresh ? name.charAt(0).toUpperCase() + name.slice(1) : null,
+        kind: fresh && kinds.includes(pane.agent) ? pane.agent : null};
+      ws.send(JSON.stringify({type: 'bench_adopt', project_id: pid, name: name, aid: aid,
+                             ...(fresh ? {create_only: true} : {}),
+                             request_id: benchSeatSent.request_id}));
+      dlg.close();
+    }
+
+    // The answers to the chain: adopted, then its roles written, then its brief opened. A refusal
+    // at either step says why and stops there.
+    function benchSeatResult(msg) {
+      const sent = benchSeatSent;
+      if (!sent || msg.project_id !== sent.pid || msg.name !== sent.name
+          || msg.command !== sent.command || msg.request_id !== sent.request_id) return false;
+      if (msg.ok && msg.command === 'bench_adopt' && msg.aid !== sent.aid) return false;
+      if (!msg.ok) {
+        benchSeatSent = null;
+        showToast(`${msg.name}: ${sent.command === 'bench_edit' ? 'on the bench, but roles were not saved: ' : ''}`
+          + (msg.error || 'not changed'));
+        return true;
+      }
+      if (msg.command === 'bench_adopt') {
+        if (!ws || ws.readyState !== 1) { benchSeatSent = null; showToast('Adopted, but disconnected before saving roles.'); return true; }
+        sent.command = 'bench_edit';
+        sent.request_id = newStartRef();
+        const edit = {type: 'bench_edit', project_id: sent.pid, name: sent.name, roles: sent.roles,
+                      if_aid: sent.aid, request_id: sent.request_id};
+        if (sent.label) edit.label = sent.label;
+        if (sent.kind) edit.kind = sent.kind;
+        if (sent.config !== null) edit.config = sent.config;
+        ws.send(JSON.stringify(edit));
+        return true;
+      }
+      benchSeatSent = null;
+      showToast(`On the bench as ${sent.label || sent.name}. Its brief is next.`);
+      benchSeatBrief(sent.aid, 20);
+      return true;
+    }
+
+    // The relay stamps the agent as a bench agent on its next poll, which is when it has a brief
+    // to read; until then the sheet would be refused.
+    function benchSeatBrief(aid, tries, connection = ws) {
+      if (ws !== connection) return;
+      if (typeof convCanRebrief === 'function' && convCanRebrief(aid)) { convRebriefMember(aid); return; }
+      if (tries > 0) setTimeout(() => benchSeatBrief(aid, tries - 1, connection), 300);
     }
 
   </script>
@@ -39776,7 +40078,9 @@ function nlmSourceDelete(source) {
       // A sheet these panels open sits *above* them with its own backdrop, so a tap in it is not a
       // tap on the thread behind — dismissing the panel under it would leave the sheet acting on a
       // roster the user can no longer see.
-      const inSheet = !!e.target.closest('#pickSheet');
+      // So are the sheets a roster row opens over it — the brief, the bench seat, the roster's own
+      // form — which the reader comes back from to the roster they left.
+      const inSheet = !!e.target.closest('#pickSheet, #rebriefSheet, #benchSeat, #arbModal');
       // The pane's roster panel is a disclosure hung off the header, and a tap on the thread
       // behind it is a tap on the thing it is covering.
       if (convPaneRoster && !inSheet &&
@@ -40925,6 +41229,18 @@ function nlmSourceDelete(source) {
                 && agents.some(x => convMemberKey(x) === key));
     }
 
+    // A member's role as a chip, and the way to its brief: pressed, it opens the Brief sheet,
+    // where the roles that write the brief are changed. Plain text where the relay holds no brief
+    // for it, and nothing for a member nothing holds.
+    function convRoleChipHtml(key, conversation, live) {
+      const role = convMemberRole(key, conversation);
+      if (!role) return '';
+      if (!live || !convCanRebrief(key)) return `<span class="conv-role">${escapeHtml(role)}</span>`;
+      return `<button type="button" class="conv-role" data-key="${escapeHtml(key)}"` +
+        ` onclick="convRebriefMember(this.dataset.key)" title="Its brief, and the roles that write it"` +
+        ` aria-label="${escapeHtml(role)}: its brief and roles">${escapeHtml(role)}</button>`;
+    }
+
     // Re-brief asks first: the relay reads back what it would type — the role it briefs this
     // agent as and each piece in the order it goes in — and the sheet shows that before anything
     // is sent, so a wrong brief is caught here rather than in the agent's next turn.
@@ -40961,6 +41277,7 @@ function nlmSourceDelete(source) {
       if (el) el.style.display = 'none';
       rebriefKey = '';
       rebriefShown = null;
+      rebriefEdit = null;
     }
 
     function rebriefRole(msg) {
@@ -40980,7 +41297,7 @@ function nlmSourceDelete(source) {
       const facts = [
         ['Agent', `${escapeHtml(name)}${badge ? ' ' + badge : ''}`],
         ['Briefed as', escapeHtml(rebriefRole(msg))],
-        msg.as === 'bench' && ['Roles', escapeHtml((msg.roles || []).join(', ') || 'none')],
+        ['Roles', rebriefRolesHtml(msg)],
         msg.project_id && msg.as !== 'bench' && ['Project', escapeHtml(msg.project_id)],
         ['Pane', escapeHtml(msg.pane_id || '')],
       ].filter(Boolean);
@@ -41003,7 +41320,103 @@ function nlmSourceDelete(source) {
         `</div>`;
     }
 
+    // The roles that write this brief, and the one place they are changed: a bench entry's role
+    // files, ticked from the library; a roster member's role, in the person's words. A recipe
+    // seat's roles are the recipe's, and a Commander's brief is its scope and recipe, so those are
+    // said and not edited here. Saved, the sheet reads the brief again, so what it shows is what
+    // the new roles write — and nothing is typed at the agent until Send brief.
+    function rebriefRolesHtml(msg) {
+      const save = '<button type="button" class="rebrief-save" onclick="rebriefSaveRoles()">Save roles</button>';
+      if (msg.as === 'bench') {
+        const have = msg.roles || [];
+        const lib = ((typeof startOptions !== 'undefined' && startOptions) || {}).recipe_roles || [];
+        const ids = lib.concat(have.filter(r => !lib.includes(r)));
+        if (!ids.length) return escapeHtml(have.join(', ') || 'none');
+        return '<div class="rebrief-roles" role="group" aria-label="Role files">' + ids.map(r =>
+          `<label class="rebrief-role"><input type="checkbox" value="${escapeHtml(r)}"` +
+          `${have.includes(r) ? ' checked' : ''}>${escapeHtml(r)}</label>`).join('') + save + '</div>';
+      }
+      if (msg.as !== 'seat') {
+        return '<span class="rebrief-roles-note">The session\'s scope and recipe: change them on the Commander sheet.</span>';
+      }
+      const {s, m} = rebriefSeatOf(msg);
+      if (!m) return escapeHtml(msg.role || 'none');
+      const seat = ((s.recipe || {}).seats || []).find(x => x.member === m.id);
+      if (seat) {
+        return `${escapeHtml(seat.name)} <span class="rebrief-roles-note">— a seat of the recipe ` +
+          `${escapeHtml((s.recipe || {}).label || '')}: its roles (${escapeHtml((seat.roles || []).join(', '))}) ` +
+          'are the recipe\'s, changed in Settings › Recipes.</span>';
+      }
+      return '<div class="rebrief-roles"><input id="rebriefRoleText" maxlength="160" autocomplete="off"' +
+        ` value="${escapeHtml(m.role || '')}" placeholder="writes the release notes"` +
+        ' aria-label="Its role on this roster">' + save + '</div>';
+    }
+
+    function rebriefSeatOf(msg) {
+      const s = (typeof cmdSessions !== 'undefined' ? cmdSessions : []).find(x => x.id === msg.session);
+      return {s, m: s && (s.members || []).find(x => x.aid === msg.aid && (!msg.member || x.id === msg.member))};
+    }
+
+    // The edit in flight, so its answer reads the brief again for the same agent.
+    let rebriefEdit = null;
+
+    function rebriefEditBusy(busy) {
+      document.querySelectorAll('#rebriefBody .rebrief-go, #rebriefBody .rebrief-save')
+        .forEach(b => { b.disabled = busy; });
+    }
+
+    function rebriefSaveRoles() {
+      const msg = rebriefShown;
+      if (!msg) return;
+      if (rebriefEdit) { showToast('Wait for the role edit to finish.'); return; }
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was changed.'); return; }
+      if (msg.as === 'bench') {
+        const roles = Array.from(document.querySelectorAll('#rebriefBody .rebrief-role input'))
+          .filter(b => b.checked).map(b => b.value);
+        rebriefEdit = {aid: msg.aid, command: 'bench_edit', project_id: msg.project_id,
+                       name: msg.name, request_id: newStartRef()};
+        rebriefEditBusy(true);
+        ws.send(JSON.stringify({type: 'bench_edit', project_id: msg.project_id, name: msg.name,
+                               roles, if_aid: msg.aid, request_id: rebriefEdit.request_id}));
+        return;
+      }
+      const {s, m} = rebriefSeatOf(msg);
+      if (!m) { showToast('That roster has moved on — reopen the brief.'); return; }
+      if (((s.recipe || {}).seats || []).some(x => x.member === m.id)) {
+        showToast('That seat takes its roles from the recipe — reopen the brief.'); return;
+      }
+      const role = String((document.getElementById('rebriefRoleText') || {}).value || '').trim();
+      // A recipe roster holds each role once; this member's own role is not a clash with itself.
+      const clash = s.recipe && typeof cmdRoleClash === 'function'
+        ? cmdRoleClash({...s, members: (s.members || []).filter(x => x !== m)}, role) : '';
+      if (clash) { showToast(`“${clash}” is already held on this roster.`); return; }
+      rebriefEdit = {aid: msg.aid, command: 'cmd_edit', session: s.id, request_id: newStartRef()};
+      rebriefEditBusy(true);
+      ws.send(JSON.stringify({type: 'cmd_edit', session: s.id, request_id: rebriefEdit.request_id,
+        members: (s.members || []).map(x =>
+          ({...(x.aid ? {aid: x.aid} : {pane_id: x.pane_id}), role: x === m ? role : (x.role || '')}))}));
+    }
+
+    // net.js hands every bench_edit and cmd_edit answer here, and an error naming cmd_edit; one
+    // that is not the sheet's own edit is somebody else's.
+    function rebriefEdited(msg) {
+      const e = rebriefEdit;
+      if (!e || msg.command !== e.command || msg.request_id !== e.request_id) return;
+      if (e.command === 'bench_edit' && (msg.project_id !== e.project_id || msg.name !== e.name)) return;
+      if (e.command === 'cmd_edit' && msg.session && msg.session !== e.session) return;
+      rebriefEdit = null;
+      if (msg.type === 'error' || !msg.ok) { rebriefEditBusy(false); return; }
+      // Asked again with the sheet left up, so it is redrawn in place rather than blinking shut.
+      if (rebriefShown && rebriefShown.aid === e.aid && ws && ws.readyState === 1) {
+        rebriefKey = e.aid;
+        rebriefShown = null;
+        ws.send(JSON.stringify({type: 'rebrief', aid: e.aid, preview: true}));
+        showToast('Roles saved. Reading the brief they write…');
+      }
+    }
+
     function submitRebrief() {
+      if (rebriefEdit || !rebriefShown) { showToast('Wait for the updated brief.'); return; }
       const key = rebriefShown && rebriefShown.aid;
       closeRebrief();
       if (!key || !convCanRebrief(key)) return;
@@ -42166,8 +42579,8 @@ function nlmSourceDelete(source) {
           `<span class="who">${escapeHtml(convMemberName(m.aid, rec.label, m.label, 'Former pane'))}</span>` +
           kindBadge((rec.spawn || {}).agent || (live.get(m.aid) || {}).agent || '',
                     live.get(m.aid), (rec.spawn || {}).config) +
-          (convMemberRole(m.aid, conv.id)
-            ? `<span class="conv-role">${escapeHtml(convMemberRole(m.aid, conv.id))}</span>` : '') +
+          convRoleChipHtml(m.aid, conv.id, on) +
+          (typeof benchMemberSwitchHtml === 'function' ? benchMemberSwitchHtml(conv, m.aid, on) : '') +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'paused')}</span>` +
           // Two things on the row and no more: the way in, and one menu holding everything that
           // changes the member. Six buttons a row was a phone screen of controls with the names
@@ -42242,7 +42655,12 @@ function nlmSourceDelete(source) {
       // every member at once — Delete last and red, alone at the foot.
       const more = convRosterMore;
       return `<div class="conv-roster">${rows}${arb}${web}<div class="conv-roster-actions">` +
-        `<button onclick="convToggleAdd()">Add pane</button>` +
+        `<button onclick="convToggleAdd()" title="Into this room only">Add pane</button>` +
+        // A room with a Commander or a loop has a roster as well as members: adding to the roster
+        // is that session's own form, which says who is on it now.
+        (typeof cmdSessionForConversation === 'function' && cmdSessionForConversation(conv.id)
+          ? `<button onclick="cmdRosterAdd()" title="Onto the roster of this room's ` +
+            `${cmdSessionForConversation(conv.id).manual ? 'loop' : 'Commander'}">Add to roster</button>` : '') +
         // Starting one is offered next to adding one, not only inside the picker: from a pane's
         // roster the picker is two taps away, and "there is nobody to add yet" is exactly the
         // moment the answer is a new agent.
@@ -42291,7 +42709,7 @@ function nlmSourceDelete(source) {
         `</div><div class="conv-roster-more-group">` +
         `<button class="conv-del arm-btn" onclick="armButton(this, '', deleteConversation)"` +
         ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
-        `</div></div></div>${tier}</div>`;
+        `</div></div></div>${typeof benchRosterLegendHtml === 'function' ? benchRosterLegendHtml(conv) : ''}${tier}</div>`;
     }
 
     // Whether the roster's More is open. One flag for both rosters: they are never on screen
@@ -48244,6 +48662,9 @@ function studioCardHtml() {
       if (typeof cmdTakenPanes === 'function') {
         cmdTakenPanes(except).forEach(paneId => out.add(paneId));
       }
+      // A bench agent is never seated on a roster (the relay's `standing_agent`), so it is taken
+      // for every picker here; arbBenchNote names the ones a picker leaves out.
+      agents.forEach(a => { if (a.bench && a.pane_id) out.add(a.pane_id); });
       return out;
     }
 
@@ -49480,6 +49901,15 @@ function studioCardHtml() {
       return `<span class="dot" style="background:${colour}" aria-hidden="true"></span>` +
         glyph + `<span class="arb-pick-name">${escapeHtml(row.label)}</span>` +
         `<span class="arb-pick-tags">${badge}${project}</span>`;
+    }
+
+    // The bench agents of a Project, under a picker that leaves them out, so one missing from it
+    // is not a mystery. '' when there are none.
+    function arbBenchNote(project) {
+      const on = agents.filter(a => a.bench && (a.project_id || '') === (project || ''));
+      return on.length ? '<span class="arb-note">Not offered, on the bench: ' +
+        on.map(a => escapeHtml(paneLabel(a))).join(', ') +
+        '. A bench agent answers to you and is never seated on a roster.</span>' : '';
     }
 
     // One agent on a roster, drawn the way the picker draws a choice — dot, glyph, name, badges —
@@ -51000,7 +51430,7 @@ function studioCardHtml() {
           '<span class="arb-note">' + (live ? 'Pick another to hand it the plan. ' : '') +
           'The pane that plans. Pick one that is running, or ' +
           '<b>+ New</b> to start one — it comes up on claude with the Commander prompt and lands ' +
-          'back in this slot. It is not one of the agents below.</span>',
+          'back in this slot. It is not one of the agents below.</span>' + arbBenchNote(project),
           cmdSign(16) + ' ') + '</div>' +
         '<label>Scope<textarea id="cmdScope" rows="2" maxlength="4000"' +
         ' placeholder="What this Commander owns, and when it is done.">' +
@@ -51849,6 +52279,15 @@ function studioCardHtml() {
     // Add member is a small form of its own rather than a row in the panel, because the panel is
     // redrawn by every broadcast about the session and would throw away a role half typed.
     // `cmdEditing` is what stops that redraw, exactly as for the Edit form.
+    // The room roster's Add to roster: a loop's Members, or the Commander's Add a member.
+    function cmdRosterAdd() {
+      const s = cmdSessionHere();
+      if (!s) return;
+      if (s.manual && typeof loopOpenMembers === 'function') { loopOpenMembers(); return; }
+      cmdOpenFromConv();
+      cmdAddOpen();
+    }
+
     function cmdAddOpen() {
       const s = cmdSessionHere();
       const conv = loadConvIndex().find(c => c.id === cmdSetupConv);
@@ -51866,7 +52305,8 @@ function studioCardHtml() {
               'words and may not repeat one this roster already holds. A seat is filled with ' +
               'Staff.</span>'
             : '<span class="arb-note">Its role is your own words: what the Commander should use ' +
-              'it for. It is named in every assignment this member is sent.</span>')) +
+              'it for. It is named in every assignment this member is sent.</span>') +
+          arbBenchNote(s.project_id)) +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="cmdAddMember()">Add</button></div>',
@@ -52224,7 +52664,9 @@ function studioCardHtml() {
             role: typeof convMemberRole === 'function' ? convMemberRole(r.key, conv.id) : '',
             check: {id: `loopMember${i}`, value: r.pane.pane_id,
                     checked: (conv.members || []).some(m => m.aid === r.key)}})).join('')
-            : '<span class="arb-note">Nobody in this room is running.</span>')) +
+            : '<span class="arb-note">Nobody in this room is running.</span>') +
+          '<span class="arb-note">Ticked: put on the loop\'s roster. Unticked: stays in the room ' +
+          'and gets no work from the loop.</span>' + arbBenchNote(project)) +
         loopSettingsHtml(LOOP_HOPS, 'pull', 1) +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
@@ -52645,6 +53087,7 @@ function studioCardHtml() {
           role: typeof convMemberRole === 'function' ? convMemberRole(a.aid, conv.id) : '',
           check: {id: `loopAddMember${i}`, value: a.aid}})).join('') ||
           '<span class="arb-note">No other agents in this Project.</span>') +
+        arbBenchNote(s.project_id) +
         '<span class="arb-note">Up to six seats. To remove or replace a seat, use the full Commander edit.</span>' +
         '<div class="arb-go"><button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="loopSaveMembers()">Save members</button></div>');
