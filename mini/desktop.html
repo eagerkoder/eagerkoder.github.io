@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-13">
+  <meta name="app-built" content="2026-11-14">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -7768,6 +7768,100 @@
 }
 
   </style>
+  <style>
+/* One agent on a roster (arbitration.js arbMemberRowHtml): the pane picker's row, laid flat, then
+   its role, its state and what can be done to it. The Commander's sheet, the loop's, and the forms
+   that add to either all draw it, on the phone, the desktop and the Projects page, so who is set
+   and who is offered read alike. */
+.arb-member {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+  min-width: 0;
+}
+
+/* `.arb-form label` stacks its children, which put a tick box above its name. */
+.arb-form .arb-member.arb-check,
+.arb-form .arb-check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.arb-member.arb-check { cursor: pointer; }
+.arb-member + .arb-member { margin-top: 4px; }
+
+.arb-member > .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.arb-member > .arb-pick-name { flex: 0 1 auto; }
+.arb-member .badge { font-size: 9px; padding: 1px 5px; }
+
+/* The role, as the bench's own mark is drawn: a chip, not a sentence. */
+.arb-member-role,
+.conv-role {
+  max-width: 22ch;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  color: var(--blue);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}
+
+.arb-member-state {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.arb-member-state[data-state="live"] { color: var(--green); }
+.arb-member-state[data-state="away"] { color: var(--orange); }
+
+.arb-member-acts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* What a slot holds now, above the picker that changes it. */
+.arb-now {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.arb-now-lede {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.arb-now-none {
+  padding: 6px 9px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+  </style>
   <!-- command.html's rail, Agents panel and Project file column. -->
   <style>
 /* command.html: the Projects rail and the Agents panel in the sidebar, and the Project file
@@ -9398,7 +9492,8 @@
 
   <!-- Re-brief: what the relay would type at a briefed agent, shown before it is sent.
        conv_lifecycle.js draws the body from the relay's preview. -->
-  <div id="rebriefSheet" class="app-overlay" style="display:none;z-index:100;">
+  <!-- Over the Commander and loop sheets (120), whose rows open it with Brief. -->
+  <div id="rebriefSheet" class="app-overlay" style="display:none;z-index:130;">
     <div onclick="closeRebrief()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
     <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="rebriefTitle">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
@@ -26007,6 +26102,27 @@ convApplyTint();
       return held ? {as: 'coordinator', session: held.id} : null;
     }
 
+    // What a room member is to the sessions over it, in a word or two: a Commander, a loop's
+    // standby, an arbitrator, its role on a Commander's roster, or its bench seat. '' for an agent
+    // nothing holds. The rosters draw it beside the name, so who does what is read off the list.
+    function convMemberRole(key, conversation) {
+      const open = s => s && s.state !== 'ended';
+      const sessions = (typeof cmdSessions !== 'undefined' && cmdSessions ? cmdSessions : []).filter(open);
+      const ordered = conversation ? sessions.filter(s => s.conversation === conversation)
+        .concat(sessions.filter(s => s.conversation !== conversation)) : sessions;
+      for (const s of ordered) {
+        if ((s.coordinator || {}).aid === key) {
+          return s.manual ? 'standby' : s.tier === 'general' ? 'General' : 'Commander';
+        }
+        const m = (s.members || []).find(x => x.aid === key);
+        if (m) return m.role || 'member';
+      }
+      if ((typeof arbSessions !== 'undefined' && arbSessions ? arbSessions : [])
+        .some(s => open(s) && (s.coordinator || {}).aid === key)) return 'arbitrator';
+      const pane = agents.find(a => convMemberKey(a) === key);
+      return pane && pane.bench && pane.bench.name ? pane.bench.name : '';
+    }
+
     // `resume` reopens the harness's last session instead of starting a fresh one. Nothing else
     // about the restart differs: same config, same flags, same opening words, same thread — unless
     // `config` names another alias to reopen it on (Resume on another config).
@@ -28875,6 +28991,44 @@ convApplyTint();
         `<span class="arb-pick-tags">${badge}${project}</span>`;
     }
 
+    // One agent on a roster, drawn the way the picker draws a choice — dot, glyph, name, badges —
+    // so who is on a roster and who is offered for it read alike wherever one is listed: the
+    // Commander's sheet, the loop's, and the forms that add to them. Then its role, its state, and
+    // what can be done to it. `kind`/`config` badge an agent whose pane is down. Brief opens the
+    // Re-brief sheet on what the relay briefed it with, where this page has that sheet and the
+    // relay holds a brief for it. `check` makes the row a tick box instead, and draws no actions:
+    // a press inside a label is the box's.
+    function arbMemberRowHtml(o) {
+      const pane = o.pane || null;
+      const kind = !pane && o.kind && typeof configBadge === 'function'
+        ? `<span class="arb-pick-tags">${configBadge(o.kind, o.config || '')}</span>` : '';
+      const body = arbPaneRowHtml({pane: pane, label: o.label || o.aid || '—'}) + kind +
+        (o.role ? `<span class="arb-member-role">${escapeHtml(o.role)}</span>` : '') +
+        (o.state ? `<span class="arb-member-state" data-state="${escapeHtml(o.state)}">` +
+          `${escapeHtml(o.state)}</span>` : '');
+      if (o.check) {
+        const c = o.check;
+        return `<label class="arb-member arb-check"><input type="checkbox" id="${escapeHtml(c.id)}"` +
+          ` value="${escapeHtml(c.value)}"${c.checked ? ' checked' : ''}${c.disabled ? ' disabled' : ''}>` +
+          body + '</label>';
+      }
+      const brief = o.aid && pane && typeof convCanRebrief === 'function' && convCanRebrief(o.aid)
+        ? `<button type="button" class="badge pick proj" data-key="${escapeHtml(o.aid)}"` +
+          ' onclick="convRebriefMember(this.dataset.key)"' +
+          ` title="What the relay briefed it with" aria-label="Brief of ${escapeHtml(o.label || o.aid)}">Brief</button>`
+        : '';
+      const acts = brief + (o.tail || '');
+      return `<div class="arb-member">${body}` +
+        (acts ? `<span class="arb-member-acts">${acts}</span>` : '') + '</div>';
+    }
+
+    // What a slot holds now, above the picker that changes it, so a picker opening on its first
+    // choice is never read as what is already set. `row` is an arbMemberRowHtml, or nothing.
+    function arbNowHtml(row, none) {
+      return '<div class="arb-now"><span class="arb-now-lede">Now</span>' +
+        (row || `<span class="arb-now-none">${escapeHtml(none)}</span>`) + '</div>';
+    }
+
     // One pane picker. Every one here is the same question — which of these panes — and the three
     // of them differing only in their id is what keeps the markup honest about that.
     //
@@ -30119,6 +30273,9 @@ convApplyTint();
     // answer to `renderConversations`, and both only rewrite the rows that changed.
     function roomMarksChanged() {
       if (typeof renderConversations === 'function') renderConversations();
+      if (typeof renderConvView === 'function') renderConvView();
+      if (typeof renderConvStandalone === 'function') renderConvStandalone(false);
+      if (typeof deskRenderRoster === 'function') deskRenderRoster();
     }
 
     // The button's face: the flag alone while it is an offer, the flag and the session's name once
@@ -30329,9 +30486,7 @@ convApplyTint();
         // another session — is still what this slot is holding. Offered as its own row rather than
         // dropped, or Save would silently replace a member nobody meant to touch.
         if (!who || (!who.pane_id && !who.aid)) return null;
-        const live = typeof agents !== 'undefined' ? (agents || []) : [];
-        const pane = live.find(a => (who.aid && convMemberKey(a) === who.aid)
-          || (who.pane_id && a.pane_id === who.pane_id)) || null;
+        const pane = cmdAgentPane(who);
         return {key: who.aid || who.pane_id, pane: pane,
                 label: who.label || who.aid || who.pane_id};
       };
@@ -30340,10 +30495,18 @@ convApplyTint();
         return row && !base.some(r => arbSamePick(arbPickValue(r), arbPickValue(row)))
           ? base.concat([row]) : base;
       };
+      // What is set now, apart from the picker that sets it: a picker opens on its first choice,
+      // which read as this room already having that Commander. A bench room is said by name,
+      // because its standing agents look like somebody in charge and are not.
+      const now = live ? arbNowHtml(cmdAgentRow(live.coordinator, {role: 'Commander'}))
+        : arbNowHtml('', String(conv.id).startsWith('c_bench_')
+          ? 'Nobody. A bench has no Commander: its agents answer to you.'
+          : 'Nobody. This room has no Commander yet.');
       return (live ? '' : cmdAgainHtml(conv)) + '<div id="cmdWhoPart">' + arbPart('Commander',
-          arbSlot('cmdWho', slotRows(free, live && live.coordinator),
+          now + arbSlot('cmdWho', slotRows(free, live && live.coordinator),
                   was ? was.cmdWho : (free[0] && arbPickValue(free[0])), false) +
-          '<span class="arb-note">The pane that plans. Pick one that is running, or ' +
+          '<span class="arb-note">' + (live ? 'Pick another to hand it the plan. ' : '') +
+          'The pane that plans. Pick one that is running, or ' +
           '<b>+ New</b> to start one — it comes up on claude with the Commander prompt and lands ' +
           'back in this slot. It is not one of the agents below.</span>',
           cmdSign(16) + ' ') + '</div>' +
@@ -30418,10 +30581,8 @@ convApplyTint();
       if (!who || (!who.pane_id && !who.aid)) {
         return arbPickValue({key: CMD_NONE, pane: null});
       }
-      const live = typeof agents !== 'undefined' ? (agents || []) : [];
       return arbPickValue({key: who.aid || who.pane_id,
-                           pane: live.find(a => (who.aid && convMemberKey(a) === who.aid)
-                             || (who.pane_id && a.pane_id === who.pane_id)) || null});
+                           pane: cmdAgentPane(who)});
     }
 
     // What the form would say about a session that is already running. The one place the wire's
@@ -30941,7 +31102,7 @@ convApplyTint();
     function cmdLooseMembers(s, held) {
       return (s.members || []).filter(m => !held.has(m.id))
         .map(m => ({member: m.id, label: m.label || m.aid || m.pane_id, role: m.role || '',
-                    state: m.pane_id ? 'live' : 'away'}));
+                    state: m.pane_id ? 'live' : 'away', aid: m.aid || '', pane_id: m.pane_id || ''}));
     }
 
     // A recipe Commander's roster as the sheet draws it: each seat with who holds it, then the
@@ -30959,7 +31120,7 @@ convApplyTint();
         const m = x.member ? byId.get(x.member) : null;
         return {name: x.name, roles: x.roles || [], kind: x.kind, config: x.config || '',
                 member: x.member || '', label: nameOf(m), state: stateOf(m, x.away),
-                aid: (m && m.aid) || '',
+                aid: (m && m.aid) || '', pane_id: (m && m.pane_id) || '',
                 error: (x.error && x.error.detail) || ''};
       });
       const extras = cmdLooseMembers(s, new Set(seats.map(x => x.member).filter(Boolean)));
@@ -30990,12 +31151,18 @@ convApplyTint();
       return cmdRolePhrases(role).find(p => held.has(p)) || '';
     }
 
-    const CMD_SEAT_MARK = {live: '●', away: '◐', empty: '○'};
+    // A known agent never falls back to a pane id herdr may have recycled.
+    function cmdAgentPane(who) {
+      const live = typeof agents !== 'undefined' ? (agents || []) : [];
+      const w = who || {};
+      return live.find(a => w.aid ? a.aid === w.aid : w.pane_id && a.pane_id === w.pane_id) || null;
+    }
 
-    function cmdMemberLine(state, name, what, who, tail) {
-      return `<div class="arb-note"><span aria-hidden="true">${CMD_SEAT_MARK[state]}</span> ` +
-        `<b>${escapeHtml(name)}</b>${what ? ' · ' + escapeHtml(what) : ''} · ` +
-        `${escapeHtml(who || '—')} · <span>${state}</span>${tail || ''}</div>`;
+    function cmdAgentRow(who, o) {
+      const w = who || {}, pane = cmdAgentPane(w);
+      return arbMemberRowHtml(Object.assign({pane: pane,
+        aid: w.aid || (pane && pane.aid) || '',
+        label: w.label || (pane ? paneLabel(pane) : '') || w.aid || w.pane_id || ''}, o));
     }
 
     // Takes one member off the roster, armed, since a seat holder taken off leaves its seat empty.
@@ -31018,8 +31185,8 @@ convApplyTint();
       const rows = cmdLooseMembers(s, new Set());
       return arbPart('Members',
         (rows.length
-          ? rows.map(x => cmdMemberLine(x.state, x.role || 'no role', '', x.label,
-                                        cmdDropHtml(s, x.member, x.label))).join('')
+          ? rows.map(x => cmdAgentRow(x, {role: x.role || 'no role', state: x.state,
+                                           tail: cmdDropHtml(s, x.member, x.label)})).join('')
           : '<div class="arb-note">Nobody yet. The Commander plans alone until someone is ' +
             'added, here or by its own member.add.</div>') +
         cmdAddHtml(s));
@@ -31028,7 +31195,6 @@ convApplyTint();
     function cmdSeatsHtml(s) {
       const model = cmdSeatModel(s);
       const open = s.state !== 'ended';
-      const line = cmdMemberLine;
       // Away is the seat's own agent down: Staff then restarts that agent into the same seat,
       // keeping its id, rather than starting a stranger.
       const staff = x => (open && x.state !== 'live'
@@ -31054,15 +31220,17 @@ convApplyTint();
           `<div class="arb-note">${escapeHtml(model.flow)}</div>` +
           '<div class="arb-note">The Commander assigns any seat directly, at any time.</div>' +
           change) +
+        // A seat's row badges the harness the seat asks for while nobody is up in it.
         arbPart('Seats', model.seats.map(x =>
-          line(x.state, x.name, x.roles.join(' + ') + ' · ' + x.kind + (x.config ? ' · ' + x.config : ''),
-               x.label, staff(x) + cmdDropHtml(s, x.member, x.label)) +
+          cmdAgentRow({aid: x.aid, pane_id: x.pane_id, label: x.label || 'nobody'},
+            {role: x.name + (x.roles.length ? ' · ' + x.roles.join(' + ') : ''), state: x.state,
+             kind: x.kind, config: x.config, tail: staff(x) + cmdDropHtml(s, x.member, x.label)}) +
           (x.error && x.state === 'empty'
             ? `<div class="arb-note">Could not start: ${escapeHtml(x.error)}</div>` : '')).join('')) +
         arbPart('Extras',
           (model.extras.length
-            ? model.extras.map(x => line(x.state, x.role || 'no role', '', x.label,
-                                         cmdDropHtml(s, x.member, x.label))).join('')
+            ? model.extras.map(x => cmdAgentRow(x, {role: x.role || 'no role', state: x.state,
+                                                    tail: cmdDropHtml(s, x.member, x.label)})).join('')
             : '<div class="arb-note">Nobody outside the seats.</div>') +
           cmdAddHtml(s));
     }
@@ -31197,7 +31365,7 @@ convApplyTint();
       cmdEditWas = null;
       const rows = arbMemberRows(conv, s.project_id, s.id)
         .filter(r => r.pane && r.pane.pane_id !== (s.coordinator || {}).pane_id);
-      cmdDraw(conv, arbPart('Add a member',
+      cmdDraw(conv, cmdOnRosterHtml(s) + arbPart('Add a member',
           arbSlot('cmdAddWho', rows, rows[0] && arbPickValue(rows[0]), false) +
           '<label>Role<input id="cmdAddRole" maxlength="160" autocomplete="off"' +
           ' placeholder="writes the release notes"></label>' +
@@ -31211,6 +31379,19 @@ convApplyTint();
         '<button type="button" class="badge pick proj" onclick="cmdAddClose()">Cancel</button>' +
         '<button type="button" class="badge pick on" onclick="cmdAddMember()">Add</button></div>',
         true, true);
+    }
+
+    // Who a roster already holds, above a form that adds to it: the Commander, then every member
+    // with its role, so a new role is chosen knowing the ones taken.
+    function cmdOnRosterHtml(s) {
+      return arbPart('On this roster',
+        cmdAgentRow(s.coordinator, {role: cmdCoordinatorRole(s), state: cmdCoordinatorGone(s) ? 'away' : 'live'}) +
+        (s.members || []).map(m => cmdAgentRow(m, {role: m.role || 'no role',
+                                                   state: m.pane_id ? 'live' : 'away'})).join(''));
+    }
+
+    function cmdCoordinatorRole(s) {
+      return s.manual ? 'standby' : s.tier === 'general' ? 'General' : 'Commander';
     }
 
     function cmdAddClose() {
@@ -31265,6 +31446,8 @@ convApplyTint();
       const at = (s.coordinator || {}).pane_id || '';
       const budget = s.budget || {};
       return arbPart('Commander',
+          cmdAgentRow(s.coordinator, {role: cmdCoordinatorRole(s),
+                                      state: cmdCoordinatorGone(s) ? 'away' : 'live'}) +
           '<div class="arb-note">' +
           escapeHtml(`${s.tier || 'project'} · ${s.project_id || 'no project'} · ${s.state}`) +
           (s.pause_reason ? ' · ' + escapeHtml(String(s.pause_reason).replace(/_/g, ' ')) : '') +
@@ -31537,16 +31720,18 @@ convApplyTint();
       const project = typeof arbPickedProject === 'function' ? arbPickedProject(conv, null) : null;
       const free = arbArbiterRows(conv, project, '');
       const members = arbMemberRows(conv, project, '').filter(r => r.pane);
-      return arbPart('Commander on standby', loopSlot(free, free[0] ? arbPickValue(free[0]) : '') +
+      // What is set now, apart from the picker that sets it — see cmdSetupHtml.
+      return arbPart('Commander on standby',
+          arbNowHtml('', 'Nobody. This room has no loop or Commander yet.') +
+          loopSlot(free, free[0] ? arbPickValue(free[0]) : '') +
           '<span class="arb-note">It is told nothing while you own the chain. It takes over ' +
           'when you press Hand to Commander.</span>', cmdSign(16) + ' ') +
         arbPart('Members',
-          (members.length ? members.map((r, i) =>
-            `<label class="arb-check"><input type="checkbox" id="loopMember${i}"` +
-            ` value="${escapeHtml(r.pane.pane_id)}"` +
-            ((conv.members || []).some(m => m.aid === r.key) ? ' checked' : '') +
-            `> ${escapeHtml(r.label || paneLabel(r.pane))}` +
-            '</label>').join('')
+          (members.length ? members.map((r, i) => arbMemberRowHtml({
+            pane: r.pane, label: r.label || paneLabel(r.pane),
+            role: typeof convMemberRole === 'function' ? convMemberRole(r.key, conv.id) : '',
+            check: {id: `loopMember${i}`, value: r.pane.pane_id,
+                    checked: (conv.members || []).some(m => m.aid === r.key)}})).join('')
             : '<span class="arb-note">Nobody in this room is running.</span>')) +
         loopSettingsHtml(LOOP_HOPS, 'pull', 1) +
         '<div class="arb-go">' +
@@ -31653,7 +31838,15 @@ convApplyTint();
         `<span class="arb-say-state">${escapeHtml((s.manual ? 'Loop · you own it' : 'Loop · Commander owns it') +
           (paused ? ' · paused' + (s.pause_reason ? ' — ' + String(s.pause_reason).replace(/_/g, ' ') : '') : ''))}</span>` +
         `<span class="arb-say-budget">${escapeHtml(holder + ' · ' + (s.delivery || 'pull'))}</span>` +
+        `<span class="arb-say-budget">${escapeHtml((s.manual ? 'standby: ' : 'Commander: ') + loopStandbyName(s))}</span>` +
         '</div>' + (s.manual ? loopPushWarning() : '') + loopChainsHtml(s) + '</div>';
+    }
+
+    // Who holds the Commander's seat, by the name its pane goes by.
+    function loopStandbyName(s) {
+      const c = s.coordinator || {};
+      const pane = cmdAgentPane(c);
+      return pane ? paneLabel(pane) : c.label || 'nobody (gone)';
     }
 
     function loopChainsHtml(s) {
@@ -31770,6 +31963,7 @@ convApplyTint();
       if (at && paneOf(at)) { loopCommand('cmd_edit', {manual: false}); return; }
       const free = arbArbiterRows(conv, s.project_id, s.id);
       loopDraw(conv, arbPart('Its Commander is gone — pick another',
+          arbNowHtml(cmdAgentRow(s.coordinator, {role: 'standby', state: 'away'})) +
           loopSlot(free, free[0] ? arbPickValue(free[0]) : ''), cmdSign(16) + ' ') +
         '<div class="arb-go">' +
         '<button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
@@ -31947,13 +32141,17 @@ convApplyTint();
       const ms = s.members || [], held = new Set(ms.map(loopAgent)), cmd = s.coordinator || {};
       const candidates = arbCandidates(conv, s.project_id, s.id).filter(a =>
         a.aid && !held.has(a.aid) && a.aid !== cmd.aid && a.pane_id !== cmd.pane_id);
-      loopDraw(conv, arbPart('Current seats', ms.map(m =>
-        `<label class="arb-check"><input type="checkbox" checked disabled> ${escapeHtml(m.label || m.id)}` +
-        ` · ${escapeHtml(m.role || 'member')}${m.away ? ' — away' : ''}</label>`).join('') ||
+      // The same rows as the Commander's sheet: who is set, then who can be added, told apart by
+      // the tick box only the second has.
+      loopDraw(conv, arbPart('Commander on standby',
+        cmdAgentRow(cmd, {role: 'standby', state: cmdCoordinatorGone(s) ? 'away' : 'live'})) +
+        arbPart('Current seats', ms.map(m => cmdAgentRow(m, {role: m.role || 'member',
+          state: m.away || !m.pane_id ? 'away' : 'live'})).join('') ||
         '<span class="arb-note">No members yet.</span>') +
-        arbPart('Add from this Project', candidates.map((a, i) =>
-          `<label class="arb-check"><input type="checkbox" id="loopAddMember${i}"` +
-          ` value="${escapeHtml(a.aid)}"> ${escapeHtml(paneLabel(a))}</label>`).join('') ||
+        arbPart('Add from this Project', candidates.map((a, i) => arbMemberRowHtml({
+          pane: a, label: paneLabel(a),
+          role: typeof convMemberRole === 'function' ? convMemberRole(a.aid, conv.id) : '',
+          check: {id: `loopAddMember${i}`, value: a.aid}})).join('') ||
           '<span class="arb-note">No other agents in this Project.</span>') +
         '<span class="arb-note">Up to six seats. To remove or replace a seat, use the full Commander edit.</span>' +
         '<div class="arb-go"><button type="button" class="badge pick proj" onclick="closeArbSetup()">Cancel</button>' +
@@ -39002,6 +39200,8 @@ convApplyTint();
           // The harness moved up to the badge beside the name, so the line under it is what this
           // member is doing and nothing it already said.
           `<small>${escapeHtml(r.status)}` +
+          `${typeof convMemberRole === 'function' && convMemberRole(r.aid, deskSelectedConv)
+            ? ' · ' + escapeHtml(convMemberRole(r.aid, deskSelectedConv)) : ''}` +
           `${r.guest ? ' · in this project' : ''}</small></div>` +
           // The member's menu, which right-click also opens: Re-brief, Restart and Resume on
           // another config live there, and a right-click is not something a reader finds.
