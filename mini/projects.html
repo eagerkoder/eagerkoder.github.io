@@ -3280,7 +3280,7 @@ button.conv-role {
 
 button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 
-/* A bench room's member: on the bench, or in the room only. */
+/* An agent on the bench sheet: on the bench, or not. */
 .conv-bench {
   flex: 0 0 auto;
   padding: 0 2px;
@@ -3296,12 +3296,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .conv-bench::before { content: '\2610'; }
 .conv-bench[aria-checked="true"] { color: var(--green); }
 .conv-bench[aria-checked="true"]::before { content: '\2611'; }
-
-.conv-bench-legend {
-  margin: 6px 2px 0;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
+.conv-bench:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Putting a member on the bench: which seat, and its role files. */
 .bench-seat-roles {
@@ -3326,8 +3321,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .bench-seat-note { margin: 0; color: var(--muted); font-size: 0.75rem; }
 
 /* The desktop roster's second line holds them inline, after what the member is doing. */
-.mock-agent small .conv-role,
-.mock-agent small .conv-bench {
+.mock-agent small .conv-role {
   margin-left: 5px;
   vertical-align: 1px;
 }
@@ -12362,6 +12356,8 @@ function convWebModeOf(conv) {
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        // The bench sheet lists the Project's running agents, so it follows the snapshot too.
+        if (typeof benchSheetDraw === 'function') benchSheetDraw();
         if (typeof remoteNativeDrawn === 'function') remoteNativeDrawn();
         // A link the page was loaded on that named something only a snapshot can resolve — an
         // agent id, a landing section, a pane. After the render, which is what fills those lists.
@@ -18316,6 +18312,7 @@ function convWebModeOf(conv) {
       // the desktop page has a Loop button in its roster header and no Commander button at all.
       // It also re-syncs every desktop column's buttons and places the strips, this one included.
       if (typeof loopSync === 'function') loopSync();
+      if (typeof benchSync === 'function') benchSync();
       if (!el) return;
       el.classList.toggle('on', !!(cmdOn && conv));
       // A manual loop is this room's Commander session too, and the Loop button beside this one

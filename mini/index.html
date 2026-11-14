@@ -2575,6 +2575,70 @@
   font-size: 0.85rem;
 }
 
+/* The bench sheet: one Project's bench as one list. */
+.bench-sheet-shade { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); }
+
+.bench-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bench-sheet-head > span { flex: 1; font-size: 0.8rem; font-weight: 600; }
+
+.bench-sheet-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.bench-sheet-body { overflow-y: auto; padding: 4px 16px 12px; }
+
+.bench-sheet-body .bench-band { margin: 10px 0 4px; }
+
+.bench-sheet-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 36px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.bench-sheet-row[data-state="live"] .bench-dot { background: var(--green); border-color: var(--green); }
+.bench-sheet-row[data-state="away"] .bench-dot { border-color: var(--orange); }
+.bench-sheet-row[data-state="barred"] .bench-name { color: var(--muted); }
+.bench-sheet-row .conv-bench { min-width: 32px; min-height: 32px; }
+
+.bench-sheet-roles { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+
+.bench-sheet-acts { display: inline-flex; gap: 6px; margin-left: auto; }
+
+.bench-sheet-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.bench-sheet-btn:hover { border-color: var(--muted); }
+
+.bench-sheet-link { width: 19px; text-align: center; color: var(--muted); }
+
+.bench-sheet-none, .bench-sheet-note { margin: 6px 0; color: var(--muted); font-size: 0.75rem; }
+
+.bench-sheet-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 10px; }
+
   </style>
     <style>
 /* One agent on a roster (arbitration.js arbMemberRowHtml): the pane picker's row, laid flat, then
@@ -2731,7 +2795,7 @@ button.conv-role {
 
 button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 
-/* A bench room's member: on the bench, or in the room only. */
+/* An agent on the bench sheet: on the bench, or not. */
 .conv-bench {
   flex: 0 0 auto;
   padding: 0 2px;
@@ -2747,12 +2811,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .conv-bench::before { content: '\2610'; }
 .conv-bench[aria-checked="true"] { color: var(--green); }
 .conv-bench[aria-checked="true"]::before { content: '\2611'; }
-
-.conv-bench-legend {
-  margin: 6px 2px 0;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
+.conv-bench:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Putting a member on the bench: which seat, and its role files. */
 .bench-seat-roles {
@@ -2777,8 +2836,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .bench-seat-note { margin: 0; color: var(--muted); font-size: 0.75rem; }
 
 /* The desktop roster's second line holds them inline, after what the member is doing. */
-.mock-agent small .conv-role,
-.mock-agent small .conv-bench {
+.mock-agent small .conv-role {
   margin-left: 5px;
   vertical-align: 1px;
 }
@@ -13737,6 +13795,11 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
            in the row, because it is the one a person presses on the way out of the room. -->
       <button class="hang-btn hang-loop" id="convLoop" onclick="loopOpenFromConv()"
         aria-label="Start a manual loop in this conversation"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" /><path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></svg></button>
+      <!-- A bench room's own: the bench sheet, its seats and who holds them. Beside Loop, which
+           stays, because a bench room may still hold a session of agents off the bench. -->
+      <button class="hang-btn hang-bench" id="convBench" onclick="benchOpenFromConv()"
+        title="This Project's bench: its seats and who holds them"
+        aria-label="This Project's bench: its seats and who holds them"><span aria-hidden="true">🏛</span></button>
       <!-- Two states and no third: this conversation has an arbitrator and this goes to its
            pane, or it has none and this opens the form that gives it one. Hidden when neither is
            true, because a button whose answer is "nothing" is one a person taps twice. -->
@@ -19742,6 +19805,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         // after an outage long enough to have missed turns.
         convRecoverOutage();
         render();
+        // The bench sheet lists the Project's running agents, so it follows the snapshot too.
+        if (typeof benchSheetDraw === 'function') benchSheetDraw();
         if (typeof remoteNativeDrawn === 'function') remoteNativeDrawn();
         // A link the page was loaded on that named something only a snapshot can resolve — an
         // agent id, a landing section, a pane. After the render, which is what fills those lists.
@@ -25794,14 +25859,19 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       benchFolds.clear();
       document.getElementById('benchAdd')?.close();
       document.getElementById('benchSeat')?.close();
+      document.getElementById('benchRoles')?.close();
       benchSeatSent = null;
+      if (typeof benchSheetClose === 'function') benchSheetClose();
     }
 
     function benchReceive(msg) {
       benchProjects = msg.projects || {};
       if (typeof renderLauncher === 'function') renderLauncher();
-      // The rosters' bench switches and role chips read it too.
+      // The rosters' role chips read it too.
       if (typeof roomMarksChanged === 'function') roomMarksChanged();
+      benchSheetDraw();
+      benchSync();
+      if (typeof deskColumns !== 'undefined' && typeof deskHangSync === 'function') deskColumns.forEach((_, i) => deskHangSync(i));
     }
 
     const BENCH_STATE = {live: 'live', away: 'away', 'not started': 'not started', linked: 'linked'};
@@ -25863,6 +25933,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     function benchRedraw() {
       if (typeof renderLauncher === 'function') renderLauncher();
       if (typeof cmdRender === 'function') cmdRender();
+      benchSheetLast = '';
+      benchSheetDraw();
     }
 
     // The relay checks the harness and answers with a fresh `bench` broadcast, which redraws the
@@ -25905,8 +25977,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         + '<label class="bench-add-field">Harness<select name="kind" onchange="benchAddAliases(this.form)">'
         + (opts.agents || []).map(option).join('') + '</select></label>'
         + '<label class="bench-add-field">Alias<select name="config"></select></label>'
-        + '<label class="bench-add-field">Role<select name="role"><option value="">none</option>'
-        + (opts.recipe_roles || []).map(option).join('') + '</select></label>'
+        + ((opts.recipe_roles || []).length ? '<fieldset class="bench-add-field bench-seat-roles"><legend>Roles — the files that write its brief</legend>'
+          + opts.recipe_roles.map(r => `<label><input type="checkbox" name="role" value="${escapeHtml(r)}">${escapeHtml(r)}</label>`).join('')
+          + '</fieldset>' : '')
         + '<div class="ql-actions"><button type="button" class="ql-secondary"'
         + ' onclick="this.closest(\'dialog\').close()">Cancel</button>'
         + '<button type="submit" class="ql-primary">Add</button></div></form>';
@@ -25936,10 +26009,10 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         return;
       }
       if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was added.'); return; }
-      const role = form.elements.role.value;
       benchAddSent = {type: 'bench_edit', project_id: pid, name: name, create_only: true,
         label: name.charAt(0).toUpperCase() + name.slice(1), kind: form.elements.kind.value,
-        config: form.elements.config.value, roles: role ? [role] : []};
+        config: form.elements.config.value,
+        roles: Array.from(form.querySelectorAll('input[name="role"]')).filter(b => b.checked).map(b => b.value)};
       ws.send(JSON.stringify(benchAddSent));
       dlg.close();
     }
@@ -25976,7 +26049,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
           return `<details class="bench-project"${open ? ' open' : ''}>`
             + `<summary onclick="benchFolds.set('${escapeHtml(p.id)}', !this.parentElement.open)">`
             + `${escapeHtml(p.label || p.id)}</summary>`
-            + `<div class="bench-rows">${entries.map(e => `<span class="bench-entry">${benchRowHtml(p.id, e)}</span>`).join('')}</div>`
+            + `<div class="bench-rows">${entries.map(e => `<span class="bench-entry">${benchRowHtml(p.id, e)}</span>`).join('')}`
+            + `<button class="bench-row" data-bench-sheet="${escapeHtml(p.id)}" onclick="benchSheetOpen(this.dataset.benchSheet)"`
+            + ` title="Every seat and who holds it">Manage…</button></div>`
             + '</details>';
         }).join('');
     }
@@ -26018,51 +26093,19 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       if (paneId && typeof openTerminal === 'function') openTerminal(paneId);
     }
 
-    // --- a room member on the bench, and off it -------------------------------------------------
+    // --- an agent on the bench, and off it ------------------------------------------------------
     //
-    // The bench room's roster says, member by member, whether the bench holds it: a member the
-    // person added is in the room only, and on the bench once an entry takes it. Putting one on is
+    // The bench sheet says, agent by agent, whether the bench holds it. Putting one on is
     // this dialog — which seat, and the role files that write its brief — then `bench_adopt`, then
     // `bench_edit` for the roles, then its brief to read and send. Nothing is typed at the agent
-    // until the person sends that brief. Letting one go is `bench_release`: it stays in the room.
+    // until the person sends that brief. Letting one go is `bench_release`: it keeps running, and
+    // stays in any room it is in.
 
     // The Project a bench room is for, or ''.
     function benchRoomProject(conv) {
       if (!conv) return '';
       if (conv.bench) return String(conv.bench);
       return String(conv.id || '').startsWith('c_bench_') ? String(conv.id).slice(8) : '';
-    }
-
-    // The entry holding this agent on that Project's bench, or null.
-    function benchEntryOf(pid, aid) {
-      return aid ? ((benchProjects || {})[pid] || []).find(e => e.aid === aid && e.state !== 'linked') || null : null;
-    }
-
-    // The roster's switch for one member of a bench room. Only a running agent can be put on — an
-    // entry adopts the agent as it is — and only a relay that sends the bench offers it at all.
-    function benchMemberSwitchHtml(conv, aid, live) {
-      const pid = benchRoomProject(conv);
-      if (!pid || !benchProjects || !Array.isArray(benchProjects[pid])) return '';
-      const e = benchEntryOf(pid, aid);
-      // A shell is never a bench agent: only an agent the relay names can be adopted.
-      if (!e && !(live && agents.some(a => a.aid && a.aid === aid))) return '';
-      return `<button class="conv-bench${e ? ' arm-btn' : ''}" role="switch" aria-checked="${e ? 'true' : 'false'}"` +
-        ` aria-label="${e ? 'On the bench' : 'In this room only'}"` +
-        ` data-pid="${escapeHtml(pid)}" data-key="${escapeHtml(aid)}"` +
-        (e ? ` data-name="${escapeHtml(e.name)}" onclick="armButton(this, '', () => benchLetGo(this.dataset.pid, this.dataset.name, this.dataset.key))"` +
-             ` title="On the bench as ${escapeHtml(e.label || e.name)}. Press twice to let it go; it stays in this room."`
-           : ` onclick="benchSeatOpen(this.dataset.pid, this.dataset.key)"` +
-             ` title="In this room only. Put it on the bench, with the roles that write its brief."`) +
-        `></button>`;
-    }
-
-    // What the boxes mean, once, under a bench room's roster.
-    function benchRosterLegendHtml(conv) {
-      const pid = benchRoomProject(conv);
-      if (!pid || !benchProjects || !Array.isArray(benchProjects[pid])) return '';
-      return '<p class="conv-bench-legend"><span aria-hidden="true">\u2611</span> on the bench \u00b7 ' +
-        '<span aria-hidden="true">\u2610</span> in this room only. Tick to put one on the bench; ' +
-        'its role opens its brief.</p>';
     }
 
     function benchLetGo(pid, name, aid) {
@@ -26188,6 +26231,231 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       if (ws !== connection) return;
       if (typeof convCanRebrief === 'function' && convCanRebrief(aid)) { convRebriefMember(aid); return; }
       if (tries > 0) setTimeout(() => benchSeatBrief(aid, tries - 1, connection), 300);
+    }
+
+    // --- the bench sheet ------------------------------------------------------------------------
+    //
+    // One Project's bench as one list: every agent of the Project, ticked when a seat holds it, and
+    // under them the seats nobody holds. Commander and loop rosters keep their own forms; this is
+    // the bench's roster only. Every control sends a message the bench card, the seat dialog or the
+    // Brief sheet already sent — the sheet gathers them, and changes nothing the relay does.
+    //
+    // An overlay like the Commander and loop sheets (120), so the Brief sheet (130) opens over it
+    // and the seat dialogs, which are modal, over both.
+    let benchSheetPid = '';
+    let benchSheetLast = '';
+    let benchSheetFrom = null;
+
+    function benchSheetOpen(pid) {
+      if (!pid || !benchProjects) { showToast('This relay keeps no bench.'); return; }
+      let el = document.getElementById('benchSheet');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'benchSheet';
+        el.className = 'app-overlay';
+        el.style.zIndex = '120';
+        el.innerHTML = '<div class="bench-sheet-shade" onclick="benchSheetClose()"></div>'
+          + '<div class="sheet wide bench-sheet" role="dialog" aria-modal="true" aria-labelledby="benchSheetTitle">'
+          + '<div class="bench-sheet-head"><span id="benchSheetTitle"></span>'
+          + '<button type="button" class="bench-sheet-x" onclick="benchSheetClose()" aria-label="Close">✕</button></div>'
+          + '<div id="benchSheetBody" class="bench-sheet-body"></div></div>';
+        document.body.appendChild(el);
+        el.addEventListener('keydown', e => {
+          const brief = document.getElementById('rebriefSheet');
+          if (brief && brief.style.display !== 'none') return;
+          e.stopPropagation();
+          if (e.key === 'Escape') { e.preventDefault(); benchSheetClose(); return; }
+          if (e.key !== 'Tab') return;
+          const buttons = Array.from(el.querySelectorAll('button:not(:disabled), select:not(:disabled)'));
+          const next = e.shiftKey ? buttons[buttons.length - 1] : buttons[0];
+          if (document.activeElement === (e.shiftKey ? buttons[0] : buttons[buttons.length - 1])) {
+            e.preventDefault(); next.focus();
+          }
+        });
+      }
+      benchSheetFrom = document.activeElement;
+      benchSheetPid = pid;
+      benchSheetLast = '';
+      el.style.display = '';
+      benchSheetDraw();
+      el.querySelector('.bench-sheet-x').focus();
+    }
+
+    function benchSheetClose() {
+      const el = document.getElementById('benchSheet');
+      if (typeof armedKey !== 'undefined' && armedKey.startsWith(`bench-let-go:${benchSheetPid}/`)) disarmButton();
+      if (el) el.style.display = 'none';
+      benchSheetPid = '';
+      if (benchSheetFrom && benchSheetFrom.isConnected) benchSheetFrom.focus();
+      benchSheetFrom = null;
+    }
+
+    // A keyed arm follows the same holder across redraws, never a replacement in the same seat.
+    function benchSheetDraw() {
+      const el = document.getElementById('benchSheet');
+      if (!el || !benchSheetPid || el.style.display === 'none') return;
+      const body = document.getElementById('benchSheetBody');
+      const project = (typeof projects !== 'undefined' ? projects : []).find(p => p.id === benchSheetPid);
+      document.getElementById('benchSheetTitle').textContent = `Bench · ${project ? project.label || project.id : benchSheetPid}`;
+      const html = benchSheetHtml(benchSheetPid);
+      if (html === benchSheetLast) return;
+      benchSheetLast = html;
+      const active = document.activeElement;
+      const row = active && body.contains(active) && active.closest('.bench-sheet-row');
+      const index = row ? Array.from(row.querySelectorAll('button, select')).indexOf(active) : -1;
+      body.innerHTML = html;
+      if (row) {
+        const replacement = Array.from(body.querySelectorAll('.bench-sheet-row'))
+          .find(r => r.dataset.bench === row.dataset.bench && r.dataset.key === row.dataset.key);
+        const control = replacement && replacement.querySelectorAll('button, select')[index];
+        (control && !control.disabled ? control : el.querySelector('.bench-sheet-x')).focus();
+      }
+    }
+
+    // Why an agent cannot be ticked, or '': the relay refuses a session's coordinator or seat as
+    // `standing_agent`, so the box says so instead of sending what would be refused.
+    function benchSheetBar(a) {
+      const m = a.managed || {};
+      if (m.as === 'seat') return `on the roster of ${m.session}`;
+      if (m.as === 'coordinator') return `coordinates ${m.session}`;
+      if (m.as === 'ambiguous') return 'held by more than one session';
+      return '';
+    }
+
+    function benchSheetHtml(pid) {
+      const entries = (benchProjects || {})[pid] || [];
+      const held = entries.filter(e => e.aid && e.state !== 'linked');
+      const empty = entries.filter(e => !e.aid && e.state !== 'linked');
+      const linked = entries.filter(e => e.state === 'linked');
+      const mine = new Set(held.map(e => e.aid));
+      const others = agents.filter(a => a.aid && !mine.has(a.aid) && (a.project_id || '') === pid
+        && (a.host || 'local') === 'local');
+      const attr = escapeHtml;
+      const roles = e => `<span class="bench-sheet-roles">${escapeHtml((e.roles || []).join(', ') || 'no roles')}</span>`;
+      const kind = (k, c) => typeof configBadge === 'function' ? configBadge(k || '?', c) : escapeHtml(k || '');
+      const btn = (cls, label, onclick, aria) =>
+        `<button type="button" class="bench-sheet-btn ${cls}" data-pid="${attr(pid)}" onclick="${onclick}"`
+        + `${aria ? ` aria-label="${attr(aria)}"` : ''}>${label}</button>`;
+      const heldRow = e => {
+        const name = e.label || e.name;
+        const open = e.state === 'live' ? 'Open' : 'Resume';
+        const key = `bench-let-go:${pid}/${e.name}/${e.aid}`;
+        return `<div class="bench-sheet-row" data-state="${attr(e.state || '')}" data-bench="${attr(e.name)}">`
+          + `<button class="conv-bench arm-btn" role="switch" aria-checked="true" data-pid="${attr(pid)}"`
+          + ` data-name="${attr(e.name)}" data-key="${attr(e.aid)}"`
+          + ` data-arm-key="${attr(key)}"${typeof armButtonArmed === 'function' && armButtonArmed(key) ? ' data-armed="1"' : ''}`
+          + ` onclick="armButton(this, '', () => benchLetGo(this.dataset.pid, this.dataset.name, this.dataset.key), this.dataset.armKey)"`
+          + ` aria-label="${attr(`Let ${name} go from the bench`)}"`
+          + ` title="On the bench. Press twice to let it go; it keeps running."></button>`
+          + '<span class="bench-dot"></span>'
+          + `<span class="bench-name">${escapeHtml(name)}</span>${kind(e.kind, e.config)}`
+          + `<span class="bench-state">${escapeHtml(BENCH_STATE[e.state] || e.state || '')}</span>${roles(e)}`
+          + '<span class="bench-sheet-acts">'
+          + btn('', 'Roles', `benchRolesOpen(this.dataset.pid, '${attr(e.name)}')`, `Roles of ${name}`)
+          + btn('', open, `benchSheetClose(); benchOpen(this.dataset.pid, '${attr(e.name)}')`, `${open} ${name}`)
+          + '</span></div>';
+      };
+      const otherRow = a => {
+        const bar = benchSheetBar(a);
+        return `<div class="bench-sheet-row" data-state="${bar ? 'barred' : 'live'}" data-key="${attr(a.aid)}">`
+          + `<button class="conv-bench" role="switch" aria-checked="false" data-pid="${attr(pid)}" data-key="${attr(a.aid)}"`
+          + (bar ? ` disabled title="${attr(`Not offered: ${bar}`)}"`
+            : ` onclick="benchSeatOpen(this.dataset.pid, this.dataset.key)" title="Put it on the bench"`)
+          + ` aria-label="${attr(`Put ${paneLabel(a)} on the bench`)}"></button>`
+          + '<span class="bench-dot"></span>'
+          + `<span class="bench-name">${escapeHtml(paneLabel(a))}</span>${kind(a.agent, a.config)}`
+          + `<span class="bench-state">${escapeHtml(bar || 'not on the bench')}</span></div>`;
+      };
+      const linkRow = e => `<div class="bench-sheet-row" data-state="linked" title="${attr(BENCH_LINK_TITLE)}">`
+        + '<span class="bench-sheet-link" aria-hidden="true">⇄</span>'
+        + `<span class="bench-name">${escapeHtml(e.label || e.name)}</span>`
+        + '<span class="bench-state">linked: another machine\'s bench</span></div>';
+      const emptyRow = e => {
+        const name = e.label || e.name;
+        const opening = benchOpening.has(`${pid}/${e.name}`);
+        return `<div class="bench-sheet-row" data-state="${attr(e.state || '')}" data-bench="${attr(e.name)}">`
+          + `<span class="bench-name">${escapeHtml(name)}</span>${benchPickHtml(pid, e)}${roles(e)}`
+          + '<span class="bench-sheet-acts">'
+          + btn('', 'Roles', `benchRolesOpen(this.dataset.pid, '${attr(e.name)}')`, `Roles of ${name}`)
+          + btn('', opening ? 'Starting…' : 'Start', `benchSheetClose(); benchOpen(this.dataset.pid, '${attr(e.name)}')`, `Start ${name}`)
+          + '</span></div>';
+      };
+      const agentsHtml = held.map(heldRow).join('') + others.map(otherRow).join('') + linked.map(linkRow).join('');
+      return '<div class="bench-band">Agents</div>'
+        + (agentsHtml || '<p class="bench-sheet-none">No agent of this Project is running.</p>')
+        + (empty.length ? '<div class="bench-band">Empty seats</div>' + empty.map(emptyRow).join('') : '')
+        + '<div class="bench-sheet-foot">'
+        + btn('', '+ New seat', 'benchAddOpen(this.dataset.pid)', 'Add a seat of this Project\'s own')
+        + '<span class="bench-sheet-note">Tick a running agent to put it on the bench; untick to let it go. '
+        + 'Commander and loop rosters are changed on their own sheets.</span></div>';
+    }
+
+    // The roles of a seat. A live bench agent's are its brief's, so the Brief sheet edits them and
+    // shows what they write; a seat with nobody running there has no brief to show, and is a
+    // `bench_edit` alone.
+    function benchRolesOpen(pid, name) {
+      const e = ((benchProjects || {})[pid] || []).find(x => x.name === name);
+      if (!e) return;
+      if (e.aid && typeof convCanRebrief === 'function' && convCanRebrief(e.aid)) { convRebriefMember(e.aid); return; }
+      let dlg = document.getElementById('benchRoles');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'benchRoles';
+        dlg.className = 'bench-add-dialog';
+        dlg.setAttribute('aria-labelledby', 'benchRolesTitle');
+        document.body.appendChild(dlg);
+      }
+      const have = e.roles || [];
+      const lib = ((typeof startOptions !== 'undefined' && startOptions) || {}).recipe_roles || [];
+      const ids = lib.concat(have.filter(r => !lib.includes(r)));
+      dlg.dataset.pid = pid;
+      dlg.dataset.name = name;
+      dlg.dataset.aid = e.aid || '';
+      dlg.innerHTML = '<form method="dialog" onsubmit="benchRolesSubmit(event)">'
+        + `<div id="benchRolesTitle" class="bench-add-title">Roles of ${escapeHtml(e.label || e.name)}</div>`
+        + (ids.length ? '<fieldset class="bench-add-field bench-seat-roles"><legend>The files that write its brief</legend>'
+          + ids.map(r => `<label><input type="checkbox" name="role" value="${escapeHtml(r)}"${have.includes(r) ? ' checked' : ''}>`
+            + `${escapeHtml(r)}</label>`).join('') + '</fieldset>'
+          : '<p class="bench-seat-note">This relay offers no role files.</p>')
+        + '<p class="bench-seat-note">Written into its brief the next time it is opened.</p>'
+        + '<div class="ql-actions"><button type="button" class="ql-secondary"'
+        + ' onclick="this.closest(\'dialog\').close()">Cancel</button>'
+        + `<button type="submit" class="ql-primary"${ids.length ? '' : ' disabled'}>Save</button></div></form>`;
+      dlg.showModal();
+    }
+
+    function benchRolesSubmit(ev) {
+      ev.preventDefault();
+      const form = ev.target;
+      const dlg = form.closest('dialog');
+      if (!ws || ws.readyState !== 1) { showToast('Not connected — nothing was changed.'); return; }
+      const {pid, name, aid} = dlg.dataset;
+      const entry = ((benchProjects || {})[pid] || []).find(e => e.name === name);
+      if (!entry || (entry.aid || '') !== aid || entry.state === 'linked') {
+        showToast('That seat changed — reopen its roles.'); dlg.close(); return;
+      }
+      const roles = Array.from(form.querySelectorAll('input[name="role"]')).filter(b => b.checked).map(b => b.value);
+      // Held to the agent it was opened on, so a seat that changed hands meanwhile is not edited.
+      ws.send(JSON.stringify({type: 'bench_edit', project_id: pid, name: name, roles: roles,
+                             ...(aid ? {if_aid: aid} : {})}));
+      dlg.close();
+    }
+
+    // The bench room's header button: the phone's, beside Loop. Shown only in a bench room.
+    function benchHereProject() {
+      const id = typeof convCurrentId === 'function' ? convCurrentId() : '';
+      if (!id) return '';
+      const conv = typeof loadConvIndex === 'function' ? loadConvIndex().find(c => c.id === id) : null;
+      return benchRoomProject(conv || {id});
+    }
+
+    function benchSync() {
+      const el = document.getElementById('convBench');
+      if (el) el.classList.toggle('on', !!benchProjects && !!benchHereProject());
+    }
+
+    function benchOpenFromConv() {
+      benchSheetOpen(benchHereProject());
     }
 
   </script>
@@ -42580,7 +42848,6 @@ function nlmSourceDelete(source) {
           kindBadge((rec.spawn || {}).agent || (live.get(m.aid) || {}).agent || '',
                     live.get(m.aid), (rec.spawn || {}).config) +
           convRoleChipHtml(m.aid, conv.id, on) +
-          (typeof benchMemberSwitchHtml === 'function' ? benchMemberSwitchHtml(conv, m.aid, on) : '') +
           `<span class="tag">${out ? 'hidden' : (on ? 'recording' : 'paused')}</span>` +
           // Two things on the row and no more: the way in, and one menu holding everything that
           // changes the member. Six buttons a row was a phone screen of controls with the names
@@ -42709,7 +42976,7 @@ function nlmSourceDelete(source) {
         `</div><div class="conv-roster-more-group">` +
         `<button class="conv-del arm-btn" onclick="armButton(this, '', deleteConversation)"` +
         ` aria-label="Delete this conversation, keeping the transcripts">Delete</button>` +
-        `</div></div></div>${typeof benchRosterLegendHtml === 'function' ? benchRosterLegendHtml(conv) : ''}${tier}</div>`;
+        `</div></div></div>${tier}</div>`;
     }
 
     // Whether the roster's More is open. One flag for both rosters: they are never on screen
@@ -51267,6 +51534,7 @@ function studioCardHtml() {
       // the desktop page has a Loop button in its roster header and no Commander button at all.
       // It also re-syncs every desktop column's buttons and places the strips, this one included.
       if (typeof loopSync === 'function') loopSync();
+      if (typeof benchSync === 'function') benchSync();
       if (!el) return;
       el.classList.toggle('on', !!(cmdOn && conv));
       // A manual loop is this room's Commander session too, and the Loop button beside this one
