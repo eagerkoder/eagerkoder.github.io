@@ -4345,6 +4345,28 @@
       color: var(--bg); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
     .resume-on-go:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* Re-brief's confirmation (conv_lifecycle.js). */
+    #rebriefBody { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .rebrief-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px;
+      margin: 0; font-size: 0.78rem; }
+    .rebrief-facts dt { color: var(--muted); }
+    .rebrief-facts dd { margin: 0; overflow-wrap: anywhere; }
+    .rebrief-parts { display: flex; flex-direction: column; gap: 6px; }
+    .rebrief-part { border: 1px solid var(--border); border-radius: 8px; font-size: 0.78rem; }
+    .rebrief-part summary { display: flex; justify-content: space-between; gap: 8px;
+      padding: 8px 10px; cursor: pointer; font-weight: 600; }
+    .rebrief-part summary small { color: var(--muted); font-weight: 400; }
+    .rebrief-part summary span::before { content: '\25B8  '; color: var(--muted); }
+    .rebrief-part[open] summary span::before { content: '\25BE  '; }
+    .rebrief-file { margin: 0 10px 6px; color: var(--muted); font-size: 0.72rem; overflow-wrap: anywhere; }
+    .rebrief-part pre { margin: 0; padding: 8px 10px; border-top: 1px solid var(--border);
+      max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+      font-size: 0.72rem; line-height: 1.4; }
+    .rebrief-actions { display: flex; gap: 8px; }
+    .rebrief-actions button { flex: 1; }
+    .rebrief-cancel { padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: none; color: var(--text); font-size: 0.85rem; cursor: pointer; }
+
     <!-- Start session, the pane picker, New agent, the notices and arbitration. Linked here,
          in the middle of this stylesheet, because that is where the rules were. -->
   </style>
@@ -9371,6 +9393,20 @@
           style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
       </div>
       <div id="resumeOnBody"></div>
+    </div>
+  </div>
+
+  <!-- Re-brief: what the relay would type at a briefed agent, shown before it is sent.
+       conv_lifecycle.js draws the body from the relay's preview. -->
+  <div id="rebriefSheet" class="app-overlay" style="display:none;z-index:100;">
+    <div onclick="closeRebrief()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="rebriefTitle">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span id="rebriefTitle" style="font-size:0.8rem;font-weight:600;flex:1">Re-brief</span>
+        <button onclick="closeRebrief()" aria-label="Close"
+          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      </div>
+      <div id="rebriefBody"></div>
     </div>
   </div>
 
@@ -20208,6 +20244,9 @@ convApplyTint();
                                 ...(held.resume && held.config !== undefined
                                   ? {config: held.config} : {})}));
       }
+      else if (msg.type === 'command_result' && msg.command === 'rebrief' && msg.preview) {
+        if (typeof convRebriefPreview === 'function') convRebriefPreview(msg);
+      }
       else if (msg.type === 'command_result' && msg.command === 'rebrief') {
         showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
       }
@@ -26128,11 +26167,90 @@ convApplyTint();
                 && agents.some(x => convMemberKey(x) === key));
     }
 
+    // Re-brief asks first: the relay reads back what it would type — the role it briefs this
+    // agent as and each piece in the order it goes in — and the sheet shows that before anything
+    // is sent, so a wrong brief is caught here rather than in the agent's next turn.
+    let rebriefKey = '', rebriefShown = null;
+
     function convRebriefMember(key) {
       if (!convCanRebrief(key)) return false;
+      closeRebrief();
+      rebriefKey = key;
+      ws.send(JSON.stringify({type: 'rebrief', aid: key, preview: true}));
+      showToast('Reading its brief…');
+      return true;
+    }
+
+    // The relay's answer to a preview. One for another agent, or after the sheet closed, is stale.
+    function convRebriefPreview(msg) {
+      if (!msg.aid || msg.aid !== rebriefKey) return;
+      if (!msg.ok) {
+        rebriefKey = '';
+        showToast(`Re-brief: ${msg.error || 'its brief could not be read'}`);
+        return;
+      }
+      const el = document.getElementById('rebriefSheet');
+      if (!el) return;
+      rebriefShown = msg;
+      renderRebrief();
+      el.style.display = '';
+      const go = document.querySelector('#rebriefSheet .rebrief-go');
+      if (go) go.focus();
+    }
+
+    function closeRebrief() {
+      const el = document.getElementById('rebriefSheet');
+      if (el) el.style.display = 'none';
+      rebriefKey = '';
+      rebriefShown = null;
+    }
+
+    function rebriefRole(msg) {
+      if (msg.as === 'bench') return `${msg.label || msg.name} on the bench of ${msg.project || msg.project_id}`;
+      if (msg.as === 'seat') return `${msg.member || 'member'}${msg.role ? ' (' + msg.role + ')' : ''} in ${msg.session}`;
+      const what = msg.kind === 'commander' ? (msg.tier ? msg.tier + ' Commander' : 'Commander') : 'arbitrator';
+      return `${what} of ${msg.session}`;
+    }
+
+    function renderRebrief() {
+      const body = document.getElementById('rebriefBody');
+      const msg = rebriefShown;
+      if (!body || !msg) return;
+      const live = agents.find(a => convMemberKey(a) === msg.aid);
+      const name = (live && (live.label || live.name)) || msg.aid;
+      const badge = live && typeof paneBadge === 'function' ? paneBadge(live, false) : '';
+      const facts = [
+        ['Agent', `${escapeHtml(name)}${badge ? ' ' + badge : ''}`],
+        ['Briefed as', escapeHtml(rebriefRole(msg))],
+        msg.as === 'bench' && ['Roles', escapeHtml((msg.roles || []).join(', ') || 'none')],
+        msg.project_id && msg.as !== 'bench' && ['Project', escapeHtml(msg.project_id)],
+        ['Pane', escapeHtml(msg.pane_id || '')],
+      ].filter(Boolean);
+      const parts = (msg.parts || []).map((p, i, all) =>
+        `<details class="rebrief-part"${i === all.length - 1 ? ' open' : ''}>` +
+        `<summary><span>${i + 1}. ${escapeHtml(p.label)}</span>` +
+        `<small>${(p.text || '').length.toLocaleString()} chars</small></summary>` +
+        (p.file ? `<p class="rebrief-file">Written to <code>${escapeHtml(p.file)}</code>; ` +
+          `the line above points the agent at it.</p>` : '') +
+        `<pre>${escapeHtml(p.text || '')}</pre></details>`).join('');
+      body.innerHTML =
+        `<dl class="rebrief-facts">` +
+        facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('') + `</dl>` +
+        `<p class="resume-on-note">Typed into its session as it stands, in this order. ` +
+        `Nothing is cleared.</p>` +
+        `<div class="rebrief-parts">${parts}</div>` +
+        `<div class="rebrief-actions">` +
+        `<button type="button" class="rebrief-cancel" onclick="closeRebrief()">Cancel</button>` +
+        `<button type="button" class="rebrief-go resume-on-go" onclick="submitRebrief()">Send brief</button>` +
+        `</div>`;
+    }
+
+    function submitRebrief() {
+      const key = rebriefShown && rebriefShown.aid;
+      closeRebrief();
+      if (!key || !convCanRebrief(key)) return;
       ws.send(JSON.stringify({type: 'rebrief', aid: key}));
       showToast('Sending its brief again…');
-      return true;
     }
 
     function convResetMember(key) {
@@ -38171,8 +38289,8 @@ convApplyTint();
         live && !respawnWebRoom(aid) && {label: 'Reset', arm: true,
                  hint: 'clears the session and says its opening words again',
                  run: () => { if (convResetMember(aid) === false) showToast('Nothing was reset.'); }},
-        live && convCanRebrief(aid) && {label: 'Re-brief', arm: true,
-                 hint: 'types its brief again, keeping the session',
+        live && convCanRebrief(aid) && {label: 'Re-brief\u2026',
+                 hint: 'shows its brief, then types it again, keeping the session',
                  run: () => convRebriefMember(aid)},
         {label: 'Restart', arm: true, disabled: !again || !convId,
          hint: again && convId ? note : 'nothing on record to start again',

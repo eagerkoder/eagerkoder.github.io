@@ -11935,6 +11935,9 @@ function convWebModeOf(conv) {
                                 ...(held.resume && held.config !== undefined
                                   ? {config: held.config} : {})}));
       }
+      else if (msg.type === 'command_result' && msg.command === 'rebrief' && msg.preview) {
+        if (typeof convRebriefPreview === 'function') convRebriefPreview(msg);
+      }
       else if (msg.type === 'command_result' && msg.command === 'rebrief') {
         showToast(msg.ok ? 'Brief sent again.' : `Re-brief failed: ${msg.error || 'unknown error'}`);
       }
