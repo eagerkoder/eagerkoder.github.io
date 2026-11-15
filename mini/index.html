@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-14">
+  <meta name="app-built" content="2026-11-15">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -9703,6 +9703,12 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       border-color: var(--orange);
     }
 
+    /* The bench is up: a seat holds a live agent. Green like a running loop. */
+    .hang-bench.live {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
     /* The loop strip's controls carry words: four verbs that change who owns work are not ones to
        guess from a glyph. Same chip as the row above, only as wide as its word. */
     .loop-strip .loop-txt {
@@ -13251,6 +13257,12 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     </div>
 
     <div class="setting-group">
+      <label class="toggle-option"><input type="checkbox" id="genBubbleOn" onchange="genBubbleSetHidden(!this.checked)"> General bubble</label>
+      <div class="hint">A round button over every screen for the General: its ring is the General's
+        state and a press is its room in a panel. Drag it anywhere. Alt+G opens it.</div>
+    </div>
+
+    <div class="setting-group">
       <label class="toggle-option"><input type="checkbox" id="autocorrectOn" onchange="setAutocorrect(this.checked)"> Autocorrect in the composer</label>
       <div class="hint">Off by default. Both composers type into an agent's prompt, where a flag is
         not a typo and a path is not a sentence — a keyboard that capitalises the first word of one
@@ -13799,7 +13811,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
            stays, because a bench room may still hold a session of agents off the bench. -->
       <button class="hang-btn hang-bench" id="convBench" onclick="benchOpenFromConv()"
         title="This Project's bench: its seats and who holds them"
-        aria-label="This Project's bench: its seats and who holds them"><span aria-hidden="true">🏛</span></button>
+        aria-label="This Project's bench: its seats and who holds them"><svg class="bench-sign" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 22h20" /><path d="M4 18h16" /><path d="M6 18v-7" /><path d="M10 18v-7" /><path d="M14 18v-7" /><path d="M18 18v-7" /><path d="M11.12 2.2a2 2 0 0 1 1.76 0l7.84 3.85A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.95z" /></svg></button>
       <!-- Two states and no third: this conversation has an arbitrator and this goes to its
            pane, or it has none and this opens the form that gives it one. Hidden when neither is
            true, because a button whose answer is "nothing" is one a person taps twice. -->
@@ -18326,6 +18338,41 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       if (typeof deskApplyAutocorrect === 'function') deskApplyAutocorrect();
     }
 
+    // Shrink to fit: a composer whose text has outgrown its ceiling takes a smaller font, down to
+    // 6px, instead of scrolling, so a long message is read whole before it is sent. Off by default,
+    // per device, and one switch for every composer, the reason autocorrect is one.
+    const COMPOSER_FIT_KEY = 'herdr_composer_fit';
+    const COMPOSER_FIT_MIN = 6;
+
+    function composerFitOn() {
+      try { return localStorage.getItem(COMPOSER_FIT_KEY) === 'on'; } catch (e) { return false; }
+    }
+
+    // Called by the grow functions with the field's height at `auto`, so scrollHeight is the text's
+    // own height. The ghost under a conversation field takes the same size, or the block cursor
+    // lands on the wrong character. A ceiling of NaN (no max-height) never shrinks.
+    function fitComposerFont(el, ceiling) {
+      const ghost = el.parentElement && el.parentElement.querySelector('.conv-ghost');
+      const set = px => {
+        if (el.style.fontSize !== px) el.style.fontSize = px;
+        if (ghost && ghost.style.fontSize !== px) ghost.style.fontSize = px;
+      };
+      set('');
+      if (!composerFitOn() || !el.value) return;
+      let size = parseFloat(getComputedStyle(el).fontSize);
+      while (size > COMPOSER_FIT_MIN && el.scrollHeight > ceiling) {
+        size = Math.max(COMPOSER_FIT_MIN, size - 1);
+        set(size + 'px');
+      }
+    }
+
+    function setComposerFit(on) {
+      try { localStorage.setItem(COMPOSER_FIT_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      const grow = typeof deskAutoGrow === 'function' ? deskAutoGrow : autoGrow;
+      document.querySelectorAll('.conv-composer textarea, #termInput').forEach(el => grow(el));
+    }
+
     function setUserHighlight(on) { setHighlight(USER_HIGHLIGHT_KEY, 'userHighlight', on); }
     function setSummaryHighlight(on) { setHighlight(SUMMARY_HIGHLIGHT_KEY, 'summaryHighlight', on); }
     // Guarded the way sound.js's toggles are, and for the same reason: this module is loaded by a
@@ -21196,6 +21243,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       // The floating dock counts the same waits on its puck, and is redrawn from here because this
       // is what every snapshot and the 30s clock already call.
       if (typeof recentFloatDraw === 'function') recentFloatDraw();
+      if (typeof genBubbleDraw === 'function') genBubbleDraw();
       const el = waitEl();
       if (!rows.length && !snoozed) { el.hidden = true; waitOpen = false; return; }
       const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -23919,6 +23967,349 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 
   </script>
   <script>
+// --- The General bubble ----------------------------------------------------------------------
+//
+// One round button over every screen of the phone and desktop pages, for the one General: its ring
+// is the General's state, and a tap is its room in a panel over whatever is on screen, so handing
+// it work never means leaving the page. The panel frames the room page the relay already serves
+// (phone-room.html on the phone, room.html on the desktop) at `#conv/<its room>`, so its thread and
+// composer are the real ones; the cost is that page's own socket, kept while this page lives so a
+// reopen finds the thread and the draft as they were. Alt+G opens and closes it.
+//
+// Drawn only while the relay runs Commanders (`cmdOn`), never inside a framed page, and not on the
+// phone while the General's own room is open. Position is dragged and kept per device, as the
+// recents puck's is, and the drag uses that puck's slop, inset and placement. A long-press on the
+// phone opens the full room; a right-click on the desktop offers it and Hide. Settings has the
+// switch that brings a hidden bubble back.
+
+    const GEN_BUBBLE_KEY = 'herdr_general_bubble';
+    // The General's room is its session's: `c_general` for one started today, but a General
+    // started before the relay fixed that keeps the room it was started in.
+    function genRoom() {
+      const g = typeof cmdOpenGeneralSession === 'function' ? cmdOpenGeneralSession() : null;
+      return (g && g.conversation) || 'c_general';
+    }
+    let genBubbleOpen = false;
+
+    function genBubblePrefs() {
+      try {
+        const v = JSON.parse(localStorage.getItem(GEN_BUBBLE_KEY) || 'null');
+        if (v && typeof v === 'object') return v;
+      } catch (e) { /* fall through to the defaults */ }
+      return {};
+    }
+
+    function genBubbleSave(patch) {
+      try { localStorage.setItem(GEN_BUBBLE_KEY, JSON.stringify(Object.assign(genBubblePrefs(), patch))); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
+    // On the right edge, above the recents puck's default (fy 0.72).
+    function genBubblePos() {
+      const v = genBubblePrefs();
+      return typeof v.fx === 'number' && typeof v.fy === 'number' ? v : {fx: 1, fy: 0.6};
+    }
+
+    function genBubbleDesk() { return typeof deskRenderAll === 'function'; }
+
+    // What the ring says, as a colour and the words for it.
+    function genBubbleState() {
+      const g = typeof cmdOpenGeneralSession === 'function' ? cmdOpenGeneralSession() : null;
+      if (!g) return {color: 'var(--muted)', words: 'not running'};
+      if (g.state === 'paused') return {color: 'var(--orange)', words: 'paused'};
+      const c = g.coordinator || {};
+      const a = (typeof agents === 'undefined' ? [] : agents)
+        .find(x => (c.aid && x.aid === c.aid) || (c.pane_id && x.pane_id === c.pane_id));
+      if (!a) return {color: 'var(--muted)', words: 'away'};
+      return {color: statusColor(a), words: a.status === 'blocked' ? 'needs you' : a.status || 'idle'};
+    }
+
+    function genBubbleShown() {
+      if (typeof cmdOn === 'undefined' || !cmdOn) return false;
+      if (genBubblePrefs().hidden) return false;
+      // The phone with the General's room on screen already has what this would open.
+      const view = document.getElementById('convView');
+      if (!genBubbleDesk() && view && view.style.display !== 'none'
+          && typeof convViewId !== 'undefined' && convViewId === genRoom()) return false;
+      return true;
+    }
+
+    const GEN_BUBBLE_CSS = `
+      .gen-bubble { position: fixed; z-index: 91; display: none; }
+      .gen-bubble.on { display: block; }
+      .gen-bubble-btn { width: 44px; height: 44px; border-radius: 50%; box-sizing: border-box;
+        border: 3px solid var(--gen-ring, var(--muted)); background: var(--surface); color: var(--text);
+        cursor: grab; opacity: .9; box-shadow: 0 2px 10px rgba(0,0,0,.35);
+        display: flex; align-items: center; justify-content: center; padding: 0;
+        touch-action: none; }
+      .gen-bubble-btn svg { width: 20px; height: 20px; }
+      .gen-bubble.dragging .gen-bubble-btn { cursor: grabbing; }
+      .gen-bubble-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+      .gen-panel[hidden], .gen-shade[hidden] { display: none; }
+      .gen-shade { position: fixed; inset: 0; z-index: 995; background: rgba(0,0,0,.4); }
+      .gen-panel { position: fixed; z-index: 996; display: flex; flex-direction: column;
+        background: var(--bg); border: 1px solid var(--border); overflow: hidden;
+        box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+      .gen-panel.phone { left: 0; right: 0; bottom: 0; height: 72vh; height: 72dvh;
+        border-radius: 14px 14px 0 0; border-bottom: none; }
+      .gen-panel.desk { width: 400px; height: 540px; max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px); border-radius: 10px; }
+      .gen-panel-head { flex: none; display: flex; align-items: center; gap: 8px;
+        min-height: 40px; padding: 0 4px 0 12px; border-bottom: 1px solid var(--border);
+        font-size: 0.85rem; color: var(--text); }
+      .gen-panel-head svg { width: 16px; height: 16px; flex: none; }
+      .gen-panel-title { font-weight: 600; }
+      .gen-panel-state { flex: 1; min-width: 0; color: var(--muted); font-size: 0.75rem;
+        display: inline-flex; align-items: center; gap: 5px; }
+      .gen-panel-state::before { content: ''; width: 7px; height: 7px; border-radius: 50%;
+        background: var(--gen-ring, var(--muted)); }
+      .gen-panel-btn { background: none; border: none; color: var(--muted); cursor: pointer;
+        min-width: 32px; min-height: 32px; border-radius: 4px; display: inline-flex;
+        align-items: center; justify-content: center; padding: 4px; font: inherit; }
+      .gen-panel-btn:hover { color: var(--text); }
+      .gen-panel-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+      .gen-panel-body { flex: 1; display: flex; min-height: 0; }
+      .gen-panel-frame { flex: 1; width: 100%; border: 0; background: var(--bg); }
+      .gen-panel-start { margin: auto; text-align: center; color: var(--muted); font-size: 0.85rem; }
+      .gen-panel-start button { margin-top: 10px; padding: 8px 16px; border-radius: 8px;
+        border: 1px solid var(--blue); background: none; color: var(--blue); font: inherit; cursor: pointer; }
+      .gen-panel-start button.armed { background: var(--blue); color: var(--bg); }
+    `;
+
+    // The General's mark: a five-point star in the house style.
+    function genStarSign() {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+        + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        + '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>';
+    }
+
+    const GEN_ICO_OPEN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+    const GEN_ICO_X = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+    function genBubbleMount() {
+      if (document.getElementById('genBubble') || window.self !== window.top) return;
+      const style = document.createElement('style');
+      style.textContent = GEN_BUBBLE_CSS;
+      document.head.appendChild(style);
+      const el = document.createElement('div');
+      el.id = 'genBubble';
+      el.className = 'gen-bubble';
+      el.innerHTML = '<button type="button" class="gen-bubble-btn" id="genBubbleBtn"'
+        + ' aria-haspopup="dialog" aria-expanded="false" aria-controls="genPanel">'
+        + genStarSign() + '</button>';
+      document.body.appendChild(el);
+      const shade = document.createElement('div');
+      shade.id = 'genShade';
+      shade.className = 'gen-shade';
+      shade.hidden = true;
+      shade.addEventListener('click', () => genBubbleSet(false));
+      document.body.appendChild(shade);
+      const panel = document.createElement('div');
+      panel.id = 'genPanel';
+      panel.className = 'gen-panel ' + (genBubbleDesk() ? 'desk' : 'phone');
+      panel.hidden = true;
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-label', 'The General');
+      panel.innerHTML = '<div class="gen-panel-head">' + genStarSign()
+        + '<span class="gen-panel-title">General</span>'
+        + '<span class="gen-panel-state" id="genPanelState"></span>'
+        + '<button type="button" class="gen-panel-btn" onclick="genBubbleFullRoom()"'
+        + ' aria-label="Open its full room" title="Open its full room">' + GEN_ICO_OPEN + '</button>'
+        + '<button type="button" class="gen-panel-btn" onclick="genBubbleSet(false)"'
+        + ' aria-label="Close" title="Close">' + GEN_ICO_X + '</button></div>'
+        + '<div class="gen-panel-body" id="genPanelBody"></div>';
+      document.body.appendChild(panel);
+      genBubbleBind(el);
+      window.addEventListener('resize', () => { genBubblePlace(el); genPanelPlace(); });
+      document.addEventListener('keydown', e => {
+        if (e.code === 'KeyG' && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && genBubbleShown()) {
+          e.preventDefault();   // a Mac's Alt+G is ©, and it must not land in the composer
+          genBubbleSet(!genBubbleOpen);
+        } else if (e.key === 'Escape' && genBubbleOpen) {
+          genBubbleSet(false);
+        }
+      });
+      // A press outside the desktop window closes it; the phone's shade does this for the sheet.
+      document.addEventListener('click', e => {
+        if (!genBubbleOpen || !genBubbleDesk() || !e.target.closest) return;
+        if (e.target.closest('#genPanel, #genBubble')) return;
+        genBubbleSet(false);
+      }, true);
+      genBubbleDraw();
+    }
+
+    // The puck's drag, against this button and its own stored position. Long-press on the phone
+    // and right-click on the desktop are the button's menu: the full room, or hide.
+    function genBubbleBind(el) {
+      const btn = el.querySelector('#genBubbleBtn');
+      let from = null, suppress = false, hold = 0;
+      btn.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        suppress = false;
+        const r = el.getBoundingClientRect();
+        from = {x: e.clientX, y: e.clientY, left: r.left, top: r.top, moved: false};
+        btn.setPointerCapture(e.pointerId);
+        if (e.pointerType === 'touch') {
+          hold = setTimeout(() => { from = null; suppress = true; genBubbleMenu(); }, 550);
+        }
+      });
+      btn.addEventListener('pointermove', e => {
+        if (!from) return;
+        const dx = e.clientX - from.x, dy = e.clientY - from.y;
+        if (!from.moved && Math.abs(dx) + Math.abs(dy) < RECENT_FLOAT_SLOP) return;
+        clearTimeout(hold);
+        from.moved = true;
+        el.classList.add('dragging');
+        const room = recentFloatRoom();
+        const max = {x: Math.max(1, room.w - el.offsetWidth), y: Math.max(1, room.h - el.offsetHeight)};
+        const x = Math.min(max.x, Math.max(0, from.left - RECENT_FLOAT_INSET + dx));
+        const y = Math.min(max.y, Math.max(0, from.top - RECENT_FLOAT_INSET + dy));
+        genBubbleSave({fx: x / max.x, fy: y / max.y});
+        genBubblePlace(el);
+      });
+      const end = e => {
+        clearTimeout(hold);
+        if (from && from.moved) suppress = true;
+        from = null;
+        el.classList.remove('dragging');
+        try { btn.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+      };
+      btn.addEventListener('pointerup', end);
+      btn.addEventListener('pointercancel', end);
+      btn.addEventListener('click', e => {
+        if (!suppress || e.detail === 0) genBubbleSet(!genBubbleOpen);
+        suppress = false;
+      });
+      btn.addEventListener('contextmenu', e => { e.preventDefault(); if (genBubbleDesk()) genBubbleMenu(e); });
+    }
+
+    // The desktop's right-click: the full room, or hide. The phone's long-press is the full room
+    // alone; hiding is Settings' switch there, where it is also turned back on.
+    function genBubbleMenu(e) {
+      if (!genBubbleDesk() || typeof deskMenuOpen !== 'function') { genBubbleFullRoom(); return; }
+      deskMenuOpen(e.clientX, e.clientY, [
+        {label: 'Open its full room', run: genBubbleFullRoom},
+        {label: 'Hide the bubble', hint: 'Settings brings it back', run: () => genBubbleSetHidden(true)},
+      ]);
+    }
+
+    function genBubbleSetHidden(hidden) {
+      genBubbleSave({hidden: !!hidden});
+      genBubbleDraw();
+    }
+
+    function genBubblePlace(el) {
+      const at = recentFloatXY(genBubblePos(), recentFloatRoom(), {w: el.offsetWidth || 44, h: el.offsetHeight || 44});
+      el.style.left = at.x + RECENT_FLOAT_INSET + 'px';
+      el.style.top = at.y + RECENT_FLOAT_INSET + 'px';
+    }
+
+    // The desktop window sits beside the bubble, on whichever side has room, clamped on screen.
+    function genPanelPlace() {
+      const panel = document.getElementById('genPanel');
+      const el = document.getElementById('genBubble');
+      if (!panel || !el || !genBubbleDesk() || panel.hidden) return;
+      const b = el.getBoundingClientRect(), w = panel.offsetWidth, h = panel.offsetHeight;
+      const gap = 10, pad = RECENT_FLOAT_INSET;
+      const left = b.left - gap - w >= pad ? b.left - gap - w : b.right + gap;
+      panel.style.left = Math.max(pad, Math.min(left, window.innerWidth - w - pad)) + 'px';
+      panel.style.top = Math.max(pad, Math.min(b.bottom - h, window.innerHeight - h - pad)) + 'px';
+    }
+
+    function genBubbleFullRoom() {
+      genBubbleSet(false);
+      if (genBubbleDesk() && typeof deskSelectConv === 'function') deskSelectConv(genRoom());
+      else if (typeof openConversation === 'function') openConversation(genRoom());
+    }
+
+    function genBubbleSet(on) {
+      genBubbleOpen = !!on && genBubbleShown();
+      genBubbleDraw();
+      const panel = document.getElementById('genPanel');
+      if (genBubbleOpen && panel) {
+        const frame = panel.querySelector('iframe');
+        (frame || panel.querySelector('button')).focus();
+      } else if (!on && document.activeElement && panel && panel.contains(document.activeElement)) {
+        document.getElementById('genBubbleBtn').focus();
+      }
+    }
+
+    // The panel's body: the room once a General is open, else the way to start one.
+    function genPanelBody() {
+      const body = document.getElementById('genPanelBody');
+      const g = typeof cmdOpenGeneralSession === 'function' ? cmdOpenGeneralSession() : null;
+      const frame = body.querySelector('iframe');
+      if (g) {
+        const page = genBubbleDesk() ? 'room.html' : 'phone-room.html';
+        const src = new URL(page, location.href);
+        src.search = '';
+        src.hash = '#conv/' + encodeURIComponent(genRoom());
+        if (frame && frame.src === src.href) return;   // a new General in another room: a new frame
+        body.innerHTML = `<iframe class="gen-panel-frame" title="The General's room" src="${escapeHtml(src.href)}"></iframe>`;
+        return;
+      }
+      const starting = typeof cmdGeneralAsked !== 'undefined'
+        && Date.now() - cmdGeneralAsked < CMD_START_WAIT_MS;
+      const html = '<div class="gen-panel-start"><div>No General is running.</div>'
+        + (starting ? '<div>Starting… this can take a minute.</div>'
+          : '<button type="button" data-arm-key="gen-bubble-start" onclick="genBubbleStart(this)">'
+            + 'Start the General</button>') + '</div>';
+      if (body._sig !== html) { body.innerHTML = html; body._sig = html; }
+    }
+
+    function genBubbleStart(btn) {
+      armButton(btn, 'Tap again to start the General.', cmdGeneralStart, 'gen-bubble-start');
+    }
+
+    function genBubbleDraw() {
+      const el = document.getElementById('genBubble');
+      if (!el) return;
+      const box = document.getElementById('genBubbleOn');
+      if (box) box.checked = !genBubblePrefs().hidden;
+      const show = genBubbleShown();
+      if (!show) genBubbleOpen = false;
+      const st = genBubbleState();
+      el.classList.toggle('on', show);
+      el.style.setProperty('--gen-ring', st.color);
+      const btn = document.getElementById('genBubbleBtn');
+      btn.setAttribute('aria-expanded', String(genBubbleOpen));
+      btn.setAttribute('aria-label', `The General, ${st.words}`);
+      btn.title = `The General · ${st.words} — Alt+G`;
+      const panel = document.getElementById('genPanel');
+      const shade = document.getElementById('genShade');
+      panel.hidden = !genBubbleOpen;
+      shade.hidden = !genBubbleOpen || genBubbleDesk();
+      panel.style.setProperty('--gen-ring', st.color);
+      document.getElementById('genPanelState').textContent = st.words;
+      if (genBubbleOpen) genPanelBody();
+      if (show) genBubblePlace(el);
+      genPanelPlace();
+    }
+
+    // Inside the panel's frame the keys land in the framed page, so that page hands Alt+G, and an
+    // Escape nothing in it took, to the page with the bubble. Bubbling, so the frame's own menus
+    // close first.
+    function genBubbleFrameKeys(e) {
+      let up = null;
+      try { up = window.parent !== window && window.parent.genBubbleSet ? window.parent : null; }
+      catch (err) { return; }   // framed by another origin: not ours
+      if (!up) return;
+      const altG = e.code === 'KeyG' && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey;
+      if (altG) { e.preventDefault(); up.genBubbleSet(false); }
+      else if (e.key === 'Escape' && !e.defaultPrevented) up.genBubbleSet(false);
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      if (window.self !== window.top) window.addEventListener('keydown', genBubbleFrameKeys);
+      else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', genBubbleMount);
+      else genBubbleMount();
+    }
+
+  </script>
+  <script>
     // Recents: the pane log, the switcher and the landing section.
     //
     // Split out of start_dialog.js, which never read any of it — the two shared a file because the
@@ -24750,7 +25141,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     // stays free text, because model names move faster than any list in this app. Keyed by
     // harness, so a provider that carries a model variable at all gets the names for its CLI.
     const MODEL_SUGGESTIONS = {
-      claude: ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-8[1m]',
+      claude: ['claude-fable-5-2', 'claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-8[1m]',
                'claude-opus-4-6[1m]', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
     };
 
@@ -26451,7 +26842,32 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 
     function benchSync() {
       const el = document.getElementById('convBench');
-      if (el) el.classList.toggle('on', !!benchProjects && !!benchHereProject());
+      if (!el) return;
+      const pid = benchProjects ? benchHereProject() : '';
+      el.classList.toggle('on', !!pid);
+      if (pid) benchButtonPaint(el, pid);
+    }
+
+    // Lit, like a running loop, while any seat of the bench holds a live agent: whether the bench
+    // is up is what the button says from across the room.
+    function benchButtonPaint(el, pid) {
+      const live = ((benchProjects || {})[pid] || []).filter(e => e.state === 'live').length;
+      el.classList.toggle('live', live > 0);
+      const label = `This Project\u2019s bench: ${live ? `${live} live` : 'nobody live'}`;
+      el.title = label;
+      el.setAttribute('aria-label', label);
+    }
+
+    // The mark: a classical portico (columns, plinth and pediment), which is what "the bench"
+    // has always been. Kept in sync with the other inline vectors: 24-unit viewBox, stroke-width 2,
+    // round caps and joins.
+    function benchSign(size) {
+      const n = size || 16;
+      return `<svg class="bench-sign" viewBox="0 0 24 24" width="${n}" height="${n}" fill="none"` +
+        ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' +
+        ' aria-hidden="true"><path d="M2 22h20" /><path d="M4 18h16" /><path d="M6 18v-7" />' +
+        '<path d="M10 18v-7" /><path d="M14 18v-7" /><path d="M18 18v-7" />' +
+        '<path d="M11.12 2.2a2 2 0 0 1 1.76 0l7.84 3.85A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.95z" /></svg>';
     }
 
     function benchOpenFromConv() {
@@ -42149,6 +42565,9 @@ function nlmSourceDelete(source) {
       // that opens as a sliver — the conversation window's is cleared while its view is hidden.
       // Left at auto it is one row, which is what it grows from anyway.
       if (!el.offsetParent) return;
+      if (typeof fitComposerFont === 'function') {
+        fitComposerFont(el, parseFloat(getComputedStyle(el).maxHeight));
+      }
       el.style.height = el.scrollHeight + 'px';
     }
 
@@ -44256,6 +44675,12 @@ function nlmSourceDelete(source) {
       if (window.cue) cue('tick');
     }
 
+    function toggleDockFit() {
+      setComposerFit(!composerFitOn());
+      if (optMenuOpen()) openOptMenu();
+      if (window.cue) cue('tick');
+    }
+
     // The list's copy of the row's double-click. `toggleConvSolo` redraws the thread, the roster
     // and this row; the list is the one thing that redraw does not reach, so it is reopened here
     // for the same reason every other switch in it is.
@@ -44279,6 +44704,8 @@ function nlmSourceDelete(source) {
           'Write an instruction into the message box instead of attaching it at the send']] : []),
         ['Autocorrect', autocorrectOn(), 'toggleDockAutocorrect()',
           "Let the keyboard correct what you type. Off by default — this box types filenames and flags"],
+        ['Shrink text to fit', composerFitOn(), 'toggleDockFit()',
+          'A long message takes a smaller font, down to 6px, instead of scrolling'],
       ];
       // Only where there is more than one member to be alone among. Same switch the chips' own
       // double-click throws, listed here because it is a standing preference about this thread and
@@ -47779,6 +48206,8 @@ function studioCardHtml() {
     // a control that does too. Enabled state is recomputed rather than remembered: a pane exiting
     // can empty the walk without anybody navigating.
     function syncNavBtns() {
+      // Every move between views lands here, and the General bubble steps aside in its own room.
+      if (typeof genBubbleDraw === 'function') genBubbleDraw();
       [[-1, 'navBack'], [1, 'navFwd']].forEach(([step, id]) => {
         const btn = document.getElementById(id);
         if (!btn) return;
@@ -52273,6 +52702,7 @@ function studioCardHtml() {
     // The tile and the General tab say what the General is now: redrawn when it starts, ends or
     // pauses, and when a start this page sent is refused.
     function cmdGeneralChanged() {
+      if (typeof genBubbleDraw === 'function') genBubbleDraw();
       if (typeof renderLauncher === 'function') renderLauncher();
       if (typeof cmdRender === 'function') cmdRender();
     }

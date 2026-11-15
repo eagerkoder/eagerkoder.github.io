@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-14">
+  <meta name="app-built" content="2026-11-15">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -12596,6 +12596,7 @@ function convWebModeOf(conv) {
       // The floating dock counts the same waits on its puck, and is redrawn from here because this
       // is what every snapshot and the 30s clock already call.
       if (typeof recentFloatDraw === 'function') recentFloatDraw();
+      if (typeof genBubbleDraw === 'function') genBubbleDraw();
       const el = waitEl();
       if (!rows.length && !snoozed) { el.hidden = true; waitOpen = false; return; }
       const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -12830,6 +12831,41 @@ function convWebModeOf(conv) {
       document.querySelectorAll('.conv-composer textarea')
         .forEach(el => applyAutocorrect(el, on));
       if (typeof deskApplyAutocorrect === 'function') deskApplyAutocorrect();
+    }
+
+    // Shrink to fit: a composer whose text has outgrown its ceiling takes a smaller font, down to
+    // 6px, instead of scrolling, so a long message is read whole before it is sent. Off by default,
+    // per device, and one switch for every composer, the reason autocorrect is one.
+    const COMPOSER_FIT_KEY = 'herdr_composer_fit';
+    const COMPOSER_FIT_MIN = 6;
+
+    function composerFitOn() {
+      try { return localStorage.getItem(COMPOSER_FIT_KEY) === 'on'; } catch (e) { return false; }
+    }
+
+    // Called by the grow functions with the field's height at `auto`, so scrollHeight is the text's
+    // own height. The ghost under a conversation field takes the same size, or the block cursor
+    // lands on the wrong character. A ceiling of NaN (no max-height) never shrinks.
+    function fitComposerFont(el, ceiling) {
+      const ghost = el.parentElement && el.parentElement.querySelector('.conv-ghost');
+      const set = px => {
+        if (el.style.fontSize !== px) el.style.fontSize = px;
+        if (ghost && ghost.style.fontSize !== px) ghost.style.fontSize = px;
+      };
+      set('');
+      if (!composerFitOn() || !el.value) return;
+      let size = parseFloat(getComputedStyle(el).fontSize);
+      while (size > COMPOSER_FIT_MIN && el.scrollHeight > ceiling) {
+        size = Math.max(COMPOSER_FIT_MIN, size - 1);
+        set(size + 'px');
+      }
+    }
+
+    function setComposerFit(on) {
+      try { localStorage.setItem(COMPOSER_FIT_KEY, on ? 'on' : 'off'); }
+      catch (e) { /* private mode: session-only */ }
+      const grow = typeof deskAutoGrow === 'function' ? deskAutoGrow : autoGrow;
+      document.querySelectorAll('.conv-composer textarea, #termInput').forEach(el => grow(el));
     }
 
     function setUserHighlight(on) { setHighlight(USER_HIGHLIGHT_KEY, 'userHighlight', on); }
@@ -14454,7 +14490,7 @@ function convWebModeOf(conv) {
     // stays free text, because model names move faster than any list in this app. Keyed by
     // harness, so a provider that carries a model variable at all gets the names for its CLI.
     const MODEL_SUGGESTIONS = {
-      claude: ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-8[1m]',
+      claude: ['claude-fable-5-2', 'claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-opus-4-8[1m]',
                'claude-opus-4-6[1m]', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
     };
 
@@ -19051,6 +19087,7 @@ function convWebModeOf(conv) {
     // The tile and the General tab say what the General is now: redrawn when it starts, ends or
     // pauses, and when a start this page sent is refused.
     function cmdGeneralChanged() {
+      if (typeof genBubbleDraw === 'function') genBubbleDraw();
       if (typeof renderLauncher === 'function') renderLauncher();
       if (typeof cmdRender === 'function') cmdRender();
     }
