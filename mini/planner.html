@@ -297,6 +297,23 @@
   .planner main { padding: 10px; }
   /* Wrapped to five lines on a phone, a frozen header would take a quarter of the screen. */
   .planner header { padding: 12px; position: static; }
+  /* Refresh and the gear stacked on the right; title, pills, then the toggles down the left.
+     Rows gap by margin, not row-gap, so a row left empty (Simple hides the toggles) takes no room. */
+  .planner header {
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 0 12px; align-items: center;
+    grid-template-areas: "title simple . refresh" "pills pills pills gear" "par par par ." "rot rot rot ." "msg msg msg msg";
+  }
+  .planner header > * { margin-block: 4px; }
+  .planner header h1 { grid-area: title; }
+  .planner header .switch:has(#simple) { grid-area: simple; }
+  .planner header .sources { grid-area: pills; }
+  .planner header .switch:has(#parallel) { grid-area: par; }
+  .planner header .switch:has(#rotate) { grid-area: rot; }
+  .planner header #refresh { grid-area: refresh; }
+  .planner header #gear { grid-area: gear; align-self: start; justify-content: center; }
+  .planner header :is(#refresh, #gear) { justify-self: stretch; }
+  .planner header #runMsg { grid-area: msg; }
+  .planner header :is(.grow, #runMsg:empty) { display: none; }
   .planner .card { padding: 12px; }
   .planner button, .planner select, .planner input[type=number], .planner input[type=time] { min-height: 44px; }
   .planner .acct { grid-template-columns: minmax(0, 1fr); }
@@ -492,7 +509,7 @@ function parseOpencode(doc) {
     // ponytail: the month counts only once used up, when it stops the week too. A month nearly
     // spent also caps the week before then; plan that when it bites.
     if (week && month && month.pct >= 100) week = {...week, pct: 100};
-    return {id: a.number, name: a.name || `#${a.number}`, email: '', active: !!a.active, ok: !!week,
+    return {id: a.number, name: `#${a.number}`, email: '', active: !!a.active, ok: !!week,
             five: five || {pct: 0, resetsAt: null}, week, month, credits: [], keepsWeek: false};
   });
   return {provider: 'opencode', fetchedAt: plannerMs(doc.fetchedAt), weekPerFive: OPENCODE_WEEK_PER_FIVE, accounts};

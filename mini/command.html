@@ -43384,11 +43384,15 @@ convApplyTint();
       .recent-float { position: fixed; z-index: 90; display: none;
         font: 14px -apple-system, system-ui, -webkit-system-font, sans-serif; }
       .recent-float.on { display: block; }
-      .recent-float-btn { width: 44px; height: 44px; border-radius: 50%;
-        border: 1px solid var(--border); background: var(--surface); color: var(--text);
-        font: inherit; font-size: 18px; line-height: 1; cursor: grab; opacity: .82;
+      /* Dressed as the General's bubble: the same ring, surface, shadow and focus outline, so the
+         two floating buttons read as one family. The ring turns red while panes wait. */
+      .recent-float-btn { width: 44px; height: 44px; border-radius: 50%; box-sizing: border-box;
+        border: 3px solid var(--muted); background: var(--surface); color: var(--text);
+        font: inherit; font-size: 18px; line-height: 1; cursor: grab; opacity: .9; padding: 0;
         box-shadow: 0 2px 10px rgba(0,0,0,.35); display: flex; align-items: center;
         justify-content: center; touch-action: none; }
+      .recent-float-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+      .recent-float.waiting .recent-float-btn { border-color: var(--red); }
       .recent-float-btn:hover, .recent-float.open .recent-float-btn { opacity: 1; }
       .recent-float-btn { position: relative; }
       /* How many panes are waiting on the person, on the puck itself so it reads with the panel
