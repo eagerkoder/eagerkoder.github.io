@@ -1044,9 +1044,10 @@ function pvAccounts(doc, plan, room, now, colors) {
     }).join('') + (lost && lost.lostPct >= 1
       ? row(`<span class="lost">${Math.round(lost.lostPct)}% unused</span>`, `<span class="reset-key">${PV_RESET}</span> week resets ${pvWhen(lost.t, now)}`) : '');
     const r = room.accounts.find(x => x.id === a.id);
+    const left = r ? `<span class="left" title="Weekly allowance left on this account until its weekly reset ${pvWhen(r.deadline, now)}, at ${pvSetting('fillH')}h per session">${pvSessions(r.left)} left this week</span>` : '';
     const extra = !r ? ''
-      : r.room < 0 ? `<span class="lost">${pvSessions(-r.room)} unused by ${pvWhen(r.deadline, now)}</span>`
-      : `<span class="${r.room < pvWarnSessions() ? 'thin' : ''}">room ${pvSessions(r.room)}</span>${a.credits.length ? '' : '<span>no resets</span>'}`;
+      : r.room < 0 ? `<span class="lost">${pvSessions(-r.room)} unused by ${pvWhen(r.deadline, now)}</span>${left}`
+      : `<span class="${r.room < pvWarnSessions() ? 'thin' : ''}">room ${pvSessions(r.room)}</span>${left}${a.credits.length ? '' : '<span>no resets</span>'}`;
     return `<div class="acct ${a.ok ? '' : 'off'}">`
       + `<div class="who"><b><span class="dot" style="background:${colors[a.id]}"></span>${pvEsc(a.name)}${a.active ? '<span class="live">live</span>' : ''}</b>`
       + `<span class="email" title="${pvEsc(a.email)}">${pvEsc(a.email)}</span>`
@@ -1187,6 +1188,7 @@ function pvChips(doc, plan, room, now) {
     dayGap ? `<span class="chip bad">${pvHours(dayGap)} gap in 24h</span>` : '<span class="chip good">covered 24h</span>',
     plan.idleH ? `<span class="chip bad detail">${pvHours(plan.idleH)} gap in 30d</span>` : '<span class="chip good detail">covered 30d</span>',
     roomChip,
+    room.accounts.length ? `<span class="chip" title="Weekly allowance left across accounts, each until its own weekly reset, at ${pvSetting('fillH')}h per session">${pvSessions(room.accounts.reduce((n, r) => n + r.left, 0))} left this week</span>` : '',
   ];
   // Reset credits and reset waste on a line of their own, under coverage and room.
   const resets = [
