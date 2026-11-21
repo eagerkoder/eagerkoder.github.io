@@ -13083,7 +13083,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   color-scheme: light;
   --track: #e9eaf0; --idle: #ba334a; --warn: #986000; --ok: #258254; --accent: #3d59a1;
   --gap: #707783; --session-line: rgba(255, 255, 255, .85);
-  --claude: #d9713a; --codex: #1a9e95;
+  --claude: #d9713a; --codex: #1a9e95; --opencode: #7c5cd6;
   /* Account colours: no green (kept for parallel bonus) and no red or yellow (kept for flags). */
   --a0: #4f78c4; --a1: #8564bd; --a2: #2595bc; --a3: #4f55a6; --a4: #b0479a; --a5: #5b6b80;
   --bonus: #a3dfb3; --burn: #13843a;
@@ -13094,7 +13094,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   :root:not([data-theme="light"]) .planner {
     color-scheme: dark;
     --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #7a80a8;
-    --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4;
+    --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
     --idle: #ff7a90; --warn: #e6b657; --ok: #70bd94; --gap: #929aaa; --muted: #a1a7c5;
     --a0: #7aa2ed; --a1: #b19ae4; --a2: #6ebcdd; --a3: #9299eb; --a4: #e08cc9; --a5: #9aa8bd;
     --bonus: #a6e9bb; --burn: #1fae52;
@@ -13108,7 +13108,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 :root[data-theme="dark"] .planner, :where(:root:not([data-theme="light"])) #plannerView .planner {
   color-scheme: dark;
   --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #7a80a8;
-  --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4;
+  --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
   --idle: #ff7a90; --warn: #e6b657; --ok: #70bd94; --gap: #929aaa; --muted: #a1a7c5;
   --a0: #7aa2ed; --a1: #b19ae4; --a2: #6ebcdd; --a3: #9299eb; --a4: #e08cc9; --a5: #9aa8bd;
   --bonus: #a6e9bb; --burn: #1fae52;
@@ -13169,6 +13169,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .planner .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
 .planner .prov-claude h3 .dot { background: var(--claude); }
 .planner .prov-codex h3 .dot { background: var(--codex); }
+.planner .prov-opencode h3 .dot { background: var(--opencode); }
 .planner .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .planner .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
 .planner .chips:has(+ .chips.resets) { margin-bottom: 0; }
@@ -13249,7 +13250,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .planner .tl-group { --hue: var(--accent); position: relative; padding: 4px 0; margin: 6px 0; border-radius: 6px;
   background: color-mix(in srgb, var(--hue) 16%, transparent);
   box-shadow: inset 3px 0 0 var(--hue), inset 0 0 0 1px color-mix(in srgb, var(--hue) 35%, transparent), 0 2px 6px rgb(0 0 0 / .18); }
-.planner .tl-group.prov-claude { --hue: var(--claude); } .planner .tl-group.prov-codex { --hue: var(--codex); }
+.planner .tl-group.prov-claude { --hue: var(--claude); } .planner .tl-group.prov-codex { --hue: var(--codex); } .planner .tl-group.prov-opencode { --hue: var(--opencode); }
 .planner .tl-group .tl-row.head .name { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .planner .tl-group .tl-row { height: 18px; } .planner .tl-group .tl-row.sub { height: 10px; }
 .planner .tl-row.sub .lane { background: none; }
@@ -13328,7 +13329,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .planner .modes th[scope="row"], .planner .modes th[scope="rowgroup"], .planner .modes thead th:nth-child(-n+2) { text-align: left; }
 .planner .modes th[scope="rowgroup"] { vertical-align: top; font-weight: 600; }
 .planner .modes th[scope="rowgroup"] .dot { display: inline-block; margin-right: 6px; }
-.planner .modes .prov-claude .dot { background: var(--claude); } .planner .modes .prov-codex .dot { background: var(--codex); }
+.planner .modes .prov-claude .dot { background: var(--claude); } .planner .modes .prov-codex .dot { background: var(--codex); } .planner .modes .prov-opencode .dot { background: var(--opencode); }
 .planner .modes tbody tr.on td, .planner .modes tbody tr.on th[scope="row"] { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .planner .modes td.best { color: var(--ok); font-weight: 700; } .planner .modes td.bad { color: var(--idle); }
 .planner .modes .small { margin-top: 8px; }
@@ -57072,7 +57073,8 @@ function studioCardHtml() {
   </script>
   <!-- After net.js and arm.js. Nothing in the three runs at load: the tab mounts on first open. -->
   <script>
-// The usage planner's logic: reads `cswap list --json` and `codex-auth list --json`, and plans
+// The usage planner's logic: reads `cswap list --json`, `codex-auth list --json` and
+// `opencode-go-usage list --json`, and plans
 // which account to run, and when to burn a reset credit, over the coming month.
 //
 // Pure: no DOM, no clock. planner_view.js draws what this returns, and tests/test_planner.js runs
@@ -57107,9 +57109,10 @@ function plannerMs(v) {
 function plannerParse(doc) {
   if (typeof doc === 'string') doc = JSON.parse(doc);
   if (!doc || !Array.isArray(doc.accounts)) throw new Error('no accounts list');
+  if (doc.schema === 'opencode-go-usage') return parseOpencode(doc);
   if ('activeAccountNumber' in doc || doc.schemaVersion != null) return parseCswap(doc);
   if (doc.command === 'list' || doc.schema_version != null) return parseCodexAuth(doc);
-  throw new Error('not cswap or codex-auth list --json output');
+  throw new Error('not cswap, codex-auth or opencode-go-usage list --json output');
 }
 
 function parseCswap(doc) {
@@ -57161,6 +57164,28 @@ function parseCodexAuth(doc) {
     };
   });
   return {provider: 'codex', fetchedAt: fetched, accounts};
+}
+
+// The OpenCode Go plan's limits are dollars: the 5h window is 20% of the month's allowance and the
+// week 50%, so one session is 40% of the week. The document carries it, over the Settings value.
+const OPENCODE_WEEK_PER_FIVE = 40;
+
+function parseOpencode(doc) {
+  const accounts = doc.accounts.map(a => {
+    const u = a.usage || {};
+    const win = w => w && Number.isFinite(w.percent)
+      ? {pct: w.status === 'rate-limited' ? 100 : w.percent, resetsAt: plannerMs(w.resetsAt)} : null;
+    const five = win(u.rolling), month = win(u.monthly);
+    let week = win(u.weekly);
+    // An unused 5h window has not started: the time it gives is only now + 5h.
+    if (five && !five.pct) five.resetsAt = null;
+    // ponytail: the month counts only once used up, when it stops the week too. A month nearly
+    // spent also caps the week before then; plan that when it bites.
+    if (week && month && month.pct >= 100) week = {...week, pct: 100};
+    return {id: a.number, name: a.name || `#${a.number}`, email: '', active: !!a.active, ok: !!week,
+            five: five || {pct: 0, resetsAt: null}, week, month, credits: [], keepsWeek: false};
+  });
+  return {provider: 'opencode', fetchedAt: plannerMs(doc.fetchedAt), weekPerFive: OPENCODE_WEEK_PER_FIVE, accounts};
 }
 
 function sortCredits(list) {
@@ -57504,7 +57529,7 @@ const PV_MARKUP = `
   </dialog>
   <main>
     <section id="intake" aria-label="Data">
-      <textarea id="paste" aria-label="Usage JSON" placeholder="Paste the output of  cswap list --json  or  codex-auth list --json  here, or drop the files on the page"></textarea>
+      <textarea id="paste" aria-label="Usage JSON" placeholder="Paste the output of  cswap list --json,  codex-auth list --json  or  opencode-go-usage list --json  here, or drop the files on the page"></textarea>
       <div class="sources">
         <button id="load">Load pasted</button>
         <button id="openFiles">Open files…</button><input type="file" id="files" accept=".json,application/json" multiple hidden>
@@ -57527,7 +57552,10 @@ const PV_PAGE_SECTIONS_DEFAULT = [['cards', true], ['all', true], ['modes', true
 // Each chart's "Soonest first" switch: its account rows in the Accounts list's order, not the CLI's.
 const PV_SORT_KEY = 'planner_sort';
 // Each provider's chart opens on 7 days and the combined one on 30.
-const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: false, codex: false, all: false}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, all: 720}, pages: {claude: 0, codex: 0, all: 0}, more: {}};
+const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: false, codex: false, opencode: false, all: false}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {}};
+// The providers, in card order. OpenCode is optional: a relay without its CLI shows no card for it.
+const PV_PROVIDERS = ['claude', 'codex', 'opencode'];
+const PV_OPTIONAL = ['opencode'];
 // The plan is simulated this far ahead; ‹ › page a chart through it, one range at a time.
 const PV_PLAN_H = 720;
 const PV_RANGES = {24: '24 hours', 72: '3 days', 168: '7 days', 720: '30 days'};
@@ -57535,7 +57563,7 @@ const PV_RANGES = {24: '24 hours', 72: '3 days', 168: '7 days', 720: '30 days'};
 const PV_FLAG = '\u2691\uFE0E';
 const PV_STAR = '\u2605\uFE0E';
 const PV_RESET = '\u27F2';
-const PV_STORE = {claude: 'planner_claude', codex: 'planner_codex'};
+const PV_STORE = {claude: 'planner_claude', codex: 'planner_codex', opencode: 'planner_opencode'};
 // The settings: input id -> [storage key, default, check].
 const PV_SETTINGS = {
   weekPerFive: ['planner_week_per_five', WEEK_PER_FIVE, v => v > 0 && v <= 100],
@@ -57555,7 +57583,11 @@ const PV_HOURS_FIELDS = ['hoursFrom', 'hoursTo', 'jobs', 'jobsAt'];
 const PV_CMD = {
   claude: {name: 'Claude', switch: n => `cswap switch ${n}`, burn: () => null},
   codex: {name: 'Codex', switch: n => `codex-auth switch ${n}`, burn: n => `codex-auth reset ${n}`},
+  // One plan per key: nothing to switch to, no credits to burn.
+  opencode: {name: 'OpenCode Go', switch: () => null, burn: () => null},
 };
+// One session as a share of the week: the provider's own when its document says, else Settings.
+const pvS = doc => doc.weekPerFive ?? pvSetting('weekPerFive');
 
 const pv$ = id => PV.root.querySelector('#' + id);
 // On screen: planner.html always, the phone's tab only while it is open.
@@ -57742,7 +57774,7 @@ function pvAccounts(doc, plan, room, now, colors) {
       + `<div class="who"><b><span class="dot" style="background:${colors[a.id]}"></span>${pvEsc(a.name)}${a.active ? '<span class="live">live</span>' : ''}</b>`
       + `<span class="email" title="${pvEsc(a.email)}">${pvEsc(a.email)}</span>`
       + `<span class="extra">${a.ok ? extra : 'no usage data'}</span></div>`
-      + '<div class="use">' + pvMeter('5h', a.five, now) + pvMeter('7d', a.week, now)
+      + '<div class="use">' + pvMeter('5h', a.five, now) + pvMeter('7d', a.week, now) + (a.month ? pvMeter('month', a.month, now) : '')
       + (rows ? `<div class="credits">${rows}</div>` : '') + '</div></div>';
   }).join('');
 }
@@ -57783,7 +57815,7 @@ function pvLanes(doc, plan, colors, now, soonest = false) {
     // Flags: red where the 7d window resets, yellow where a reset credit expires, green where one is burned.
     ...plan.resets.filter(r => r.id === a.id).map(r => ({t: r.t, glyph: PV_RESET, cls: 'reset', tip: {
       head: `${a.name} · 7d window resets`, rows: [acct(a.id), ['When', pvAt(r.t, now)],
-        ['Unused then', r.lostPct >= 1 ? `${Math.round(r.lostPct)}% of the week · ${pvSessions(r.lostPct / pvSetting('weekPerFive'))}` : 'none']]}})),
+        ['Unused then', r.lostPct >= 1 ? `${Math.round(r.lostPct)}% of the week · ${pvSessions(r.lostPct / pvS(doc))}` : 'none']]}})),
     ...a.credits.filter(c => c.expiresAt != null).map(c => {
       const burned = plan.burns.find(b => b.credit && b.credit.id === c.id && b.id === a.id);
       const lapsed = plan.expired.find(x => x.credit && x.credit.id === c.id && x.id === a.id);
@@ -57838,9 +57870,9 @@ function pvSteps(doc, plan, now) {
 // Every combination of the two switches, planned on the same data and settings, side by side.
 const PV_MODES = [[false, false, 'Sequential'], [false, true, 'Take turns'], [true, false, 'Parallel'], [true, true, 'Parallel + turns']];
 function pvModes(docs, now) {
-  const base = {weekPerFive: pvSetting('weekPerFive'), fillH: pvSetting('fillH'), windows: pvWindows()};
   const f = (n, d = 0) => n.toFixed(d);
   const body = docs.map(d => {
+    const base = {weekPerFive: pvS(d), fillH: pvSetting('fillH'), windows: pvWindows()};
     const rows = PV_MODES.map(([parallel, rotate, label]) => ({label, parallel, rotate,
       s: plannerSummary(plannerSimulate(d.accounts, now, {...base, parallel, rotate}), base)}));
     const best = Math.max(...rows.map(r => r.s.sessions));
@@ -57865,7 +57897,7 @@ function pvChips(doc, plan, room, now) {
   const dayGap = plan.segments.filter(g => g.id == null && !g.off && g.start < dayEnd)
     .reduce((h, g) => h + (Math.min(g.end, dayEnd) - g.start) / PLAN_H, 0);
   const spare = plan.expired.length;
-  const S = pvSetting('weekPerFive');
+  const S = pvS(doc);
   const lost = plan.resets.reduce((n, r) => n + r.lostPct, 0) / S;
   const n = doc.accounts.filter(a => a.ok).length;
   const roomTitle = `Sessions you can skip before weekly allowance goes unused, at ${pvSetting('fillH')}h per session, one account at a time.`;
@@ -57929,19 +57961,19 @@ function pvRender() {
     ? {i: document.activeElement.dataset.tip, head: document.activeElement.getAttribute('aria-label')} : null;
   pvHideTip(true);
   PV.tips = [];
-  const docs = ['claude', 'codex'].map(p => PV.docs[p]).filter(Boolean);
+  const docs = PV_PROVIDERS.map(p => PV.docs[p]).filter(Boolean);
   pv$('sources').innerHTML = docs.map(d => {
     const age = d.fetchedAt ? now - d.fetchedAt : null;
     const stale = age != null && age > 60 * 60e3;
     return `<span class="src ${stale ? 'stale' : ''}" title="usage read ${d.fetchedAt ? new Date(d.fetchedAt).toLocaleString() : 'at an unknown time'}">${PV_CMD[d.provider].name} · ${d.fetchedAt ? pvIn(now, d.fetchedAt) + ' old' : 'age unknown'}</span>`;
   }).join('');
-  pv$('intake').hidden = docs.length === 2 && !PV.showIntake;
+  pv$('intake').hidden = !!(PV.docs.claude && PV.docs.codex) && !PV.showIntake;
   if (!docs.length) { out.innerHTML = '<div class="empty card">No data yet. Paste or drop the JSON above.</div>'; return; }
 
   const plans = docs.map(d => {
     const colors = {};
     d.accounts.forEach((a, i) => { colors[a.id] = pvColor(i); });
-    const opts = {weekPerFive: pvSetting('weekPerFive'), fillH: pvSetting('fillH'), windows: pvWindows(),
+    const opts = {weekPerFive: pvS(d), fillH: pvSetting('fillH'), windows: pvWindows(),
                   parallel: pvToggle('parallel'), rotate: pvToggle('rotate')};
     return {doc: d, colors, plan: plannerSimulate(d.accounts, now, opts), room: plannerRoom(d.accounts, now, opts)};
   });
@@ -57968,7 +58000,7 @@ function pvRender() {
     modes: () => pvModes(docs, now),
   };
   out.innerHTML = `${PV.pageSections.filter(([, on]) => on).map(([id]) => blocks[id]()).join('')}
-    <div class="small muted detail">Plans assume one account on the main line at a time, ${pvHoursSpec().mode === 'window' ? `only in hours of use (${pvEsc(pvHoursText())})` : 'all 24 hours'}, one session per ${pvSetting('fillH')}h of use${pvToggle('parallel') ? ', and reset credits spent for full value run in parallel beside it' : ''}${pvToggle('rotate') ? '; accounts take turns a session at a time' : '; each account runs until its week is used up'}. A Claude reset keeps the week's end date; a Codex reset restarts the week. <a href="#" id="again">Load new data</a></div>`;
+    <div class="small muted detail">Plans assume one account on the main line at a time, ${pvHoursSpec().mode === 'window' ? `only in hours of use (${pvEsc(pvHoursText())})` : 'all 24 hours'}, one session per ${pvSetting('fillH')}h of use${pvToggle('parallel') ? ', and reset credits spent for full value run in parallel beside it' : ''}${pvToggle('rotate') ? '; accounts take turns a session at a time' : '; each account runs until its week is used up'}. A Claude reset keeps the week's end date; a Codex reset restarts the week.${PV.docs.opencode ? ` An OpenCode Go session is ${OPENCODE_WEEK_PER_FIVE}% of its week: the plan's 5h limit is a fifth of the month, its week half.` : ''} <a href="#" id="again">Load new data</a></div>`;
   out.querySelectorAll('.tl-wrap, .steps').forEach((el, i) => {
     if (scrolls[i]) [el.scrollLeft, el.scrollTop] = scrolls[i];
   });
@@ -58000,7 +58032,8 @@ function pvLoad(text) {
   }
 }
 
-// The relay runs `cswap list --json` and `codex-auth list --json` and hands back what they print.
+// The relay runs `cswap list --json`, `codex-auth list --json` and `opencode-go-usage list --json`
+// and hands back what they print.
 // A page opened as a file, or from a relay without the route, says so and keeps to pasting.
 // How the page reaches the relay. Served over HTTP, by /api/planner-*; the phone's tab sets its
 // own, over the socket. Opened as a file, there is no relay to reach.
@@ -58037,8 +58070,10 @@ async function pvFetch() {
   const bad = [];
   try {
     const answer = await PV.io.usage();
-    for (const p of ['claude', 'codex']) {
+    for (const p of PV_PROVIDERS) {
       const v = answer?.[p];
+      // An optional CLI the relay does not have, or a relay older than it: no card, no complaint.
+      if (PV_OPTIONAL.includes(p) && (!v || v.absent)) continue;
       try {
         if (!v?.doc) bad.push(v?.error || `no ${p} data`);
         else if (plannerParse(v.doc).provider !== p) bad.push(`wrong ${p} data`);
@@ -58117,7 +58152,7 @@ function pvMount(root, io = PV_HTTP) {
   PV.io = io;
   root.classList.add('planner');
   root.insertAdjacentHTML('afterbegin', PV_MARKUP);
-  for (const p of ['claude', 'codex']) {
+  for (const p of PV_PROVIDERS) {
     const raw = pvGet(PV_STORE[p]);
     if (raw) try { pvAccept(raw); } catch (e) { /* a stored copy that no longer parses is dropped */ }
   }
