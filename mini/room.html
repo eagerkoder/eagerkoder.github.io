@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-15">
+  <meta name="app-built" content="2026-11-21">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -1524,6 +1524,15 @@
       color: var(--term-muted);
     }
 
+    .desk-conv .desk-empty {
+      margin: auto;
+      max-width: 30ch;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--term-dim);
+      line-height: 1.5;
+    }
+
     /* --- A conversation, drawn into a column ------------------------------------------------
        Lifted from the mobile page's thread and not rewritten: conv_thread.js builds one set of
        bubbles for both pages, so one set of rules has to dress them. What differs is only the
@@ -1748,6 +1757,7 @@
     .desk-hang-btn[data-hang="loop"].live { border-color: var(--green); color: var(--green); }
     .desk-hang-btn[data-hang="loop"].live.paused { border-color: var(--orange); color: var(--orange); }
     .desk-hang-btn[data-hang="bench"].live { border-color: var(--green); color: var(--green); }
+    .desk-hang-btn[data-hang="arb"].live { border-color: var(--blue); color: var(--blue); }
     /* The phone's Commander pill: the flag and the session's name once the room has one, amber
        with a pause mark while it is stopped. */
     .desk-hang-btn[data-hang="cmd"].live {
@@ -2909,12 +2919,27 @@
       background: none;
       border: 0;
       color: var(--muted);
-      font-size: 1rem;
+      font-size: 1.2rem;
+      line-height: 1;
       cursor: pointer;
-      padding: 4px 8px;
+      min-width: 32px;
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 4px;
+      box-sizing: border-box;
     }
 
-    .desk-sheet-x:hover { color: var(--text); }
+    .desk-sheet-x:hover {
+      color: var(--text);
+    }
+
+    .desk-sheet-x:focus-visible {
+      outline: 2px solid var(--accent, var(--blue));
+      outline-offset: 1px;
+    }
 
     /* A sheet that is read across rather than down. Settings is a column of labelled fields and
        56ch is generous for one; a wall of tiles at that width is four columns of squares with the
@@ -3872,6 +3897,8 @@
       flex: 1 1 auto;
       overflow-x: auto;
       scrollbar-width: none;
+      mask-image: linear-gradient(to right, black calc(100% - 14px), transparent 100%);
+      -webkit-mask-image: linear-gradient(to right, black calc(100% - 14px), transparent 100%);
     }
 
     .desk-chips::-webkit-scrollbar { display: none; }
@@ -3883,21 +3910,20 @@
       display: inline-flex;
       align-items: center;
       flex: 0 0 auto;
-      height: 1.75em;
-      padding: 0 0.9ch;
+      height: 1.65em;
+      padding: 0 0.8ch;
       border-radius: 0.9em;
       border: 1px solid var(--term-border);
       background: var(--term-active-bg);
-      color: var(--term-muted);
+      color: color-mix(in srgb, var(--term-text) 80%, var(--term-muted));
       /* Three points under the interface, and scaling with it: an instruction is a smaller thing
-         than the member it will be said to, and the two rows sit one above the other — so it stays
-         one step under the member pills wherever those land. */
+         than the member it will be said to, so it stays one step under the member pills above. */
       font-size: calc(var(--desk-ui-font, 11px) - 3px);
       line-height: 1;
       cursor: pointer;
     }
 
-    .desk-chips .desk-chip:hover { color: var(--term-text); }
+    .desk-chips .desk-chip:hover { color: var(--term-text); border-color: var(--accent); }
 
     /* Sized with the chips it opens the rest of, not with the pills on the rail above. */
     .desk-rails .desk-chip-more {
@@ -4830,7 +4856,25 @@
   border: none;
   color: var(--muted);
   font-size: 1.2rem;
+  line-height: 1;
   cursor: pointer;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.pick-x:hover {
+  color: var(--text);
+}
+
+.pick-x:focus-visible {
+  outline: 2px solid var(--accent, var(--blue));
+  outline-offset: 1px;
 }
 
 .pick-search {
@@ -5906,7 +5950,8 @@
 
 /* A loop the person owns is green while it runs and amber while it is stopped: the colour is what
    says, from across the room, whether the chain is still moving. */
-.hang-loop.live {
+.hang-loop.live,
+.hang-bench.live {
   color: var(--green);
   border-color: var(--green);
 }
@@ -7792,12 +7837,31 @@
   background: none;
   color: var(--muted);
   font-size: 1.2rem;
+  line-height: 1;
   cursor: pointer;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.bench-sheet-x:hover {
+  color: var(--text);
+}
+
+.bench-sheet-x:focus-visible {
+  outline: 2px solid var(--accent, var(--blue));
+  outline-offset: 1px;
 }
 
 .bench-sheet-body { overflow-y: auto; padding: 4px 16px 12px; }
 
-.bench-sheet-body .bench-band { margin: 10px 0 4px; }
+.bench-sheet-body .bench-band { margin: 16px 0 6px; }
+.bench-sheet-body .bench-band:first-child { margin-top: 6px; }
 
 .bench-sheet-row {
   display: flex;
@@ -7813,9 +7877,26 @@
 .bench-sheet-row[data-state="live"] .bench-dot { background: var(--green); border-color: var(--green); }
 .bench-sheet-row[data-state="away"] .bench-dot { border-color: var(--orange); }
 .bench-sheet-row[data-state="barred"] .bench-name { color: var(--muted); }
-.bench-sheet-row .conv-bench { min-width: 32px; min-height: 32px; }
+.bench-sheet-row .conv-bench {
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
-.bench-sheet-roles { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.bench-sheet-roles {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  padding: 0 0 2px;
+}
+
+.bench-sheet-row > .conv-bench ~ .bench-sheet-roles {
+  padding-left: 40px;
+}
 
 .bench-sheet-acts { display: inline-flex; gap: 6px; margin-left: auto; }
 
@@ -7834,9 +7915,25 @@
 
 .bench-sheet-link { width: 19px; text-align: center; color: var(--muted); }
 
-.bench-sheet-none, .bench-sheet-note { margin: 6px 0; color: var(--muted); font-size: 0.75rem; }
+.bench-sheet-none { margin: 6px 0; color: var(--muted); font-size: 0.75rem; }
 
-.bench-sheet-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 10px; }
+.bench-sheet-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.bench-sheet-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  width: 100%;
+}
 
   </style>
   <style>
@@ -8040,6 +8137,56 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   vertical-align: 1px;
 }
 
+/* Close button for sheets and dialogs on every page. */
+.sheet-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.sheet-x:hover {
+  color: var(--text);
+}
+
+.sheet-x:focus-visible {
+  outline: 2px solid var(--accent, var(--blue));
+  outline-offset: 1px;
+}
+
+/* Backdrop shade for sheets and modal dialogs. */
+.sheet-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Header bar for sheets and modal dialogs. */
+.sheet-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Title in a sheet header bar. */
+.sheet-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex: 1;
+}
+
   </style>
   <!-- command.html's rail, Agents panel and Project file column. -->
   <style>
@@ -8144,15 +8291,23 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 }
 
 .cmd-page .cmd-icon {
-  padding: 0 0.45em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  box-sizing: border-box;
   border: 1px solid var(--term-border);
   border-radius: var(--radius-md);
   background: none;
   color: var(--term-muted);
   font: inherit;
-  line-height: 1.5;
+  line-height: 1;
   cursor: pointer;
 }
+
+.cmd-page .cmd-icon svg { display: block; }
 
 .cmd-page .cmd-icon:hover { border-color: var(--accent); color: var(--term-text); }
 
@@ -8238,7 +8393,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 
 .cmd-page .cmd-caret-gap { display: inline-block; width: 1.4em; flex: none; }
 .cmd-page .cmd-general,
-.cmd-page .cmd-bench-mark { flex: none; }
+.cmd-page .cmd-bench-mark { flex: none; display: inline-flex; align-items: center; }
+.cmd-page .cmd-doc svg { vertical-align: -2px; margin-right: 3px; }
 .cmd-page .cmd-room-mark { flex: none; color: var(--accent); opacity: .7; font-size: .95em; }
 .cmd-page .cmd-available .cmd-card-badges { margin: 0.35em 0 0.5em 0.6em; }
 .cmd-page .cmd-general { color: var(--orange); }
@@ -8381,6 +8537,10 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .cmd-pf-focus[aria-pressed="true"] { border-color: var(--accent); }
 
 .cmd-pf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 0.1em 0.7em;
   border: 1px solid var(--term-border);
   border-radius: var(--radius-md);
@@ -8388,6 +8548,11 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   color: var(--term-muted);
   font: inherit;
   cursor: pointer;
+}
+
+.cmd-pf-btn svg {
+  flex: none;
+  display: block;
 }
 
 .cmd-pf-btn:hover { border-color: var(--accent); }
@@ -8516,7 +8681,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .cmd-check[data-status="done"] { border-color: var(--green); background: var(--green); }
 .cmd-check[data-status="dropped"] { border-color: var(--term-border); color: var(--term-dim); }
 
-.cmd-task { align-items: center; padding: 0.15em 0; }
+.cmd-task { padding: 0.15em 0; }
 
 /* Text view: Markdown's own task items, drawn with the same box. */
 .cmd-pf-md li.cmd-md-task {
@@ -8669,16 +8834,27 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .cmd-task[data-focus="1"] { padding-left: 0.5em; }
 
 /* An unstarted bench entry's harness and alias, under the card's badges: its name, then the two
-   selects sharing what width is left, which a narrow panel takes from them and not from the name. */
+   selects side-by-side beneath it so no option text is clipped. */
 .cmd-page .cmd-bench-pick {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   margin: 0 0 0.35em 0.6em;
 }
 
-.cmd-page .cmd-bench-pick .bench-pick { max-width: none; min-height: 24px; padding: 1px 2px; }
+.cmd-page .cmd-bench-pick .cmd-badge-role {
+  flex: 0 0 100%;
+  margin-bottom: 1px;
+}
+
+.cmd-page .cmd-bench-pick .bench-pick {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  min-height: 24px;
+  padding: 1px 4px;
+}
 
 .cmd-page .cmd-bench-add {
   margin: 0 0 0.4em 0.6em;
@@ -9547,7 +9723,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
           <button type="button" id="ltermBigger" aria-label="Larger text">A+</button>
         </div>
         <details class="lterm-set" id="ltermSet">
-          <summary aria-label="Terminal settings" title="Terminal settings">⚙</summary>
+          <summary aria-label="Terminal settings" title="Terminal settings"><svg class="gear-ico" aria-hidden="true" focusable="false"><use href="#icoGear" /></svg></summary>
           <div class="lterm-set-panel">
             <label><input type="checkbox" id="ltermFollow"> Open the Project in focus</label>
             <p>Ctrl+` goes to the terminal of the Project in focus, and starts one if it has none.
@@ -9570,12 +9746,11 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
        every other field there is a question about a session, and a sheet that hid all of them
        would be this one wearing the other's markup. -->
   <div id="newProjectSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closeNewProject()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeNewProject()" class="sheet-shade"></div>
     <div class="sheet">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">New project</span>
-        <button onclick="closeNewProject()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span class="sheet-title">New project</span>
+        <button class="sheet-x" onclick="closeNewProject()" aria-label="Close">✕</button>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
         <!-- Drawn only when there is a choice to make: one root is not a question. -->
@@ -9602,17 +9777,16 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   </div>
 
   <div id="startSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closeStart()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeStart()" class="sheet-shade"></div>
     <div
       class="sheet">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <div class="sheet-head">
         <!-- The Project is a fact about what is being started, so it is the same @badge it is on a
              pane header and in the row below — not a title joined to another title by a dot. -->
-        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px;min-width:0">
+        <span class="sheet-title" style="display:flex;align-items:center;gap:6px;min-width:0">
           <span id="startTitle">Start session</span>
           <span id="startProject" class="badge proj"></span></span>
-        <button onclick="closeStart()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeStart()" aria-label="Close">✕</button>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
         <!-- Only drawn when the dialog was opened without a Project — from the landing page's two
@@ -9668,12 +9842,11 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   <!-- Resume on another config: the member's last session reopened under another alias of the
        provider it ran on. conv_lifecycle.js draws the body. -->
   <div id="resumeOnSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closeResumeOn()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeResumeOn()" class="sheet-shade"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="resumeOnTitle">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span id="resumeOnTitle" style="font-size:0.8rem;font-weight:600;flex:1">Resume on another config</span>
-        <button onclick="closeResumeOn()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span id="resumeOnTitle" class="sheet-title">Resume on another config</span>
+        <button class="sheet-x" onclick="closeResumeOn()" aria-label="Close">✕</button>
       </div>
       <div id="resumeOnBody"></div>
     </div>
@@ -9683,36 +9856,33 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
        conv_lifecycle.js draws the body from the relay's preview. -->
   <!-- Over the Commander and loop sheets (120), whose rows open it with Brief. -->
   <div id="rebriefSheet" class="app-overlay" style="display:none;z-index:130;">
-    <div onclick="closeRebrief()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeRebrief()" class="sheet-shade"></div>
     <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="rebriefTitle">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span id="rebriefTitle" style="font-size:0.8rem;font-weight:600;flex:1">Brief</span>
-        <button onclick="closeRebrief()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span id="rebriefTitle" class="sheet-title">Brief</span>
+        <button class="sheet-x" onclick="closeRebrief()" aria-label="Close">✕</button>
       </div>
       <div id="rebriefBody"></div>
     </div>
   </div>
 
   <div id="arbResumeSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closeArbResume()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeArbResume()" class="sheet-shade"></div>
     <div class="sheet wide">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span id="arbResumeTitle" style="font-size:0.8rem;font-weight:600;flex:1">Resume from here</span>
-        <button onclick="closeArbResume()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span id="arbResumeTitle" class="sheet-title">Resume from here</span>
+        <button class="sheet-x" onclick="closeArbResume()" aria-label="Close">✕</button>
       </div>
       <div id="arbResumeBody"></div>
     </div>
   </div>
 
   <div id="arbSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closeArbDetail()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeArbDetail()" class="sheet-shade"></div>
     <div class="sheet">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">What was decided</span>
-        <button onclick="closeArbDetail()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span class="sheet-title">What was decided</span>
+        <button class="sheet-x" onclick="closeArbDetail()" aria-label="Close">✕</button>
       </div>
       <div id="arbDetailBody"></div>
     </div>
@@ -9721,7 +9891,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   <!-- The pane picker. index.html's sheet, its markup unchanged, so pane_picker.js addresses the
        same ids here as it does there. -->
   <div id="pickSheet" class="app-overlay" style="display:none;z-index:100;">
-    <div onclick="closePicker()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closePicker()" class="sheet-shade"></div>
     <div class="pick-panel">
       <div class="pick-head">
         <span class="pick-title" id="pickTitle"></span>
@@ -9761,26 +9931,24 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
        edited while looking at the wall it sits in, which is the shape it already has on the phone
        where the section stays behind it. deskEscape gives it the Escape first for the same reason. -->
   <div id="launcherModal" class="app-overlay" style="display:none;z-index:121;">
-    <div onclick="closeLauncherEdit()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeLauncherEdit()" class="sheet-shade"></div>
     <div role="dialog" aria-label="Launcher"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1" id="launcherEditTitle">Launcher</span>
-        <button onclick="closeLauncherEdit()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span class="sheet-title" id="launcherEditTitle">Launcher</span>
+        <button class="sheet-x" onclick="closeLauncherEdit()" aria-label="Close">✕</button>
       </div>
       <div class="new-agent-body" id="launcherEditBody"></div>
     </div>
   </div>
 
   <div id="newAgentModal" class="app-overlay" style="display:none;z-index:121;">
-    <div onclick="closeNewAgent()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeNewAgent()" class="sheet-shade"></div>
     <div role="dialog" aria-label="New agent"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1">New agent · <span id="newAgentConv"></span></span>
-        <button onclick="closeNewAgent()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span class="sheet-title">New agent · <span id="newAgentConv"></span></span>
+        <button class="sheet-x" onclick="closeNewAgent()" aria-label="Close">✕</button>
       </div>
       <!-- Top down in the order the decision is actually made: what it is, what it does, what it
            is called, and where it runs. Three of the four are badges — a start is picked, not
@@ -9820,13 +9988,12 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   </div>
 
   <div id="arbModal" class="app-overlay" style="display:none;z-index:120;">
-    <div onclick="closeArbSetup()" style="position:absolute;inset:0;background:rgba(0,0,0,0.5)"></div>
+    <div onclick="closeArbSetup()" class="sheet-shade"></div>
     <div role="dialog" aria-label="Arbitrate this conversation"
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><span id="arbSetupSign" style="display:flex"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></span> <span id="arbSetupKind">Arbitrate</span> · <span id="arbSetupConvName"></span></span>
-        <button onclick="closeArbSetup()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+      <div class="sheet-head">
+        <span class="sheet-title" style="display:flex;align-items:center;gap:6px"><span id="arbSetupSign" style="display:flex"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></span> <span id="arbSetupKind">Arbitrate</span> · <span id="arbSetupConvName"></span></span>
+        <button class="sheet-x" onclick="closeArbSetup()" aria-label="Close">✕</button>
       </div>
       <div class="arb-form arb-setup" id="arbSetupBody"></div>
     </div>
@@ -10765,6 +10932,16 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       try { localStorage.setItem(key, compactOn(key) ? 'off' : 'on'); }
       catch (e) { /* private mode: session-only */ }
       if (typeof render === 'function') render();
+    }
+
+    // The mark for a document or Project file: a page with a folded top-right corner.
+    // Inline SVG on a 24-unit grid in the house style, matching benchSign, loopSign, cmdSign.
+    function docSign(size) {
+      const n = size || 16;
+      return `<svg class="doc-sign" viewBox="0 0 24 24" width="${n}" height="${n}" fill="none"`
+        + ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+        + ' aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />'
+        + '<polyline points="14 2 14 8 20 8" /></svg>';
     }
 
     // aria-pressed rather than two icons: the button is a state, and swapping the glyph under the
@@ -20260,6 +20437,7 @@ convApplyTint();
         // Before state_get: one lane, so the numbers are in hand when the index first lands.
         if (typeof convActivityOpen === 'function') convActivityOpen(socket);
         stateSyncOpen(socket);
+        if (typeof plannerSocketOpened === 'function') plannerSocketOpened();
       };
       socket.onclose = () => {
         if (ws !== socket) return;
@@ -20267,6 +20445,7 @@ convApplyTint();
         if (typeof cmdProjectFileReset === 'function') cmdProjectFileReset();
         // A record question asked on this socket will never be answered on the next one.
         if (typeof convLiveAskDone === 'function') convLiveAskDone(true);
+        if (typeof plannerSocketClosed === 'function') plannerSocketClosed();
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -20309,6 +20488,7 @@ convApplyTint();
         // fact about the relay, not a failure to put in front of the user.
         if (typeof convActivityNoteError === 'function' && convActivityNoteError(msg.message)) return;
         if (stateSyncNoteError(msg.message)) return;
+        if (typeof plannerNoteError === 'function' && plannerNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
         // A refusal that names the message it refused is the answer to a button somebody pressed,
         // and the screen that pressed it is still open. Offered there first, where it persists and
@@ -20326,6 +20506,9 @@ convApplyTint();
       else if (msg.type === 'state_conflict') { stateSyncConflict(msg); }
       else if (msg.type === 'conv_log') {
         convLiveReceive(msg);
+      }
+      else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
+        if (typeof plannerReceive === 'function') plannerReceive(msg);
       }
       else if (msg.type === 'git_commits') {
         // The answer to a range the thread asked about. Only the ranges it asked for come back, so
@@ -26349,11 +26532,12 @@ convApplyTint();
           + ` title="On the bench. Press twice to let it go; it keeps running."></button>`
           + '<span class="bench-dot"></span>'
           + `<span class="bench-name">${escapeHtml(name)}</span>${kind(e.kind, e.config)}`
-          + `<span class="bench-state">${escapeHtml(BENCH_STATE[e.state] || e.state || '')}</span>${roles(e)}`
+          + `<span class="bench-state">${escapeHtml(BENCH_STATE[e.state] || e.state || '')}</span>`
           + '<span class="bench-sheet-acts">'
           + btn('', 'Roles', `benchRolesOpen(this.dataset.pid, '${attr(e.name)}')`, `Roles of ${name}`)
           + btn('', open, `benchSheetClose(); benchOpen(this.dataset.pid, '${attr(e.name)}')`, `${open} ${name}`)
-          + '</span></div>';
+          + '</span>'
+          + `${roles(e)}</div>`;
       };
       const otherRow = a => {
         const bar = benchSheetBar(a);
@@ -26374,11 +26558,12 @@ convApplyTint();
         const name = e.label || e.name;
         const opening = benchOpening.has(`${pid}/${e.name}`);
         return `<div class="bench-sheet-row" data-state="${attr(e.state || '')}" data-bench="${attr(e.name)}">`
-          + `<span class="bench-name">${escapeHtml(name)}</span>${benchPickHtml(pid, e)}${roles(e)}`
+          + `<span class="bench-name">${escapeHtml(name)}</span>${benchPickHtml(pid, e)}`
           + '<span class="bench-sheet-acts">'
           + btn('', 'Roles', `benchRolesOpen(this.dataset.pid, '${attr(e.name)}')`, `Roles of ${name}`)
           + btn('', opening ? 'Starting…' : 'Start', `benchSheetClose(); benchOpen(this.dataset.pid, '${attr(e.name)}')`, `Start ${name}`)
-          + '</span></div>';
+          + '</span>'
+          + `${roles(e)}</div>`;
       };
       const agentsHtml = held.map(heldRow).join('') + others.map(otherRow).join('') + linked.map(linkRow).join('');
       return '<div class="bench-band">Agents</div>'
@@ -32599,7 +32784,7 @@ convApplyTint();
         ` data-state="${escapeHtml(s.state || '')}">` +
         '<div class="arb-bar">' +
         '<button class="hang-btn" onclick="loopOpenSettings()" aria-label="Loop settings"' +
-        ' title="Loop settings"><span class="arb-ico" aria-hidden="true">⚙</span></button>' +
+        ' title="Loop settings"><svg class="gear-ico" aria-hidden="true" focusable="false"><use href="#icoGear" /></svg></button>' +
         (s.manual
           ? btn('Assign', 'Hand the first piece of work to a member, with the route', 'loopOpenAssign()', 'lit') +
             btn('Members', 'Add members without changing the current seats', 'loopOpenMembers()') +
@@ -36126,7 +36311,7 @@ convApplyTint();
           // Scales for the arbitrator, the robot for a member. It is not a third participant, it is
           // the one deciding between the other two, and a strip drawing all three alike would tell
           // the same lie launcherPreview already refuses to.
-          + (m.arb ? '<span class="ql-part-mark" aria-hidden="true">⚖</span>'
+          + (m.arb ? `<span class="ql-part-mark">${arbSign(14)}</span>`
                    : `<span class="ql-part-mark">${launcherIcon('spawn')}</span>`)
           + `<span class="ql-part-name">${escapeHtml(m.label || m.name)}</span>`
           + configBadge(m.name, m.config)
@@ -37522,7 +37707,16 @@ convApplyTint();
     // A strip of eight tabs is three kinds of thing named in one typeface, and the label alone does
     // not say which is which — a room and the agent in it are commonly called the same thing.
     //
-    // Guarded by `typeof`: the glyphs live in two modules this file's tests do not slice.
+    // Fallback vector is only for the node --test VM slice in tests/test_desktop_pure.js,
+    // which does not load utils.js; in the browser docSign is always loaded.
+    const deskDocGlyph = typeof docSign === 'function' ? docSign : size => {
+      const n = size || 16;
+      return `<svg class="doc-sign" viewBox="0 0 24 24" width="${n}" height="${n}" fill="none"`
+        + ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+        + ' aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />'
+        + '<polyline points="14 2 14 8 20 8" /></svg>';
+    };
+
     function deskKindGlyph(kind, pane) {
       if (kind === 'conversation') {
         return typeof convGlyph === 'function' ? convGlyph() : '';
@@ -37530,7 +37724,7 @@ convApplyTint();
       if (kind === 'terminal') {
         return typeof shellGlyph === 'function' ? shellGlyph() : '';
       }
-      if (kind === 'project') return '<span class="desk-kind-glyph" aria-hidden="true">📄</span>';
+      if (kind === 'project') return '<span class="desk-kind-glyph" aria-hidden="true">' + deskDocGlyph('1em') + '</span>';
       if (kind === 'remote') return '<span class="remote-r" aria-hidden="true">R</span>';
       return typeof paneGlyph === 'function' ? paneGlyph(pane || {agent: 'x'}) : '';
     }
@@ -37807,15 +38001,15 @@ convApplyTint();
         // The paragraph view: an answer under the question that produced it, in one bubble. The
         // icon is the pair itself — a short line over a rule over two long ones.
         ['para', 'Show each answer under the question that produced it',
-         icon(13, '<path d="M5 7h9" /><path d="M3 11.5h18" /><path d="M5 15.5h14M5 19h9" />')],
+         icon(15, '<path d="M5 7h9" /><path d="M3 11.5h18" /><path d="M5 15.5h14M5 19h9" />')],
         // Whether a bubble carries its agent's colour as a wash behind it, and whether it is
         // drawn as a bubble at all. The icon is a drop.
         ['tint', 'Use agent colours behind each bubble',
-         icon(13, '<path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />')],
+         icon(15, '<path d="M12 3.5c3.2 3.6 5.5 6.3 5.5 9a5.5 5.5 0 0 1-11 0c0-2.7 2.3-5.4 5.5-9z" />')],
         // The send guard: on, every send from a room's composer stops on a popup naming the
         // agent. The icon is a shield with a check.
         ['guard', 'Confirm the agent before every send',
-         icon(13, '<path d="M12 2.5l7.5 3v6c0 4.6-3.2 8.4-7.5 10-4.3-1.6-7.5-5.4-7.5-10v-6z" />' +
+         icon(15, '<path d="M12 2.5l7.5 3v6c0 4.6-3.2 8.4-7.5 10-4.3-1.6-7.5-5.4-7.5-10v-6z" />' +
               '<path d="M8.8 12.2l2.3 2.3 4.3-4.5" />')],
       ]);
     }
@@ -37834,11 +38028,7 @@ convApplyTint();
               '<path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" />')],
         // A bench room's own: its bench sheet. Beside the loop, which stays — a bench room may still
         // hold a session of agents off the bench.
-        ['bench', 'This Project\u2019s bench: its seats and who holds them',
-         typeof benchSign === 'function' ? benchSign(15) :
-         icon(15, '<path d="M2 22h20" /><path d="M4 18h16" /><path d="M6 18v-7" />' +
-              '<path d="M10 18v-7" /><path d="M14 18v-7" /><path d="M18 18v-7" />' +
-              '<path d="M11.12 2.2a2 2 0 0 1 1.76 0l7.84 3.85A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.95z" />')],
+        ['bench', 'This Project\u2019s bench: its seats and who holds them', benchSign(15)],
         // Two states and no third: this room has an arbitrator and this goes to its pane, or it has
         // none and this opens the form that gives it one.
         ['arb', 'Arbitrate this conversation',
@@ -37856,15 +38046,15 @@ convApplyTint();
         ['cmd', 'This conversation\u2019s Commander',
          typeof cmdSign === 'function' ? cmdSign(15) : ''],
         ['refresh', 'Read this again',
-         icon(13, '<path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />')],
+         icon(15, '<path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />')],
         // What was committed between the messages. Only ever true of the relay's record — this
         // browser's own transcript has no commits in it.
         ['commits', 'Show what was committed between messages',
-         icon(13, '<circle cx="12" cy="12" r="3.5" /><path d="M12 2v6.5M12 15.5V22" />')],
+         icon(15, '<circle cx="12" cy="12" r="3.5" /><path d="M12 2v6.5M12 15.5V22" />')],
         // Which record the thread is reading: this browser's transcript, or the one the relay
         // writes for every pane whether anyone is watching or not.
         ['live', 'Read the relay’s record',
-         icon(13, '<ellipse cx="12" cy="5.5" rx="7.5" ry="3" />' +
+         icon(15, '<ellipse cx="12" cy="5.5" rx="7.5" ry="3" />' +
               '<path d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13" />' +
               '<path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3" />')],
       ]) +
@@ -44423,11 +44613,21 @@ convApplyTint();
       if (typeof deskRenderColumns === 'function') deskRenderColumns();
     }
 
+    // Inline vector icons for the Project file toolbar, sharing house style with header icons.
+    const cmdPfIcon = (body, fill = 'none') =>
+      `<svg viewBox="0 0 24 24" width="15" height="15" fill="${fill}" stroke="currentColor"` +
+      ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      body + '</svg>';
+
     // How the Tree and Roadmap folds open: `auto` opens only what the phase under way holds,
     // `expand` and `collapse` all of them. A fold the reader turns by hand keeps its own state until
     // the mode next changes.
     const CMD_PF_FOLDS = ['auto', 'expand', 'collapse'];
-    const CMD_PF_FOLD_FACE = {auto: '◐ Auto', expand: '⊞ Expanded', collapse: '⊟ Collapsed'};
+    const CMD_PF_FOLD_FACE = {
+      auto: cmdPfIcon('<circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" />') + ' Auto',
+      expand: cmdPfIcon('<rect x="3" y="3" width="18" height="18" rx="2" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />') + ' Expanded',
+      collapse: cmdPfIcon('<rect x="3" y="3" width="18" height="18" rx="2" /><line x1="8" y1="12" x2="16" y2="12" />') + ' Collapsed',
+    };
     function cmdPfFold() {
       const v = cmdStoreGet(CMD_PF_FOLD_KEY);
       return CMD_PF_FOLDS.includes(v) ? v : 'auto';
@@ -44492,9 +44692,9 @@ convApplyTint();
       const size = row ? deskTextSize(row) : null;
       return '<span class="cmd-pf-nav" role="group" aria-label="History">'
         + `<button class="cmd-pf-btn" onclick="cmdNavGo(-1)"${back ? '' : ' disabled'}`
-        + ' title="Back" aria-label="Back">‹</button>'
+        + ` title="Back" aria-label="Back">${cmdPfIcon('<polyline points="15 18 9 12 15 6" />')}</button>`
         + `<button class="cmd-pf-btn" onclick="cmdNavGo(1)"${fwd ? '' : ' disabled'}`
-        + ' title="Forward" aria-label="Forward">›</button></span>'
+        + ` title="Forward" aria-label="Forward">${cmdPfIcon('<polyline points="9 18 15 12 9 6" />')}</button></span>`
         + (row ? '<span class="cmd-pf-nav" role="group" aria-label="Text size">'
           + `<button class="cmd-pf-btn cmd-pf-font" data-step="-1" onclick="cmdPfFont(-1,this)"`
           + `${size <= DESK_TEXT_MIN ? ' disabled' : ''} title="Smaller text" aria-label="Smaller text">A−</button>`
@@ -44564,7 +44764,7 @@ convApplyTint();
       const args = escapeHtml(JSON.stringify(pid) + ',' + JSON.stringify(String(path)));
       return `<button class="cmd-doc${primary ? ' plan' : ''}" title="${escapeHtml(path)}"`
         + ` data-pid="${escapeHtml(pid)}" data-path="${escapeHtml(String(path))}"`
-        + ` onclick="cmdOpenDoc(${args},false,this)">${primary ? '📄 ' : ''}${escapeHtml(name)}</button>`;
+        + ` onclick="cmdOpenDoc(${args},false,this)">${primary ? docSign(12) + ' ' : ''}${escapeHtml(name)}</button>`;
     }
 
     function cmdTaskHtml(t, mentions, pid, attrs) {
@@ -44702,7 +44902,7 @@ convApplyTint();
       const head = `<div class="cmd-pf-head"><code class="cmd-pf-path">${escapeHtml(doc.path)}</code>${when}`
         + `<span class="cmd-pf-tools">${cmdPfCommonTools(key)}`
         + '<button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"'
-        + ` onclick="cmdPfRefresh(${escapeHtml(JSON.stringify(key))})">↻</button></span></div>`;
+        + ` onclick="cmdPfRefresh(${escapeHtml(JSON.stringify(key))})">${cmdPfIcon('<path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />')}</button></span></div>`;
       let body;
       if (!held) body = '<p class="desk-empty">Reading…</p>';
       else if (held.missing) body = '<p class="desk-empty">There is no such file in this Project.</p>';
@@ -44742,9 +44942,9 @@ convApplyTint();
               collapse: 'Every fold is shut'}[fold]} · press for ${nextFold}"`
             + ` aria-label="Folds: ${fold}. Press for ${nextFold}">${CMD_PF_FOLD_FACE[fold]}</button>` : '')
         + `<button class="cmd-pf-btn cmd-pf-focus" aria-pressed="${focusOn}" onclick="cmdPfToggleFocus(this)"`
-        + ' title="Grey every phase but the one under way, and scroll to it">◎ Focus</button>'
+        + ` title="Grey every phase but the one under way, and scroll to it">${cmdPfIcon('<circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" fill="currentColor" />')} Focus</button>`
         + `<button class="cmd-pf-btn" title="Read it again" aria-label="Read it again"`
-        + ` onclick="cmdPfRefresh(${q})">↻</button></span></div>`;
+        + ` onclick="cmdPfRefresh(${q})">${cmdPfIcon('<path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />')}</button></span></div>`;
       let body;
       if (!held) body = '<p class="desk-empty">Reading PROJECT.md…</p>';
       else if (held.missing) body = '<p class="desk-empty">This Project has no PROJECT.md.</p>';
@@ -44809,11 +45009,13 @@ convApplyTint();
         const icons = r.unplaced || !cmdToggles.icons ? '' : '<span class="cmd-rail-icons">'
           + (cmdCommanders(data.sessions, r.id, data.convs, data.held).all.length
             ? `<button class="cmd-icon" data-act="cmd" title="Open the last active Commander's room"`
-              + ` aria-label="Commander">⌘</button>` : '')
+              + ` aria-label="Commander"><svg viewBox="0 0 24 24" width="13" height="13" fill="none"`
+              + ` stroke="currentColor" stroke-width="2" stroke-linecap="round"`
+              + ` stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>` : '')
           + (bench[r.id] ? `<button class="cmd-icon" data-act="bench" title="Open the bench room"`
-            + ` aria-label="Bench">🏛</button>` : '')
+            + ` aria-label="Bench">${benchSign(13)}</button>` : '')
           + `<button class="cmd-icon" data-act="file" title="Open PROJECT.md · double click: a column of its own"`
-          + ` aria-label="Project file">📄</button></span>`;
+            + ` aria-label="Project file">${docSign(13)}</button></span>`;
         return `<div class="cmd-rail-row${r.id === cmdSelected ? ' sel' : ''}" data-pid="${id}"`
           + ` role="button" tabindex="0" aria-pressed="${r.id === cmdSelected}">`
           + '<span class="cmd-rail-line">'
@@ -44906,7 +45108,7 @@ convApplyTint();
       }).join('');
       return `<div class="cmd-card cmd-bench" data-session="">`
         + `<div class="cmd-card-head" data-room="${escapeHtml(view.bench ? room : '')}">`
-        + '<span class="cmd-caret-gap"></span><span class="cmd-bench-mark">🏛</span>'
+        + '<span class="cmd-caret-gap"></span><span class="cmd-bench-mark">' + benchSign(15) + '</span>'
         + '<span class="cmd-card-name">bench</span></div>'
         + (cmdToggles.compact ? '' : `<div class="cmd-card-badges">${badges}</div>`)
         + (cmdToggles.compact || typeof benchPickHtml !== 'function' ? ''

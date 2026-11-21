@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-15">
+  <meta name="app-built" content="2026-11-21">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -886,9 +886,9 @@
 }
 
 .cc-mode[aria-pressed="true"] {
-  color: var(--fg);
+  color: var(--fg, var(--text));
   border-color: var(--border);
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
 }
 
 .cc-body {
@@ -913,7 +913,7 @@
   margin: 4px 0 0;
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--fg);
+  color: var(--fg, var(--text));
 }
 
 /* A row is pressable and says so by moving, not by wearing a border: a tree of eight sessions
@@ -921,11 +921,11 @@
 .cc-row {
   padding: 6px 8px;
   border-radius: 8px;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
   cursor: pointer;
 }
 
-.cc-row.picked { outline: 1px solid var(--accent, #4a9eff); }
+.cc-row.picked { outline: 1px solid var(--accent, var(--blue)); }
 
 .cc-select {
   width: 100%;
@@ -957,8 +957,8 @@
   color: var(--muted);
 }
 
-.cc-tier.on { color: var(--ok, #3ddc84); border-color: currentColor; }
-.cc-tier.warn { color: var(--warn, #ffb020); border-color: currentColor; }
+.cc-tier.on { color: var(--ok, var(--green)); border-color: currentColor; }
+.cc-tier.warn { color: var(--warn, var(--orange)); border-color: currentColor; }
 
 .cc-name {
   flex: 1;
@@ -988,7 +988,7 @@
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--panel, transparent);
-  color: var(--fg);
+  color: var(--fg, var(--text));
   cursor: pointer;
 }
 
@@ -1022,18 +1022,18 @@
   transition: background 120ms ease, border-color 120ms ease;
 }
 
-.cc-step:hover { background: var(--panel, rgba(127, 127, 127, 0.08)); }
+.cc-step:hover { background: var(--panel, color-mix(in srgb, var(--text) 6%, transparent)); }
 .cc-step[role="button"] { cursor: pointer; }
 
 /* The row in front of you. A ring and a wash rather than a colour change: every other thing
    on the row already carries a colour that means something. */
 .cc-step.picked {
-  border-color: var(--accent, #4a9eff);
-  background: color-mix(in srgb, var(--accent, #4a9eff) 10%, transparent);
+  border-color: var(--accent, var(--blue));
+  background: color-mix(in srgb, var(--accent, var(--blue)) 10%, transparent);
 }
 
 .cc-step:focus-visible {
-  outline: 2px solid var(--accent, #4a9eff);
+  outline: 2px solid var(--accent, var(--blue));
   outline-offset: 1px;
 }
 
@@ -1044,11 +1044,11 @@
   line-height: 1.5;
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--panel, rgba(127, 127, 127, 0.1));
+  background: var(--panel, color-mix(in srgb, var(--text) 10%, transparent));
   color: var(--muted);
 }
 
-.cc-step-id.missing { color: var(--warn, #ffb020); }
+.cc-step-id.missing { color: var(--warn, var(--orange)); }
 
 /* The four words a status folds into, as the colours the rest of the app uses for them. A
    status was being drawn as grey text beside grey text, which is the one column on this
@@ -1063,8 +1063,8 @@
   text-transform: uppercase;
 }
 
-.cc-state.cc-doing { color: var(--accent, #4a9eff); }
-.cc-state.cc-done { color: var(--ok, #3ddc84); }
+.cc-state.cc-doing { color: var(--accent, var(--blue)); }
+.cc-state.cc-done { color: var(--ok, var(--green)); }
 .cc-state.cc-todo { color: var(--muted); border-color: var(--border); }
 .cc-state.cc-dropped { color: var(--muted); border-style: dashed; opacity: 0.75; }
 
@@ -1080,7 +1080,7 @@
   font-size: 0.6rem;
   padding: 1px 6px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent, #4a9eff) 12%, transparent);
+  background: color-mix(in srgb, var(--accent, var(--blue)) 12%, transparent);
   color: var(--muted);
 }
 
@@ -1101,10 +1101,10 @@
 .cc-activity {
   flex: 0 0 auto;
   padding: 1px 7px;
-  border: 1px solid var(--warn, #ffb020);
+  border: 1px solid var(--warn, var(--orange));
   border-radius: 999px;
   font-size: 0.6rem;
-  color: var(--warn, #ffb020);
+  color: var(--warn, var(--orange));
   animation: cc-breathe 2.4s ease-in-out infinite;
 }
 
@@ -1131,7 +1131,7 @@
 }
 
 .cc-step-link { font-size: 0.66rem; color: var(--muted); }
-.cc-step-link.missing { color: var(--warn, #ffb020); }
+.cc-step-link.missing { color: var(--warn, var(--orange)); }
 
 .cc-fold > summary {
   cursor: pointer;
@@ -1157,7 +1157,7 @@
 .cc-children {
   margin-left: 13px;
   padding-left: 9px;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid var(--line, var(--border));
 }
 
 .cc-children > .cc-step::before,
@@ -1170,7 +1170,7 @@
   top: 0.95em;
   width: 7px;
   height: 1px;
-  background: var(--line);
+  background: var(--line, var(--border));
 }
 
 .cc-children > .cc-fold > summary { position: relative; }
@@ -1185,7 +1185,7 @@
 .cc-anchored {
   margin-left: 13px;
   padding-left: 9px;
-  border-left: 2px solid color-mix(in srgb, var(--accent, #4a9eff) 45%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--accent, var(--blue)) 45%, transparent);
 }
 
 .cc-plan-owner {
@@ -1194,7 +1194,7 @@
   gap: 7px;
   min-width: 0;
   padding: 3px 8px 7px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line, var(--border));
 }
 
 .cc-plan-owner .cc-name { font-weight: 600; }
@@ -1226,7 +1226,7 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--panel, transparent);
-  color: var(--fg);
+  color: var(--fg, var(--text));
   cursor: pointer;
 }
 
@@ -1266,10 +1266,10 @@
   padding: 3px 7px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
 }
 
-.cc-plan.ids .cc-step-chip .cc-step-id { color: var(--fg); }
+.cc-plan.ids .cc-step-chip .cc-step-id { color: var(--fg, var(--text)); }
 .cc-plan.ids .cc-step-chip .cc-place-icon { width: 16px; height: 16px; padding: 1px; }
 .cc-plan.ids .cc-step-branch { flex-basis: 100%; }
 
@@ -1316,9 +1316,9 @@
 }
 
 .cc-row-pick[aria-pressed="true"] {
-  border-color: var(--accent, #4a9eff);
-  color: var(--accent, #4a9eff);
-  background: color-mix(in srgb, var(--accent, #4a9eff) 18%, transparent);
+  border-color: var(--accent, var(--blue));
+  color: var(--accent, var(--blue));
+  background: color-mix(in srgb, var(--accent, var(--blue)) 18%, transparent);
 }
 
 /* One row's own verbs, under that row. A card rather than a strip, because it is about the
@@ -1330,9 +1330,9 @@
   gap: 6px;
   margin: 2px 0 6px 13px;
   padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent, #4a9eff) 40%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent, var(--blue)) 40%, var(--border));
   border-radius: 8px;
-  background: var(--panel, rgba(127, 127, 127, 0.06));
+  background: var(--panel, var(--surface));
 }
 
 .cc-row-bar > .cc-empty {
@@ -1347,7 +1347,7 @@
   padding: 5px 6px;
   font: inherit;
   font-size: 0.72rem;
-  color: var(--fg);
+  color: var(--fg, var(--text));
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1359,7 +1359,7 @@
   flex-basis: 100%;
   margin-top: 2px;
   padding-top: 6px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line, var(--border));
 }
 
 .cc-row-feed .cc-step { padding: 3px 0; }
@@ -1406,7 +1406,7 @@
   font: inherit;
   font-size: 0.7rem;
   color: inherit;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -1434,7 +1434,7 @@
   font-size: 0.66rem;
   white-space: pre-wrap;
   word-break: break-word;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
   border-radius: 8px;
 }
 
@@ -1449,7 +1449,7 @@
   text-align: left;
   padding: 10px 12px;
   margin-bottom: 6px;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
   border: 1px solid var(--border);
   border-radius: 10px;
   color: inherit;
@@ -1476,7 +1476,7 @@
   font: inherit;
   font-size: 0.72rem;
   color: inherit;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -1498,7 +1498,7 @@
   font: inherit;
   font-size: 0.72rem;
   color: inherit;
-  background: var(--panel, rgba(127, 127, 127, 0.08));
+  background: var(--panel, var(--surface));
   border: 1px solid var(--border);
   border-radius: 8px;
   resize: vertical;
@@ -1960,7 +1960,25 @@
   border: none;
   color: var(--muted);
   font-size: 1.2rem;
+  line-height: 1;
   cursor: pointer;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.pick-x:hover {
+  color: var(--text);
+}
+
+.pick-x:focus-visible {
+  outline: 2px solid var(--accent, var(--blue));
+  outline-offset: 1px;
 }
 
 .pick-search {
@@ -3036,7 +3054,8 @@
 
 /* A loop the person owns is green while it runs and amber while it is stopped: the colour is what
    says, from across the room, whether the chain is still moving. */
-.hang-loop.live {
+.hang-loop.live,
+.hang-bench.live {
   color: var(--green);
   border-color: var(--green);
 }
@@ -3324,6 +3343,56 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .mock-agent small .conv-role {
   margin-left: 5px;
   vertical-align: 1px;
+}
+
+/* Close button for sheets and dialogs on every page. */
+.sheet-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.sheet-x:hover {
+  color: var(--text);
+}
+
+.sheet-x:focus-visible {
+  outline: 2px solid var(--accent, var(--blue));
+  outline-offset: 1px;
+}
+
+/* Backdrop shade for sheets and modal dialogs. */
+.sheet-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Header bar for sheets and modal dialogs. */
+.sheet-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Title in a sheet header bar. */
+.sheet-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex: 1;
 }
 
   </style>
@@ -3625,8 +3694,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     <div class="sheet">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:0.8rem;font-weight:600;flex:1">New project</span>
-        <button onclick="closeNewProject()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeNewProject()" aria-label="Close">✕</button>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
         <!-- Drawn only when there is a choice to make: one root is not a question. -->
@@ -3662,8 +3730,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px;min-width:0">
           <span id="startTitle">Start session</span>
           <span id="startProject" class="badge proj"></span></span>
-        <button onclick="closeStart()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeStart()" aria-label="Close">✕</button>
       </div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
         <!-- Only drawn when the dialog was opened without a Project — from the landing page's two
@@ -3718,8 +3785,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     <div class="sheet wide">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span id="arbResumeTitle" style="font-size:0.8rem;font-weight:600;flex:1">Resume from here</span>
-        <button onclick="closeArbResume()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeArbResume()" aria-label="Close">✕</button>
       </div>
       <div id="arbResumeBody"></div>
     </div>
@@ -3730,8 +3796,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     <div class="sheet">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:0.8rem;font-weight:600;flex:1">What was decided</span>
-        <button onclick="closeArbDetail()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeArbDetail()" aria-label="Close">✕</button>
       </div>
       <div id="arbDetailBody"></div>
     </div>
@@ -3785,8 +3850,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:0.8rem;font-weight:600;flex:1" id="launcherEditTitle">Launcher</span>
-        <button onclick="closeLauncherEdit()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeLauncherEdit()" aria-label="Close">✕</button>
       </div>
       <div class="new-agent-body" id="launcherEditBody"></div>
     </div>
@@ -3798,8 +3862,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:80dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:0.8rem;font-weight:600;flex:1">New agent · <span id="newAgentConv"></span></span>
-        <button onclick="closeNewAgent()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeNewAgent()" aria-label="Close">✕</button>
       </div>
       <!-- Top down in the order the decision is actually made: what it is, what it does, what it
            is called, and where it runs. Three of the four are badges — a start is picked, not
@@ -3844,8 +3907,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:420px;max-height:85dvh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:0.8rem;font-weight:600;flex:1;display:flex;align-items:center;gap:6px"><span id="arbSetupSign" style="display:flex"><svg class="arb-sign" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.37" r="4" fill="var(--red)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="7.8" cy="15.64" r="4" fill="var(--orange)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /><circle cx="16.2" cy="15.64" r="4" fill="var(--green)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.1" /></svg></span> <span id="arbSetupKind">Arbitrate</span> · <span id="arbSetupConvName"></span></span>
-        <button onclick="closeArbSetup()" aria-label="Close"
-          style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        <button class="sheet-x" onclick="closeArbSetup()" aria-label="Close">✕</button>
       </div>
       <div class="arb-form arb-setup" id="arbSetupBody"></div>
     </div>
@@ -4654,6 +4716,16 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       try { localStorage.setItem(key, compactOn(key) ? 'off' : 'on'); }
       catch (e) { /* private mode: session-only */ }
       if (typeof render === 'function') render();
+    }
+
+    // The mark for a document or Project file: a page with a folded top-right corner.
+    // Inline SVG on a 24-unit grid in the house style, matching benchSign, loopSign, cmdSign.
+    function docSign(size) {
+      const n = size || 16;
+      return `<svg class="doc-sign" viewBox="0 0 24 24" width="${n}" height="${n}" fill="none"`
+        + ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+        + ' aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />'
+        + '<polyline points="14 2 14 8 20 8" /></svg>';
     }
 
     // aria-pressed rather than two icons: the button is a state, and swapping the glyph under the
@@ -11869,6 +11941,7 @@ function convWebModeOf(conv) {
         // Before state_get: one lane, so the numbers are in hand when the index first lands.
         if (typeof convActivityOpen === 'function') convActivityOpen(socket);
         stateSyncOpen(socket);
+        if (typeof plannerSocketOpened === 'function') plannerSocketOpened();
       };
       socket.onclose = () => {
         if (ws !== socket) return;
@@ -11876,6 +11949,7 @@ function convWebModeOf(conv) {
         if (typeof cmdProjectFileReset === 'function') cmdProjectFileReset();
         // A record question asked on this socket will never be answered on the next one.
         if (typeof convLiveAskDone === 'function') convLiveAskDone(true);
+        if (typeof plannerSocketClosed === 'function') plannerSocketClosed();
         // First drop only: reconnect attempts every 3s must not keep pushing the clock forward, or
         // an hour offline reads as three seconds when the socket finally comes back.
         if (!wsDownSince) wsDownSince = Date.now();
@@ -11918,6 +11992,7 @@ function convWebModeOf(conv) {
         // fact about the relay, not a failure to put in front of the user.
         if (typeof convActivityNoteError === 'function' && convActivityNoteError(msg.message)) return;
         if (stateSyncNoteError(msg.message)) return;
+        if (typeof plannerNoteError === 'function' && plannerNoteError(msg.message)) return;
         convLiveNoteError(msg.message);
         // A refusal that names the message it refused is the answer to a button somebody pressed,
         // and the screen that pressed it is still open. Offered there first, where it persists and
@@ -11935,6 +12010,9 @@ function convWebModeOf(conv) {
       else if (msg.type === 'state_conflict') { stateSyncConflict(msg); }
       else if (msg.type === 'conv_log') {
         convLiveReceive(msg);
+      }
+      else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
+        if (typeof plannerReceive === 'function') plannerReceive(msg);
       }
       else if (msg.type === 'git_commits') {
         // The answer to a range the thread asked about. Only the ranges it asked for come back, so

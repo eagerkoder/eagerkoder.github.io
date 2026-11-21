@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1b26">
+  <!-- Stamped by scripts/build.py, as every page's are. -->
+  <meta name="app-version" content="0.6.0">
+  <meta name="app-built" content="2026-11-21">
+  <title>Usage Planner</title>
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='2'%20y='9'%20width='3'%20height='4'%20rx='1'%20fill='%237aa2f7'/%3E%3Crect%20x='6.5'%20y='6'%20width='3'%20height='7'%20rx='1'%20fill='%239ece6a'/%3E%3Crect%20x='11'%20y='3'%20width='3'%20height='10'%20rx='1'%20fill='%23ff9e64'/%3E%3C/svg%3E">
+  <!--
+    The usage planner. It opens no socket. It reads what `cswap list --json` and
+    `codex-auth list --json` print: from the relay's /api/planner-usage when the relay serves it,
+    or pasted or dropped in. It keeps the last of each in this browser only. src/planner.js plans; src/planner_view.js draws.
+  -->
+  <style>
+/* The usage planner's styles, for web/planner.html and the phone's Usage tab alike. Every rule is
+   under .planner, the class pvMount puts on its root, so none of them reaches the phone's own
+   markup. */
+
+/* The other way, the phone's rules do reach into the tab: its reset of every element's margin and
+   padding, its 13px fields, and bare .chip and .seg rules of its own (a pointer, bold, a border
+   on every bar). These put back what the browser gives planner.html. First in the file and next
+   to no specificity, so they beat the phone's rules by order and every .planner rule beats them. */
+:where(#plannerView) :is(input, select, textarea, option, dialog) { margin: revert; padding: revert; font-size: revert; }
+:where(#plannerView) :is(.chip, .seg) { all: revert; }
+
+.planner {
+  --bg: #f5f5f7; --panel: #ffffff; --line: #dcdde3; --fg: #24283b; --muted: #6b7089;
+  color-scheme: light;
+  --track: #e9eaf0; --idle: #ba334a; --warn: #986000; --ok: #258254; --accent: #3d59a1;
+  --gap: #707783; --session-line: rgba(255, 255, 255, .85);
+  --claude: #d9713a; --codex: #1a9e95;
+  /* Account colours: no green (kept for parallel bonus) and no red or yellow (kept for flags). */
+  --a0: #4f78c4; --a1: #8564bd; --a2: #2595bc; --a3: #4f55a6; --a4: #b0479a; --a5: #5b6b80;
+  --bonus: #a3dfb3; --burn: #13843a;
+  --flag-red: #d62d2d; --flag-yellow: #c99a00;
+  --weekend: rgba(0, 0, 0, .035);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .planner {
+    color-scheme: dark;
+    --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #7a80a8;
+    --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4;
+    --idle: #ff7a90; --warn: #e6b657; --ok: #70bd94; --gap: #929aaa; --muted: #a1a7c5;
+    --a0: #7aa2ed; --a1: #b19ae4; --a2: #6ebcdd; --a3: #9299eb; --a4: #e08cc9; --a5: #9aa8bd;
+    --bonus: #a6e9bb; --burn: #1fae52;
+    --session-line: rgba(0, 0, 0, .8);
+  --flag-red: #ff5c5c; --flag-yellow: #ffd23f;
+    --weekend: rgba(255, 255, 255, .03);
+  }
+}
+/* The phone's dark theme is the absence of its light one, whatever the system says; :where keeps
+   this rule below the phone's surface mapping. */
+:root[data-theme="dark"] .planner, :where(:root:not([data-theme="light"])) #plannerView .planner {
+  color-scheme: dark;
+  --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #7a80a8;
+  --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4;
+  --idle: #ff7a90; --warn: #e6b657; --ok: #70bd94; --gap: #929aaa; --muted: #a1a7c5;
+  --a0: #7aa2ed; --a1: #b19ae4; --a2: #6ebcdd; --a3: #9299eb; --a4: #e08cc9; --a5: #9aa8bd;
+  --bonus: #a6e9bb; --burn: #1fae52;
+  --session-line: rgba(0, 0, 0, .8);
+  --flag-red: #ff5c5c; --flag-yellow: #ffd23f;
+  --weekend: rgba(255, 255, 255, .03);
+}
+/* The tab's back bar is the phone's two-row header with only its first row: one line, centred. */
+#plannerView > .conv-view-head { display: flex; align-items: center; }
+/* In the phone's Usage tab the surfaces are the app's own, so the tab reads as part of it. The
+   planner's other colours keep their own light and dark values, chosen by the phone's theme. */
+#plannerView { --pv-bg: var(--bg); --pv-panel: var(--surface); --pv-line: var(--border); --pv-fg: var(--text); --pv-accent: var(--blue); }
+#plannerView .planner { --bg: var(--pv-bg); --panel: var(--pv-panel); --line: var(--pv-line); --fg: var(--pv-fg); --accent: var(--pv-accent); }
+.planner, .planner * { box-sizing: border-box; }
+.planner [hidden] { display: none !important; }
+.planner a { color: var(--accent); }
+.planner {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.planner header {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  position: sticky; top: 0; z-index: 5;
+}
+.planner h1 { font-size: 16px; margin: 0; }
+.planner h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.planner h3 { font-size: 15px; margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.planner main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 1400px; margin: 0 auto; }
+.planner .muted { color: var(--muted); }
+.planner .small { font-size: 12px; }
+.planner button, .planner select {
+  font: inherit; font-size: 12px; color: var(--fg); background: var(--track);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-height: 36px; cursor: pointer;
+}
+.planner button:hover { border-color: var(--accent); }
+.planner :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.planner input[type=time] { font: inherit; color: var(--fg); background: var(--track); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.planner input[type=number] { width: 56px; font: inherit; color: var(--fg); background: var(--track); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.planner .grow { flex: 1; }
+
+.planner #intake { display: grid; gap: 8px; }
+.planner #intake textarea {
+  width: 100%; min-height: 72px; font: 12px ui-monospace, Menlo, monospace; color: var(--fg);
+  background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; padding: 8px;
+}
+.planner.dragging #intake textarea { border-color: var(--accent); }
+.planner .sources { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.planner .src { padding: 2px 8px; border-radius: 999px; background: var(--track); font-size: 12px; }
+.planner .src.stale { color: var(--warn); }
+.planner #err { color: var(--idle); font-size: 12px; overflow-wrap: anywhere; }
+.planner #out { display: grid; gap: 16px; min-width: 0; }
+.planner .chart-head { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+.planner .chart-head h2 { margin: 0; }
+.planner .chart-head label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+.planner .providers { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+.planner .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.planner .prov-claude h3 .dot { background: var(--claude); }
+.planner .prov-codex h3 .dot { background: var(--codex); }
+.planner .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.planner .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.planner .chips:has(+ .chips.resets) { margin-bottom: 0; }
+.planner .chips.resets { margin-top: 6px; }
+.planner .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--track); }
+.planner .chip.bad { background: color-mix(in srgb, var(--idle) 22%, transparent); }
+.planner .chip.good { background: color-mix(in srgb, var(--ok) 22%, transparent); }
+.planner .chip.warn { background: color-mix(in srgb, var(--warn) 25%, transparent); }
+
+/* Accounts, soonest event first. */
+.planner .acct { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.planner .acct:first-of-type { border-top: 0; }
+.planner .acct .who { display: flex; flex-direction: column; min-width: 0; }
+.planner .acct .who b { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; overflow-wrap: anywhere; }
+.planner .acct .who .email { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planner .live { font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--accent); color: var(--panel); }
+/* The 5h and 7d windows each in a card of their own, so the two read apart. */
+.planner .meter { font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.planner .meter .lbl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 6px; color: var(--muted); }
+.planner .meter .lbl b { color: var(--fg); font-weight: 600; }
+/* One row per reset credit under the two cards, on the cards' own columns: the burn under 5h,
+   the expiry under 7d, so every burn lines up on the left and every expiry on the right. */
+/* The cards and their credit rows in a grid of their own, so a tall name column beside them
+   never opens a gap between the two. */
+.planner .acct .use { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 12px; align-items: start; }
+.planner .acct .credits { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; font-size: 12px; color: var(--muted); }
+.planner .acct .credits > span { padding: 1px 8px; border-top: 1px dashed var(--line); overflow-wrap: anywhere; }
+.planner .acct .credits > span:nth-child(-n+2) { border-top: 0; }
+.planner .bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; margin-top: 4px; }
+.planner .bar i { display: block; height: 100%; background: var(--ok); }
+.planner .bar i.mid { background: var(--warn); }
+.planner .bar i.hi { background: var(--idle); }
+.planner .acct .extra { margin-top: 4px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.planner .acct .extra > span { white-space: nowrap; }
+.planner .lost { color: var(--idle); }
+.planner .extra .thin { color: var(--warn); }
+.planner .acct.off { opacity: .55; }
+
+/* Timelines: rows of absolutely placed segments and marks over a shared time axis. */
+.planner .tl-wrap { padding: 6px 12px 6px 0; container-type: inline-size; }
+/* A month in a narrow chart: session dividers would stripe the bars, and a label per day overlap. */
+@container (max-width: 900px) { .planner .tl.dense .seg { background-image: none; } }
+@container (max-width: 700px) { .planner .tl.dense .axis span:not(.major) { display: none; } }
+.planner .tl-row .name .pct { color: var(--muted); font-weight: 400; }
+.planner .tl-row.now .name { font-weight: 700; }
+.planner .tl-row.now .name::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 4px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.planner .tl { position: relative; --label: 112px; }
+.planner .tl-row { display: grid; grid-template-columns: var(--label) 1fr; align-items: center; height: 26px; }
+.planner .tl-row .name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.planner .tl-row.head .name { font-weight: 600; }
+.planner .lane { position: relative; height: 18px; background: var(--track); border-radius: 4px; }
+.planner .lane.thin { height: 8px; }
+.planner .seg { position: absolute; top: 0; bottom: 0; border-radius: 3px; min-width: 1px;
+  background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(var(--session) - 1px), var(--session-line) calc(var(--session) - 1px), var(--session-line) var(--session)); }
+.planner .seg.idle { background: repeating-linear-gradient(135deg, var(--gap) 0 4px, transparent 4px 8px); }
+/* No box behind a mark: the glyph alone, with a 1px halo so it holds its edge over a bar. */
+.planner .mark { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 13px; line-height: 1; cursor: pointer; background: none; font-variant-emoji: text; filter: drop-shadow(0 0 1px var(--panel)); }
+.planner .mark.reset { color: var(--flag-red); font-size: 14px; font-weight: 700; }
+.planner .mark.credit { color: var(--flag-yellow); font-size: 18px; }
+/* A burn is a deep green star, outlined so it reads on the light green bonus bar it starts. */
+.planner .mark.burn { color: var(--burn); font-size: 17px; filter: drop-shadow(0 0 1px var(--panel)) drop-shadow(0 0 1px var(--panel)); }
+.planner .mark.lapse { color: var(--muted); }
+.planner .axis { position: relative; height: 18px; margin: 0 0 2px var(--label); font-size: 10px; color: var(--muted); }
+.planner .axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.planner .grid { position: absolute; top: 0; bottom: 0; left: var(--label); right: 0; pointer-events: none; }
+.planner .grid i { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); opacity: .6; }
+.planner .grid i.we { border-left: 0; background: var(--weekend); }
+.planner .grid .now { border-left: 2px solid var(--fg); opacity: 1; z-index: 2; }
+.planner .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: 10px 0; }
+.planner .gap-key { color: var(--gap); } .planner .reset-key { color: var(--flag-red); }
+.planner .credit-key { color: var(--flag-yellow); } .planner .burn-key { color: var(--burn); } .planner .bonus-key { color: var(--bonus); }
+.planner .chip.bonus { background: color-mix(in srgb, var(--bonus) 22%, transparent); }
+.planner .tl-row.sub { height: 14px; } .planner .tl-row.sub .name { font-size: 10px; color: var(--muted); padding-left: 10px; }
+/* A provider's main line and parallel lines, boxed apart from its account rows. The box is an
+   inset shadow, not a border, so the lanes keep the axis's x positions. */
+/* Read as a header: the provider's colour as a tinted band with a bar down its left, lifted
+   off the account rows, its name set like the section headings. */
+.planner .tl-group { --hue: var(--accent); position: relative; padding: 4px 0; margin: 6px 0; border-radius: 6px;
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--hue), inset 0 0 0 1px color-mix(in srgb, var(--hue) 35%, transparent), 0 2px 6px rgb(0 0 0 / .18); }
+.planner .tl-group.prov-claude { --hue: var(--claude); } .planner .tl-group.prov-codex { --hue: var(--codex); }
+.planner .tl-group .tl-row.head .name { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.planner .tl-group .tl-row { height: 18px; } .planner .tl-group .tl-row.sub { height: 10px; }
+.planner .tl-row.sub .lane { background: none; }
+.planner .tl-group .name { padding-left: 8px; } .planner .tl-group .tl-row.sub .name { padding-left: 16px; }
+
+.planner .seg { cursor: pointer; }
+/* The tip bubble: one per page, placed over whatever was hovered or clicked. */
+.planner #tip { position: fixed; z-index: 10; max-width: min(340px, calc(100vw - 16px)); padding: 8px 10px; border-radius: 8px;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0, 0, 0, .25); font-size: 12px; pointer-events: none; }
+.planner #tip[data-pinned="1"] { pointer-events: auto; border-color: var(--accent); }
+.planner #tip b { display: block; margin-bottom: 4px; }
+.planner #tip dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+.planner #tip dt { color: var(--muted); } .planner #tip dd { margin: 0; }
+/* On/off switches for the plan's two modes. */
+/* Settings: a native dialog, applied as it changes. */
+.planner dialog#settings { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg);
+  padding: 16px; width: min(420px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0, 0, 0, .25); }
+.planner dialog#settings::backdrop { background: rgba(0, 0, 0, .35); }
+.planner dialog#settings fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 10px;
+  display: grid; gap: 8px; font-size: 13px; }
+.planner dialog#settings fieldset.inner { border: 0; padding: 0 0 0 22px; margin: 0; }
+.planner dialog#settings fieldset:disabled { opacity: .5; }
+.planner dialog#settings legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.planner dialog#settings p { margin: 0; }
+.planner ol.sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.planner ol.sections li { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
+.planner ol.sections button { padding: 2px 10px; }
+.planner .card > .sec { margin-top: 14px; }
+.planner .card > .sec > h2:first-child { margin-top: 0; }
+.planner .sec-steps > ol.steps { margin-top: 0; }
+.planner dialog#settings .actions { display: flex; justify-content: flex-end; }
+/* Simple view: what to do now. Charts, comparisons and the finer print are the detailed view's. */
+.planner.simple .detail { display: none; }
+.planner.simple ol.steps li:nth-child(n+3), .planner.simple ol.steps li.more { display: none; }
+.planner.simple .acct .email { display: none; }
+.planner.simple .acct .credits > span:nth-child(n+3) { display: none; }
+.planner #gear { display: inline-flex; gap: 6px; align-items: center; }
+.planner #gear svg { flex: none; }
+.planner .seg.off { background: none; }
+.planner ol.steps li.off { color: var(--muted); }
+.planner .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+.planner .switch input { appearance: none; width: 32px; height: 18px; margin: 0; border-radius: 9px; background: var(--track); border: 1px solid var(--line); position: relative; cursor: pointer; transition: background .15s; }
+.planner .switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.planner .switch input:checked { background: var(--accent); border-color: var(--accent); }
+.planner .switch input:checked::after { transform: translateX(14px); background: var(--panel); }
+.planner .switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .planner .switch input, .planner .switch input::after { transition: none; } }
+.planner .nav { display: inline-flex; gap: 6px; align-items: center; }
+.planner .nav button { min-width: 32px; font-size: 15px; line-height: 1; }
+.planner .nav .span { font: 12px ui-monospace, Menlo, monospace; white-space: pre; text-align: center; }
+.planner .nav button:disabled, .planner ol.sections button:disabled { opacity: .4; cursor: default; }
+
+/* A switch run from the page: the first press arms it and the fill drains over arm.js's 2.5s;
+   the second press inside that runs it. The app's own armed look, in this page's tokens. */
+.planner .cmds { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.planner .arm-btn[data-armed="1"] {
+  color: var(--panel); border-color: transparent;
+  background: linear-gradient(to right, var(--claude) 50%, var(--track) 50%) right / 200% 100%;
+  animation: arm-drain 2.5s linear forwards;
+}
+@keyframes arm-drain { from { background-position: left; } to { background-position: right; } }
+@media (prefers-reduced-motion: reduce) { .planner .arm-btn[data-armed="1"] { background: var(--claude); animation: none; } }
+
+/* The next 24h as steps. */
+/* One grid for the list, each row a subgrid: the time column is as wide as the widest time, so
+   a time never wraps and every row's text starts at the same edge. */
+.planner ol.steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; gap: 4px; max-height: 340px; overflow-y: auto; }
+.planner ol.steps li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; gap: 8px; align-items: center; font-size: 13px; padding: 6px; border-radius: 6px; overflow-wrap: anywhere; }
+.planner ol.steps li.burn { background: color-mix(in srgb, var(--idle) 12%, transparent); }
+.planner ol.steps li.idle { background: color-mix(in srgb, var(--idle) 6%, transparent); }
+/* The modes table: every combination of the two switches, the one in use marked. */
+.planner .modes .table-wrap { overflow-x: auto; }
+.planner .modes table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.planner .modes th, .planner .modes td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.planner .modes thead th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; vertical-align: bottom; white-space: normal; }
+.planner .modes th[scope="row"], .planner .modes th[scope="rowgroup"], .planner .modes thead th:nth-child(-n+2) { text-align: left; }
+.planner .modes th[scope="rowgroup"] { vertical-align: top; font-weight: 600; }
+.planner .modes th[scope="rowgroup"] .dot { display: inline-block; margin-right: 6px; }
+.planner .modes .prov-claude .dot { background: var(--claude); } .planner .modes .prov-codex .dot { background: var(--codex); }
+.planner .modes tbody tr.on td, .planner .modes tbody tr.on th[scope="row"] { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.planner .modes td.best { color: var(--ok); font-weight: 700; } .planner .modes td.bad { color: var(--idle); }
+.planner .modes .small { margin-top: 8px; }
+.planner ol.steps time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A step with nothing to run lets its text take the command column. */
+.planner ol.steps .cmds:empty { display: none; }
+.planner ol.steps li > span:has(+ .cmds:empty) { grid-column: 2 / -1; }
+.planner ol.steps li.more { display: block; padding: 2px 6px; }
+.planner ol.steps li.more button { font-size: 12px; padding: 3px 10px; }
+.planner code { font: 12px ui-monospace, Menlo, monospace; background: var(--track); padding: 1px 6px; border-radius: 4px; }
+.planner .tabs { display: flex; gap: 4px; }
+.planner .tabs button[aria-selected="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+.planner .empty { padding: 24px; text-align: center; color: var(--muted); }
+@media (max-width: 560px) {
+  .planner main { padding: 10px; }
+  /* Wrapped to five lines on a phone, a frozen header would take a quarter of the screen. */
+  .planner header { padding: 12px; position: static; }
+  .planner .card { padding: 12px; }
+  .planner button, .planner select, .planner input[type=number], .planner input[type=time] { min-height: 44px; }
+  .planner .acct { grid-template-columns: minmax(0, 1fr); }
+  .planner .acct .who { gap: 4px; }
+  .planner .tl { --label: 96px; }
+  .planner ol.steps { grid-template-columns: max-content minmax(0, 1fr); }
+  .planner ol.steps .cmds { grid-column: 2; justify-self: start; max-width: 100%; }
+  .planner ol.steps button { max-width: 100%; overflow-wrap: anywhere; }
+}
+
+  </style>
+</head>
+
+<body>
+  <script>
+    // The two-tap arm, on any button a render drew.
+    //
+    // Its own file because it is not a phone control: the arm is the confirmation step in front of
+    // everything destructive the app can do, and the desktop page reaches it through arbitration's
+    // Re-brief and End session — two buttons in a dialog whose module both pages load. It was the
+    // head of controls.js, which is a phone's pane header and nothing this page has.
+    //
+    // `armFire` stayed there and serves the header's CLS and QUIT: it is keyed by element id
+    // against a table of labels, and these buttons are rebuilt from innerHTML with no id worth
+    // having. So this arm hangs off the element, and only one is ever armed — a second arm
+    // disarms the first, because two buttons both claiming the next tap is not a promise.
+    //
+    // 2.5s rather than the header's 1.5s. That window is short because QUIT sits under the thumb
+    // for as long as a pane is open; these are reached by opening a panel and aiming, and a
+    // deadline that expires while you are still moving teaches people to double-tap blind.
+    const ARM_MS = 2500;
+    let armedEl = null, armedKey = '', armedTimer = 0;
+
+    // `key` is for a control whose enclosing card is redrawn by the poll. Its element changes,
+    // but its action does not; matching that action lets the second tap reach the same arm.
+    // The button keeps its words: the drain behind them is the whole signal. A `label` is a note
+    // for what the button cannot say in its own words — "Every tab on this profile closes" — and
+    // shows as a toast on the first tap, never in place of the button's text.
+    function armButton(btn, label, run, key) {
+      if ((key && armedKey === key) || (!key && armedEl === btn)) { disarmButton(); run(); return; }
+      disarmButton();
+      armedEl = btn;
+      armedKey = key || '';
+      btn.dataset.armed = '1';
+      // The drain is drawn off `.arm-btn`, so a button whose markup never asked for it gets it for
+      // as long as it is armed — every armed button looks armed, whichever render drew it.
+      if (!btn.classList.contains('arm-btn')) { btn.classList.add('arm-btn'); btn.dataset.armClass = '1'; }
+      if (label && typeof showToast === 'function') showToast(label);
+      // Disarms itself rather than waiting to be pressed again — the same reason the header's does.
+      armedTimer = setTimeout(disarmButton, ARM_MS);
+    }
+
+    function disarmButton() {
+      clearTimeout(armedTimer);
+      const btn = armedEl;
+      const key = armedKey;
+      armedEl = null; armedKey = '';
+      // The element that was armed, and — for a keyed arm — whatever is standing in its place now.
+      // A poll redraw replaces the node between the two taps, so by the time the arm expires the
+      // one on screen is not the one this holds, and clearing only `armedEl` leaves a detached
+      // node tidied and a live button still draining with nothing behind it.
+      // Read off the dataset rather than matched in a selector: the arm key is whatever the
+      // caller had to name — a member's agent id, a conversation id, a label someone typed — and
+      // a selector built out of one throws on the character it did not expect, which loses the
+      // second tap rather than the styling.
+      const live = key && typeof document !== 'undefined' && document.querySelectorAll
+        ? Array.from(document.querySelectorAll('[data-arm-key]'))
+          .find(el => el.dataset.armKey === key) : null;
+      for (const el of new Set([btn, live])) {
+        if (!el || !el.dataset || !el.dataset.armed) continue;
+        delete el.dataset.armed;
+        if (el.dataset.armClass) { el.classList.remove('arm-btn'); delete el.dataset.armClass; }
+      }
+    }
+
+    function armButtonArmed(key) { return !!key && armedKey === key; }
+
+    // Anywhere else, and the arm is off: a tap that lands somewhere else is a tap that was not
+    // the second half of this pair.
+    document.addEventListener('click', (e) => {
+      const keyed = e.target.closest && e.target.closest('[data-arm-key]');
+      if (e.target !== armedEl && (!keyed || keyed.dataset.armKey !== armedKey)) disarmButton();
+    }, true);
+
+  </script>
+  <script>
+// The usage planner's logic: reads `cswap list --json` and `codex-auth list --json`, and plans
+// which account to run, and when to burn a reset credit, over the coming month.
+//
+// Pure: no DOM, no clock. planner_view.js draws what this returns, and tests/test_planner.js runs
+// it in a vm. The two providers are planned apart, one account in use at a time, all 24 hours
+// unless hours of use say otherwise.
+//
+// The model, per account:
+//   - One session is WEEK_PER_FIVE % of the 7d window, spent in fillH hours of use (5 by
+//     default: steady use, which fills the 5h window just as it resets). A window with no reset
+//     time starts on first use.
+//   - At a 7d reset, whatever is left unused is lost. So run first the account whose week ends
+//     soonest (earliest deadline first): that is what wastes the least.
+//   - A reset credit clears both windows. On Claude the week keeps its end date, so a credit is
+//     worth only the hours left before it; on Codex the week restarts from the reset.
+
+const PLAN_H = 3600e3;
+const PLAN_FIVE = 5 * PLAN_H;
+const PLAN_WEEK = 7 * 24 * PLAN_H;
+const WEEK_PER_FIVE = 12;
+// ponytail: a credit is burned for a gap only when it buys a full 5h block; a planner that looks
+// ahead for the best moment would beat this, add one if burns land badly in practice.
+const BURN_MIN_H = 5;
+
+function plannerMs(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : t;
+}
+
+// Either tool's document, recognised by its shape. Returns {provider, fetchedAt, accounts}.
+function plannerParse(doc) {
+  if (typeof doc === 'string') doc = JSON.parse(doc);
+  if (!doc || !Array.isArray(doc.accounts)) throw new Error('no accounts list');
+  if ('activeAccountNumber' in doc || doc.schemaVersion != null) return parseCswap(doc);
+  if (doc.command === 'list' || doc.schema_version != null) return parseCodexAuth(doc);
+  throw new Error('not cswap or codex-auth list --json output');
+}
+
+function parseCswap(doc) {
+  let fetched = null;
+  const accounts = doc.accounts.map(a => {
+    const u = a.usage || {};
+    const f = u.fiveHour, w = u.sevenDay;
+    fetched = Math.max(fetched || 0, plannerMs(a.usageFetchedAt) || 0) || fetched;
+    const credits = [];
+    for (const g of u.resetGrants || []) {
+      if (g.paused) continue;
+      for (let i = 0; i < (g.resetsLeft || 0); i++) {
+        credits.push({id: `${g.id}#${i}`, label: g.label || 'Full reset',
+                      startsAt: plannerMs(g.startsAt), expiresAt: plannerMs(g.endsAt),
+                      needsLimit: !!g.useRequiresLimit});
+      }
+    }
+    return {
+      id: a.number, name: a.alias || `#${a.number}`, email: a.email || '', active: !!a.active,
+      ok: a.usageStatus === 'ok' && !!w && !a.disabled,
+      five: f ? {pct: f.pct || 0, resetsAt: plannerMs(f.resetsAt)} : {pct: 0, resetsAt: null},
+      week: w ? {pct: w.pct || 0, resetsAt: plannerMs(w.resetsAt)} : null,
+      credits: sortCredits(credits), keepsWeek: true,
+    };
+  });
+  return {provider: 'claude', fetchedAt: fetched, accounts};
+}
+
+function parseCodexAuth(doc) {
+  let fetched = null;
+  const accounts = doc.accounts.map(a => {
+    const u = a.usage || {};
+    // primary/secondary are not 5h/7d by position: a plan with no 5h limit sends the week as
+    // primary. The window's length says which it is.
+    const wins = [u.primary, u.secondary].filter(Boolean);
+    const pick = mins => {
+      const x = wins.find(v => v.window_minutes === mins);
+      return x ? {pct: x.used_percent || 0, resetsAt: plannerMs(x.resets_at)} : null;
+    };
+    fetched = Math.max(fetched || 0, plannerMs(u.updated_at) || 0) || fetched;
+    const credits = (u.reset_credit || []).filter(c => c.status === 'available').map(c => ({
+      id: c.id, label: c.title || 'Full reset', startsAt: null,
+      expiresAt: plannerMs(c.expires_at), needsLimit: false}));
+    const week = pick(10080);
+    return {
+      id: a.number, name: a.alias || a.account_name || `#${a.number}`, email: a.email || '',
+      active: !!a.active, ok: !!week,
+      five: pick(300), week, credits: sortCredits(credits), keepsWeek: false,
+    };
+  });
+  return {provider: 'codex', fetchedAt: fetched, accounts};
+}
+
+function sortCredits(list) {
+  return list.sort((a, b) => (a.expiresAt ?? Infinity) - (b.expiresAt ?? Infinity));
+}
+
+// What burning a credit now gives back, in hours of continuous work.
+function creditGainH(s, t, r7) {
+  const back = s.p7 / r7;
+  if (!s.keepsWeek || s.t7 == null) return back;
+  return Math.max(0, Math.min(back, (s.t7 - t) / PLAN_H));
+}
+
+// Hours of use: when work runs, as daily windows in local minutes [from, to), a `to` past 1440
+// running over midnight. null is all day. spec: {mode: 'all'} or {mode: 'window', from: '09:00',
+// to: '01:00', jobs: n, jobsAt: '02:00'}: the person's hours, plus n timed jobs of one session
+// each (fillH hours of use) back to back from jobsAt.
+function plannerHoursOfUse(spec, fillH = 5) {
+  if (!spec || spec.mode !== 'window') return null;
+  const min = v => { const [h, m] = String(v || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+  const from = min(spec.from), to = min(spec.to);
+  const wins = [[from, to > from ? to : to + 1440]];
+  const jobs = Math.max(0, Math.floor(spec.jobs || 0));
+  if (jobs) { const at = min(spec.jobsAt); wins.push([at, at + jobs * fillH * 60]); }
+  return wins;
+}
+
+// The windows as times, for the local days around `t`: yesterday's may run into today.
+function plannerSpans(t, wins) {
+  const spans = [];
+  for (let k = -1; k <= 1; k++) {
+    for (const [a, b] of wins) {
+      const s = new Date(t); s.setDate(s.getDate() + k); s.setHours(0, a, 0, 0);
+      const e = new Date(t); e.setDate(e.getDate() + k); e.setHours(0, b, 0, 0);
+      spans.push([s.getTime(), e.getTime()]);
+    }
+  }
+  return spans;
+}
+const plannerOn = (t, wins) => !wins || plannerSpans(t, wins).some(([s, e]) => s <= t && t < e);
+// The next time at which work may start or stop.
+function plannerNextEdge(t, wins) {
+  if (!wins) return Infinity;
+  return plannerSpans(t, wins).flat().filter(x => x > t).reduce((m, x) => Math.min(m, x), Infinity);
+}
+// Hours of use between two times.
+function plannerOnHours(from, to, wins) {
+  if (!wins) return Math.max(0, to - from) / PLAN_H;
+  let h = 0;
+  for (let t = from; t < to; ) {
+    const n = Math.min(to, plannerNextEdge(t, wins));
+    if (plannerOn(t, wins)) h += n - t;
+    t = n;
+  }
+  return h / PLAN_H;
+}
+
+// Runs the accounts forward from `now`, one in use at a time. Returns the plan:
+//   segments: [{start, end, id, off}]  id null for a gap with nothing usable, or, with off set,
+//             outside the hours of use (opts.windows, from plannerHoursOfUse)
+//   parallel: [{start, end, id, lane}]  bonus use alongside the main line (opts.parallel only)
+//   burns:    [{t, id, credit, gainH, why}]   why 'gap', 'full' or 'expiring'
+//   resets:   [{t, id, lostPct}]  natural 7d resets, and the headroom each one throws away
+//   expired:  [{t, id, credit}]   credits that lapsed unused
+//   bonusH:   hours of parallel use
+//   offH:     hours outside the hours of use
+//
+// opts.parallel: spend reset credits for their full value rather than only to fill a gap. A
+// credit is burned the moment its account's week is used up with time enough left to use all of
+// it again; that account then runs as a bonus beside the main line (lane 1, 2, …) until it runs
+// dry or its week resets. The main line takes a bonus account only when nothing else is usable.
+//
+// opts.rotate: an account need not run dry before the next. At every session boundary (fillH
+// hours on one account) the main line re-picks by least slack — hours to its week end less the
+// hours of use it still holds — so the accounts take turns a session at a time instead of in
+// one long run each.
+// ponytail: off hours stop use but not the clock, while a credit's worth is still counted in
+// continuous hours; with short hours of use a burn may give back less than it says.
+// ponytail: the 'full' rule waits for an account to run dry, so a Claude credit whose account
+// never runs dry early in a week still lapses into a last-chance burn; burning partway through a
+// week would need lookahead.
+function plannerSimulate(accounts, now, opts = {}) {
+  const hours = opts.hours ?? 24 * 30;
+  const dt = (opts.stepMin ?? 15) * 60e3;
+  // Fill time: the hours of use one session's allowance takes. Under 5, the 5h window fills
+  // before it resets and the pick below moves on to the next account.
+  const fillH = opts.fillH ?? 5;
+  const r5 = 100 / fillH;
+  const r7 = (opts.weekPerFive ?? WEEK_PER_FIVE) / fillH;
+  const end = now + hours * PLAN_H;
+  const wins = opts.windows || null;
+  const st = accounts.filter(a => a.ok).map(a => ({
+    id: a.id, keepsWeek: a.keepsWeek, hasFive: !!a.five,
+    p5: a.five ? a.five.pct : 0, t5: a.five ? a.five.resetsAt : null,
+    p7: a.week.pct, t7: a.week.resetsAt,
+    credits: a.credits.map(c => ({...c})),
+  }));
+  const parallel = !!opts.parallel;
+  const rotate = !!opts.rotate;
+  let runH = 0;  // hours on `cur` since this session on it began, for rotate
+  const out = {segments: [], parallel: [], burns: [], resets: [], expired: [], idleH: 0, bonusH: 0, offH: 0, start: now, end};
+  let cur = (accounts.find(a => a.active && a.ok) || {}).id ?? null;
+  const usable = s => (!s.hasFive || s.p5 < 100 - 1e-6) && s.p7 < 100 - 1e-6;
+  const burn = (s, c, t, why) => {
+    s.credits.splice(s.credits.indexOf(c), 1);
+    out.burns.push({t, id: s.id, credit: c, gainH: creditGainH(s, t, r7), why});
+    s.p5 = 0; s.t5 = null; s.p7 = 0;
+    if (!s.keepsWeek) s.t7 = null;
+    // In parallel mode every burn but a gap's runs beside the main line, in the lowest free lane.
+    if (parallel && why !== 'gap' && !s.lane) {
+      const taken = new Set(st.map(x => x.lane).filter(Boolean));
+      s.lane = 1;
+      while (taken.has(s.lane)) s.lane++;
+    }
+  };
+  // Consumes `h` hours of use on one account.
+  const use = (s, t, h) => {
+    if (s.hasFive) {
+      if (s.t5 == null) s.t5 = t + PLAN_FIVE;
+      s.p5 = Math.min(100, s.p5 + r5 * h);
+    }
+    if (s.t7 == null) s.t7 = t + PLAN_WEEK;
+    s.p7 = Math.min(100, s.p7 + r7 * h);
+  };
+  const runsDry = (s, t) => Math.min(t + (100 - s.p7) / r7 * PLAN_H,
+    s.hasFive ? t + (100 - s.p5) / r5 * PLAN_H : Infinity);
+  const ready = (c, s, t) => (c.startsAt == null || c.startsAt <= t) && (!c.needsLimit || !usable(s));
+
+  for (let t = now; t < end; ) {
+    for (const s of st) {
+      if (s.t5 != null && t >= s.t5) { s.p5 = 0; s.t5 = null; }
+      if (s.t7 != null && t >= s.t7) {
+        if (s.t7 >= now) out.resets.push({t: s.t7, id: s.id, lostPct: Math.max(0, 100 - s.p7)});
+        s.p7 = 0; s.t7 = null;
+        s.lane = 0;  // a fresh week is the main line's again
+      }
+      while (s.credits.length && s.credits[0].expiresAt != null && s.credits[0].expiresAt <= t) {
+        out.expired.push({t: s.credits[0].expiresAt, id: s.id, credit: s.credits.shift()});
+      }
+      // Last chance: a credit lapsing before the next step is burned if it gives anything back.
+      const c = s.credits.find(c => ready(c, s, t));
+      if (c && c.expiresAt != null && c.expiresAt <= Math.min(end, t + dt)
+          && creditGainH(s, t, r7) >= 1) burn(s, c, t, 'expiring');
+      // Full value: the week is used up and there is time left to use every hour it gives back.
+      if (parallel && s.p7 >= 100 - 1e-6) {
+        const full = s.credits.find(c => ready(c, s, t));
+        if (full && creditGainH(s, t, r7) >= s.p7 / r7 - 1e-6) burn(s, full, t, 'full');
+      }
+      if (s.lane && !usable(s) && s.p7 >= 100 - 1e-6) s.lane = 0;
+    }
+
+    // Outside the hours of use nothing runs, on the main line or beside it, until they open.
+    if (!plannerOn(t, wins)) {
+      let next = Math.min(end, plannerNextEdge(t, wins));
+      for (const s of st) {
+        for (const at of [s.t5, s.t7, ...s.credits.flatMap(c => [c.startsAt, c.expiresAt])]) {
+          if (at != null && at > t) next = Math.min(next, at);
+        }
+      }
+      const last = out.segments[out.segments.length - 1];
+      if (last && last.off) last.end = next;
+      else out.segments.push({start: t, end: next, id: null, off: true});
+      out.offH += (next - t) / PLAN_H;
+      t = next;
+      continue;
+    }
+
+    const order = (a, b) =>
+      (a.t7 ?? Infinity) - (b.t7 ?? Infinity) || (b.id === cur) - (a.id === cur) || a.id - b.id;
+    const slack = s => ((s.t7 ?? Infinity) - t) / PLAN_H - (100 - s.p7) / r7;
+    const byOrder = rotate ? (a, b) => slack(a) - slack(b) || a.id - b.id : order;
+    const keep = rotate && runH < fillH - 1e-6 && st.find(s => s.id === cur && usable(s) && !s.lane);
+    let pick = keep || st.filter(s => usable(s) && !s.lane).sort(byOrder)[0]
+      || st.filter(usable).sort(byOrder)[0];
+    if (pick) {
+      pick.lane = 0;
+      if (pick.id !== cur || runH >= fillH - 1e-6) runH = 0;
+    }
+    if (!pick) {
+      const best = st.map(s => ({s, c: s.credits.find(c => ready(c, s, t)), gain: creditGainH(s, t, r7)}))
+        .filter(x => x.c)
+        .sort((a, b) => b.gain - a.gain || (a.c.expiresAt ?? Infinity) - (b.c.expiresAt ?? Infinity))[0];
+      if (best && best.gain >= BURN_MIN_H) {
+        burn(best.s, best.c, t, 'gap'); pick = best.s; runH = 0;
+      }
+    }
+
+    // Stop at an allowance or event, even when it falls between the sampling steps.
+    let next = Math.min(end, t + dt, plannerNextEdge(t, wins));
+    for (const s of st) {
+      for (const at of [s.t5, s.t7, ...s.credits.flatMap(c => [c.startsAt, c.expiresAt])]) {
+        if (at != null && at > t) next = Math.min(next, at);
+      }
+    }
+    if (pick) next = Math.min(next, runsDry(pick, t), rotate ? t + (fillH - runH) * PLAN_H : Infinity);
+    const side = st.filter(s => s.lane && usable(s));
+    for (const s of side) next = Math.min(next, runsDry(s, t));
+    const usedH = (next - t) / PLAN_H;
+    for (const s of side) {
+      const prev = out.parallel.findLast(g => g.id === s.id && g.lane === s.lane);
+      if (prev && prev.end === t) prev.end = next;
+      else out.parallel.push({start: t, end: next, id: s.id, lane: s.lane});
+      out.bonusH += usedH;
+      use(s, t, usedH);
+    }
+    const id = pick ? pick.id : null;
+    const last = out.segments[out.segments.length - 1];
+    if (last && last.id === id && !last.off) last.end = next;
+    else out.segments.push({start: t, end: next, id});
+    if (!pick) { out.idleH += usedH; t = next; continue; }
+    cur = id;
+    runH += usedH;
+    use(pick, t, usedH);
+    t = next;
+  }
+  return out;
+}
+
+// Sessions that can still be skipped before weekly allowance goes unused, one account in use at a
+// time. A session is one 5h window's allowance, weekPerFive % of the week. Closed form: the
+// accounts in the order the plan runs them (earliest week end first), and at each one's reset,
+// the hours left over once everything due by then has been used. Accounts whose week has not
+// started are left out, since their first use sets the deadline; reset credits are left out too,
+// since an unused one is already reported as spare.
+// Returns {room, accounts: [{id, room, left, deadline}]}; room is Infinity with no account at risk.
+// With hours of use, every hour counted is an hour of use.
+// ponytail: the 5h cap counts whole windows in hours of use, not where each window falls.
+function plannerRoom(accounts, now, opts = {}) {
+  const S = opts.weekPerFive ?? WEEK_PER_FIVE;
+  const fillH = opts.fillH ?? 5;
+  const wins = opts.windows || null;
+  const due = accounts.filter(a => a.ok && a.week && a.week.pct < 100 && a.week.resetsAt != null && a.week.resetsAt > now)
+    .sort((a, b) => a.week.resetsAt - b.week.resetsAt);
+  let need = 0;
+  const rows = due.map(a => {
+    const left = (100 - a.week.pct) / S;
+    const hours = plannerOnHours(now, a.week.resetsAt, wins);
+    need += left * fillH;
+    const edf = (hours - need) / fillH;
+    let cap = Infinity;
+    if (a.five) {
+      const wait = Math.min(hours, plannerOnHours(now, a.five.resetsAt ?? now, wins));
+      const current = wait ? Math.min((100 - a.five.pct) / 100, wait / fillH) : 0;
+      const after = hours - wait;
+      cap = current + Math.floor(after / 5) + Math.min(1, (after % 5) / fillH) - left;
+    }
+    return {id: a.id, room: Math.min(edf, cap), left, deadline: a.week.resetsAt};
+  });
+  return {room: rows.reduce((m, r) => Math.min(m, r.room), Infinity), accounts: rows};
+}
+
+// The plan's first `hours` as steps a person follows: switches and burns, in time order.
+function plannerSteps(plan, hours = 24) {
+  const until = plan.start + hours * PLAN_H;
+  const steps = [];
+  for (const g of plan.segments) {
+    if (g.start >= until) break;
+    steps.push(g.off ? {t: g.start, kind: 'off', until: Math.min(g.end, until)}
+      : g.id == null ? {t: g.start, kind: 'idle', until: Math.min(g.end, until)}
+      : {t: g.start, kind: 'use', id: g.id, until: Math.min(g.end, until)});
+  }
+  for (const g of plan.parallel || []) {
+    if (g.start < until) steps.push({t: g.start, kind: 'parallel', id: g.id, lane: g.lane, until: Math.min(g.end, until)});
+  }
+  for (const b of plan.burns) if (b.t < until) steps.push({t: b.t, kind: 'burn', id: b.id, gainH: b.gainH, why: b.why});
+  // A burn and the use it opens share a time; the burn reads first.
+  return steps.sort((a, b) => a.t - b.t || (b.kind === 'burn') - (a.kind === 'burn'));
+}
+
+// A plan in numbers, to set modes side by side: sessions of use (main line and parallel), hours
+// with nothing usable (off hours are not a gap), credits burned and lapsed, sessions left unused at 7d resets, and how many
+// times the main line changes account (a gap between two runs on one account is not a switch).
+function plannerSummary(plan, opts = {}) {
+  const fillH = opts.fillH ?? 5;
+  let mainH = 0, gapH = 0, switches = 0, last = null;
+  for (const g of plan.segments) {
+    const h = (g.end - g.start) / PLAN_H;
+    if (g.off) continue;
+    if (g.id == null) { gapH += h; continue; }
+    mainH += h;
+    if (last != null && g.id !== last) switches++;
+    last = g.id;
+  }
+  return {sessions: (mainH + plan.bonusH) / fillH, bonusSessions: plan.bonusH / fillH, gapH, switches,
+          burns: plan.burns.length, lapsed: plan.expired.length,
+          lostSessions: plan.resets.reduce((n, r) => n + r.lostPct, 0) / (opts.weekPerFive ?? WEEK_PER_FIVE)};
+}
+
+  </script>
+  <script>
+// The usage planner's page: intake, the accounts list, steps and ranged charts. Draws what
+// planner.js returns and holds nothing else. Served by the relay, the page asks it for both CLIs'
+// output; opened any other way, it takes them pasted or dropped. The last of each is kept in
+// localStorage, per browser, so a reload keeps them.
+
+// The page's markup, written into whatever root pvMount is given: planner.html's body, or the
+// phone's Usage tab. Every id is looked up under that root (pv$), never in the document.
+const PV_MARKUP = `
+  <header>
+    <h1>Usage Planner</h1>
+    <label class="switch" title="Only what to do now: the next steps, room and each account's use. Charts and comparisons stay in the detailed view"><input type="checkbox" role="switch" id="simple">Simple</label>
+    <div class="sources" id="sources"></div>
+    <button id="refresh" hidden>Refresh</button>
+    <span id="runMsg" class="small muted" role="status"></span>
+    <span class="grow"></span>
+    <label class="switch detail" title="Spend reset credits when they pay in full, and run the refilled account beside the main one"><input type="checkbox" role="switch" id="parallel">Parallel bonus</label>
+    <label class="switch detail" title="Switch accounts every session by least slack, instead of running each one until its week is used up"><input type="checkbox" role="switch" id="rotate">Take turns per session</label>
+    <button id="gear" aria-haspopup="dialog" title="Settings"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span id="hoursSum">all day</span></button>
+  </header>
+  <!-- Settings apply as they change; Done only closes. -->
+  <dialog id="settings" aria-labelledby="settingsTitle">
+    <form method="dialog">
+      <h2 id="settingsTitle">Settings</h2>
+      <fieldset>
+        <legend>Session</legend>
+        <label>1 session = <input type="number" id="weekPerFive" min="1" max="100" step="0.5" value="12">% of the week</label>
+        <label>1 session = <input type="number" id="fillH" min="1" max="5" step="0.5" value="5">h of use</label>
+        <label>Warn under <input type="number" id="warnH" min="0" step="1" value="24">h of room</label>
+      </fieldset>
+      <fieldset>
+        <legend>Hours of use</legend>
+        <label><input type="radio" name="hoursMode" id="hoursAll" value="all" checked> All 24 hours</label>
+        <label><input type="radio" name="hoursMode" id="hoursWindow" value="window"> From
+          <input type="time" id="hoursFrom" value="09:00" aria-label="Start of use"> to
+          <input type="time" id="hoursTo" value="01:00" aria-label="End of use"></label>
+        <fieldset id="jobsSet" class="inner">
+          <label>Timed jobs overnight: <input type="number" id="jobs" min="0" max="4" step="1" value="0"> sessions from
+            <input type="time" id="jobsAt" value="02:00" aria-label="Jobs start"></label>
+          <p class="small muted">Outside these hours nothing is planned: not a gap, only time off. Jobs run back to back, one session's hours each.</p>
+        </fieldset>
+      </fieldset>
+      <fieldset>
+        <legend>Sections, in order</legend>
+        <p class="small muted" id="sectionsHead">In each provider card</p>
+        <ol id="sections" class="sections" aria-labelledby="sectionsHead"></ol>
+        <p class="small muted" id="pageSectionsHead">On the page</p>
+        <ol id="pageSections" class="sections" aria-labelledby="pageSectionsHead"></ol>
+      </fieldset>
+      <div class="actions"><button value="done" autofocus>Done</button></div>
+    </form>
+  </dialog>
+  <main>
+    <section id="intake" aria-label="Data">
+      <textarea id="paste" aria-label="Usage JSON" placeholder="Paste the output of  cswap list --json  or  codex-auth list --json  here, or drop the files on the page"></textarea>
+      <div class="sources">
+        <button id="load">Load pasted</button>
+        <button id="openFiles">Open files…</button><input type="file" id="files" accept=".json,application/json" multiple hidden>
+        <span id="err" role="alert"></span>
+      </div>
+    </section>
+    <div id="out"></div>
+  </main>
+  <div id="tip" role="tooltip" hidden></div>
+`;
+
+// A provider card's sections, in the order shown, each on or off; set in Settings.
+const PV_SECTIONS_KEY = 'planner_sections';
+const PV_SECTION_NAMES = {accounts: 'Accounts', chart: 'Planned use chart', steps: 'Next steps'};
+const PV_SECTIONS_DEFAULT = [['accounts', true], ['chart', true], ['steps', true]];
+// The page's own blocks, the same way: the provider cards, the combined chart, the modes table.
+const PV_PAGE_SECTIONS_KEY = 'planner_page_sections';
+const PV_PAGE_SECTION_NAMES = {cards: 'Provider cards', all: 'All accounts chart', modes: 'Modes compared'};
+const PV_PAGE_SECTIONS_DEFAULT = [['cards', true], ['all', true], ['modes', true]];
+// Each chart's "Soonest first" switch: its account rows in the Accounts list's order, not the CLI's.
+const PV_SORT_KEY = 'planner_sort';
+// Each provider's chart opens on 7 days and the combined one on 30.
+const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: false, codex: false, all: false}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, all: 720}, pages: {claude: 0, codex: 0, all: 0}, more: {}};
+// The plan is simulated this far ahead; ‹ › page a chart through it, one range at a time.
+const PV_PLAN_H = 720;
+const PV_RANGES = {24: '24 hours', 72: '3 days', 168: '7 days', 720: '30 days'};
+// U+2691 with the text-presentation selector, so it takes the mark's colour instead of an emoji's.
+const PV_FLAG = '\u2691\uFE0E';
+const PV_STAR = '\u2605\uFE0E';
+const PV_RESET = '\u27F2';
+const PV_STORE = {claude: 'planner_claude', codex: 'planner_codex'};
+// The settings: input id -> [storage key, default, check].
+const PV_SETTINGS = {
+  weekPerFive: ['planner_week_per_five', WEEK_PER_FIVE, v => v > 0 && v <= 100],
+  fillH: ['planner_fill_h', 5, v => v >= 1 && v <= 5],
+  warnH: ['planner_warn_h', 24, v => v >= 0],
+};
+// The plan's two switches: checkbox id -> [storage key, default].
+const PV_TOGGLES = {
+  parallel: ['planner_parallel', true],
+  rotate: ['planner_rotate', false],
+  // Simple: only what to do now. The page hides the rest (body.simple .detail) but still plans it.
+  simple: ['planner_simple', false],
+};
+// Hours of use, kept as one JSON document: {mode, from, to, jobs, jobsAt}.
+const PV_HOURS_KEY = 'planner_hours';
+const PV_HOURS_FIELDS = ['hoursFrom', 'hoursTo', 'jobs', 'jobsAt'];
+const PV_CMD = {
+  claude: {name: 'Claude', switch: n => `cswap switch ${n}`, burn: () => null},
+  codex: {name: 'Codex', switch: n => `codex-auth switch ${n}`, burn: n => `codex-auth reset ${n}`},
+};
+
+const pv$ = id => PV.root.querySelector('#' + id);
+// On screen: planner.html always, the phone's tab only while it is open.
+const pvShown = () => !!PV.root && PV.root.getClientRects().length > 0;
+
+function pvEsc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+function pvGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function pvSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked: this visit only */ } }
+
+const pvTime = t => new Date(t).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+const pvDay = t => new Date(t).toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'});
+// Today: the time. This week: the weekday and time. Further out: the date and time.
+function pvWhen(t, now) {
+  if (new Date(t).toDateString() === new Date(now).toDateString()) return pvTime(t);
+  if (t - now < 6 * 24 * PLAN_H) return `${new Date(t).toLocaleDateString([], {weekday: 'short'})} ${pvTime(t)}`;
+  return `${pvDay(t)} ${pvTime(t)}`;
+}
+function pvIn(t, now) {
+  const m = Math.round((t - now) / 60e3);
+  if (m < 0) return 'past';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+const pvHours = h => (h >= 10 ? Math.round(h) : Math.round(h * 10) / 10) + 'h';
+const pvSessions = n => {
+  const v = Math.abs(n) >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
+  return `${v} session${v === 1 ? '' : 's'}`;
+};
+
+function pvAccept(text) {
+  const doc = plannerParse(text);
+  PV.docs[doc.provider] = doc;
+  pvSet(PV_STORE[doc.provider], typeof text === 'string' ? text : JSON.stringify(text));
+  return doc.provider;
+}
+
+function pvColor(i) { return `var(--a${i % 6})`; }
+
+// The bubble behind every mark and bar: hover shows it, a click pins it. Each render files its
+// tips here and the elements carry an index, so the markup holds no copy of the text.
+function pvTip(tip) {
+  PV.tips.push(tip);
+  return `data-tip="${PV.tips.length - 1}" aria-label="${pvEsc(tip.head)}"`;
+}
+function pvTipHtml(tip) {
+  return `<b>${pvEsc(tip.head)}</b><dl>${tip.rows.filter(r => r[1] != null && r[1] !== '')
+    .map(([k, v]) => `<dt>${pvEsc(k)}</dt><dd>${pvEsc(v)}</dd>`).join('')}</dl>`;
+}
+function pvShowTip(el, pin) {
+  const box = pv$('tip');
+  const tip = PV.tips[Number(el.dataset.tip)];
+  if (!tip) return;
+  // A pinned tip stays until a click elsewhere or Escape: hover and focus do not replace it.
+  if (!pin && box.dataset.pinned && !box.hidden) return;
+  box.innerHTML = pvTipHtml(tip);
+  box.hidden = false;
+  box.dataset.pinned = pin ? '1' : '';
+  PV.pinned = pin ? {i: el.dataset.tip, head: tip.head} : null;
+  const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const left = Math.max(8, Math.min(innerWidth - b.width - 8, r.left + r.width / 2 - b.width / 2));
+  const top = r.top - b.height - 8 >= 8 ? r.top - b.height - 8 : r.bottom + 8;
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
+}
+function pvHideTip(force) {
+  const box = pv$('tip');
+  if (force || !box.dataset.pinned) { box.hidden = true; box.dataset.pinned = ''; }
+}
+const pvAt = (t, now) => `${pvDay(t)} ${pvTime(t)} (${t >= now ? 'in ' + pvIn(t, now) : 'past'})`;
+const pvLen = (a, b) => `${pvHours((b - a) / PLAN_H)} · ${pvSessions((b - a) / PLAN_H / pvSetting('fillH'))}`;
+const pvOrdinal = n => n + ((n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({1: 'st', 2: 'nd', 3: 'rd'}[n % 10] || 'th'));
+
+// One timeline: rows of segments and marks over [start, end). `ticks` are {t, label, cls}.
+function pvTimeline(start, end, rows, ticks, now) {
+  const at = t => Math.max(0, Math.min(100, (t - start) / (end - start) * 100));
+  const grid = ticks.map(k => k.cls === 'we'
+    ? `<i class="we" style="left:${at(k.t)}%;width:${at(k.end) - at(k.t)}%"></i>`
+    : `<i style="left:${at(k.t)}%"></i>`).join('')
+    + (now >= start && now < end ? `<i class="now" style="left:${at(now)}%"></i>` : '');
+  const axis = ticks.filter(k => k.label).map(k => `<span${k.major ? ' class="major"' : ''} style="left:${at(k.t)}%">${pvEsc(k.label)}</span>`).join('');
+  const body = rows.map((r, i) => {
+    const items = r.items.filter(x => x.t != null ? x.t >= start && x.t < end : x.end > start && x.start < end).map(x => x.t != null
+      ? `<span class="mark ${x.cls}" style="left:${at(x.t)}%" tabindex="-1" role="img" ${pvTip(x.tip)}>${x.glyph}</span>`
+      : `<span class="seg ${x.cls || ''}" tabindex="-1" role="img" style="left:${at(x.start)}%;width:${at(x.end) - at(x.start)}%;${x.color ? `background-color:${x.color};--session:${pvSetting('fillH') * PLAN_H / (Math.min(x.end, end) - Math.max(x.start, start)) * 100}%` : ''}" ${pvTip(x.tip)}></span>`).join('');
+    const row = `<div class="tl-row ${r.head ? 'head' : ''} ${r.sub ? 'sub' : ''}${r.live ? ' now' : ''}"><span class="name" title="${pvEsc(r.title || r.label)}${r.live ? ' · live' : ''}">${pvEsc(r.label)}${r.pct == null ? '' : ` <span class="pct">(${pvPct(r.pct)}${r.days == null ? '' : ` ${r.days.toFixed(1)}d`})</span>`}</span><div class="lane ${r.thin ? 'thin' : ''}">${items}</div></div>`;
+    // A provider's main line and its parallel lines share one box, apart from its accounts.
+    const next = rows[i + 1];
+    return (r.head ? `<div class="tl-group ${r.group || ''}">` : '') + row + ((r.head || r.sub) && !(next && next.sub) ? '</div>' : '');
+  }).join('');
+  // The chart fits its card at every range: no sideways scroll, the bars narrow instead.
+  return `<div class="tl-wrap" role="region" aria-label="Usage timeline"><div class="tl${end - start > 8 * 24 * PLAN_H ? ' dense' : ''}"><div class="grid">${grid}</div><div class="axis">${axis}</div>${body}</div></div>`;
+}
+
+function pvChart(key, rows, now) {
+  const hours = PV.ranges[key], page = PV.pages[key];
+  const start = now + page * hours * PLAN_H, end = Math.min(start + hours * PLAN_H, now + PV_PLAN_H * PLAN_H);
+  const last = (page + 1) * hours >= PV_PLAN_H;
+  const options = Object.entries(PV_RANGES).map(([h, label]) =>
+    `<option value="${h}"${Number(h) === hours ? ' selected' : ''}>${label}</option>`).join('');
+  return `<div class="chart-head"><h2>${key === 'all' ? 'All accounts' : 'Planned use'}</h2>`
+    + `<span class="nav"><button data-nav="${key}" data-dir="-1" aria-label="Earlier"${page ? '' : ' disabled'}>‹</button>`
+    + `<span class="span small muted">${pvStamp(start)} – ${pvStamp(end)}</span>`
+    + `<button data-nav="${key}" data-dir="1" aria-label="Later"${last ? ' disabled' : ''}>›</button></span>`
+    + `<label>Range <select data-range="${key}">${options}</select></label>`
+    + `<label class="switch" title="Order accounts by their next reset or credit expiry, as in the Accounts list"><input type="checkbox" role="switch" data-sort="${key}"${PV.sorts[key] ? ' checked' : ''}>Soonest first</label></div>`
+    + `<div class="legend"><span>bar: planned use · dividers: sessions</span><span class="gap-key">▨ gap</span>${rows.some(r => r.items.some(i => i.cls === 'off')) ? '<span>blank: off hours</span>' : ''}<span class="reset-key">${PV_RESET} 7d reset</span><span class="credit-key">${PV_FLAG} credit expires</span><span class="burn-key">${PV_STAR} burn reset</span>${rows.some(r => r.items.some(i => i.cls === 'bonus')) ? '<span class="burn-key"><span class="bonus-key">▬</span> parallel bonus</span>' : ''}</div>`
+    + pvTimeline(start, end, rows, hours === 24 ? pvDayTicks(start, end) : pvMonthTicks(start, end), now);
+}
+
+// A range end in one fixed shape, "Wed 11/07", so the nav label keeps its width as it pages.
+function pvStamp(t) {
+  const d = new Date(t);
+  const p2 = n => String(n).padStart(2, '0');
+  return `${d.toLocaleDateString('en-US', {weekday: 'short'})} ${p2(d.getMonth() + 1)}/${p2(d.getDate())}`;
+}
+
+function pvDayTicks(start, end) {
+  const ticks = [];
+  const d = new Date(start); d.setMinutes(0, 0, 0);
+  for (let t = d.getTime() + PLAN_H; t < end; t += PLAN_H) {
+    const h = new Date(t).getHours();
+    ticks.push({t, label: h % 3 === 0 ? (h === 0 ? pvDay(t).replace(/,.*/, '') + ' 0:00' : `${h}:00`) : ''});
+  }
+  return ticks;
+}
+
+function pvMonthTicks(start, end) {
+  const ticks = [];
+  const d = new Date(start); d.setHours(0, 0, 0, 0);
+  for (let t = d.getTime(); t < end; ) {
+    const day = new Date(t);
+    const next = new Date(day); next.setDate(day.getDate() + 1);
+    // Major days keep their label when a narrow chart has no room for every day; the 30th would
+    // collide with the next month's 1st.
+    const date = day.getDate();
+    if (t > start) ticks.push({t, major: date === 1 || (date % 5 === 0 && date <= 25), label: day.getDate() === 1 || ticks.length === 0
+      ? day.toLocaleDateString([], {month: 'short', day: 'numeric'}) : String(day.getDate())});
+    if (day.getDay() === 0 || day.getDay() === 6) ticks.push({t, end: next.getTime(), cls: 'we'});
+    t = next.getTime();
+  }
+  return ticks;
+}
+
+// Each account's next event: whichever of its windows or credits comes first.
+function pvNextEvent(a, now) {
+  const ts = [a.week && a.week.resetsAt, a.five && a.five.pct > 0 && a.five.resetsAt,
+              ...a.credits.map(c => c.expiresAt)].filter(t => t && t > now);
+  return ts.length ? Math.min(...ts) : Infinity;
+}
+
+function pvMeter(label, w, now) {
+  if (!w) return `<div class="meter"><div class="lbl">${label} <span>no limit</span></div></div>`;
+  const cls = w.pct >= 90 ? 'hi' : w.pct >= 60 ? 'mid' : '';
+  const reset = w.resetsAt && w.resetsAt > now
+    ? `⟲ ${pvWhen(w.resetsAt, now)} · ${pvIn(w.resetsAt, now)}` : (w.pct ? '' : 'not started');
+  return `<div class="meter"><div class="lbl"><span>${label} <b>${pvPct(w.pct)}</b></span><span>${reset}</span></div>`
+    + `<div class="bar"><i class="${cls}" style="width:${Math.min(100, w.pct)}%"></i></div></div>`;
+}
+
+function pvAccounts(doc, plan, room, now, colors) {
+  const sorted = [...doc.accounts].sort((a, b) => pvNextEvent(a, now) - pvNextEvent(b, now));
+  return sorted.map(a => {
+    const lost = plan.resets.find(r => r.id === a.id);
+    // Rows under the cards, one per reset credit: what the plan does with it under 5h, when it
+    // expires under 7d. Then what the week leaves unused when it resets.
+    const row = (l, r) => `<span>${l}</span><span>${r}</span>`;
+    const rows = a.credits.map(c => {
+      const burned = plan.burns.find(b => b.credit && b.credit.id === c.id && b.id === a.id);
+      const lapsed = plan.expired.find(x => x.credit && x.credit.id === c.id && x.id === a.id);
+      return row(burned ? `<span class="burn-key">${PV_STAR}</span> burn ${pvWhen(burned.t, now)}`
+          : lapsed ? '<span class="lost">lapses unused</span>' : 'not needed in 30d',
+        `<span class="credit-key">${PV_FLAG}</span> ${c.expiresAt == null ? 'no expiry given' : `expires ${pvDay(c.expiresAt)}`}`);
+    }).join('') + (lost && lost.lostPct >= 1
+      ? row(`<span class="lost">${Math.round(lost.lostPct)}% unused</span>`, `<span class="reset-key">${PV_RESET}</span> week resets ${pvWhen(lost.t, now)}`) : '');
+    const r = room.accounts.find(x => x.id === a.id);
+    const extra = !r ? ''
+      : r.room < 0 ? `<span class="lost">${pvSessions(-r.room)} unused by ${pvWhen(r.deadline, now)}</span>`
+      : `<span class="${r.room < pvWarnSessions() ? 'thin' : ''}">room ${pvSessions(r.room)}</span>${a.credits.length ? '' : '<span>no resets</span>'}`;
+    return `<div class="acct ${a.ok ? '' : 'off'}">`
+      + `<div class="who"><b><span class="dot" style="background:${colors[a.id]}"></span>${pvEsc(a.name)}${a.active ? '<span class="live">live</span>' : ''}</b>`
+      + `<span class="email" title="${pvEsc(a.email)}">${pvEsc(a.email)}</span>`
+      + `<span class="extra">${a.ok ? extra : 'no usage data'}</span></div>`
+      + '<div class="use">' + pvMeter('5h', a.five, now) + pvMeter('7d', a.week, now)
+      + (rows ? `<div class="credits">${rows}</div>` : '') + '</div></div>';
+  }).join('');
+}
+
+function pvLanes(doc, plan, colors, now, soonest = false) {
+  const name = id => (doc.accounts.find(a => a.id === id) || {}).name || `#${id}`;
+  // Each bubble names the account in full: its number, its alias when it has one, and its email.
+  const acct = id => {
+    const a = doc.accounts.find(x => x.id === id) || {};
+    return ['Account', [`#${id}`, a.name && a.name !== `#${id}` ? a.name : '', a.email].filter(Boolean).join(' · ')];
+  };
+  const cmd = PV_CMD[doc.provider];
+  const useTip = g => ({head: `${name(g.id)} · planned use`, rows: [acct(g.id), ['From', pvAt(g.start, now)], ['To', pvAt(g.end, now)],
+    ['Length', pvLen(g.start, g.end)], ['Switch with', cmd.switch(g.id)]]});
+  const gapTip = g => ({head: 'Gap · nothing usable', rows: [['From', pvAt(g.start, now)], ['To', pvAt(g.end, now)],
+    ['Length', pvHours((g.end - g.start) / PLAN_H)]]});
+  const offTip = g => ({head: 'Off · outside hours of use', rows: [['From', pvAt(g.start, now)], ['To', pvAt(g.end, now)],
+    ['Hours of use', pvHoursText()]]});
+  const bonusTip = g => ({head: `${name(g.id)} · parallel bonus`, rows: [acct(g.id), ['Lane', `${pvOrdinal(g.lane + 1)} line, beside the main one`],
+    ['From', pvAt(g.start, now)], ['To', pvAt(g.end, now)], ['Length', pvLen(g.start, g.end)],
+    ['Why', 'a reset credit refilled this account while another is in use']]});
+  const head = {label: cmd.name, head: true, group: `prov-${doc.provider}`, thin: true, items: plan.segments
+    .map(g => ({start: g.start, end: g.end, cls: g.off ? 'off' : g.id == null ? 'idle' : '', color: g.id == null ? '' : colors[g.id],
+                tip: g.off ? offTip(g) : g.id == null ? gapTip(g) : useTip(g)}))};
+  // Bonus use running alongside the main line, on one thin unlabelled row: a third line in
+  // parallel overlaps the second there, its own account's row tells them apart.
+  const lanes = plan.parallel && plan.parallel.length ? [{label: '', sub: true, thin: true, title: 'In parallel',
+    items: plan.parallel.map(g => ({start: g.start, end: g.end, cls: 'bonus', color: 'var(--bonus)', tip: bonusTip(g)}))}] : [];
+  // Each account's row names its weekly use now and the days left in its week: #1 (66% 5.1d),
+  // and a dot marks the account in use now.
+  // Soonest first sorts only the account rows; the main and parallel lines stay on top. The sort is
+  // stable, so ties keep the CLI's order.
+  const accounts = soonest ? [...doc.accounts].sort((a, b) => pvNextEvent(a, now) - pvNextEvent(b, now)) : doc.accounts;
+  const rows = accounts.map(a => ({label: a.name, title: a.email, live: !!a.active, pct: a.week ? a.week.pct : null,
+    days: a.week && a.week.resetsAt > now ? (a.week.resetsAt - now) / (24 * PLAN_H) : null, items: [
+    ...plan.segments.filter(g => g.id === a.id).map(g => ({start: g.start, end: g.end, color: colors[a.id], tip: useTip(g)})),
+    ...(plan.parallel || []).filter(g => g.id === a.id).map(g => ({start: g.start, end: g.end, cls: 'bonus', color: 'var(--bonus)', tip: bonusTip(g)})),
+    // Flags: red where the 7d window resets, yellow where a reset credit expires, green where one is burned.
+    ...plan.resets.filter(r => r.id === a.id).map(r => ({t: r.t, glyph: PV_RESET, cls: 'reset', tip: {
+      head: `${a.name} · 7d window resets`, rows: [acct(a.id), ['When', pvAt(r.t, now)],
+        ['Unused then', r.lostPct >= 1 ? `${Math.round(r.lostPct)}% of the week · ${pvSessions(r.lostPct / pvSetting('weekPerFive'))}` : 'none']]}})),
+    ...a.credits.filter(c => c.expiresAt != null).map(c => {
+      const burned = plan.burns.find(b => b.credit && b.credit.id === c.id && b.id === a.id);
+      const lapsed = plan.expired.find(x => x.credit && x.credit.id === c.id && x.id === a.id);
+      return {t: c.expiresAt, glyph: PV_FLAG, cls: 'credit', tip: {head: `${a.name} · reset credit expires`, rows: [acct(a.id),
+        ['When', pvAt(c.expiresAt, now)], ['Credit', c.label],
+        ['Plan', burned ? `burn it ${pvWhen(burned.t, now)}` : lapsed ? 'lapses unused: spare' : 'not needed in the next 30 days']]}};
+    }),
+    ...plan.burns.filter(b => b.id === a.id).map(b => ({t: b.t, glyph: PV_STAR, cls: 'burn', tip: {
+      head: `${a.name} · burn a reset credit`, rows: [acct(a.id), ['When', pvAt(b.t, now)],
+        ['Gives back', `${pvHours(b.gainH)} · +${pvSessions(b.gainH / pvSetting('fillH'))}`],
+        ['Why', b.why === 'full' ? 'its week is used up, with time to use all of it again: run it in parallel'
+          : b.why === 'gap' ? 'nothing else is usable: it fills the gap' : 'the credit expires next: use what it can still give'],
+        ['How', cmd.burn(a.id) || 'reset it in the Claude app']]}})),
+  ]}));
+  return [head, ...lanes, ...rows];
+}
+
+function pvSteps(doc, plan, now) {
+  const cmd = PV_CMD[doc.provider];
+  const name = id => (doc.accounts.find(a => a.id === id) || {}).name || `#${id}`;
+  const active = (doc.accounts.find(a => a.active) || {}).id;
+  const steps = plannerSteps(plan, PV.ranges[doc.provider]);
+  let on = active;  // the account last in use, so a run after a gap or off hours reads as resuming
+  const items = steps.map((s, i) => {
+    const t = i === 0 && s.t <= now + 15 * 60e3 ? 'now' : pvWhen(s.t, now);
+    let text, command = null;
+    if (s.kind === 'idle') text = `nothing usable until ${pvWhen(s.until, now)}`;
+    else if (s.kind === 'off') text = `off: outside hours of use until ${pvWhen(s.until, now)}`;
+    else if (s.kind === 'parallel') text = `<span class="bonus-key">▬</span> also run <b>${pvEsc(name(s.id))}</b> in parallel until ${pvWhen(s.until, now)}`;
+    else if (s.kind === 'burn') {
+      text = `burn a reset on <b>${pvEsc(name(s.id))}</b>: +${pvSessions(s.gainH / pvSetting('fillH'))}${s.why === 'expiring' ? ', before it expires' : s.why === 'full' ? ', in full' : ''}`;
+      command = cmd.burn(s.id);
+      if (!command) text += ' <span class="muted">(reset it in the Claude app)</span>';
+    } else {
+      const stay = s.id === on;
+      text = `${stay ? (i === 0 ? 'stay on' : 'resume') : 'switch to'} <b>${pvEsc(name(s.id))}</b> until ${pvWhen(s.until, now)}`;
+      if (!stay) command = cmd.switch(s.id);
+      on = s.id;
+    }
+    // A switch can be run through the relay, armed: the first press arms, the second runs.
+    const run = command && s.kind === 'use' && pvCanRun()
+      ? `<button class="run" data-run="${pvEsc(doc.provider + ':' + s.id)}" data-arm-key="${pvEsc('run:' + doc.provider + ':' + s.id)}" title="Press twice to run on the relay's machine">▶ ${pvEsc(command)}</button>` : '';
+    const copy = command ? `<button data-copy="${pvEsc(command)}" title="Copy ${pvEsc(command)}">${run ? 'copy' : pvEsc(command)}</button>` : '';
+    return `<li class="${s.kind}"><time>${pvEsc(t)}</time><span>${text}</span><span class="cmds">${run}${copy}</span></li>`;
+  });
+  // The next two steps, and the rest behind a button: the list is the plan, the top is what to do.
+  const open = PV.more[doc.provider], hidden = items.length - 2;
+  const more = hidden > 0 ? `<li class="more"><button data-more="${doc.provider}" aria-expanded="${!!open}">${open ? 'Show fewer' : `Show ${hidden} more`}</button></li>` : '';
+  return '<ol class="steps">' + (open ? items : items.slice(0, 2)).join('') + more + '</ol>';
+}
+
+// Every combination of the two switches, planned on the same data and settings, side by side.
+const PV_MODES = [[false, false, 'Sequential'], [false, true, 'Take turns'], [true, false, 'Parallel'], [true, true, 'Parallel + turns']];
+function pvModes(docs, now) {
+  const base = {weekPerFive: pvSetting('weekPerFive'), fillH: pvSetting('fillH'), windows: pvWindows()};
+  const f = (n, d = 0) => n.toFixed(d);
+  const body = docs.map(d => {
+    const rows = PV_MODES.map(([parallel, rotate, label]) => ({label, parallel, rotate,
+      s: plannerSummary(plannerSimulate(d.accounts, now, {...base, parallel, rotate}), base)}));
+    const best = Math.max(...rows.map(r => r.s.sessions));
+    return rows.map(({label, parallel, rotate, s}, i) => {
+      const on = parallel === pvToggle('parallel') && rotate === pvToggle('rotate');
+      return `<tr class="${on ? 'on' : ''}">${i ? '' : `<th scope="rowgroup" rowspan="${rows.length}" class="prov-${d.provider}"><span class="dot"></span>${PV_CMD[d.provider].name}</th>`}`
+        + `<th scope="row">${label}${on ? ' <span class="live">now</span>' : ''}</th>`
+        + `<td class="${s.sessions >= best - 0.05 ? 'best' : ''}">${f(s.sessions, 1)}</td><td>${s.bonusSessions ? '+' + f(s.bonusSessions, 1) : '–'}</td>`
+        + `<td>${f(s.gapH)}h</td><td>${s.burns}</td><td class="${s.lapsed ? 'bad' : ''}">${s.lapsed}</td>`
+        + `<td class="${s.lostSessions >= 0.5 ? 'bad' : ''}">${f(s.lostSessions, 1)}</td><td>${s.switches}</td></tr>`;
+    }).join('');
+  }).join('');
+  return `<section class="card modes detail"><h2>Modes compared · next 30 days</h2>
+    <div class="table-wrap"><table><thead><tr><th></th><th scope="col">Mode</th><th scope="col">Sessions</th><th scope="col">of which parallel</th>
+    <th scope="col">Main-line gap</th><th scope="col">Credits burned</th><th scope="col">Credits lapsed</th><th scope="col">Unused at 7d resets</th><th scope="col">Switches</th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+    <div class="small muted">Recomputed from the same data and settings as the plans above. Parallel sessions count only if you run two agents at once.</div></section>`;
+}
+
+function pvChips(doc, plan, room, now) {
+  const dayEnd = now + 24 * PLAN_H;
+  const dayGap = plan.segments.filter(g => g.id == null && !g.off && g.start < dayEnd)
+    .reduce((h, g) => h + (Math.min(g.end, dayEnd) - g.start) / PLAN_H, 0);
+  const spare = plan.expired.length;
+  const S = pvSetting('weekPerFive');
+  const lost = plan.resets.reduce((n, r) => n + r.lostPct, 0) / S;
+  const n = doc.accounts.filter(a => a.ok).length;
+  const roomTitle = `Sessions you can skip before weekly allowance goes unused, at ${pvSetting('fillH')}h per session, one account at a time.`;
+  const roomChip = room.room === Infinity ? ''
+    : room.room < 0 ? `<span class="chip bad" title="${roomTitle}">${pvSessions(-room.room)} will go unused</span>`
+    : room.room < pvWarnSessions() ? `<span class="chip warn" title="${roomTitle}">thin: ${pvSessions(room.room)} of room</span>`
+    : `<span class="chip good" title="${roomTitle}">room: ${pvSessions(room.room)}</span>`;
+  const chips = [
+    `<span class="chip detail">${n} accounts · ${pvSessions(n * 100 / S)}/week</span>`,
+    dayGap ? `<span class="chip bad">${pvHours(dayGap)} gap in 24h</span>` : '<span class="chip good">covered 24h</span>',
+    plan.idleH ? `<span class="chip bad detail">${pvHours(plan.idleH)} gap in 30d</span>` : '<span class="chip good detail">covered 30d</span>',
+    roomChip,
+  ];
+  // Reset credits and reset waste on a line of their own, under coverage and room.
+  const resets = [
+    plan.burns.length ? `<span class="chip"><span class="burn-key">${PV_STAR}</span> ${plan.burns.length} reset${plan.burns.length > 1 ? 's' : ''} to burn</span>` : '',
+    plan.bonusH ? `<span class="chip bonus detail" title="Reset credits spent for their full value, used alongside the main line">+${pvSessions(plan.bonusH / pvSetting('fillH'))} in parallel, 30d</span>` : '',
+    spare ? `<span class="chip warn detail" title="Credits that lapse unused even running all day: spare capacity, free for any work"><span class="credit-key">${PV_FLAG}</span> ${spare} spare reset${spare > 1 ? 's' : ''}</span>` : '',
+    lost >= 0.1 ? `<span class="chip warn detail" title="Weekly headroom left at resets: spare capacity, free for any work">${pvSessions(lost)} unused at resets</span>` : '',
+  ];
+  const second = resets.join('');
+  return `<div class="chips">${chips.join('')}</div>` + (second ? `<div class="chips resets">${second}</div>` : '');
+}
+
+function pvSetting(id) {
+  const [, fallback, ok] = PV_SETTINGS[id];
+  const v = parseFloat(pv$(id).value);
+  return Number.isFinite(v) && ok(v) ? v : fallback;
+}
+// The hours of use set in Settings, all day when the page has no such fields (the vm tests).
+function pvHoursSpec() {
+  const box = pv$('hoursWindow');
+  if (!box || !box.checked) return {mode: 'all'};
+  const v = id => pv$(id).value;
+  return {mode: 'window', from: v('hoursFrom'), to: v('hoursTo'), jobs: Math.min(4, Math.max(0, Number(v('jobs')) || 0)), jobsAt: v('jobsAt')};
+}
+const pvWindows = () => plannerHoursOfUse(pvHoursSpec(), pvSetting('fillH'));
+function pvHoursText(spec = pvHoursSpec()) {
+  if (spec.mode !== 'window') return 'all day';
+  return `${spec.from}–${spec.to}${spec.jobs ? ` + ${spec.jobs} job${spec.jobs > 1 ? 's' : ''} ${spec.jobsAt}` : ''}`;
+}
+function pvToggle(id) { const box = pv$(id); return box ? box.checked : PV_TOGGLES[id][1]; }
+// Claude counts a window's use and Codex what is left of it; this page always shows use.
+const pvPct = used => `${Math.round(used)}%`;
+// The amber line, in sessions: the hours of room asked for, at the fill time.
+const pvWarnSessions = () => pvSetting('warnH') / pvSetting('fillH');
+
+function pvRender() {
+  const out = pv$('out');
+  const scrolls = [...out.querySelectorAll('.tl-wrap, .steps')].map(el => [el.scrollLeft, el.scrollTop]);
+  // A focused Range or Soonest first control keeps focus across the redraw.
+  const ctl = out.contains(document.activeElement) ? document.activeElement.dataset : {};
+  const focusedCtl = ctl.range ? `[data-range="${ctl.range}"]` : ctl.sort ? `[data-sort="${ctl.sort}"]` : null;
+  const now = Date.now();
+  PV.root.classList.toggle('simple', pvToggle('simple'));
+  // A pinned tip outlives the redraw while the bar it names is drawn again in the same place.
+  const tipBox = pv$('tip');
+  const pinned = !tipBox.hidden && tipBox.dataset.pinned ? PV.pinned : null;
+  const focusedTip = out.contains(document.activeElement) && document.activeElement.dataset.tip != null
+    ? {i: document.activeElement.dataset.tip, head: document.activeElement.getAttribute('aria-label')} : null;
+  pvHideTip(true);
+  PV.tips = [];
+  const docs = ['claude', 'codex'].map(p => PV.docs[p]).filter(Boolean);
+  pv$('sources').innerHTML = docs.map(d => {
+    const age = d.fetchedAt ? now - d.fetchedAt : null;
+    const stale = age != null && age > 60 * 60e3;
+    return `<span class="src ${stale ? 'stale' : ''}" title="usage read ${d.fetchedAt ? new Date(d.fetchedAt).toLocaleString() : 'at an unknown time'}">${PV_CMD[d.provider].name} · ${d.fetchedAt ? pvIn(now, d.fetchedAt) + ' old' : 'age unknown'}</span>`;
+  }).join('');
+  pv$('intake').hidden = docs.length === 2 && !PV.showIntake;
+  if (!docs.length) { out.innerHTML = '<div class="empty card">No data yet. Paste or drop the JSON above.</div>'; return; }
+
+  const plans = docs.map(d => {
+    const colors = {};
+    d.accounts.forEach((a, i) => { colors[a.id] = pvColor(i); });
+    const opts = {weekPerFive: pvSetting('weekPerFive'), fillH: pvSetting('fillH'), windows: pvWindows(),
+                  parallel: pvToggle('parallel'), rotate: pvToggle('rotate')};
+    return {doc: d, colors, plan: plannerSimulate(d.accounts, now, opts), room: plannerRoom(d.accounts, now, opts)};
+  });
+  const cards = () => plans.map(({doc, colors, plan, room}) => {
+    const parts = {
+      accounts: () => `<h2>Accounts · soonest first</h2>${pvAccounts(doc, plan, room, now, colors)}`,
+      chart: () => pvChart(doc.provider, pvLanes(doc, plan, colors, now, PV.sorts[doc.provider]), now),
+      steps: () => pvSteps(doc, plan, now),
+    };
+    return `
+    <section class="card prov-${doc.provider}">
+      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}</h3>
+      ${pvChips(doc, plan, room, now)}
+      ${PV.sections.filter(([, on]) => on).map(([id]) => `<div class="sec sec-${id}">${parts[id]()}</div>`).join('')}
+    </section>`;
+  }).join('');
+  // The page's blocks in the order set in Settings, hidden ones not drawn; the footer always last.
+  const blocks = {
+    cards: () => `<div class="providers">${cards()}</div>`,
+    all: () => `
+    <section class="card detail">
+      ${pvChart('all', plans.flatMap(({doc, colors, plan}) => pvLanes(doc, plan, colors, now, PV.sorts.all)), now)}
+    </section>`,
+    modes: () => pvModes(docs, now),
+  };
+  out.innerHTML = `${PV.pageSections.filter(([, on]) => on).map(([id]) => blocks[id]()).join('')}
+    <div class="small muted detail">Plans assume one account on the main line at a time, ${pvHoursSpec().mode === 'window' ? `only in hours of use (${pvEsc(pvHoursText())})` : 'all 24 hours'}, one session per ${pvSetting('fillH')}h of use${pvToggle('parallel') ? ', and reset credits spent for full value run in parallel beside it' : ''}${pvToggle('rotate') ? '; accounts take turns a session at a time' : '; each account runs until its week is used up'}. A Claude reset keeps the week's end date; a Codex reset restarts the week. <a href="#" id="again">Load new data</a></div>`;
+  out.querySelectorAll('.tl-wrap, .steps').forEach((el, i) => {
+    if (scrolls[i]) [el.scrollLeft, el.scrollTop] = scrolls[i];
+  });
+  // Each chart is one Tab stop: its first bar or mark, and the arrow keys rove from there.
+  out.querySelectorAll('.tl-wrap').forEach(w => { const first = w.querySelector('[data-tip]'); if (first) first.tabIndex = 0; });
+  const again = pinned && out.querySelector(`[data-tip="${pinned.i}"]`);
+  if (again && PV.tips[pinned.i].head === pinned.head) pvShowTip(again, true);
+  // And a focused bar keeps focus, and its place in the chart's Tab order.
+  const focus = focusedTip && out.querySelector(`[data-tip="${focusedTip.i}"]`);
+  if (focus && focus.getAttribute('aria-label') === focusedTip.head) {
+    focus.closest('.tl-wrap').querySelector('[data-tip][tabindex="0"]').tabIndex = -1;
+    focus.tabIndex = 0;
+    focus.focus({preventScroll: true});
+  }
+  if (focusedCtl) out.querySelector(focusedCtl)?.focus({preventScroll: true});
+}
+
+function pvLoad(text) {
+  const err = pv$('err');
+  try {
+    const got = pvAccept(text);
+    err.textContent = '';
+    PV.showIntake = false;
+    pvRender();
+    return got;
+  } catch (e) {
+    err.textContent = `Could not read that: ${e.message}`;
+    return null;
+  }
+}
+
+// The relay runs `cswap list --json` and `codex-auth list --json` and hands back what they print.
+// A page opened as a file, or from a relay without the route, says so and keeps to pasting.
+// How the page reaches the relay. Served over HTTP, by /api/planner-*; the phone's tab sets its
+// own, over the socket. Opened as a file, there is no relay to reach.
+const PV_HTTP = {
+  reachable: () => location.protocol.startsWith('http'),
+  async usage() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 65000);
+    try {
+      // location.search carries ?token= when the listener asks for one.
+      const r = await fetch('/api/planner-usage' + location.search, {cache: 'no-store', signal: controller.signal});
+      if (!r.ok) throw new Error(`the relay answered ${r.status}`);
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+  async run(provider, account) {
+    const q = new URLSearchParams(location.search);
+    q.set('provider', provider);
+    q.set('account', account);
+    const r = await fetch(`/api/planner-run?${q}`, {headers: {'X-Herdr-Planner': 'run'}, cache: 'no-store'});
+    const a = await r.json().catch(() => ({}));
+    return {ok: !!a.ok, error: a.error || `the relay answered ${r.status}`};
+  },
+};
+
+async function pvFetch() {
+  if (!PV.io.reachable()) return;
+  const err = pv$('err');
+  const btn = pv$('refresh');
+  if (btn.disabled) return;
+  btn.hidden = false; btn.disabled = true; btn.textContent = 'Fetching…';
+  const bad = [];
+  try {
+    const answer = await PV.io.usage();
+    for (const p of ['claude', 'codex']) {
+      const v = answer?.[p];
+      try {
+        if (!v?.doc) bad.push(v?.error || `no ${p} data`);
+        else if (plannerParse(v.doc).provider !== p) bad.push(`wrong ${p} data`);
+        else pvAccept(v.doc);
+      }
+      catch (e) { bad.push(`${p}: ${e.message}`); }
+    }
+  } catch (e) {
+    bad.push(`Could not fetch from the relay: ${e.message}`);
+  }
+  btn.disabled = false; btn.textContent = 'Refresh';
+  err.textContent = bad.join('; ');
+  if (bad.length) PV.showIntake = true;
+  pvRender();
+}
+
+// Reached through the relay, which may run a switch. Opened as a file, there is nothing to run it.
+const pvCanRun = () => PV.io.reachable();
+
+async function pvRun(btn) {
+  const [provider, account] = btn.dataset.run.split(':');
+  const command = PV_CMD[provider].switch(account);
+  const status = pv$('runMsg');
+  btn.disabled = true;
+  status.textContent = `running ${command}…`;
+  try {
+    const a = await PV.io.run(provider, account);
+    status.textContent = a.ok ? `${command}: done` : `${command} failed: ${a.error}`;
+    if (a.ok) await pvFetch();
+  } catch (e) {
+    status.textContent = `${command} failed: ${e.message}`;
+  }
+  btn.disabled = false;
+}
+
+// One ordered list of sections in Settings, each on or off, kept under key: the stored order with
+// unknown ids dropped and new ones appended. Returns the live array the render reads.
+function pvOrderList(list, key, names, defaults) {
+  const rows = defaults.map(x => [...x]);
+  try {
+    const saved = JSON.parse(pvGet(key) || 'null');
+    if (Array.isArray(saved)) {
+      const known = saved.filter(x => Array.isArray(x) && x[0] in names).map(([id, on]) => [id, !!on]);
+      rows.splice(0, rows.length, ...known, ...defaults.filter(([id]) => !known.some(k => k[0] === id)).map(x => [...x]));
+    }
+  } catch (e) { /* a stored copy that no longer parses is dropped */ }
+  const draw = () => {
+    list.innerHTML = rows.map(([id, on], i) => `<li><label><input type="checkbox" data-sec="${id}"${on ? ' checked' : ''}> ${names[id]}</label>`
+      + `<button type="button" data-move="${id}" data-dir="-1" aria-label="Move ${names[id]} up"${i ? '' : ' disabled'}>↑</button>`
+      + `<button type="button" data-move="${id}" data-dir="1" aria-label="Move ${names[id]} down"${i < rows.length - 1 ? '' : ' disabled'}>↓</button></li>`).join('');
+  };
+  const changed = () => { pvSet(key, JSON.stringify(rows)); draw(); pvRender(); };
+  draw();
+  list.addEventListener('change', e => {
+    const row = rows.find(([id]) => id === e.target.dataset.sec);
+    if (row) { row[1] = e.target.checked; changed(); list.querySelector(`[data-sec="${row[0]}"]`).focus(); }
+  });
+  list.addEventListener('click', e => {
+    const b = e.target.closest('[data-move]');
+    if (!b) return;
+    const i = rows.findIndex(([id]) => id === b.dataset.move), j = i + Number(b.dataset.dir);
+    if (i < 0 || j < 0 || j >= rows.length) return;
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+    changed();
+    const again = list.querySelector(`[data-move="${b.dataset.move}"][data-dir="${b.dataset.dir}"]`);
+    (again && !again.disabled ? again : list.querySelector(`[data-move="${b.dataset.move}"]:not([disabled])`))?.focus();
+  });
+  return rows;
+}
+
+// Draws the planner into root, once: planner.html's body, or the phone's tab. The listeners that
+// must sit on the document act only while root is on screen.
+function pvMount(root, io = PV_HTTP) {
+  if (PV.root) return;
+  PV.root = root;
+  PV.io = io;
+  root.classList.add('planner');
+  root.insertAdjacentHTML('afterbegin', PV_MARKUP);
+  for (const p of ['claude', 'codex']) {
+    const raw = pvGet(PV_STORE[p]);
+    if (raw) try { pvAccept(raw); } catch (e) { /* a stored copy that no longer parses is dropped */ }
+  }
+  for (const [id, [key, , ok]] of Object.entries(PV_SETTINGS)) {
+    const input = pv$(id);
+    const saved = parseFloat(pvGet(key));
+    if (Number.isFinite(saved) && ok(saved)) input.value = saved;
+    input.addEventListener('input', () => { pvSet(key, input.value); pvRender(); });
+  }
+  PV.sections = pvOrderList(pv$('sections'), PV_SECTIONS_KEY, PV_SECTION_NAMES, PV_SECTIONS_DEFAULT);
+  PV.pageSections = pvOrderList(pv$('pageSections'), PV_PAGE_SECTIONS_KEY, PV_PAGE_SECTION_NAMES, PV_PAGE_SECTIONS_DEFAULT);
+  try {
+    const saved = JSON.parse(pvGet(PV_SORT_KEY) || 'null');
+    if (saved && typeof saved === 'object') for (const k in PV.sorts) PV.sorts[k] = saved[k] === true;
+  } catch (e) { /* a stored copy that no longer parses is dropped */ }
+  // Settings: the gear opens them; each applies as it changes.
+  const dlg = pv$('settings');
+  pv$('gear').addEventListener('click', () => dlg.showModal());
+  try {
+    const saved = JSON.parse(pvGet(PV_HOURS_KEY) || 'null');
+    if (saved && saved.mode === 'window') {
+      pv$('hoursWindow').checked = true;
+      for (const [id, k] of [['hoursFrom', 'from'], ['hoursTo', 'to'], ['jobs', 'jobs'], ['jobsAt', 'jobsAt']]) {
+        if (saved[k] != null) pv$(id).value = saved[k];
+      }
+    }
+  } catch (e) { /* a stored copy that no longer parses is dropped */ }
+  const hoursChanged = () => {
+    const spec = pvHoursSpec();
+    for (const id of [...PV_HOURS_FIELDS, 'jobsSet']) pv$(id).disabled = spec.mode !== 'window';
+    pv$('hoursSum').textContent = pvHoursText(spec);
+    pvSet(PV_HOURS_KEY, JSON.stringify(spec));
+  };
+  hoursChanged();
+  for (const id of ['hoursAll', 'hoursWindow', ...PV_HOURS_FIELDS]) {
+    pv$(id).addEventListener('input', () => { hoursChanged(); pvRender(); });
+  }
+  for (const [id, [key, fallback]] of Object.entries(PV_TOGGLES)) {
+    const box = pv$(id);
+    const saved = pvGet(key);
+    box.checked = saved == null ? fallback : saved === '1';
+    box.addEventListener('change', () => { pvSet(key, box.checked ? '1' : '0'); pvRender(); });
+  }
+  // Tips: hover or focus shows one, a click pins it, a click anywhere else or Escape lets it go.
+  const out = pv$('out');
+  out.addEventListener('mouseover', e => { const el = e.target.closest('[data-tip]'); if (el) pvShowTip(el, false); });
+  out.addEventListener('mouseout', e => { if (e.target.closest('[data-tip]')) pvHideTip(false); });
+  out.addEventListener('focusin', e => { const el = e.target.closest('[data-tip]'); if (el) pvShowTip(el, false); });
+  out.addEventListener('focusout', () => pvHideTip(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && pvShown()) pvHideTip(true); });
+  // Inside a chart the arrow keys move between its bars and marks, row by row; Home and End jump.
+  out.addEventListener('keydown', e => {
+    const el = e.target.closest('.tl-wrap [data-tip]');
+    const step = {ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: -Infinity, End: Infinity}[e.key];
+    if (!el || !step) return;
+    e.preventDefault();
+    const all = [...el.closest('.tl-wrap').querySelectorAll('[data-tip]')];
+    const next = all[Math.max(0, Math.min(all.length - 1, all.indexOf(el) + step))];
+    el.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+  });
+  pv$('load').addEventListener('click', () => {
+    const box = pv$('paste');
+    if (pvLoad(box.value)) box.value = '';
+  });
+  pv$('files').addEventListener('change', async e => {
+    for (const f of e.target.files) pvLoad(await f.text());
+    e.target.value = '';
+  });
+  pv$('openFiles').addEventListener('click', () => pv$('files').click());
+  document.addEventListener('dragover', e => { if (!pvShown()) return; e.preventDefault(); root.classList.add('dragging'); });
+  document.addEventListener('dragleave', e => { if (!e.relatedTarget) root.classList.remove('dragging'); });
+  document.addEventListener('drop', async e => {
+    if (!pvShown()) return;
+    e.preventDefault();
+    root.classList.remove('dragging');
+    for (const f of e.dataTransfer.files) pvLoad(await f.text());
+  });
+  // A click outside the root lets a pinned tip go; inside, it is the page's own.
+  document.addEventListener('click', e => { if (!root.contains(e.target)) pvHideTip(true); });
+  root.addEventListener('click', e => {
+    const tipped = e.target.closest('[data-tip]');
+    if (tipped) pvShowTip(tipped, true);
+    else if (!e.target.closest('#tip')) pvHideTip(true);
+    const n = e.target.closest('[data-nav]');
+    if (n && !n.disabled) {
+      const {nav: key, dir} = n.dataset;
+      PV.pages[key] = Math.max(0, PV.pages[key] + Number(dir));
+      pvRender();
+      const again = root.querySelector(`[data-nav="${key}"][data-dir="${dir}"]`);
+      (again && !again.disabled ? again : root.querySelector(`[data-nav="${key}"]:not([disabled])`))?.focus({preventScroll: true});
+    }
+    const m = e.target.closest('[data-more]');
+    if (m) {
+      PV.more[m.dataset.more] = !PV.more[m.dataset.more];
+      pvRender();
+      root.querySelector(`[data-more="${m.dataset.more}"]`)?.focus({preventScroll: true});
+    }
+    const r = e.target.closest('[data-run]');
+    if (r && !r.disabled) armButton(r, null, () => pvRun(r), r.dataset.armKey);
+    const b = e.target.closest('[data-copy]');
+    if (b) {
+      navigator.clipboard?.writeText(b.dataset.copy).then(() => {
+        const was = b.textContent; b.textContent = 'copied'; setTimeout(() => { b.textContent = was; }, 900);
+      }, () => {});
+    }
+    if (e.target.id === 'again') { e.preventDefault(); PV.showIntake = true; pvRender(); pv$('paste').focus(); }
+  });
+  pv$('refresh').addEventListener('click', pvFetch);
+  pv$('out').addEventListener('change', e => {
+    const sort = e.target.dataset.sort;
+    if (sort in PV.sorts) {
+      PV.sorts[sort] = e.target.checked;
+      pvSet(PV_SORT_KEY, JSON.stringify(PV.sorts));
+      pvRender();  // and the redraw keeps the switch focused
+      return;
+    }
+    const key = e.target.dataset.range;
+    const hours = Number(e.target.value);
+    if (!(key in PV.ranges) || !PV_RANGES[hours]) return;
+    PV.ranges[key] = hours;
+    PV.pages[key] = 0;
+    pvRender();
+    root.querySelector(`[data-range="${key}"]`).focus();
+  });
+  pvRender();
+  pvFetch();
+  setInterval(() => { if (pvShown()) pvRender(); }, 60e3);
+}
+
+  </script>
+  <script>pvMount(document.body);</script>
+</body>
+
+</html>
