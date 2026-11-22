@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-21">
+  <meta name="app-built" content="2026-11-22">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -13203,7 +13203,6 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .planner .bar i.mid { background: var(--warn); }
 .planner .bar i.hi { background: var(--idle); }
 .planner .acct .extra { margin-top: 4px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 10px; }
-.planner .acct .extra > span { white-space: nowrap; }
 .planner .lost { color: var(--idle); }
 .planner .extra .thin { color: var(--warn); }
 .planner .acct.off { opacity: .55; }
@@ -13368,6 +13367,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
   .planner button, .planner select, .planner input[type=number], .planner input[type=time] { min-height: 44px; }
   .planner .acct { grid-template-columns: minmax(0, 1fr); }
   .planner .acct .who { gap: 4px; }
+  /* One column: the notes share a line, each kept whole. Beside the cards, the 112px name column
+     wraps them instead, so none runs over a card or its credit rows. */
+  .planner .acct .extra > span { white-space: nowrap; }
   .planner .tl { --label: 96px; }
   .planner ol.steps { grid-template-columns: max-content minmax(0, 1fr); }
   .planner ol.steps .cmds { grid-column: 2; justify-self: start; max-width: 100%; }
@@ -57197,12 +57199,9 @@ function parseOpencode(doc) {
     const win = w => w && Number.isFinite(w.percent)
       ? {pct: w.status === 'rate-limited' ? 100 : w.percent, resetsAt: plannerMs(w.resetsAt)} : null;
     const five = win(u.rolling), month = win(u.monthly);
-    let week = win(u.weekly);
+    const week = win(u.weekly);
     // An unused 5h window has not started: the time it gives is only now + 5h.
     if (five && !five.pct) five.resetsAt = null;
-    // ponytail: the month counts only once used up, when it stops the week too. A month nearly
-    // spent also caps the week before then; plan that when it bites.
-    if (week && month && month.pct >= 100) week = {...week, pct: 100};
     return {id: a.number, name: `#${a.number}`, email: '', active: !!a.active, ok: !!week,
             five: five || {pct: 0, resetsAt: null}, week, month, credits: [], keepsWeek: false};
   });
@@ -57302,6 +57301,7 @@ function plannerSimulate(accounts, now, opts = {}) {
     id: a.id, keepsWeek: a.keepsWeek, hasFive: !!a.five,
     p5: a.five ? a.five.pct : 0, t5: a.five ? a.five.resetsAt : null,
     p7: a.week.pct, t7: a.week.resetsAt,
+    pMonth: a.month ? a.month.pct : 0, tMonth: a.month ? a.month.resetsAt : null, hasMonth: !!a.month,
     credits: a.credits.map(c => ({...c})),
   }));
   const parallel = !!opts.parallel;
@@ -57309,7 +57309,7 @@ function plannerSimulate(accounts, now, opts = {}) {
   let runH = 0;  // hours on `cur` since this session on it began, for rotate
   const out = {segments: [], parallel: [], burns: [], resets: [], expired: [], idleH: 0, bonusH: 0, offH: 0, start: now, end};
   let cur = (accounts.find(a => a.active && a.ok) || {}).id ?? null;
-  const usable = s => (!s.hasFive || s.p5 < 100 - 1e-6) && s.p7 < 100 - 1e-6;
+  const usable = s => (!s.hasFive || s.p5 < 100 - 1e-6) && s.p7 < 100 - 1e-6 && s.pMonth < 100 - 1e-6;
   const burn = (s, c, t, why) => {
     s.credits.splice(s.credits.indexOf(c), 1);
     out.burns.push({t, id: s.id, credit: c, gainH: creditGainH(s, t, r7), why});
@@ -57330,13 +57330,17 @@ function plannerSimulate(accounts, now, opts = {}) {
     }
     if (s.t7 == null) s.t7 = t + PLAN_WEEK;
     s.p7 = Math.min(100, s.p7 + r7 * h);
+    if (s.hasMonth) s.pMonth = Math.min(100, s.pMonth + r7 / 2 * h);
   };
   const runsDry = (s, t) => Math.min(t + (100 - s.p7) / r7 * PLAN_H,
-    s.hasFive ? t + (100 - s.p5) / r5 * PLAN_H : Infinity);
+    s.hasFive ? t + (100 - s.p5) / r5 * PLAN_H : Infinity,
+    s.hasMonth ? t + (100 - s.pMonth) / (r7 / 2) * PLAN_H : Infinity);
   const ready = (c, s, t) => (c.startsAt == null || c.startsAt <= t) && (!c.needsLimit || !usable(s));
 
   for (let t = now; t < end; ) {
     for (const s of st) {
+      // Only the reported monthly reset is known; Refresh supplies the next one.
+      if (s.tMonth != null && t >= s.tMonth) { s.pMonth = 0; s.tMonth = null; }
       if (s.t5 != null && t >= s.t5) { s.p5 = 0; s.t5 = null; }
       if (s.t7 != null && t >= s.t7) {
         if (s.t7 >= now) out.resets.push({t: s.t7, id: s.id, lostPct: Math.max(0, 100 - s.p7)});
@@ -57362,7 +57366,7 @@ function plannerSimulate(accounts, now, opts = {}) {
     if (!plannerOn(t, wins)) {
       let next = Math.min(end, plannerNextEdge(t, wins));
       for (const s of st) {
-        for (const at of [s.t5, s.t7, ...s.credits.flatMap(c => [c.startsAt, c.expiresAt])]) {
+        for (const at of [s.t5, s.t7, s.tMonth, ...s.credits.flatMap(c => [c.startsAt, c.expiresAt])]) {
           if (at != null && at > t) next = Math.min(next, at);
         }
       }
@@ -57397,7 +57401,7 @@ function plannerSimulate(accounts, now, opts = {}) {
     // Stop at an allowance or event, even when it falls between the sampling steps.
     let next = Math.min(end, t + dt, plannerNextEdge(t, wins));
     for (const s of st) {
-      for (const at of [s.t5, s.t7, ...s.credits.flatMap(c => [c.startsAt, c.expiresAt])]) {
+      for (const at of [s.t5, s.t7, s.tMonth, ...s.credits.flatMap(c => [c.startsAt, c.expiresAt])]) {
         if (at != null && at > t) next = Math.min(next, at);
       }
     }
@@ -57452,6 +57456,9 @@ function plannerRoom(accounts, now, opts = {}) {
       const current = wait ? Math.min((100 - a.five.pct) / 100, wait / fillH) : 0;
       const after = hours - wait;
       cap = current + Math.floor(after / 5) + Math.min(1, (after % 5) / fillH) - left;
+    }
+    if (a.month && (a.month.resetsAt == null || a.month.resetsAt >= a.week.resetsAt)) {
+      cap = Math.min(cap, (100 - a.month.pct) / (S / 2) - left);
     }
     return {id: a.id, room: Math.min(edf, cap), left, deadline: a.week.resetsAt};
   });
@@ -57571,9 +57578,10 @@ const PV_PAGE_SECTIONS_KEY = 'planner_page_sections';
 const PV_PAGE_SECTION_NAMES = {cards: 'Provider cards', all: 'All accounts chart', modes: 'Modes compared'};
 const PV_PAGE_SECTIONS_DEFAULT = [['cards', true], ['all', true], ['modes', true]];
 // Each chart's "Soonest first" switch: its account rows in the Accounts list's order, not the CLI's.
+// On until switched off.
 const PV_SORT_KEY = 'planner_sort';
 // Each provider's chart opens on 7 days and the combined one on 30.
-const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: false, codex: false, opencode: false, all: false}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {}};
+const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: true, codex: true, opencode: true, all: true}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {}};
 // The providers, in card order. OpenCode is optional: a relay without its CLI shows no card for it.
 const PV_PROVIDERS = ['claude', 'codex', 'opencode'];
 const PV_OPTIONAL = ['opencode'];
@@ -57789,7 +57797,7 @@ function pvAccounts(doc, plan, room, now, colors) {
     const r = room.accounts.find(x => x.id === a.id);
     const left = r ? `<span class="left" title="Weekly allowance left on this account until its weekly reset ${pvWhen(r.deadline, now)}, at ${pvSetting('fillH')}h per session">${pvSessions(r.left)} left this week</span>` : '';
     const extra = !r ? ''
-      : r.room < 0 ? `<span class="lost">${pvSessions(-r.room)} unused by ${pvWhen(r.deadline, now)}</span>${left}`
+      : r.room < 0 ? `<span class="lost">${pvSessions(-r.room)} unused by ${pvWhen(r.deadline, now).replaceAll(' ', '\u00a0')}</span>${left}`
       : `<span class="${r.room < pvWarnSessions() ? 'thin' : ''}">room ${pvSessions(r.room)}</span>${left}${a.credits.length ? '' : '<span>no resets</span>'}`;
     return `<div class="acct ${a.ok ? '' : 'off'}">`
       + `<div class="who"><b><span class="dot" style="background:${colors[a.id]}"></span>${pvEsc(a.name)}${a.active ? '<span class="live">live</span>' : ''}</b>`
@@ -58021,7 +58029,7 @@ function pvRender() {
     modes: () => pvModes(docs, now),
   };
   out.innerHTML = `${PV.pageSections.filter(([, on]) => on).map(([id]) => blocks[id]()).join('')}
-    <div class="small muted detail">Plans assume one account on the main line at a time, ${pvHoursSpec().mode === 'window' ? `only in hours of use (${pvEsc(pvHoursText())})` : 'all 24 hours'}, one session per ${pvSetting('fillH')}h of use${pvToggle('parallel') ? ', and reset credits spent for full value run in parallel beside it' : ''}${pvToggle('rotate') ? '; accounts take turns a session at a time' : '; each account runs until its week is used up'}. A Claude reset keeps the week's end date; a Codex reset restarts the week.${PV.docs.opencode ? ` An OpenCode Go session is ${OPENCODE_WEEK_PER_FIVE}% of its week: the plan's 5h limit is a fifth of the month, its week half.` : ''} <a href="#" id="again">Load new data</a></div>`;
+    <div class="small muted detail">Plans assume one account on the main line at a time, ${pvHoursSpec().mode === 'window' ? `only in hours of use (${pvEsc(pvHoursText())})` : 'all 24 hours'}, one session per ${pvSetting('fillH')}h of use${pvToggle('parallel') ? ', and reset credits spent for full value run in parallel beside it' : ''}${pvToggle('rotate') ? '; accounts take turns a session at a time' : '; each account runs until its week is used up'}. A Claude reset keeps the week's end date; a Codex reset restarts the week.${PV.docs.opencode ? ` An OpenCode Go session is ${OPENCODE_WEEK_PER_FIVE}% of its week: the plan's 5h limit is a fifth of the month, its week half. The monthly allowance also caps use; only the reported monthly reset is known, so Refresh to learn subsequent resets.` : ''} <a href="#" id="again">Load new data</a></div>`;
   out.querySelectorAll('.tl-wrap, .steps').forEach((el, i) => {
     if (scrolls[i]) [el.scrollLeft, el.scrollTop] = scrolls[i];
   });
@@ -58094,7 +58102,11 @@ async function pvFetch() {
     for (const p of PV_PROVIDERS) {
       const v = answer?.[p];
       // An optional CLI the relay does not have, or a relay older than it: no card, no complaint.
-      if (PV_OPTIONAL.includes(p) && (!v || v.absent)) continue;
+      if (PV_OPTIONAL.includes(p) && (!v || v.absent)) {
+        delete PV.docs[p];
+        pvSet(PV_STORE[p], '');
+        continue;
+      }
       try {
         if (!v?.doc) bad.push(v?.error || `no ${p} data`);
         else if (plannerParse(v.doc).provider !== p) bad.push(`wrong ${p} data`);
@@ -58187,7 +58199,7 @@ function pvMount(root, io = PV_HTTP) {
   PV.pageSections = pvOrderList(pv$('pageSections'), PV_PAGE_SECTIONS_KEY, PV_PAGE_SECTION_NAMES, PV_PAGE_SECTIONS_DEFAULT);
   try {
     const saved = JSON.parse(pvGet(PV_SORT_KEY) || 'null');
-    if (saved && typeof saved === 'object') for (const k in PV.sorts) PV.sorts[k] = saved[k] === true;
+    if (saved && typeof saved === 'object') for (const k in PV.sorts) if (typeof saved[k] === 'boolean') PV.sorts[k] = saved[k];
   } catch (e) { /* a stored copy that no longer parses is dropped */ }
   // Settings: the gear opens them; each applies as it changes.
   const dlg = pv$('settings');

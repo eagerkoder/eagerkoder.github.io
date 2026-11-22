@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1b26">
+  <!-- Stamped by scripts/build.py, as every page's are. -->
+  <meta name="app-version" content="0.6.0">
+  <meta name="app-built" content="2026-11-22">
+  <title>Activity</title>
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='3'%20y='8'%20width='2'%20height='5'%20fill='%237aa2f7'/%3E%3Crect%20x='7'%20y='4'%20width='2'%20height='9'%20fill='%237aa2f7'/%3E%3Crect%20x='11'%20y='6'%20width='2'%20height='7'%20fill='%237aa2f7'/%3E%3C/svg%3E">
+  <!--
+    What this machine's Projects did over days, weeks and months: activity hours, agent-hours,
+    5-hour sessions, commits and lines, slices done, and weekly and monthly rollups. It opens no
+    socket; the relay answers /api/activity from relay/activity.py, LAN only.
+  -->
+  <style>
+/* web/metrics.html: the agent metrics page. Its own page, so its tokens sit on :root. */
+:root {
+  --bg: #f5f5f7; --panel: #ffffff; --line: #dcdde3; --fg: #24283b; --muted: #6b7089;
+  --track: #e9eaf0; --accent: #3d59a1; --bad: #ba334a; --good: #258254;
+  --claude: #d9713a; --codex: #1a9e95; --opencode: #7c5cd6;
+  --s0: #4f78c4; --s1: #d9713a; --s2: #1a9e95; --s3: #8564bd; --s4: #b0479a; --s5: #986000;
+  --s6: #2595bc; --s7: #5b6b80;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #a1a7c5;
+    --track: #292e42; --accent: #7aa2f7; --bad: #ff7a90; --good: #70bd94;
+    --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
+    --s0: #7aa2ed; --s1: #ff9e64; --s2: #2ac3b4; --s3: #b19ae4; --s4: #e08cc9; --s5: #e6b657;
+    --s6: #6ebcdd; --s7: #9aa8bd;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #a1a7c5;
+  --track: #292e42; --accent: #7aa2f7; --bad: #ff7a90; --good: #70bd94;
+  --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
+  --s0: #7aa2ed; --s1: #ff9e64; --s2: #2ac3b4; --s3: #b19ae4; --s4: #e08cc9; --s5: #e6b657;
+  --s6: #6ebcdd; --s7: #9aa8bd;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+header {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  position: sticky; top: 0; z-index: 5;
+}
+h1 { font-size: 16px; margin: 0; }
+header nav a { color: var(--accent); }
+h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+h2 .small { text-transform: none; letter-spacing: 0; font-weight: normal; }
+main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 1400px; margin: 0 auto; }
+label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.grow { flex: 1; }
+button, select {
+  font: inherit; font-size: 12px; color: var(--fg); background: var(--track);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-height: 36px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); position: relative; }
+#err { color: var(--bad); margin: 0; overflow-wrap: anywhere; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+
+.cards { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.stat .k { font-size: 11px; color: var(--muted); }
+.stat .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .d { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.d.bad { color: var(--bad); }
+.d.good { color: var(--good); }
+
+.chart-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.chart-head h2 { margin: 0; flex: 1; }
+#chart { min-width: 0; }
+#chart svg { display: block; width: 100%; height: auto; }
+#chart .axis { stroke: var(--line); }
+#chart .tick { fill: var(--muted); font-size: 10px; }
+#chart .avg { stroke: var(--fg); stroke-dasharray: 4 3; stroke-width: 1; opacity: .7; }
+#chart .avg-label { fill: var(--fg); font-size: 10px; opacity: .8; }
+#chart .empty { fill: var(--muted); font-size: 12px; }
+/* The legend is a vertical list beside the chart, or under it on a narrow card; metrics.js sets how
+   many rows fit, and the grid flows the rest into more columns. */
+.plot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 16px; }
+.plot.side { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(0, max-content); gap: 4px 16px; font-size: 12px; }
+.plot:not(.side) .legend { grid-auto-columns: minmax(0, 1fr); }
+.plot.side .legend { padding-top: 10px; max-width: 360px; }
+.legend li { display: flex; align-items: center; gap: 6px; min-width: 0; cursor: default; border-radius: 4px; padding: 1px 4px; }
+.legend li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.legend li.on { background: var(--track); }
+.legend li:focus-visible { outline: 2px solid var(--accent); }
+.legend i, .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+#chart [data-s] { transition: opacity .12s; }
+#chart svg.hl [data-s]:not(.on) { opacity: .18; }
+#chart svg.hl path.on { stroke-width: 3; }
+#chart .guide { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+#chart .hit { fill: transparent; }
+.tip { position: absolute; z-index: 3; pointer-events: none; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .18); min-width: 140px; max-width: 280px; }
+.tip .when { color: var(--muted); margin-bottom: 4px; }
+.tip .r { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.tip .r span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tip .r b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip .r.on span { font-weight: 700; }
+.tip .r.total { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; }
+.star { color: var(--s5); }
+.key-note { margin: -2px 0 8px; }
+.stat.key { border-color: color-mix(in srgb, var(--s5) 55%, var(--line)); }
+.stat .k .star, .stat .k .diamond { margin-left: 4px; }
+.diamond { color: var(--s2); }
+.stat.tuned { border-color: color-mix(in srgb, var(--s2) 55%, var(--line)); }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+th button { all: unset; cursor: pointer; }
+th button:focus-visible { outline: 2px solid var(--accent); }
+th[aria-sort="ascending"] button::after { content: " ▲"; }
+th[aria-sort="descending"] button::after { content: " ▼"; }
+tbody tr.row { cursor: pointer; }
+tbody tr.row:hover { background: var(--track); }
+td .name { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; }
+td .name b { overflow: hidden; text-overflow: ellipsis; }
+.harness { font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--track); color: var(--muted); }
+tr.detail > td { white-space: normal; text-align: left; background: var(--bg); padding: 12px; }
+.detail-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.detail-grid h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); }
+.bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; margin: 0 0 6px; }
+.bar .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .track { grid-column: 1 / -1; grid-row: 2; height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); }
+.bar .n { color: var(--muted); white-space: nowrap; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Insights start closed; the heading is the toggle, its triangle turning as they open. */
+details.ins > summary { list-style: none; cursor: pointer; width: fit-content; max-width: 100%; border-radius: 4px; }
+details.ins > summary::-webkit-details-marker { display: none; }
+details.ins > summary h2 { display: inline; margin: 0; }
+details.ins > summary h2::before { content: ''; display: inline-block; margin: 0 8px 1px 2px; border: 5px solid transparent;
+  border-right-width: 0; border-left: 7px solid currentColor; transition: transform .15s; }
+details.ins[open] > summary { margin-bottom: 8px; }
+details.ins[open] > summary h2::before { transform: rotate(90deg); }
+details.ins > summary:hover h2 { color: var(--fg); }
+.insights { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.insight { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--s5);
+  border-radius: 10px; padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.insight h3 { font-size: 14px; margin: 0; overflow-wrap: anywhere; }
+.insight p { margin: 0; overflow-wrap: anywhere; }
+.insight .lever { font-size: 13px; }
+.insight .foot { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: auto; padding-top: 4px; }
+.insight .foot button { margin-left: auto; min-height: 32px; padding: 4px 10px; }
+.chip { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--track); color: var(--muted); }
+.chip.high { color: var(--good); }
+.chip.low { color: var(--bad); }
+
+  </style>
+  <style>
+/* web/activity.html: what metrics.css does not already lay out. One heat colour, mixed into the
+   track by activity.js, shades every lane session, cell and table figure. */
+:root { --heat: #258254; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --heat: #4fd18b; }
+}
+:root[data-theme="dark"] { --heat: #4fd18b; }
+
+.insight.flag { border-left-color: var(--bad); }
+.insight.record { border-left-color: var(--good); }
+.insight.note { border-left-color: var(--accent); }
+
+.heat-key { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.heat-key .cell { margin: 0 1px; }
+.cell { display: block; width: 11px; height: 11px; border-radius: 2px; background-color: var(--track); }
+.heat-key .cell { display: inline-block; }
+.cell.nodata { background: none; outline: 1px dashed var(--line); outline-offset: -1px; }
+
+/* Lanes: the planner's rows, a Project's 5-hour sessions placed by time. */
+.lanes { position: relative; display: grid; gap: 4px; }
+.ln-row { display: grid; grid-template-columns: minmax(90px, 200px) minmax(0, 1fr); gap: 8px; align-items: center; }
+.ln-row .name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; white-space: nowrap; }
+.ln-row .name b { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.lane { position: relative; height: 18px; background: var(--track); border-radius: 4px; overflow: hidden; }
+.ln-row.axis .lane { background: none; overflow: visible; height: 14px; }
+.lane .tick { position: absolute; top: 0; font-size: 10px; color: var(--muted); transform: translateX(2px); white-space: nowrap; }
+.lane .grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.lane .seg { position: absolute; top: 2px; bottom: 2px; min-width: 2px; border-radius: 2px;
+  background-color: color-mix(in srgb, var(--heat) 10%, var(--track)); outline: 1px solid color-mix(in srgb, var(--heat) 35%, transparent); }
+.lane .seg.none { outline-color: var(--line); }
+.lane .seg:hover, .lane .seg:focus-visible { outline: 2px solid var(--fg); z-index: 1; }
+section.card { position: relative; }
+
+/* Punchcard and calendar: weekday rows of heat cells. */
+.pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.punch { display: grid; grid-template-columns: auto repeat(24, minmax(11px, 1fr)); gap: 2px; font-size: 10px; color: var(--muted); min-width: 330px; }
+.punch .cell { width: auto; height: 14px; }
+.calendar { display: grid; gap: 2px; font-size: 10px; color: var(--muted); width: max-content; }
+.dl { padding-right: 4px; line-height: 11px; }
+.punch .dl { line-height: 14px; }
+.ml { white-space: nowrap; overflow: visible; width: 11px; }
+.hl { text-align: left; }
+.tip.float { position: fixed; min-width: 0; z-index: 10; }
+
+td.heat { color: var(--fg); }
+
+/* Rollups: a card per week or month. */
+.rollups { display: grid; gap: 8px; align-items: start; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.rollup { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rollup h3 { font-size: 14px; margin: 0; display: flex; gap: 8px; align-items: center; }
+.rollup p { margin: 0; }
+.figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.fig { border-radius: 6px; padding: 4px 6px; background-color: var(--track); display: flex; flex-direction: column; min-width: 0; }
+.fig b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.fig span { font-size: 11px; }
+.fig .d { font-variant-numeric: tabular-nums; }
+.tops .bar { margin: 0 0 4px; font-size: 12px; }
+.rollup details { font-size: 12px; }
+.rollup summary { cursor: pointer; color: var(--accent); }
+.rollup ul { margin: 4px 0 0; padding-left: 18px; }
+.rollup li { overflow-wrap: anywhere; }
+.rollup code { font-size: 11px; color: var(--muted); }
+
+@media (max-width: 600px) {
+  .ln-row { grid-template-columns: minmax(70px, 110px) minmax(0, 1fr); }
+  .ln-row .name .muted { display: none; }
+}
+
+/* The trend's rolling baseline: dashed, in the text colour, over bars and lines alike. */
+#chart .base { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .75; }
+.sw.dash, .legend i.dash { background: none; border-top: 2px dashed var(--fg); height: 0; border-radius: 0; opacity: .75; }
+.activity-nav button { min-width: 36px; font-size: 14px; }
+.activity-nav button:disabled { opacity: .45; cursor: default; }
+.activity-nav button:disabled:hover { border-color: var(--line); }
+
+/* Flat mode must keep isolated sessions visible even in a year-wide phone lane. */
+.lanes.flat .seg { min-width: 4px; outline-color: var(--heat); }
+.lanes.flat .seg.none { background-color: var(--track); outline-color: var(--muted); outline-style: dashed; }
+
+/* Trend bins before a figure's source began: hatched, so a zero there reads as unknown. */
+#chart .band { fill: var(--line); opacity: .35; }
+#chart .band-label { fill: var(--muted); font-size: 11px; }
+
+/* Layout: the gear's dialog, as the planner's Settings. A block it hides is hidden whatever its display. */
+[data-block][hidden] { display: none; }
+#gear { display: inline-flex; align-items: center; padding: 4px 8px; }
+#gear svg { flex: none; }
+dialog#layout { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg);
+  padding: 16px; width: min(640px, calc(100vw - 32px)); box-shadow: 0 12px 40px rgba(0, 0, 0, .25); }
+dialog#layout::backdrop { background: rgba(0, 0, 0, .35); }
+dialog#layout fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 10px;
+  display: grid; gap: 8px 20px; font-size: 13px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: start; }
+dialog#layout legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+dialog#layout p { margin: 4px 0 6px; }
+dialog#layout h2 { margin-top: 0; }
+dialog#layout .actions { display: flex; justify-content: flex-end; }
+ol.sections { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+ol.sections li { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
+ol.sections button { padding: 2px 8px; min-height: 28px; }
+ol.sections button:disabled { opacity: .45; cursor: default; }
+
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Activity</h1>
+    <div class="seg" id="period" role="group" aria-label="Period"></div>
+    <label>Bin <select id="bin" aria-label="Bin size"></select></label>
+    <div class="seg" id="count" role="group" aria-label="Inputs counted"></div>
+    <label title="The time a day has to give: active hours are shown as a share of it">Day
+      <select id="basis" aria-label="Available hours a day"></select></label>
+    <div class="seg" id="shade" role="group" aria-label="Colour"></div>
+    <button id="refresh" type="button">Refresh</button>
+    <button id="pull" type="button" title="Read the linked machines' activity over ssh and add it here">Pull machines</button>
+    <span class="muted small grow" id="status" role="status"></span>
+    <button id="gear" type="button" aria-haspopup="dialog" aria-label="Layout" title="Layout: order and show sections and cards"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <nav class="small" aria-label="Other pages"><a href="metrics.html">Metrics</a> · <a href="planner.html">Planner</a></nav>
+  </header>
+  <main>
+    <p id="err" role="alert" hidden></p>
+    <!-- The blocks below are put in the order set under the gear, hidden ones not shown. -->
+    <!-- Insights start closed: a press on the heading opens them. -->
+    <details class="ins" id="ins-box" data-block="insights">
+      <summary><h2 id="h-ins">Insights <span class="count" id="ins-count"></span></h2></summary>
+      <div class="insights" id="insights"></div>
+      <p class="muted small" id="insights-empty" hidden>Nothing stands out in this period.</p>
+    </details>
+    <section aria-labelledby="h-sum" data-block="overall">
+      <h2 id="h-sum">Overall <span class="muted small" id="sum-note"></span></h2>
+      <div class="cards" id="cards"></div>
+    </section>
+    <section class="card" aria-labelledby="h-lanes" data-block="lanes">
+      <div class="chart-head">
+        <h2 id="h-lanes">Projects by 5-hour session <span class="muted small" id="lanes-range"></span></h2>
+        <div class="seg activity-nav" role="group" aria-label="Move session and trend window">
+          <button type="button" id="lanes-older" title="One bin back" aria-label="One bin back">‹</button>
+          <button type="button" id="lanes-newer" title="One bin forward" aria-label="One bin forward">›</button>
+          <button type="button" id="lanes-latest" title="Back to now">Now</button>
+        </div>
+        <label>Sort <select id="lane-sort" aria-label="Lane order"></select></label>
+        <label>Shade by <select id="intensity" aria-label="Session shade"></select></label>
+        <span class="heat-key small muted" id="lanes-key"></span>
+      </div>
+      <div class="lanes" id="lanes"></div>
+      <div class="tip" id="lane-tip" role="tooltip" hidden></div>
+    </section>
+    <section class="card" aria-labelledby="h-trend" data-block="trend">
+      <div class="chart-head">
+        <h2 id="h-trend">Trend <span class="muted small" id="range"></span></h2>
+        <div class="seg activity-nav" id="nav" role="group" aria-label="Move the window">
+          <button type="button" id="older" title="One bin back" aria-label="One bin back">‹</button>
+          <button type="button" id="newer" title="One bin forward" aria-label="One bin forward">›</button>
+          <button type="button" id="latest" title="Back to now">Now</button>
+        </div>
+        <label>Metric <select id="metric" aria-label="Chart metric"></select></label>
+        <div class="seg" id="by" role="group" aria-label="Split by"></div>
+      </div>
+      <div class="plot" id="plot">
+        <div id="chart"></div>
+        <ul class="legend" id="legend" aria-label="Series"></ul>
+        <div class="tip" id="tip" role="tooltip" hidden></div>
+      </div>
+    </section>
+    <div class="pair" data-block="when">
+      <section class="card" aria-labelledby="h-punch">
+        <div class="chart-head">
+          <h2 id="h-punch">When <span class="muted small">active hours by weekday and hour</span></h2>
+          <span class="heat-key small muted" id="punch-key"></span>
+        </div>
+        <div class="scroll"><div class="punch" id="punch" role="img" aria-label="Active hours by weekday and hour"></div></div>
+      </section>
+      <section class="card" aria-labelledby="h-cal">
+        <div class="chart-head">
+          <h2 id="h-cal">Year <span class="muted small" id="cal-note"></span></h2>
+          <label>Shade by <select id="cal-metric" aria-label="Calendar shade"></select></label>
+        </div>
+        <div class="scroll"><div class="calendar" id="calendar" role="img" aria-label="Activity by day over the last year"></div></div>
+        <p class="small muted" id="cal-sum"></p>
+      </section>
+    </div>
+    <section class="card" aria-labelledby="h-projects" data-block="projects">
+      <h2 id="h-projects">Projects <span class="muted small">shaded by each column's own scale; hover a cell for the change</span></h2>
+      <div class="scroll"><table id="projects"></table></div>
+    </section>
+    <section class="card" aria-labelledby="h-roll" data-block="rollups">
+      <div class="chart-head">
+        <h2 id="h-roll">Rollups <span class="muted small">what each week or month did, newest first</span></h2>
+        <div class="seg" id="roll" role="group" aria-label="Rollup size"></div>
+      </div>
+      <div class="rollups" id="rollups"></div>
+    </section>
+    <p class="muted small" id="defs"></p>
+  </main>
+  <!-- Layout applies as it changes and is kept in this browser; Done only closes. -->
+  <dialog id="layout" aria-labelledby="layout-title">
+    <form method="dialog">
+      <h2 id="layout-title">Layout</h2>
+      <fieldset>
+        <legend>In order, each shown or not</legend>
+        <div><p class="small muted" id="blocks-head">Sections</p>
+          <ol id="blocks" class="sections" aria-labelledby="blocks-head"></ol></div>
+        <div><p class="small muted" id="card-order-head">Overall cards</p>
+          <ol id="card-order" class="sections" aria-labelledby="card-order-head"></ol></div>
+      </fieldset>
+      <div class="actions"><button value="done">Done</button></div>
+    </form>
+  </dialog>
+  <div class="tip float" id="cell-tip" role="tooltip" hidden></div>
+  <script>
+// web/activity.html: what this machine's Projects did, from the relay's /api/activity.
+// relay/activity.py does the counting; this only lays it out. Project labels and commit subjects
+// are what people typed, so every string goes in as text, never as markup.
+'use strict';
+
+const MIN = 60e3, HOUR = 3600e3, DAY = 86400e3;
+const STORE = 'herdr.activity.';
+const SERIES_MAX = 7;
+// sum: additive, charted as stacked bars per Project. fmt: how a value reads.
+const METRICS = [
+  {key: 'hours', label: 'Active hours', fmt: 'h', sum: true,
+    why: 'Time between inputs to agents, at most 15 minutes after each, 5 after the last of a run. A day with no input on record is estimated from commit times.'},
+  {key: 'agent_hours', label: 'Agent-hours', fmt: 'h', sum: true,
+    why: 'Time agents spent between model calls, at most 5 minutes apart, summed over every agent and subagent.'},
+  {key: 'leverage', label: 'Leverage', fmt: 'x',
+    why: 'Agent-hours per active hour: how many agents, on average, worked while you did.'},
+  {key: 'active_pct', label: 'Active % of the day', fmt: 'pct',
+    why: 'Active hours as a share of the hours each day has to give (the Day setting: 24, 16 awake or 8 at work).'},
+  {key: 'prompts', label: 'Prompts', fmt: 'int', sum: true, why: 'Prompts sent to agents, by anyone.'},
+  {key: 'commits', label: 'Commits', fmt: 'int', sum: true, why: 'Distinct commit objects on normal branches; rebases and cherry-picks have different ids.'},
+  {key: 'landed_now', label: 'Landed', fmt: 'int', sum: true, why: 'Of those, the ones now on the default branch.'},
+  {key: 'lines', label: 'Lines changed', fmt: 'int', sum: true,
+    why: 'Code lines added plus removed: churn, not size. Data, lockfiles, built and generated files are apart.'},
+  {key: 'added', label: 'Lines added', fmt: 'int', sum: true, why: 'Code lines added.'},
+  {key: 'removed', label: 'Lines removed', fmt: 'int', sum: true, why: 'Code lines removed.'},
+  {key: 'slices_done', label: 'Slices done', fmt: 'int', sum: true,
+    why: 'Slices PROJECT.md first showed done, by the time the version was saved.'},
+];
+const BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m]));
+// How the hours card names each kind of input.
+const SPLIT = {git: 'from commits'};
+// The shade of a lane session, in the order of a session's figures from the relay.
+const INTENSITY = [['lines', 'Lines of code', 2, 'int'], ['commits', 'Commits', 3, 'int'],
+  ['hours', 'Active hours', 4, 'h'], ['agent_hours', 'Agent-hours', 5, 'h'], ['prompts', 'Prompts', 6, 'int']];
+// Lane order: [key, label, a Project's sort value, descending]. Recent first by default.
+const LANE_SORT = [
+  ['recent', 'Latest activity', p => p.last_activity ?? (p.sessions.length ? p.sessions[p.sessions.length - 1][0] : 0), true],
+  ['first', 'First activity', p => p.first_activity ?? (p.sessions.length ? p.sessions[0][0] : Infinity), false],
+  ['hours', 'Active hours', p => p.now.hours, true],
+  ['agent_hours', 'Agent-hours', p => p.now.agent_hours, true],
+  ['lines', 'Lines of code', p => p.now.lines, true],
+  ['commits', 'Commits', p => p.now.commits, true],
+  ['sessions', 'Sessions', p => p.sessions_count ?? p.sessions.length, true],
+  ['label', 'Name', p => p.label.toLowerCase(), false],
+];
+const CAL = [['hours', 'Active hours', 1, 'h'], ['lines', 'Lines of code', 2, 'int'], ['commits', 'Commits', 3, 'int']];
+// The most heat under a figure: past it, the text on the cell is hard to read.
+const TEXT_HEAT = 45;
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// The page's blocks and the Overall cards, by id in their default order; Layout reorders and hides them.
+const BLOCKS = {insights: 'Insights', overall: 'Overall', lanes: 'Projects by 5-hour session', trend: 'Trend',
+  when: 'When and Year', projects: 'Projects table', rollups: 'Rollups'};
+const CARDS = {hours: 'Active hours', active_pct: 'Of the day', agent_hours: 'Agent-hours', leverage: 'Leverage',
+  prompts: 'Prompts', landed_now: 'Commits landed', lines: 'Lines changed', slices_done: 'Slices done',
+  active_days: 'Active days', late_nights: 'Late nights', focus_pct: 'Focus', wait_median_s: 'Blocked wait'};
+
+const $ = id => document.getElementById(id);
+const st = {period: '30d', bin: '', count: 'all', bins: {}, binDefault: {}, data: null, loading: null,
+  metric: 'hours', by: 'project', intensity: 'lines', cal: 'hours', roll: 'weeks',
+  sort: {key: 'hours', dir: -1}, basis: 24, shade: 'scale', shift: 0};
+
+function load(k, dflt) { try { return localStorage.getItem(STORE + k) || dflt; } catch { return dflt; } }
+function save(k, v) { try { localStorage.setItem(STORE + k, v); } catch { /* private window */ } }
+
+function fmt(kind, v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '–';
+  if (kind === 'h') return v >= 100 ? Math.round(v) + '\u00a0h' : v >= 1 ? v.toFixed(1) + '\u00a0h' : Math.round(v * 60) + '\u00a0min';
+  if (kind === 'x') return v.toFixed(2) + '×';
+  if (kind === 'pct') return (v > 0 && v < 10 ? v.toFixed(1) : Math.round(v)) + '%';
+  if (kind === 'min') return v >= 90 ? (v / 60).toFixed(1) + ' h' : Math.round(v) + ' min';
+  if (kind === 's') return v >= 3600 ? (v / 3600).toFixed(1) + ' h' : v >= 60 ? Math.round(v / 60) + ' min' : Math.round(v) + ' s';
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e4) return Math.round(v / 1e3) + 'k';
+  return Math.round(v).toLocaleString();
+}
+const plural = (n, word) => `${fmt('int', n)} ${word}${n === 1 ? '' : 's'}`;
+const show = (key, v) => fmt(BY_KEY[key] ? BY_KEY[key].fmt : 'int', v);
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const c of kids) if (c !== null && c !== undefined) n.append(c);
+  return n;
+}
+const SVG = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs, text) {
+  const n = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+// ---- the one colour scale ----
+
+// The top of a scale: the 95th percentile of the values above zero, so one outlier does not wash
+// every other cell out.
+function scaleTop(values) {
+  const v = values.filter(x => x > 0).sort((a, b) => a - b);
+  if (!v.length) return 0;
+  return v[Math.min(v.length - 1, Math.floor(v.length * 0.95))];
+}
+// A value's share of its scale as a mix of the heat colour into the track: square root, clamped,
+// so small values still show. Zero is the bare track.
+// `most` caps the mix where text sits on the cell, so the text stays readable.
+// Flat colour: any activity at one strong shade, none at the track, for when scale hides the small.
+function heatPct(v, top, most = 100) {
+  if (!(v > 0) || !(top > 0)) return 0;
+  if (st.shade === 'flat') return most;
+  return Math.round(25 + (most - 25) * Math.sqrt(Math.min(1, v / top)));
+}
+function heat(v, top, most) {
+  const p = heatPct(v, top, most);
+  return p ? `background-color:color-mix(in srgb, var(--heat) ${p}%, var(--track))` : '';
+}
+function heatKey(node, top, kind) {
+  if (st.shade === 'flat') {
+    node.replaceChildren(el('i', {class: 'cell', style: 'background-color:var(--track)'}), ' none ',
+      el('i', {class: 'cell', style: heat(1, 1)}), ' some');
+    return;
+  }
+  node.replaceChildren('less ', ...[0, .1, .3, .6, 1].map(f => el('i', {class: 'cell', style: f ? heat(f * top, top) : 'background-color:var(--track)'})),
+    ` more · top ${fmt(kind, top)}`);
+}
+
+// ---- time, in the relay's zone ----
+
+function tzOpt(extra) { return {timeZone: st.data ? st.data.timezone : undefined, ...extra}; }
+const day = at => new Date(at).toLocaleDateString([], tzOpt({month: 'short', day: 'numeric'}));
+const dayYear = at => new Date(at).toLocaleDateString([], tzOpt({month: 'short', day: 'numeric', year: 'numeric'}));
+const dayTime = at => new Date(at).toLocaleString([], tzOpt({weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'}));
+const BIN_NAMES = {quarter: '3 months', half: '6 months'};
+// [year, month 1-12] of a time, in the relay's zone.
+function ym(at) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en', tzOpt({year: 'numeric', month: 'numeric'}))
+    .formatToParts(new Date(at)).map(x => [x.type, x.value]));
+  return [Number(p.year), Number(p.month)];
+}
+// A bin's short name for an axis. `prev` is the bin before: a day or week names its year when it
+// is the first shown or the year changed.
+function binLabel(at, prev, size = st.data.bin) {
+  const [y, m] = ym(at), yy = `'${String(y).slice(2)}`;
+  if (size === 'quarter') return `Q${Math.ceil(m / 3)} ${yy}`;
+  if (size === 'half') return `H${m > 6 ? 2 : 1} ${yy}`;
+  if (size === 'month') return new Date(at).toLocaleDateString([], tzOpt({month: 'short'})) + ` ${yy}`;
+  return prev === undefined || ym(prev)[0] !== y ? `${day(at)} ${yy}` : day(at);
+}
+// A bin's full name, for a tip.
+function binTitle(at, size = st.data.bin) {
+  const [y, m] = ym(at);
+  if (size === 'quarter') return `Q${Math.ceil(m / 3)} ${y}`;
+  if (size === 'half') return `${m > 6 ? 'July to December' : 'January to June'} ${y}`;
+  if (size === 'month') return new Date(at).toLocaleDateString([], tzOpt({month: 'long', year: 'numeric'}));
+  if (size === 'week') return 'Week of ' + dayYear(at);
+  return new Date(at).toLocaleDateString([], tzOpt({weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'}));
+}
+
+// ---- data ----
+
+async function api(query, ask) {
+  let r = await fetch('/api/activity' + query, {cache: 'no-store'});
+  // 202: a cold report still being read. The relay keeps the run; ask again until it answers.
+  for (let waited = 6; r.status === 202 && (!ask || st.loading === ask); waited += 2) {
+    $('status').textContent = `Reading the record, transcripts and git… ${waited} s`;
+    await new Promise(done => setTimeout(done, 1500));
+    r = await fetch('/api/activity' + query, {cache: 'no-store'});
+  }
+  let body = null;
+  try { body = await r.json(); } catch { /* not ours */ }
+  if (!body) throw new Error(r.ok ? 'the relay sent no activity' :
+    'no activity here: this page reads it from the relay on the LAN (HTTP ' + r.status + ')');
+  if (!r.ok) throw new Error(body.error || 'HTTP ' + r.status);
+  return body;
+}
+
+// Answers read this visit, by query, for five minutes: stepping back and forth redraws at once.
+// Refresh forgets them.
+const answers = new Map();
+const KEEP_MS = 5 * 60e3;
+const query = a => `?period=${a.period}&bin=${a.bin}&count=${a.count}&shift=${a.shift}`;
+const kept = q => { const a = answers.get(q); return a && Date.now() - a.at < KEEP_MS ? a.d : null; };
+
+// The bin before the one shown, read quietly so the next ‹ is already there. A cold answer (202)
+// is left to the relay, which keeps the run for the click that follows.
+function prefetch(ask) {
+  if (ask.shift >= SHIFT_MAX) return;
+  const q = query({...ask, shift: ask.shift + 1});
+  if (kept(q)) return;
+  fetch('/api/activity' + q, {cache: 'no-store'})
+    .then(r => r.status === 200 ? r.json() : null)
+    .then(d => { if (d) answers.set(q, {d, at: Date.now()}); })
+    .catch(() => { /* a quiet read; the click will ask again */ });
+}
+
+async function refresh(forget) {
+  if (forget === true) answers.clear();
+  const ask = {period: st.period, bin: st.bin, count: st.count, shift: st.shift};
+  const q = query(ask);
+  const have = kept(q);
+  if (have) {
+    st.loading = null;
+    $('refresh').disabled = false;
+    st.data = have;
+    $('err').hidden = true;
+    render();
+    prefetch(ask);
+    return;
+  }
+  st.loading = ask;
+  $('status').textContent = 'Reading the record, transcripts and git…';
+  $('refresh').disabled = true;
+  try {
+    const d = await api(q, ask);
+    if (st.loading !== ask) return;
+    answers.set(q, {d, at: Date.now()});
+    st.data = d;
+    $('err').hidden = true;
+    render();
+    prefetch(ask);
+  } catch (e) {
+    if (st.loading !== ask) return;
+    $('err').textContent = e.message;
+    $('err').hidden = false;
+    $('status').textContent = '';
+  } finally {
+    if (st.loading === ask) { st.loading = null; $('refresh').disabled = false; }
+  }
+}
+
+// Linked machines are read only when asked: start a pull, wait for it, then read afresh.
+async function pullMachines() {
+  const deadline = Date.now() + 11 * 60 * 1000;  // the relay's SSH timeout is ten minutes
+  const ask = async headers => {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for machines');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(10000, deadline - Date.now()));
+    try {
+      const r = await fetch('/api/activity-pull', {headers, cache: 'no-store', signal: controller.signal});
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  $('pull').disabled = true;
+  try {
+    let r = await ask({'X-Herdr-Activity': 'pull'});
+    if (!r.machines.length) { $('status').textContent = 'No machines linked over SSH'; return; }
+    while (r.machines.some(m => m.pulling)) {
+      $('status').textContent = 'Pulling ' + r.machines.filter(m => m.pulling).map(m => m.name).join(', ') + '…';
+      await new Promise(done => setTimeout(done, 2000));
+      r = await ask({});
+    }
+    await refresh(true);
+  } catch (e) {
+    $('err').textContent = 'Pull failed: ' + e.message;
+    $('err').hidden = false;
+  } finally {
+    $('pull').disabled = false;
+  }
+}
+
+const colourOf = i => i < SERIES_MAX ? `var(--s${i})` : 'var(--muted)';
+const labelOf = id => { const p = st.data.projects.find(x => x.id === id); return p ? p.label : id; };
+
+function render() {
+  const d = st.data;
+  const t = d.totals.now;
+  $('status').textContent = `${d.projects.length} Projects · ${d.timezone} · ${d.took_ms} ms` +
+    (d.partial_sources?.length ? ' · partial sources: ' + d.partial_sources.join(', ') : '') +
+    (d.machines?.length ? ' · with ' + d.machines.map(m => m.name +
+      (m.error ? ' (last pull failed)' : m.pulling ? ' (pulling)' : m.until ? ` (to ${dayTime(m.until)})` : '')).join(', ') : '') +
+    (d.detail_truncated ? ' · session detail limited' : '');
+  const span = `${dayYear(d.since)} to ${d.shift ? dayYear(d.until - 1) : 'now'}`;
+  $('sum-note').textContent = span;
+  for (const prefix of ['', 'lanes-']) {
+    $(prefix + 'range').textContent = span;
+    $(prefix + 'newer').disabled = $(prefix + 'latest').disabled = !d.shift;
+    $(prefix + 'older').disabled = d.shift >= SHIFT_MAX;
+  }
+  renderInsights(d);
+  renderCards(d);
+  renderLanes(d);
+  renderChart(d);
+  renderPunch(d);
+  renderCalendar(d);
+  renderProjects(d);
+  renderRollups(d);
+  const c = d.constants;
+  $('defs').textContent = `Estimates, not measurements. Active hours: from each input to an agent to the next, at most ${c.present_gap_min} minutes, ` +
+    `else ${c.present_tail_min}; inputs are human (typed at the app or a terminal), automated (a Commander's decision or prompt, another agent's message), ` +
+    `transcript (a session herdr never registered) and backfill (found later in pane text), all counted unless Human only is chosen. ` +
+    `A day with no input on record (before it began, or with the relay down) is estimated from commit times instead: each commit back to the ` +
+    `Project's last within ${c.commit_gap_min} minutes, else ${c.commit_lead_min}; All inputs only. Agent-hours, prompts and leverage have no estimate; ` +
+    `agent-hours before ${(d.coverage || {}).calls || 'the first transcript'} count only harnesses the record times, Claude and Codex deleting their transcripts. ` +
+    `Agent-hours: between model calls at most ${c.busy_gap_min} minutes apart. A session opens at a Project's first activity and lasts ${c.session_h} hours. ` +
+    `Lines are code lines added plus removed; data, lockfiles, built files and files over ${c.bulk_lines} lines in one commit are counted apart ` +
+    `(${fmt('int', t.other_lines)} here). Distinct commit ids count separately; ${d.commit_copies} identical objects across repositories folded.` +
+    (d.no_default_branch.length ? ` Landed status unavailable without a default branch: ${d.no_default_branch.map(labelOf).join(', ')}.` : '');
+}
+
+function delta(now, prev) {
+  if (prev === null || prev === undefined || now === null || now === undefined || !prev) return null;
+  const pct = 100 * (now - prev) / prev;
+  if (!Number.isFinite(pct)) return null;
+  return Math.abs(pct) < 0.5 ? '±0%' : (pct > 0 ? '+' : '') + Math.round(pct) + '%';
+}
+
+function renderInsights(d) {
+  $('insights').replaceChildren(...d.insights.map(i => el('article', {class: 'insight ' + i.kind, 'data-id': i.id},
+    el('h3', {text: i.title}),
+    el('p', {class: 'small muted', text: i.evidence}),
+    el('div', {class: 'foot small'}, el('span', {class: 'chip', text: i.kind}),
+      BY_KEY[i.metric] ? el('button', {type: 'button', text: 'Show ' + BY_KEY[i.metric].label, onclick: () => {
+        st.metric = i.metric;
+        $('metric').value = i.metric;
+        const trend = $('blocks').querySelector('[data-sec="trend"]');
+        if (!trend.checked) trend.click();
+        renderChart(st.data);
+        $('h-trend').scrollIntoView({block: 'start', behavior: 'smooth'});
+      }}) : null))));
+  $('insights-empty').hidden = d.insights.length > 0;
+  $('ins-count').textContent = `(${d.insights.length})`;
+}
+
+function renderCards(d) {
+  const n = {...d.totals.now, active_pct: ofDay(d.totals.now.hours, d.since, d.until, d.day_units)};
+  const p = d.totals.prev ? {...d.totals.prev, active_pct: ofDay(d.totals.prev.hours, d.prev_since, d.prev_until, d.prev_day_units)} : {};
+  const split = Object.entries(n.split || {}).map(([k, v]) => `${SPLIT[k] || k} ${Math.round(v)}%`).join(' · ');
+  const cards = {
+    hours: [fmt('h', n.hours), `${split || 'no inputs'}`],
+    active_pct: [fmt('pct', n.active_pct), `active, of ${st.basis} h a day · ${fmt('h', available(d.since, d.until, d.day_units))} in all`],
+    agent_hours: [fmt('h', n.agent_hours), `peak ${n.concurrency_peak ?? '–'} at once`],
+    leverage: [fmt('x', n.leverage), `${n.concurrency_mean ?? '–'} agents on average while active`],
+    prompts: [fmt('int', n.prompts), `${fmt('int', n.inputs)} inputs with decisions`],
+    landed_now: [fmt('int', n.landed_now), `of ${fmt('int', n.commits)} · ${fmt('pct', n.agent_pct)} agent-credited`],
+    lines: [fmt('int', n.lines), `+${fmt('int', n.added)} / −${fmt('int', n.removed)} · tests ${fmt('pct', n.tests_pct)}`],
+    slices_done: [fmt('int', n.slices_done), `${plural(n.merges, 'merge')} · ${n.feat} feat / ${n.fix} fix`],
+    active_days: [fmt('int', n.active_days), `longest streak ${n.streak} · span ${n.span_avg_h ?? '–'} h a day`],
+    late_nights: [fmt('int', n.late_nights), `${fmt('pct', n.late_night_pct)} after 23:00 · weekend ${fmt('pct', n.weekend_pct)}`],
+    focus_pct: [fmt('pct', n.focus_pct), `${n.switches_per_day ?? '–'} switches a day · longest ${fmt('min', n.longest_block_min)}`],
+    wait_median_s: [fmt('s', n.wait_median_s), `median · ${n.blocked} blocked, ${n.unresolved} unresolved`],
+  };
+  $('cards').replaceChildren(...st.cards.filter(([, on]) => on).map(([k]) => {
+    const [v, sub] = cards[k];
+    const dl = delta(n[k], p[k]);
+    return el('div', {class: 'stat', 'data-key': k, title: BY_KEY[k] ? BY_KEY[k].why : null},
+      el('div', {class: 'k', text: CARDS[k]}), el('div', {class: 'v', text: v}),
+      el('div', {class: 'd', text: sub}),
+      el('div', {class: 'd', text: dl ? `${dl} vs before` : d.totals.prev ? 'no earlier data' : ''}));
+  }));
+}
+
+// ---- lanes: a Project's 5-hour sessions, planner style ----
+
+function ticks(lo, hi, limit = 10) {
+  // Server boundaries carry the relay's timezone and DST, not this browser's calendar.
+  const bins = st.data.bins.filter(t => lo <= t && t < hi);
+  const stride = Math.max(1, Math.ceil(bins.length / limit));
+  const at = bins.filter((_, i) => i % stride === 0);
+  return {at, size: st.data.bin, prev: new Map(at.map((t, i) => [t, i ? at[i - 1] : undefined]))};
+}
+
+function renderLanes(d) {
+  $('lanes').classList.toggle('flat', st.shade === 'flat');
+  const [key, , idx, kind] = INTENSITY.find(x => x[0] === st.intensity) || INTENSITY[0];
+  const lo = d.since, hi = d.until, span = hi - lo;
+  const at = t => Math.max(0, Math.min(100, (t - lo) / span * 100));
+  const top = scaleTop(d.projects.flatMap(p => p.sessions.map(s => s[idx])));
+  heatKey($('lanes-key'), top, kind);
+  const room = $('lanes').clientWidth - (innerWidth <= 600 ? 118 : 208);
+  const tk = ticks(lo, hi, Math.max(1, Math.floor(room / 65)));
+  const axis = el('div', {class: 'ln-row axis'}, el('span', {class: 'name'}),
+    el('div', {class: 'lane'}, ...tk.at.filter(t => at(t) < 92).map(t => el('span', {class: 'tick', style: `left:${at(t)}%`,
+      text: binLabel(t, tk.prev.get(t), tk.size)}))));
+  const [, , by, desc] = LANE_SORT.find(x => x[0] === st.laneSort) || LANE_SORT[0];
+  const order = d.projects.filter(p => p.sessions.length).sort((a, b) => {
+    const x = by(a), y = by(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * (desc ? -1 : 1) || a.label.localeCompare(b.label);
+  });
+  const rows = order.map(p => {
+    const total = p.now[key === 'hours' ? 'hours' : key];
+    return el('div', {class: 'ln-row', 'data-project': p.id},
+      el('span', {class: 'name', title: p.label}, el('i', {class: 'sw', style: `background:${colourOf(d.projects.indexOf(p))}`}),
+        el('b', {text: p.label}), el('span', {class: 'muted', text: ' ' + fmt(kind, total)})),
+      el('div', {class: 'lane'},
+        ...tk.at.map(t => el('i', {class: 'grid', style: `left:${at(t)}%`})),
+        ...p.sessions.map(s => el('span', {class: 'seg' + (s[idx] > 0 ? '' : ' none'), tabindex: 0,
+          style: `left:${at(s[0])}%;width:${Math.max(0, at(s[1]) - at(s[0]))}%;${heat(s[idx], top)}`,
+          'data-tip': JSON.stringify([p.label, ...s]),
+          'aria-label': `${p.label} ${dayTime(s[0])}: ${fmt(kind, s[idx])}`}))));
+  });
+  $('lanes').replaceChildren(axis, ...rows);
+  if (!rows.length) $('lanes').append(el('p', {class: 'muted small', text: 'No activity in this period.'}));
+}
+
+function laneTip(e) {
+  const seg = e.target.closest && e.target.closest('.seg');
+  const tip = $('lane-tip');
+  if (!seg) { tip.hidden = true; return; }
+  const [label, s, end, lines, commits, hours, agent, prompts] = JSON.parse(seg.dataset.tip);
+  tip.replaceChildren(el('div', {class: 'when', text: `${label} · ${dayTime(s)} – ${new Date(end).toLocaleTimeString([], tzOpt({hour: '2-digit', minute: '2-digit'}))}`}),
+    ...[['Lines of code', fmt('int', lines)], ['Commits', fmt('int', commits)], ['Active', fmt('h', hours)],
+      ['Agent-hours', fmt('h', agent)], ['Prompts', fmt('int', prompts)]].map(([k, v]) =>
+      el('div', {class: 'r'}, el('i', {class: 'sw'}), el('span', {text: k}), el('b', {text: v}))));
+  tip.hidden = false;
+  place(tip, seg.closest('.card'), seg.getBoundingClientRect());
+}
+
+// Beside the box, inside the container, on whichever side has room.
+function place(tip, box, r) {
+  const b = box.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = r.left - b.left + r.width / 2 - tw / 2;
+  x = Math.max(4, Math.min(x, b.width - tw - 4));
+  let y = r.top - b.top - th - 6;
+  if (y < 0) y = r.bottom - b.top + 6;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+
+// ---- trend chart ----
+
+function niceMax(v) {
+  if (!(v > 0)) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  return [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= v);
+}
+
+const SHIFT_MAX = 800;   // the relay's limit on bins back
+
+// The hours a span of time has to give: its length at `basis` hours a day.
+const available = (lo, hi, units) => (units ?? (hi - lo) / DAY) * st.basis;
+const ofDay = (hours, lo, hi, units) => (hi > lo ? 100 * hours / available(lo, hi, units) : null);
+
+function value(m, b, i, d) {
+  if (m.key === 'active_pct') return b ? ofDay(b.hours, d.bins[i], d.bin_ends[i], d.bin_day_units?.[i]) : null;
+  if (!b) return m.sum ? 0 : null;
+  if (m.key === 'leverage') return b.hours && b.agent_hours ? b.agent_hours / b.hours : null;
+  return b[m.key];
+}
+
+function chartSeries(d, m) {
+  if (st.by === 'all' || !m.sum)
+    return [{name: 'All Projects', colour: 'var(--accent)', values: d.total_bins.map((b, i) => value(m, b, i, d))}];
+  let series = d.projects.map((p, i) => ({name: p.label, colour: colourOf(i), values: p.bins.map((b, j) => value(m, b, j, d))}))
+    .filter(s => s.values.some(v => v));
+  if (series.length > SERIES_MAX) {
+    const other = {name: `${series.length - SERIES_MAX} more`, colour: 'var(--muted)', values: d.bins.map(() => 0)};
+    for (const s of series.slice(SERIES_MAX)) s.values.forEach((v, i) => { other.values[i] += v || 0; });
+    series = [...series.slice(0, SERIES_MAX), other];
+  }
+  return series;
+}
+
+function renderChart(d) {
+  const m = BY_KEY[st.metric] || METRICS[0];
+  const series = chartSeries(d, m);
+  const n = d.bins.length;
+  const plot = $('plot');
+  const side = plot.clientWidth >= 720;
+  plot.classList.toggle('side', side);
+  const H = side || plot.clientWidth >= 600 ? 240 : 200;
+  // The rolling four-week baseline, of the total: a dashed line over the bars or lines.
+  const base = (d.baseline || []).map((b, i) => !b ? null : m.key === 'active_pct'
+    ? (b.hours === null ? null : ofDay(b.hours, d.bins[i], d.bin_ends[i], d.bin_day_units?.[i])) : b[m.key] ?? null);
+  const hasBase = series.length > 0 && base.some(v => v !== null);
+  const legend = $('legend');
+  legend.replaceChildren(...series.map((s, i) => el('li', {'data-s': i, title: s.name},
+    el('i', {style: `background:${s.colour}`}), el('span', {text: s.name}))),
+    hasBase ? el('li', {class: 'base', title: 'The four weeks before each bin, as a mean per day, at the bin\'s length'},
+      el('i', {class: 'dash'}), el('span', {text: '4-week average'})) : null);
+  const rows = side ? Math.max(1, Math.floor((H - 10) / 22)) : Math.ceil(series.length / Math.max(1, Math.floor(plot.clientWidth / 170)));
+  legend.style.gridTemplateRows = `repeat(${Math.max(1, rows)}, auto)`;
+  const W = Math.max(280, Math.round($('chart').clientWidth) || 900);
+  const L = 52, R = 10, T = 14, B = 26;
+  const pw = W - L - R, ph = H - T - B, bw = pw / Math.max(1, n);
+  const cx = i => L + i * bw + bw / 2;
+  let top = 0;
+  if (m.sum) for (let i = 0; i < n; i++) top = Math.max(top, series.reduce((t, s) => t + (s.values[i] || 0), 0));
+  else for (const s of series) for (const v of s.values) if (v) top = Math.max(top, v);
+  if (hasBase) for (const v of base) if (v) top = Math.max(top, v);
+  const ymax = niceMax(top * 1.05);
+  const y = v => T + ph - (v / ymax) * ph;
+  const root = svg('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `${m.label} per ${d.bin}`});
+  for (let i = 0; i <= 4; i++) {
+    const v = ymax * i / 4, yy = y(v);
+    root.append(svg('line', {class: 'axis', x1: L, x2: W - R, y1: yy, y2: yy, 'stroke-opacity': i ? .5 : 1}));
+    root.append(svg('text', {class: 'tick', x: L - 6, y: yy + 3, 'text-anchor': 'end'}, show(m.key, v)));
+  }
+  const every = Math.ceil(n / Math.max(2, Math.floor(pw / 70)));
+  d.bins.forEach((at, i) => {
+    if (i % every) return;
+    root.append(svg('text', {class: 'tick', x: cx(i), y: H - 8, 'text-anchor': 'middle'}, binLabel(at, i ? d.bins[i - every] : undefined)));
+  });
+  if (!series.length) {
+    root.append(svg('text', {class: 'empty', x: L + pw / 2, y: T + ph / 2, 'text-anchor': 'middle'}, 'Nothing in this period'));
+  } else if (m.sum) {
+    for (let i = 0; i < n; i++) {
+      let base = 0;
+      series.forEach(s => {
+        const v = s.values[i] || 0;
+        if (!v) return;
+        root.append(svg('rect', {x: L + i * bw + bw * .12, width: bw * .76, y: y(base + v),
+          height: Math.max(0, y(base) - y(base + v)), fill: s.colour}));
+        base += v;
+      });
+    }
+  } else {
+    series.forEach(s => {
+      let path = '', pen = false;
+      s.values.forEach((v, i) => {
+        if (v === null || v === undefined) { pen = false; return; }
+        path += `${pen ? 'L' : 'M'}${cx(i).toFixed(1)},${y(v).toFixed(1)}`;
+        pen = true;
+      });
+      root.append(svg('path', {d: path, fill: 'none', stroke: s.colour, 'stroke-width': 2, 'stroke-linejoin': 'round'}));
+      s.values.forEach((v, i) => { if (v !== null && v !== undefined && bw >= 8) root.append(svg('circle', {cx: cx(i), cy: y(v), r: 3, fill: s.colour})); });
+    });
+  }
+  if (hasBase) {
+    let path = '', pen = false;
+    base.forEach((v, i) => {
+      if (v === null) { pen = false; return; }
+      path += `${pen ? 'L' : 'M'}${cx(i).toFixed(1)},${y(v).toFixed(1)}`;
+      pen = true;
+    });
+    root.append(svg('path', {class: 'avg base', d: path, fill: 'none'}));
+  }
+  // Bins before a figure's source began: hours there are estimated from commits (All) or absent;
+  // agent-hours, prompts and leverage are absent. Shaded and named rather than drawn as zero.
+  const src = {hours: 'inputs', active_pct: 'inputs', prompts: 'inputs', agent_hours: 'calls', leverage: 'calls'}[m.key];
+  const began = src ? (d.coverage_at || {})[src] : null;
+  const gone = src ? d.bin_ends.filter(e => began === null || e <= began).length : 0;
+  if (gone) {
+    const estimated = src === 'inputs' && m.key !== 'prompts' && d.count === 'all';
+    root.prepend(svg('rect', {class: 'band', x: L, y: T, width: gone * bw, height: ph}));
+    root.append(svg('text', {class: 'band-label', x: L + 6, y: T + 12},
+      estimated ? 'estimated from commits' : src === 'calls' ? 'partial: before the transcripts' : 'before the record'));
+  }
+  const guide = svg('line', {class: 'guide', y1: T, y2: T + ph, visibility: 'hidden'});
+  const hit = svg('rect', {class: 'hit', x: L, y: T, width: pw, height: ph});
+  root.append(guide, hit);
+  const tip = $('tip');
+  function hover(e) {
+    if (!series.length) return;
+    const box = root.getBoundingClientRect();
+    const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - box.left) * W / box.width - L) / bw)));
+    guide.setAttribute('x1', cx(i));
+    guide.setAttribute('x2', cx(i));
+    guide.setAttribute('visibility', 'visible');
+    const at = series.map(s => ({s, v: s.values[i]})).filter(r => r.v !== null && r.v !== undefined && (r.v || !m.sum)).sort((a, b) => b.v - a.v);
+    tip.replaceChildren(el('div', {class: 'when', text: `${binTitle(d.bins[i])} · ${m.label}`}),
+      ...(at.length ? at.map(r => el('div', {class: 'r'}, el('i', {class: 'sw', style: `background:${r.s.colour}`}),
+        el('span', {text: r.s.name}), el('b', {text: show(m.key, r.v)})))
+        : [el('div', {class: 'muted', text: 'Nothing in this bin'})]),
+      m.sum && at.length > 1 ? el('div', {class: 'r total'}, el('i', {class: 'sw'}), el('span', {text: 'Total'}),
+        el('b', {text: show(m.key, at.reduce((t, r) => t + r.v, 0))})) : '',
+      hasBase && base[i] !== null ? el('div', {class: 'r'}, el('i', {class: 'sw dash'}), el('span', {text: '4-week average'}),
+        el('b', {text: show(m.key, base[i])})) : '');
+    tip.hidden = false;
+    const pbox = plot.getBoundingClientRect();
+    const px = e.clientX - pbox.left, py = e.clientY - pbox.top;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.max(0, px + 14 + tw > pbox.width ? px - 14 - tw : px + 14) + 'px';
+    tip.style.top = Math.max(0, Math.min(py - th / 2, pbox.height - th)) + 'px';
+  }
+  hit.addEventListener('pointermove', hover);
+  hit.addEventListener('pointerdown', hover);
+  hit.addEventListener('pointerleave', () => { tip.hidden = true; guide.setAttribute('visibility', 'hidden'); });
+  tip.hidden = true;
+  for (const b of $('by').children) {
+    b.disabled = b.dataset.value === 'project' && !m.sum;
+    b.setAttribute('aria-pressed', String(b.dataset.value === (m.sum ? st.by : 'all')));
+  }
+  $('chart').replaceChildren(root);
+}
+
+// ---- punchcard and calendar ----
+
+function cellTip(node, text) {
+  node.dataset.cell = text;
+  return node;
+}
+
+function renderPunch(d) {
+  const top = scaleTop(d.punchcard.flat());
+  heatKey($('punch-key'), top / 60, 'h');
+  const grid = $('punch');
+  grid.replaceChildren(el('span'), ...Array.from({length: 24}, (_, h) => el('span', {class: 'hl', text: h % 3 ? '' : String(h)})));
+  d.punchcard.forEach((row, wd) => {
+    grid.append(el('span', {class: 'dl', text: WEEKDAYS[wd]}));
+    row.forEach((m, h) => grid.append(cellTip(el('i', {class: 'cell', style: heat(m, top)}),
+      `${WEEKDAYS[wd]} ${String(h).padStart(2, '0')}:00 · ${fmt('h', m / 60)}`)));
+  });
+}
+
+function renderCalendar(d) {
+  const [, label, idx, kind] = CAL.find(x => x[0] === st.cal) || CAL[0];
+  const days = d.calendar;
+  const top = scaleTop(days.map(x => x[idx]));
+  const grid = $('calendar');
+  grid.replaceChildren();
+  if (!days.length) return;
+  // A column per week, Monday at the top, as the punchcard reads.
+  const first = new Date(days[0][0] + 'T12:00:00Z');
+  const lead = (first.getUTCDay() + 6) % 7;
+  const cols = Math.ceil((lead + days.length) / 7);
+  grid.style.gridTemplateColumns = `auto repeat(${cols}, 11px)`;
+  grid.style.gridTemplateRows = `auto repeat(7, 11px)`;
+  grid.append(el('span'));
+  // A month is named over the week its first day is in; the partial month the year opens on is not.
+  for (let c = 0; c < cols; c++) {
+    const first = days.slice(Math.max(0, c * 7 - lead), c * 7 - lead + 7).find(x => x[0].endsWith('-01'));
+    grid.append(el('span', {class: 'ml', style: `grid-column:${c + 2};grid-row:1`,
+      text: first ? new Date(first[0] + 'T12:00:00Z').toLocaleDateString([], {month: 'short', timeZone: 'UTC'}) : ''}));
+  }
+  WEEKDAYS.forEach((w, r) => grid.append(el('span', {class: 'dl', style: `grid-column:1;grid-row:${r + 2}`, text: r % 2 ? '' : w})));
+  // Days before the record's first input have no hours to show, only git: marked, not blank.
+  // Under All, they are estimated from commits; under Human only there is nothing to show.
+  const from = (d.coverage || {}).inputs;
+  const human = d.count === 'human';
+  days.forEach((x, i) => {
+    const pos = i + lead;
+    const before = !from || x[0] < from;
+    const none = st.cal === 'hours' && before && human;
+    grid.append(cellTip(el('i', {class: 'cell' + (none ? ' nodata' : ''),
+      style: `grid-column:${Math.floor(pos / 7) + 2};grid-row:${pos % 7 + 2};${none ? '' : heat(x[idx], top)}`}),
+      `${x[0]} · ${none ? 'before the record began' : fmt('h', x[1]) + (before ? ' active, estimated from commits' : ' active')} · ` +
+      `${fmt('int', x[2])} lines · ${fmt('int', x[3])} commits`));
+  });
+  const active = days.filter(x => x[1] > 0).length;
+  $('cal-note').textContent = `${days[0][0]} to ${days[days.length - 1][0]}` +
+    (from && from > days[0][0] ? (human ? ` · hours from ${from}, when the record begins; lines and commits all year`
+      : ` · hours before ${from}, when the record begins, are estimated from commit times`) : '');
+  $('cal-sum').textContent = `${active} active days · ${fmt('h', days.reduce((t, x) => t + x[1], 0))} active · ` +
+    `${fmt('int', days.reduce((t, x) => t + x[2], 0))} lines · ${fmt('int', days.reduce((t, x) => t + x[3], 0))} commits · shaded by ${label.toLowerCase()}, top ${fmt(kind, top)}`;
+}
+
+function floatTip(e) {
+  const c = e.target.closest && e.target.closest('[data-cell]');
+  const tip = $('cell-tip');
+  if (!c) { tip.hidden = true; return; }
+  tip.textContent = c.dataset.cell;
+  tip.hidden = false;
+  const r = c.getBoundingClientRect();
+  tip.style.left = Math.max(4, Math.min(innerWidth - tip.offsetWidth - 4, r.left + r.width / 2 - tip.offsetWidth / 2)) + 'px';
+  tip.style.top = (r.top - tip.offsetHeight - 6 < 0 ? r.bottom + 6 : r.top - tip.offsetHeight - 6) + 'px';
+}
+
+// ---- Projects table ----
+
+// [key, label, format, shaded]
+const COLUMNS = [['hours', 'Active', 'h', true], ['share', 'Share', 'pct', false], ['agent_hours', 'Agent-h', 'h', true],
+  ['leverage', 'Leverage', 'x', false], ['prompts', 'Prompts', 'int', true], ['commits', 'Commits', 'int', true],
+  ['landed_now', 'Landed', 'int', true], ['added', 'Added', 'int', true], ['removed', 'Removed', 'int', true],
+  ['slices_done', 'Slices', 'int', true], ['merges', 'Merges', 'int', true], ['agent_pct', 'Agent-cr.', 'pct', false],
+  ['tests_pct', 'Tests', 'pct', false], ['active_days', 'Days', 'int', true], ['late_nights', 'Late', 'int', true]];
+
+function renderProjects(d) {
+  const total = d.totals.now.hours;
+  const val = (p, k) => k === 'share' ? (total ? 100 * p.now.hours / total : null) : p.now[k];
+  const {key, dir} = st.sort;
+  const rows = [...d.projects].sort((a, b) => {
+    const x = key === 'label' ? a.label.toLowerCase() : val(a, key) ?? -1, y = key === 'label' ? b.label.toLowerCase() : val(b, key) ?? -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * dir;
+  });
+  const tops = Object.fromEntries(COLUMNS.filter(c => c[3]).map(([k]) => [k, scaleTop(d.projects.map(p => p.now[k]))]));
+  const head = el('tr', {}, ...[['label', 'Project'], ...COLUMNS].map(([k, label]) =>
+    el('th', {scope: 'col', 'aria-sort': k === key ? (dir > 0 ? 'ascending' : 'descending') : null},
+      el('button', {type: 'button', text: label, onclick: () => {
+        st.sort = {key: k, dir: st.sort.key === k ? -st.sort.dir : (k === 'label' ? 1 : -1)};
+        renderProjects(st.data);
+      }}))));
+  const body = el('tbody', {}, ...rows.map(p => el('tr', {'data-project': p.id},
+    el('td', {}, el('span', {class: 'name'}, el('i', {class: 'sw', style: `background:${colourOf(d.projects.indexOf(p))}`}),
+      el('b', {text: p.label, title: p.label}))),
+    ...COLUMNS.map(([k, , f, shaded]) => {
+      const dl = p.prev ? delta(p.now[k], p.prev[k]) : null;
+      return el('td', {class: shaded ? 'heat' : null, style: shaded ? heat(p.now[k], tops[k], TEXT_HEAT) : null,
+        title: dl ? `${dl} vs ${fmt(f, p.prev[k])} before` : null}, fmt(f, val(p, k)));
+    }))));
+  if (!rows.length) body.append(el('tr', {}, el('td', {colspan: COLUMNS.length + 1, class: 'muted', text: 'Nothing in this period.'})));
+  $('projects').replaceChildren(el('thead', {}, head), body);
+}
+
+// ---- rollups ----
+
+function renderRollups(d) {
+  const items = d.rollups[st.roll] || [];
+  const tops = Object.fromEntries(['hours', 'agent_hours', 'landed_now', 'lines', 'slices_done', 'merges']
+    .map(k => [k, scaleTop(items.map(r => r.stats[k]))]));
+  $('rollups').replaceChildren(...items.map(r => {
+    const s = r.stats;
+    const title = st.roll === 'weeks' ? 'Week of ' + dayYear(r.start)
+      : new Date(r.start).toLocaleDateString([], tzOpt({month: 'long', year: 'numeric'}));
+    const fig = (k, label, f) => {
+      const dl = r.vs_prev && r.vs_prev[k];
+      return el('div', {class: 'fig', style: heat(s[k], tops[k], TEXT_HEAT)},
+        el('b', {text: fmt(f, s[k])}), el('span', {class: 'muted', text: label}),
+        dl !== null && dl !== undefined ? el('span', {class: 'd', text: (dl > 0 ? '+' : '') + dl + '%'}) : null);
+    };
+    const tmax = Math.max(0, ...r.top.map(t => t.hours));
+    if (!s.hours && !s.agent_hours && !s.commits && !s.slices_done)
+      return el('article', {class: 'rollup quiet', 'data-start': r.start},
+        el('h3', {}, title, r.partial ? el('span', {class: 'chip', text: 'partial'}) : null),
+        el('p', {class: 'small muted', text: 'Nothing recorded.'}));
+    return el('article', {class: 'rollup', 'data-start': r.start},
+      el('h3', {}, title, r.partial ? el('span', {class: 'chip', text: 'partial'}) : null),
+      el('p', {class: 'small muted', text: `${fmt('pct', ofDay(s.hours, r.start, r.end, r.day_units))} of ${st.basis} h days active · ${s.active_days} active days`
+        + (r.busiest_day ? ` · busiest ${r.busiest_day.day} (${fmt('h', r.busiest_day.hours)})` : '')
+        + (r.longest_block ? ` · longest ${fmt('min', r.longest_block.min)} in ${labelOf(r.longest_block.project)}` : '')}),
+      el('div', {class: 'figs'}, fig('hours', 'active', 'h'), fig('agent_hours', 'agent', 'h'),
+        fig('landed_now', 'landed', 'int'), fig('lines', 'lines', 'int'), fig('slices_done', 'slices', 'int'),
+        fig('merges', 'merges', 'int')),
+      el('div', {class: 'tops'}, ...r.top.map(t => el('div', {class: 'bar'},
+        el('span', {class: 't', text: labelOf(t.project), title: labelOf(t.project)}),
+        el('span', {class: 'track'}, el('span', {class: 'fill', style: `width:${tmax ? (100 * t.hours / tmax).toFixed(1) : 0}%;display:block;background:${colourOf(d.projects.findIndex(p => p.id === t.project))}`})),
+        el('span', {class: 'n', text: `${fmt('h', t.hours)} · ${fmt('pct', t.pct)}`})))),
+      r.slices_count ? el('details', {}, el('summary', {text: `${r.slices_count} slice${r.slices_count === 1 ? '' : 's'} done`}),
+        el('ul', {}, ...r.slices.map(x => el('li', {}, el('b', {text: x.id}), ' ', x.title, el('span', {class: 'muted', text: ' · ' + labelOf(x.project)}))))) : null,
+      r.merges_count ? el('details', {}, el('summary', {text: `${r.merges_count} merge${r.merges_count === 1 ? '' : 's'} to the default branch`}),
+        el('ul', {}, ...r.merges.map(x => el('li', {}, el('code', {text: x.sha}), ' ', x.subject, el('span', {class: 'muted', text: ' · ' + labelOf(x.project)}))))) : null);
+  }));
+  if (!items.length) $('rollups').append(el('p', {class: 'muted small', text: 'Nothing in this period.'}));
+}
+
+// ---- controls ----
+
+function seg(root, items, current, onpick) {
+  root.replaceChildren(...items.map(([value, label]) => el('button', {type: 'button', 'data-value': value,
+    'aria-pressed': String(value === current), text: label,
+    onclick: () => {
+      for (const b of root.children) b.setAttribute('aria-pressed', String(b.dataset.value === value));
+      onpick(value);
+    }})));
+}
+
+function setBins() {
+  const allowed = st.bins[st.period] || [];
+  const want = load('bin.' + st.period, st.binDefault[st.period] || '');
+  st.bin = allowed.includes(want) ? want : st.binDefault[st.period] || allowed[0] || '';
+  $('bin').replaceChildren(...allowed.map(b => el('option', {value: b, text: BIN_NAMES[b] || b})));
+  $('bin').value = st.bin;
+  $('bin').disabled = allowed.length < 2;
+}
+
+// One ordered list in Layout, as the planner's Sections: [id, on] rows kept under key, unknown ids
+// dropped and new ones appended in their default place at the end. Each change is kept and applied.
+function orderList(list, key, names, apply) {
+  let saved = null;
+  try { saved = JSON.parse(load(key, 'null')); } catch { /* a stored copy that no longer parses is dropped */ }
+  const known = (Array.isArray(saved) ? saved : [])
+    .filter(x => Array.isArray(x) && typeof x[0] === 'string' && Object.hasOwn(names, x[0]) && typeof x[1] === 'boolean')
+    .filter((x, i, a) => a.findIndex(y => y[0] === x[0]) === i)
+    .map(([id, on]) => [id, on]);
+  const rows = [...known, ...Object.keys(names).filter(id => !known.some(k => k[0] === id)).map(id => [id, true])];
+  const draw = () => list.replaceChildren(...rows.map(([id, on], i) => el('li', {},
+    el('label', {}, el('input', {type: 'checkbox', 'data-sec': id, checked: on || null}), ' ' + names[id]),
+    el('button', {type: 'button', 'data-move': id, 'data-dir': '-1', 'aria-label': `Move ${names[id]} up`, disabled: i ? null : '', text: '↑'}),
+    el('button', {type: 'button', 'data-move': id, 'data-dir': '1', 'aria-label': `Move ${names[id]} down`, disabled: i < rows.length - 1 ? null : '', text: '↓'}))));
+  const changed = () => { save(key, JSON.stringify(rows)); draw(); apply(); };
+  draw();
+  list.addEventListener('change', e => {
+    const row = rows.find(([id]) => id === e.target.dataset.sec);
+    if (row) { row[1] = e.target.checked; changed(); list.querySelector(`[data-sec="${row[0]}"]`).focus(); }
+  });
+  list.addEventListener('click', e => {
+    const b = e.target.closest('[data-move]');
+    if (!b) return;
+    const i = rows.findIndex(([id]) => id === b.dataset.move), j = i + Number(b.dataset.dir);
+    if (i < 0 || j < 0 || j >= rows.length) return;
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+    changed();
+    const again = list.querySelector(`[data-move="${b.dataset.move}"][data-dir="${b.dataset.dir}"]`);
+    (again && !again.disabled ? again : list.querySelector(`[data-move="${b.dataset.move}"]:not([disabled])`))?.focus();
+  });
+  return rows;
+}
+
+// The blocks moved in the DOM, not by CSS order, so Tab and a screen reader follow what is seen.
+function placeBlocks() {
+  $('defs').before(...st.blocks.map(([id, on]) => {
+    const node = document.querySelector(`[data-block="${id}"]`);
+    node.hidden = !on;
+    return node;
+  }));
+  if (st.data) {
+    renderLanes(st.data);
+    renderChart(st.data);
+  }
+}
+
+function select(node, items, current, onpick) {
+  node.replaceChildren(...items.map(([v, label]) => el('option', {value: v, text: label})));
+  node.value = current;
+  node.addEventListener('change', () => onpick(node.value));
+}
+
+async function boot() {
+  st.period = load('period', '30d');
+  st.count = load('count', 'all');
+  st.metric = load('metric', 'hours');
+  st.intensity = load('intensity', 'lines');
+  st.cal = load('cal', 'hours');
+  st.roll = load('roll', 'weeks');
+  st.by = load('by', 'project');
+  select($('metric'), METRICS.map(m => [m.key, m.label]), BY_KEY[st.metric] ? st.metric : 'hours', v => {
+    st.metric = v; save('metric', v); if (st.data) renderChart(st.data);
+  });
+  st.laneSort = LANE_SORT.some(x => x[0] === load('laneSort', 'recent')) ? load('laneSort', 'recent') : 'recent';
+  select($('lane-sort'), LANE_SORT.map(x => [x[0], x[1]]), st.laneSort, v => {
+    st.laneSort = v; save('laneSort', v); if (st.data) renderLanes(st.data);
+  });
+  select($('intensity'), INTENSITY.map(x => [x[0], x[1]]), st.intensity, v => {
+    st.intensity = v; save('intensity', v); if (st.data) renderLanes(st.data);
+  });
+  select($('cal-metric'), CAL.map(x => [x[0], x[1]]), st.cal, v => {
+    st.cal = v; save('cal', v); if (st.data) renderCalendar(st.data);
+  });
+  seg($('by'), [['project', 'By Project'], ['all', 'All']], st.by, v => { st.by = v; save('by', v); if (st.data) renderChart(st.data); });
+  st.basis = [24, 16, 8].includes(Number(load('basis', '24'))) ? Number(load('basis', '24')) : 24;
+  st.shade = load('shade', 'scale') === 'flat' ? 'flat' : 'scale';
+  select($('basis'), [['24', '24 h'], ['16', '16 h awake'], ['8', '8 h work']], String(st.basis), v => {
+    st.basis = Number(v); save('basis', v); if (st.data) render();
+  });
+  seg($('shade'), [['scale', 'Scaled'], ['flat', 'Flat']], st.shade, v => { st.shade = v; save('shade', v); if (st.data) render(); });
+  seg($('roll'), [['weeks', 'Weeks'], ['months', 'Months']], st.roll, v => { st.roll = v; save('roll', v); if (st.data) renderRollups(st.data); });
+  st.blocks = orderList($('blocks'), 'blocks', BLOCKS, placeBlocks);
+  st.cards = orderList($('card-order'), 'cards', CARDS, () => { if (st.data) renderCards(st.data); });
+  placeBlocks();
+  $('gear').addEventListener('click', () => $('layout').showModal());
+  $('refresh').addEventListener('click', () => refresh(true));
+  $('pull').addEventListener('click', pullMachines);
+  $('lanes').addEventListener('pointerover', laneTip);
+  $('lanes').addEventListener('focusin', laneTip);
+  $('lanes').addEventListener('pointerleave', () => { $('lane-tip').hidden = true; });
+  $('lanes').addEventListener('focusout', () => { $('lane-tip').hidden = true; });
+  for (const id of ['punch', 'calendar']) {
+    $(id).addEventListener('pointerover', floatTip);
+    $(id).addEventListener('pointerleave', () => { $('cell-tip').hidden = true; });
+  }
+  let list;
+  try {
+    list = await api('');
+  } catch (e) {
+    $('err').textContent = e.message;
+    $('err').hidden = false;
+    return;
+  }
+  if (!list.periods.includes(st.period)) st.period = '30d';
+  if (!list.counts.includes(st.count)) st.count = 'all';
+  st.bins = list.bins;
+  st.binDefault = list.bin_default;
+  setBins();
+  // Moving the window is by one bin of the chosen size; a new period or bin starts at now again.
+  $('bin').addEventListener('change', () => { st.bin = $('bin').value; st.shift = 0; save('bin.' + st.period, st.bin); refresh(); });
+  seg($('period'), list.periods.map(p => [p, p]), st.period, v => { st.period = v; st.shift = 0; save('period', v); setBins(); refresh(); });
+  for (const prefix of ['', 'lanes-']) {
+    $(prefix + 'older').addEventListener('click', () => { st.shift = Math.min(SHIFT_MAX, st.shift + 1); refresh(); });
+    $(prefix + 'newer').addEventListener('click', () => { st.shift = Math.max(0, st.shift - 1); refresh(); });
+    $(prefix + 'latest').addEventListener('click', () => { st.shift = 0; refresh(); });
+  }
+  seg($('count'), [['all', 'All inputs'], ['human', 'Human only']], st.count, v => { st.count = v; save('count', v); refresh(); });
+  refresh();
+  let pending = 0;
+  new ResizeObserver(() => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => { if (st.data) renderChart(st.data); });
+  }).observe($('plot'));
+}
+
+boot();
+
+  </script>
+</body>
+
+</html>

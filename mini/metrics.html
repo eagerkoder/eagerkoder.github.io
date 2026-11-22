@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1b26">
+  <!-- Stamped by scripts/build.py, as every page's are. -->
+  <meta name="app-version" content="0.6.0">
+  <meta name="app-built" content="2026-11-22">
+  <title>Agent Metrics</title>
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Cpath%20d='M2%2012L6%207L9%209L14%203'%20stroke='%237aa2f7'%20stroke-width='2'%20fill='none'%20stroke-linecap='round'/%3E%3C/svg%3E">
+  <!--
+    What each agent of one Project spent, over a period and bin by bin: context per call, calls
+    per turn, cache, growth, compactions, tool output, subagents, by agent and by model. It opens
+    no socket; the relay answers /api/agent-metrics from relay/agent_metrics.py, LAN only.
+  -->
+  <style>
+/* web/metrics.html: the agent metrics page. Its own page, so its tokens sit on :root. */
+:root {
+  --bg: #f5f5f7; --panel: #ffffff; --line: #dcdde3; --fg: #24283b; --muted: #6b7089;
+  --track: #e9eaf0; --accent: #3d59a1; --bad: #ba334a; --good: #258254;
+  --claude: #d9713a; --codex: #1a9e95; --opencode: #7c5cd6;
+  --s0: #4f78c4; --s1: #d9713a; --s2: #1a9e95; --s3: #8564bd; --s4: #b0479a; --s5: #986000;
+  --s6: #2595bc; --s7: #5b6b80;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #a1a7c5;
+    --track: #292e42; --accent: #7aa2f7; --bad: #ff7a90; --good: #70bd94;
+    --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
+    --s0: #7aa2ed; --s1: #ff9e64; --s2: #2ac3b4; --s3: #b19ae4; --s4: #e08cc9; --s5: #e6b657;
+    --s6: #6ebcdd; --s7: #9aa8bd;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #a1a7c5;
+  --track: #292e42; --accent: #7aa2f7; --bad: #ff7a90; --good: #70bd94;
+  --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
+  --s0: #7aa2ed; --s1: #ff9e64; --s2: #2ac3b4; --s3: #b19ae4; --s4: #e08cc9; --s5: #e6b657;
+  --s6: #6ebcdd; --s7: #9aa8bd;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+header {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  position: sticky; top: 0; z-index: 5;
+}
+h1 { font-size: 16px; margin: 0; }
+header nav a { color: var(--accent); }
+h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+h2 .small { text-transform: none; letter-spacing: 0; font-weight: normal; }
+main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 1400px; margin: 0 auto; }
+label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.grow { flex: 1; }
+button, select {
+  font: inherit; font-size: 12px; color: var(--fg); background: var(--track);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-height: 36px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); position: relative; }
+#err { color: var(--bad); margin: 0; overflow-wrap: anywhere; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+
+.cards { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.stat .k { font-size: 11px; color: var(--muted); }
+.stat .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .d { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.d.bad { color: var(--bad); }
+.d.good { color: var(--good); }
+
+.chart-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.chart-head h2 { margin: 0; flex: 1; }
+#chart { min-width: 0; }
+#chart svg { display: block; width: 100%; height: auto; }
+#chart .axis { stroke: var(--line); }
+#chart .tick { fill: var(--muted); font-size: 10px; }
+#chart .avg { stroke: var(--fg); stroke-dasharray: 4 3; stroke-width: 1; opacity: .7; }
+#chart .avg-label { fill: var(--fg); font-size: 10px; opacity: .8; }
+#chart .empty { fill: var(--muted); font-size: 12px; }
+/* The legend is a vertical list beside the chart, or under it on a narrow card; metrics.js sets how
+   many rows fit, and the grid flows the rest into more columns. */
+.plot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 16px; }
+.plot.side { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(0, max-content); gap: 4px 16px; font-size: 12px; }
+.plot:not(.side) .legend { grid-auto-columns: minmax(0, 1fr); }
+.plot.side .legend { padding-top: 10px; max-width: 360px; }
+.legend li { display: flex; align-items: center; gap: 6px; min-width: 0; cursor: default; border-radius: 4px; padding: 1px 4px; }
+.legend li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.legend li.on { background: var(--track); }
+.legend li:focus-visible { outline: 2px solid var(--accent); }
+.legend i, .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+#chart [data-s] { transition: opacity .12s; }
+#chart svg.hl [data-s]:not(.on) { opacity: .18; }
+#chart svg.hl path.on { stroke-width: 3; }
+#chart .guide { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+#chart .hit { fill: transparent; }
+.tip { position: absolute; z-index: 3; pointer-events: none; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .18); min-width: 140px; max-width: 280px; }
+.tip .when { color: var(--muted); margin-bottom: 4px; }
+.tip .r { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.tip .r span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tip .r b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip .r.on span { font-weight: 700; }
+.tip .r.total { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; }
+.star { color: var(--s5); }
+.key-note { margin: -2px 0 8px; }
+.stat.key { border-color: color-mix(in srgb, var(--s5) 55%, var(--line)); }
+.stat .k .star, .stat .k .diamond { margin-left: 4px; }
+.diamond { color: var(--s2); }
+.stat.tuned { border-color: color-mix(in srgb, var(--s2) 55%, var(--line)); }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+th button { all: unset; cursor: pointer; }
+th button:focus-visible { outline: 2px solid var(--accent); }
+th[aria-sort="ascending"] button::after { content: " ▲"; }
+th[aria-sort="descending"] button::after { content: " ▼"; }
+tbody tr.row { cursor: pointer; }
+tbody tr.row:hover { background: var(--track); }
+td .name { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; }
+td .name b { overflow: hidden; text-overflow: ellipsis; }
+.harness { font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--track); color: var(--muted); }
+tr.detail > td { white-space: normal; text-align: left; background: var(--bg); padding: 12px; }
+.detail-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.detail-grid h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); }
+.bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; margin: 0 0 6px; }
+.bar .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .track { grid-column: 1 / -1; grid-row: 2; height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); }
+.bar .n { color: var(--muted); white-space: nowrap; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Insights start closed; the heading is the toggle, its triangle turning as they open. */
+details.ins > summary { list-style: none; cursor: pointer; width: fit-content; max-width: 100%; border-radius: 4px; }
+details.ins > summary::-webkit-details-marker { display: none; }
+details.ins > summary h2 { display: inline; margin: 0; }
+details.ins > summary h2::before { content: ''; display: inline-block; margin: 0 8px 1px 2px; border: 5px solid transparent;
+  border-right-width: 0; border-left: 7px solid currentColor; transition: transform .15s; }
+details.ins[open] > summary { margin-bottom: 8px; }
+details.ins[open] > summary h2::before { transform: rotate(90deg); }
+details.ins > summary:hover h2 { color: var(--fg); }
+.insights { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.insight { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--s5);
+  border-radius: 10px; padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.insight h3 { font-size: 14px; margin: 0; overflow-wrap: anywhere; }
+.insight p { margin: 0; overflow-wrap: anywhere; }
+.insight .lever { font-size: 13px; }
+.insight .foot { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: auto; padding-top: 4px; }
+.insight .foot button { margin-left: auto; min-height: 32px; padding: 4px 10px; }
+.chip { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--track); color: var(--muted); }
+.chip.high { color: var(--good); }
+.chip.low { color: var(--bad); }
+
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Agent Metrics</h1>
+    <label>Project <select id="project" aria-label="Project"></select></label>
+    <div class="seg" id="period" role="group" aria-label="Period"></div>
+    <label>Bin <select id="bin" aria-label="Bin size"></select></label>
+    <button id="refresh" type="button">Refresh</button>
+    <span class="muted small grow" id="status" role="status"></span>
+    <nav class="small" aria-label="Other pages"><a href="activity.html">Activity</a> · <a href="planner.html">Planner</a></nav>
+  </header>
+  <main>
+    <p id="err" role="alert" hidden></p>
+    <!-- Insights start closed: a press on the heading opens them. -->
+    <details class="ins" id="ins-box">
+      <summary><h2 id="h-ins">Insights <span class="count" id="ins-count"></span> <span class="muted small">what costs
+        most that could cost less, largest saving first</span></h2></summary>
+      <div class="insights" id="insights"></div>
+      <p class="muted small" id="insights-empty" hidden>Nothing stands out in this period. A lever needs
+        at least 20 results of one tool kind, 3 turns an agent, or 100 calls in this period and the
+        one before.</p>
+    </details>
+    <section aria-labelledby="h-sum">
+      <h2 id="h-sum">Overall <span class="muted small" id="sum-note"></span></h2>
+      <p class="key-note small muted"><span class="star" aria-hidden="true">★</span> marks what drives
+        cost: context sent = turns × calls per turn × context per call, and cache hits and warm
+        turns are what make it cheap. <span class="diamond" aria-hidden="true">◆</span> marks what the
+        2026-11-03 coder instructions were tuned and judged by (narrower reads, bounded grep, fewer
+        screenshots): growth per call is the fair one, since a compaction resets context per call.
+        Hover a card or column for why.</p>
+      <div class="cards" id="cards"></div>
+    </section>
+    <section class="card" aria-labelledby="h-trend">
+      <div class="chart-head">
+        <h2 id="h-trend">Trend</h2>
+        <label>Metric <select id="metric" aria-label="Chart metric"></select></label>
+        <div class="seg" id="by" role="group" aria-label="Split by"></div>
+      </div>
+      <div class="plot" id="plot">
+        <div id="chart"></div>
+        <ul class="legend" id="legend" aria-label="Series"></ul>
+        <div class="tip" id="tip" role="tooltip" hidden></div>
+      </div>
+    </section>
+    <section class="card" aria-labelledby="h-ops">
+      <h2 id="h-ops">Tool output <span class="muted small">what each kind of tool result costs, carried
+        in every later call until a compaction</span></h2>
+      <div class="scroll"><table id="ops"></table></div>
+    </section>
+    <section class="card" aria-labelledby="h-agents">
+      <h2 id="h-agents">Agents <span class="muted small">press a row for detail</span></h2>
+      <div class="scroll"><table id="agents"></table></div>
+    </section>
+    <section class="card" aria-labelledby="h-models">
+      <h2 id="h-models">Models</h2>
+      <div class="scroll"><table id="models"></table></div>
+    </section>
+    <p class="muted small">Context is the whole prompt a call sends (input, cache read and cache
+      write); every call re-sends it, so a turn costs calls &times; context. Turns and cold turns
+      come from the relay's record; calls, context and tools from Claude Code and Codex transcripts
+      under the Project's root, worktrees included. Δ compares the same length of time before.</p>
+  </main>
+  <script>
+// web/metrics.html: what each agent of one Project spent, from the relay's /api/agent-metrics.
+// relay/agent_metrics.py does the counting; this only lays it out. Agent labels are what people
+// and agents typed, so every string goes in as text, never as markup.
+'use strict';
+
+const HOUR = 3600e3, DAY = 86400e3;
+const STORE = 'herdr.metrics.';
+// better: which way is good, for colouring a change. sum: additive, so charted as stacked bars
+// and averaged per bin; otherwise a ratio, charted as lines. model: has a by-model series, which
+// only a per-call figure can: a turn can span models, and a tool result is billed to none.
+// key: drives cost, starred. why: what the number means for cost, shown on hover.
+const METRICS = [
+  {key: 'context_per_turn', label: 'Context / turn', fmt: 'tok', better: 'down', key_: true,
+    why: 'What one turn of work costs: calls per turn × context per call. The best single cost figure.'},
+  {key: 'context_avg', label: 'Context / call', fmt: 'tok', better: 'down', model: true, key_: true,
+    why: 'Every call re-sends the whole context, so this is the price of each step.'},
+  {key: 'calls_per_turn', label: 'Calls / turn', fmt: 'dec', better: 'down', key_: true,
+    why: 'Steps per turn. Each one re-sends the context, so fewer, larger steps cost less.'},
+  {key: 'cache_pct', label: 'Cache hit', fmt: 'pct', better: 'up', model: true, key_: true,
+    why: 'Share of context read from the prompt cache, billed at a fraction of fresh input. A drop costs.'},
+  {key: 'cold_pct', label: 'Cold turns', fmt: 'pct', better: 'down', key_: true,
+    why: 'Turns started after the cache expired (idle over an hour): the whole context is billed fresh.'},
+  {key: 'context', label: 'Context sent', fmt: 'tok', sum: true, better: 'down', model: true, key_: true,
+    why: 'Total context billed in the period: the volume every other figure multiplies into.'},
+  {key: 'growth_avg', label: 'Growth / call', fmt: 'tok', better: 'down', model: true, tuned: true,
+    why: 'How fast context grows per call (mean rise, compactions left out): tool output and replies piling up. The fair measure across compactions, and the one the 2026-11-03 instructions cut from 1.7k to 1.2k.'},
+  {key: 'result_avg', label: 'Tool result (avg)', fmt: 'bytes', better: 'down', tuned: true,
+    why: 'Average tool output added to the context, screenshots left out. Narrower reads and bounded grep cut it from 2.5 KB to 1.0 KB on 2026-11-03.'},
+  {key: 'images', label: 'Screenshots viewed', fmt: 'int', sum: true, better: 'down', tuned: true,
+    why: 'Images read into the context, each one large. The 2026-11-03 instructions took it from 1 per 7 minutes to 1 per 33.'},
+  {key: 'calls_per_compaction', label: 'Calls / compaction', fmt: 'int', better: 'up', tuned: true,
+    why: 'Calls between compactions: what slower growth buys (about 100 to 140 expected on 2026-11-03).'},
+  {key: 'image_pct', label: 'Screenshot share', fmt: 'pct', better: 'down',
+    why: 'Share of tool output bytes that were images.'},
+  {key: 'context_median', label: 'Median context / call', fmt: 'tok', better: 'down', model: true,
+    why: 'Context per call, unmoved by a few huge calls. A diagnostic only: the bill follows the mean.'},
+  {key: 'sub_pct', label: 'Subagent share', fmt: 'pct',
+    why: 'Context spent by subagents, which run with their own, smaller context.'},
+  {key: 'output_per_call', label: 'Output / call', fmt: 'tok', model: true,
+    why: 'Tokens written per call.'},
+  {key: 'calls', label: 'Calls', fmt: 'int', sum: true, model: true, why: 'Model calls.'},
+  {key: 'turns', label: 'Turns', fmt: 'int', sum: true, why: 'Turn ends in the relay record.'},
+  {key: 'output', label: 'Output', fmt: 'tok', sum: true, model: true, why: 'Tokens written.'},
+  {key: 'compactions', label: 'Compactions', fmt: 'int', sum: true, why: 'Context compactions.'},
+];
+const BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m]));
+const CARDS = ['context_per_turn', 'context_avg', 'calls_per_turn', 'cache_pct', 'cold_pct', 'context',
+  'growth_avg', 'result_avg', 'images', 'calls_per_compaction', 'sub_pct', 'calls', 'turns'];
+const starred = k => BY_KEY[k] && BY_KEY[k].key_;
+const tuned = k => BY_KEY[k] && BY_KEY[k].tuned;
+const mark = k => starred(k) ? '★ ' : tuned(k) ? '◆ ' : '';
+const COLUMNS = [
+  ['context_per_turn', 'Ctx/turn'], ['context_avg', 'Ctx/call'], ['calls_per_turn', 'Calls/turn'],
+  ['cache_pct', 'Cache'], ['cold_pct', 'Cold'], ['context', 'Context'],
+  ['growth_avg', 'Growth'], ['result_avg', 'Tool out'], ['images', 'Screens'],
+  ['calls_per_compaction', 'Calls/cmp'], ['turns', 'Turns'], ['calls', 'Calls'],
+  ['sub_pct', 'Sub'], ['output_per_call', 'Out/call'],
+];
+const SERIES_MAX = 7;    // series past this are "other" in a stacked chart and left out of a line one
+
+const $ = id => document.getElementById(id);
+const st = {list: [], project: '', period: '1d', bin: '', bins: {}, binDefault: {},
+  metric: 'context_avg', by: 'agent',
+  data: null, sort: {key: 'context', dir: -1}, open: new Set(), loading: null};
+
+function load(k, dflt) { try { return localStorage.getItem(STORE + k) || dflt; } catch { return dflt; } }
+function save(k, v) { try { localStorage.setItem(STORE + k, v); } catch { /* private window */ } }
+
+function fmt(kind, v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '–';
+  if (kind === 'tok') return v >= 1e6 ? (v / 1e6).toFixed(v >= 1e8 ? 0 : 2) + 'M'
+    : v >= 1e3 ? (v / 1e3).toFixed(v >= 1e5 ? 0 : 1) + 'k' : String(Math.round(v));
+  if (kind === 'bytes') return v >= 1e6 ? (v / 1e6).toFixed(1) + ' MB' : v >= 1e3 ? (v / 1e3).toFixed(1) + ' KB' : Math.round(v) + ' B';
+  if (kind === 'pct') return (Math.round(v * 10) / 10) + '%';
+  if (kind === 'dec') return (Math.round(v * 10) / 10).toFixed(1);
+  return Math.round(v).toLocaleString();
+}
+const show = (key, v) => fmt(BY_KEY[key] ? BY_KEY[key].fmt : 'int', v);
+
+// The change from the previous period, as text and good/bad; nothing when either side is empty.
+function delta(key, now, prev) {
+  if (!prev || now === null || now === undefined) return null;
+  const pct = 100 * (now - prev) / prev;
+  if (!Number.isFinite(pct) || Math.abs(pct) < 0.5) return {text: '±0%', cls: ''};
+  const better = BY_KEY[key] && BY_KEY[key].better;
+  const good = better && ((better === 'up') === (pct > 0));
+  return {text: (pct > 0 ? '+' : '') + Math.round(pct) + '%', cls: better ? (good ? 'good' : 'bad') : ''};
+}
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const c of kids) if (c !== null && c !== undefined) n.append(c);
+  return n;
+}
+const SVG = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs, text) {
+  const n = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+// A time alone while the chart spans about a day, a date once bins are days, else both.
+function binLabel(at, size, span) {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  if (size >= DAY) return d.toLocaleDateString([], {month: 'numeric', day: 'numeric'});
+  if (span <= 1.5 * DAY) return time;
+  return d.toLocaleDateString([], {month: 'numeric', day: 'numeric'}) + ' ' + time;
+}
+
+// ---- data ----
+
+async function api(query) {
+  const r = await fetch('/api/agent-metrics' + query, {cache: 'no-store'});
+  let body = null;
+  try { body = await r.json(); } catch { /* not ours */ }
+  if (!body) throw new Error(r.ok ? 'the relay sent no metrics' :
+    'no metrics here: this page reads them from the relay on the LAN (HTTP ' + r.status + ')');
+  if (!r.ok) throw new Error(body.error || 'HTTP ' + r.status);
+  return body;
+}
+
+async function refresh() {
+  if (!st.project) return;
+  const ask = {project: st.project, period: st.period, bin: st.bin};
+  st.loading = ask;
+  $('status').textContent = 'Reading transcripts…';
+  $('refresh').disabled = true;
+  try {
+    const d = await api('?project=' + encodeURIComponent(ask.project) + '&period=' + ask.period
+      + (ask.bin ? '&bin=' + ask.bin : ''));
+    if (st.loading !== ask) return;
+    st.data = d;
+    $('err').hidden = true;
+    render();
+  } catch (e) {
+    if (st.loading !== ask) return;
+    $('err').textContent = e.message;
+    $('err').hidden = false;
+    $('status').textContent = '';
+  } finally {
+    if (st.loading === ask) { st.loading = null; $('refresh').disabled = false; }
+  }
+}
+
+// Agents by context, each with a colour kept for the whole page.
+function agentColours(d) {
+  const out = new Map();
+  d.agents.forEach((a, i) => out.set(a.key, i < SERIES_MAX ? `var(--s${i})` : 'var(--muted)'));
+  return out;
+}
+
+// ---- render ----
+
+function render() {
+  const d = st.data;
+  const when = new Date(d.since);
+  $('status').textContent = `${d.transcripts} transcripts · ${d.agents.length} agents · ${d.took_ms} ms`;
+  $('sum-note').textContent = `since ${when.toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}`;
+  renderInsights(d);
+  renderCards(d);
+  renderChart(d);
+  renderOps(d);
+  renderAgents(d);
+  renderModels(d);
+}
+
+function renderCards(d) {
+  const now = d.totals.now, prev = d.totals.prev;
+  $('cards').replaceChildren(...CARDS.map(k => {
+    const dl = delta(k, now[k], prev[k]);
+    return el('div', {class: 'stat' + (starred(k) ? ' key' : tuned(k) ? ' tuned' : ''), 'data-key': k, title: BY_KEY[k].why},
+      el('div', {class: 'k'}, BY_KEY[k].label,
+        starred(k) ? el('span', {class: 'star', text: '★', 'aria-label': 'cost driver'})
+          : tuned(k) ? el('span', {class: 'diamond', text: '◆', 'aria-label': 'tuned 2026-11-03'}) : null),
+      el('div', {class: 'v', text: show(k, now[k])}),
+      el('div', {class: 'd' + (dl && dl.cls ? ' ' + dl.cls : ''),
+        text: dl ? `${dl.text} vs ${show(k, prev[k])}` : 'no earlier data'}));
+  }));
+}
+
+// [{name, colour, values: [per bin, null for no data]}], and the period's overall value.
+function chartSeries(d, m) {
+  const by = st.by === 'model' && !m.model ? 'agent' : st.by;
+  const bins = d.bins.length;
+  if (by === 'all') {
+    const values = d.total_bins.map(b => ratioOrNull(m, b));
+    return {series: [{name: 'All agents', colour: 'var(--accent)', values}], by};
+  }
+  if (by === 'model') {
+    const series = d.models.map((mm, i) => ({
+      name: mm.model, colour: i < SERIES_MAX ? `var(--s${i})` : 'var(--muted)',
+      values: mm.bins.map(b => ratioOrNull(m, b)),
+    }));
+    return {series: fold(series, m, bins), by};
+  }
+  const colours = agentColours(d);
+  const series = d.agents.map(a => ({name: a.label, colour: colours.get(a.key),
+    values: a.bins.map(b => ratioOrNull(m, b))}));
+  return {series: fold(series, m, bins), by};
+}
+
+// A ratio with nothing under it is a gap, not a zero.
+function ratioOrNull(m, b) {
+  if (!b) return null;           // the relay sends nothing for a bin where nothing happened
+  if (m.sum) return b[m.key];
+  const base = ['turns', 'cold_pct', 'calls_per_turn', 'context_per_turn'].includes(m.key) ? b.turns
+    : m.key === 'result_avg' || m.key === 'image_pct' ? b.results
+    : m.key === 'sub_pct' ? b.calls + b.sub_calls : b.calls;
+  return base ? b[m.key] : null;
+}
+
+function fold(series, m, bins) {
+  series = series.filter(s => s.values.some(v => v !== null && v !== undefined));
+  if (series.length <= SERIES_MAX) return series;
+  if (!m.sum) return series.slice(0, SERIES_MAX);
+  const other = {name: `${series.length - SERIES_MAX} more`, colour: 'var(--muted)', values: new Array(bins).fill(0)};
+  for (const s of series.slice(SERIES_MAX)) s.values.forEach((v, i) => { other.values[i] += v || 0; });
+  return [...series.slice(0, SERIES_MAX), other];
+}
+
+function niceMax(v) {
+  if (!(v > 0)) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  return [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= v);
+}
+
+function renderChart(d) {
+  const m = BY_KEY[st.metric];
+  const {series, by} = chartSeries(d, m);
+  for (const b of $('by').children) {
+    b.disabled = b.dataset.by === 'model' && !m.model;
+    b.setAttribute('aria-pressed', String(b.dataset.by === by));
+  }
+  const n = d.bins.length;
+  // The legend first: beside the chart when the card is wide, under it when not, so the chart is
+  // measured in the room the legend leaves.
+  const plot = $('plot');
+  const side = plot.clientWidth >= 720;
+  plot.classList.toggle('side', side);
+  const H = side || plot.clientWidth >= 600 ? 260 : 220;
+  const legend = $('legend');
+  legend.replaceChildren(...series.map((s, i) => el('li', {'data-s': i, tabindex: 0, title: s.name,
+    onpointerenter: () => highlight(i), onpointerleave: () => highlight(null),
+    onfocus: () => highlight(i), onblur: () => highlight(null)},
+  el('i', {style: `background:${s.colour}`}), el('span', {text: s.name}))));
+  const rows = side ? Math.max(1, Math.floor((H - 10) / 22))
+    : Math.ceil(series.length / Math.max(1, Math.floor(plot.clientWidth / 170)));
+  legend.style.gridTemplateRows = `repeat(${Math.max(1, rows)}, auto)`;
+  // Drawn at the box's own pixel width, so its text stays 10px on a phone as on a desktop.
+  const W = Math.max(280, Math.round($('chart').clientWidth) || 900);
+  const L = 52, R = 10, T = 14, B = 26;
+  const pw = W - L - R, ph = H - T - B, bw = pw / n;
+  const cx = i => L + i * bw + bw / 2;
+  // The overall line: the period's own value for a ratio, the mean bin for a sum.
+  const total = by === 'model' ? (d.model_totals?.now || d.totals.now) : d.totals.now;
+  const overall = m.sum ? total[m.key] / n : total[m.key];
+  let top = 0;
+  if (m.sum) for (let i = 0; i < n; i++) top = Math.max(top, series.reduce((t, s) => t + (s.values[i] || 0), 0));
+  else for (const s of series) for (const v of s.values) if (v) top = Math.max(top, v);
+  const ymax = niceMax(Math.max(top, overall || 0) * 1.05);
+  const y = v => T + ph - (v / ymax) * ph;
+  const root = svg('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img',
+    'aria-label': `${m.label} per ${binLabelUnit(d.bin_ms)}, by ${by}`});
+  for (let i = 0; i <= 4; i++) {
+    const v = ymax * i / 4, yy = y(v);
+    root.append(svg('line', {class: 'axis', x1: L, x2: W - R, y1: yy, y2: yy, 'stroke-opacity': i ? .5 : 1}));
+    root.append(svg('text', {class: 'tick', x: L - 6, y: yy + 3, 'text-anchor': 'end'}, show(m.key, v)));
+  }
+  const span = n * d.bin_ms;
+  const every = Math.ceil(n / Math.max(2, Math.floor(pw / (span > 1.5 * DAY && d.bin_ms < DAY ? 110 : 80))));
+  d.bins.forEach((at, i) => {
+    if (i % every) return;
+    root.append(svg('text', {class: 'tick', x: cx(i), y: H - 8, 'text-anchor': 'middle'}, binLabel(at, d.bin_ms, span)));
+  });
+  const groups = series.map((s, i) => svg('g', {'data-s': i}));
+  if (!series.length) {
+    root.append(svg('text', {class: 'empty', x: L + pw / 2, y: T + ph / 2, 'text-anchor': 'middle'}, 'Nothing in this period'));
+  } else if (m.sum) {
+    for (let i = 0; i < n; i++) {
+      let base = 0;
+      series.forEach((s, k) => {
+        const v = s.values[i] || 0;
+        if (!v) return;
+        groups[k].append(svg('rect', {x: L + i * bw + bw * .12, width: bw * .76, y: y(base + v),
+          height: Math.max(0, y(base) - y(base + v)), fill: s.colour}));
+        base += v;
+      });
+    }
+  } else {
+    series.forEach((s, k) => {
+      let path = '', pen = false;
+      s.values.forEach((v, i) => {
+        if (v === null || v === undefined) { pen = false; return; }
+        path += `${pen ? 'L' : 'M'}${cx(i).toFixed(1)},${y(v).toFixed(1)}`;
+        pen = true;
+      });
+      groups[k].append(svg('path', {d: path, fill: 'none', stroke: s.colour, 'stroke-width': 2, 'stroke-linejoin': 'round'}));
+      // A dot per bin while there is room for one; a lone value between gaps keeps its dot.
+      s.values.forEach((v, i) => {
+        if (v === null || v === undefined) return;
+        const alone = (s.values[i - 1] ?? null) === null && (s.values[i + 1] ?? null) === null;
+        if (bw >= 8 || alone) groups[k].append(svg('circle', {cx: cx(i), cy: y(v), r: bw >= 8 ? 3 : 2, fill: s.colour}));
+      });
+    });
+  }
+  root.append(...groups);
+  if (overall) {
+    root.append(svg('line', {class: 'avg', x1: L, x2: W - R, y1: y(overall), y2: y(overall)}));
+    root.append(svg('text', {class: 'avg-label', x: L + 4, y: y(overall) - 4},
+      `${m.sum ? 'mean per bin' : 'overall'} ${show(m.key, overall)}`));
+  }
+  const guide = svg('line', {class: 'guide', y1: T, y2: T + ph, visibility: 'hidden'});
+  root.append(guide);
+  // One transparent sheet over the plot takes the pointer: the bin under it, and for lines the
+  // series nearest it, which is lit with the others dimmed.
+  const hit = svg('rect', {class: 'hit', x: L, y: T, width: pw, height: ph});
+  root.append(hit);
+  const tip = $('tip');
+
+  function highlight(k) {
+    root.classList.toggle('hl', k !== null);
+    for (const g of groups) g.classList.toggle('on', Number(g.dataset.s) === k);
+    for (const g of root.querySelectorAll('g[data-s] path')) g.classList.toggle('on', Number(g.parentNode.dataset.s) === k);
+    for (const li of legend.children) li.classList.toggle('on', Number(li.dataset.s) === k);
+  }
+
+  function hover(e) {
+    if (!series.length) return;
+    const box = root.getBoundingClientRect();
+    const sx = (e.clientX - box.left) * W / box.width, sy = (e.clientY - box.top) * H / box.height;
+    const i = Math.min(n - 1, Math.max(0, Math.floor((sx - L) / bw)));
+    const at = series.map((s, k) => ({k, s, v: s.values[i]})).filter(r => r.v !== null && r.v !== undefined && (r.v || !m.sum));
+    let near = null;
+    if (m.sum) {
+      let base = 0;    // the segment of the stack under the pointer
+      for (const r of at) { if (sy <= y(base) && sy >= y(base + r.v)) near = r.k; base += r.v; }
+    } else if (at.length) {
+      near = at.reduce((a, b) => Math.abs(y(b.v) - sy) < Math.abs(y(a.v) - sy) ? b : a).k;
+    }
+    highlight(near);
+    guide.setAttribute('x1', cx(i));
+    guide.setAttribute('x2', cx(i));
+    guide.setAttribute('visibility', 'visible');
+    const sorted = [...at].sort((a, b) => b.v - a.v);
+    tip.replaceChildren(el('div', {class: 'when', text: binLabel(d.bins[i], d.bin_ms, span) + ' · ' + m.label}),
+      ...(sorted.length ? sorted.map(r => el('div', {class: 'r' + (r.k === near ? ' on' : '')},
+        el('i', {class: 'sw', style: `background:${r.s.colour}`}), el('span', {text: r.s.name}),
+        el('b', {text: show(m.key, r.v)})))
+        : [el('div', {class: 'muted', text: 'Nothing in this bin'})]),
+      m.sum && sorted.length > 1 ? el('div', {class: 'r total'}, el('i', {class: 'sw'}), el('span', {text: 'Total'}),
+        el('b', {text: show(m.key, sorted.reduce((t, r) => t + r.v, 0))})) : '');
+    tip.hidden = false;
+    // Beside the pointer, on whichever side has room, inside the plot.
+    const pbox = plot.getBoundingClientRect();
+    const px = e.clientX - pbox.left, py = e.clientY - pbox.top;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.max(0, px + 14 + tw > pbox.width ? px - 14 - tw : px + 14) + 'px';
+    tip.style.top = Math.max(0, Math.min(py - th / 2, pbox.height - th)) + 'px';
+  }
+  hit.addEventListener('pointermove', hover);
+  hit.addEventListener('pointerdown', hover);
+  hit.addEventListener('pointerleave', () => { tip.hidden = true; guide.setAttribute('visibility', 'hidden'); highlight(null); });
+  tip.hidden = true;
+  $('chart').replaceChildren(root);
+}
+
+function binLabelUnit(ms) { return ms === DAY ? 'day' : ms >= HOUR ? `${ms / HOUR} h` : `${ms / 60e3} min`; }
+
+function sortValue(a, key) { return key === 'label' ? a.label.toLowerCase() : (a.now[key] ?? -1); }
+
+function renderAgents(d) {
+  const colours = agentColours(d);
+  const {key, dir} = st.sort;
+  const rows = [...d.agents].sort((a, b) => {
+    const x = sortValue(a, key), y = sortValue(b, key);
+    return (x < y ? -1 : x > y ? 1 : 0) * dir;
+  });
+  const head = el('tr', {}, ...[['label', 'Agent'], ...COLUMNS].map(([k, label]) =>
+    el('th', {scope: 'col', 'aria-sort': k === key ? (dir > 0 ? 'ascending' : 'descending') : null,
+      title: BY_KEY[k] ? `${BY_KEY[k].label}: ${BY_KEY[k].why}` : null},
+    el('button', {type: 'button', text: mark(k) + label, onclick: () => {
+      st.sort = {key: k, dir: st.sort.key === k ? -st.sort.dir : (k === 'label' ? 1 : -1)};
+      renderAgents(st.data);
+    }}))));
+  const body = el('tbody');
+  for (const a of rows) {
+    const open = st.open.has(a.key);
+    const tr = el('tr', {class: 'row', tabindex: 0, 'aria-expanded': String(open), 'data-key': a.key,
+      onclick: () => toggle(a.key),
+      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(a.key); } }},
+    el('td', {}, el('span', {class: 'name'},
+      el('i', {class: 'sw', style: `background:${colours.get(a.key)}`}),
+      el('b', {text: a.label, title: a.label}),
+      el('span', {class: 'harness', text: a.harness}))),
+    ...COLUMNS.map(([k]) => {
+      const dl = delta(k, a.now[k], a.prev[k]);
+      return el('td', {title: dl ? `${dl.text} vs ${show(k, a.prev[k])} before` : null}, show(k, a.now[k]));
+    }));
+    body.append(tr);
+    if (open) body.append(el('tr', {class: 'detail'}, el('td', {colspan: COLUMNS.length + 1}, detail(a))));
+  }
+  if (!rows.length) body.append(el('tr', {}, el('td', {colspan: COLUMNS.length + 1, class: 'muted', text: 'No agent worked under this Project in this period.'})));
+  $('agents').replaceChildren(el('thead', {}, head), body);
+}
+
+function toggle(key) {
+  if (st.open.has(key)) st.open.delete(key); else st.open.add(key);
+  renderAgents(st.data);
+  const row = document.querySelector(`#agents tr.row[data-key="${CSS.escape(key)}"]`);
+  if (row) row.focus();
+}
+
+function bars(items, max) {
+  return items.map(([name, value, note]) => el('div', {class: 'bar'},
+    el('span', {class: 't', text: name, title: name}),
+    el('span', {class: 'track'}, el('span', {class: 'fill', style: `width:${max ? (100 * value / max).toFixed(1) : 0}%;display:block`})),
+    el('span', {class: 'n', text: note})));
+}
+
+function detail(a) {
+  const models = Object.entries(a.models);
+  const mmax = Math.max(0, ...models.map(([, m]) => m.context));
+  const tools = a.tools.slice(0, 12);
+  const tmax = Math.max(0, ...tools.map(t => t[4]));
+  const subs = Object.entries(a.subagents);
+  const compare = ['context_per_turn', 'context_avg', 'calls_per_turn', 'cache_pct', 'growth_avg', 'result_avg', 'images'];
+  return el('div', {class: 'detail-grid'},
+    el('div', {}, el('h3', {text: 'Models'}),
+      ...(models.length ? bars(models.map(([name, m]) =>
+        [name, m.context, `${fmt('int', m.calls)} calls · ${fmt('tok', m.context / (m.calls || 1))}/call${m.sub ? ' · ' + m.sub + ' sub' : ''}`]), mmax)
+        : [el('p', {class: 'muted', text: 'No calls read.'})])),
+    el('div', {}, el('h3', {text: 'Tool output by kind: carried context, and the average the 2026-11-03 tuning cut'}),
+      ...(tools.length ? bars(tools.map(([kind, count, bytes, , carried]) => [kind, carried, `${count} · avg ${fmt('bytes', bytes / count)} · ${fmt('tok', carried)} carried`]), tmax)
+        : [el('p', {class: 'muted', text: 'No tool results.'})])),
+    el('div', {}, el('h3', {text: 'Subagents'}),
+      ...(subs.length ? subs.map(([model, s]) => el('div', {class: 'small'},
+        `${model}: ${s.agents} run${s.agents === 1 ? '' : 's'}, ${fmt('int', s.calls)} calls, ${fmt('tok', s.context)} context, ${fmt('tok', s.output)} out`))
+        : [el('p', {class: 'muted', text: 'None.'})]),
+      el('h3', {text: 'Where', style: 'margin-top:12px'}),
+      el('div', {class: 'small', text: `${a.sessions} session${a.sessions === 1 ? '' : 's'} in ${a.cwds.map(c => c === '.' ? 'the root' : c).join(', ') || '–'}`}),
+      el('div', {class: 'small muted', text: `${fmt('tok', a.now.context)} context re-read for ${fmt('tok', a.now.output)} output (${a.now.output ? Math.round(a.now.context / a.now.output) : '–'}×)`})),
+    el('div', {}, el('h3', {text: 'Against the period before'}),
+      el('dl', {class: 'kv small'}, ...compare.flatMap(k => {
+        const dl = delta(k, a.now[k], a.prev[k]);
+        return [el('dt', {text: BY_KEY[k].label}),
+          el('dd', {}, `${show(k, a.now[k])} `, el('span', {class: 'd' + (dl && dl.cls ? ' ' + dl.cls : ''), text: dl ? `(${dl.text} vs ${show(k, a.prev[k])})` : '(no earlier)'}))];
+      }))));
+}
+
+// A model's row counts every call it made, subagents' included; Δ on hover, as for an agent.
+const MODEL_COLUMNS = [['calls', 'Calls'], ['context', 'Context'], ['context_avg', 'Ctx/call'],
+  ['cache_pct', 'Cache'], ['growth_avg', 'Growth'], ['output', 'Output'], ['output_per_call', 'Out/call']];
+
+function renderModels(d) {
+  const total = d.models.reduce((t, m) => t + m.now.context, 0);
+  const cols = ['Model', ...MODEL_COLUMNS.map(([k, label]) => mark(k) + label), 'Agents', 'Share'];
+  const body = el('tbody', {}, ...d.models.map((m, i) => el('tr', {},
+    el('td', {}, el('span', {class: 'name'}, el('i', {class: 'sw', style: `background:${i < SERIES_MAX ? `var(--s${i})` : 'var(--muted)'}`}), el('b', {text: m.model}))),
+    ...MODEL_COLUMNS.map(([k]) => {
+      const dl = delta(k, m.now[k], m.prev[k]);
+      return el('td', {title: dl ? `${dl.text} vs ${show(k, m.prev[k])} before` : null}, show(k, m.now[k]));
+    }),
+    el('td', {}, String(m.agents)), el('td', {}, fmt('pct', total ? 100 * m.now.context / total : 0)))));
+  if (!d.models.length) body.append(el('tr', {}, el('td', {colspan: cols.length, class: 'muted', text: 'No calls in this period.'})));
+  $('models').replaceChildren(el('thead', {}, el('tr', {}, ...cols.map(c => el('th', {scope: 'col', text: c})))), body);
+}
+
+// Ranked levers from relay/agent_metrics.py's insights(): each says what a figure costs and what
+// would cut it, never what caused it.
+function renderInsights(d) {
+  const list = d.insights || [];
+  $('insights').replaceChildren(...list.map(i => el('article', {class: 'insight', 'data-id': i.id},
+    el('h3', {text: i.title}),
+    el('p', {class: 'small muted', text: i.evidence}),
+    el('p', {class: 'lever', text: i.lever}),
+    el('div', {class: 'foot small'},
+      i.saving_tokens ? el('b', {text: `saves ~${fmt('tok', i.saving_tokens)} context` + (i.saving_pct ? ` (${i.saving_pct}%)` : '')}) : null,
+      el('span', {class: 'muted', text: i.basis}),
+      el('span', {class: 'chip ' + i.confidence, title: `${i.sample} in the sample`, text: `${i.confidence} · n=${i.sample}`}),
+      BY_KEY[i.metric] ? el('button', {type: 'button', text: 'Show ' + BY_KEY[i.metric].label, onclick: () => {
+        st.metric = i.metric;
+        $('metric').value = i.metric;
+        renderChart(st.data);
+        $('h-trend').scrollIntoView({block: 'start', behavior: 'smooth'});
+      }}) : null))));
+  $('insights-empty').hidden = list.length > 0;
+  $('ins-count').textContent = `(${list.length})`;
+}
+
+function renderOps(d) {
+  const ops = d.ops || [];
+  const cols = [['Tool', ''], ['Results', 'Tool results of this kind, subagents included'],
+    ['Avg size', 'Average bytes a result added; ◆ shows the 2026-11-03 target'],
+    ['Δ avg', 'Average size against the period before'],
+    ['Tokens', 'Estimated tokens added: bytes / 4, or about 1,600 for a screenshot'],
+    ['Carried', 'Tokens re-sent: each result counted once per later call until the next compaction'],
+    ['Share', 'Carried, as a share of all context sent'], ['Top agent', 'The agent that carried the most']];
+  const body = el('tbody', {}, ...ops.slice(0, 15).map(o => {
+    const dl = delta('result_avg', o.avg_bytes, o.prev_avg_bytes);
+    return el('tr', {'data-kind': o.kind},
+      el('td', {}, el('b', {text: o.kind}), o.target ? el('span', {class: 'diamond', text: ' ◆', title: 'tuned 2026-11-03'}) : null),
+      el('td', {}, fmt('int', o.count)),
+      el('td', {title: o.target ? `2026-11-03 target ${fmt('bytes', o.target)}` : null},
+        fmt('bytes', o.avg_bytes) + (o.target ? ' / ' + fmt('bytes', o.target) : '')),
+      el('td', {}, el('span', {class: 'd' + (dl && dl.cls ? ' ' + dl.cls : ''), text: dl ? dl.text : '–'})),
+      el('td', {}, fmt('tok', o.tokens)), el('td', {}, fmt('tok', o.carried)),
+      el('td', {}, fmt('pct', o.share)),
+      el('td', {}, el('span', {class: 'name'}, el('b', {text: o.top_agent || '–', title: o.top_agent || ''}))));
+  }));
+  if (!ops.length) body.append(el('tr', {}, el('td', {colspan: cols.length, class: 'muted', text: 'No tool results in this period.'})));
+  $('ops').replaceChildren(el('thead', {}, el('tr', {}, ...cols.map(([c, why]) => el('th', {scope: 'col', title: why || null, text: c})))), body);
+}
+
+// The bin sizes the relay allows for this period; the one remembered for it, else its default.
+function setBins() {
+  const allowed = st.bins[st.period] || [];
+  const want = load('bin.' + st.period, st.binDefault[st.period] || '');
+  st.bin = allowed.includes(want) ? want : st.binDefault[st.period] || allowed[0] || '';
+  $('bin').replaceChildren(...allowed.map(b => el('option', {value: b, text: b})));
+  $('bin').value = st.bin;
+  $('bin').disabled = allowed.length < 2;
+}
+
+// ---- controls ----
+
+function seg(root, items, current, onpick) {
+  root.replaceChildren(...items.map(([value, label]) => el('button', {type: 'button', 'data-by': value,
+    'data-value': value, 'aria-pressed': String(value === current), text: label,
+    onclick: () => {
+      for (const b of root.children) b.setAttribute('aria-pressed', String(b.dataset.value === value));
+      onpick(value);
+    }})));
+}
+
+async function boot() {
+  st.period = load('period', '1d');
+  st.by = load('by', 'agent');
+  $('metric').replaceChildren(
+    el('optgroup', {label: '★ Cost drivers'}, ...METRICS.filter(m => m.key_).map(m => el('option', {value: m.key, text: '★ ' + m.label}))),
+    el('optgroup', {label: '◆ Tuned 2026-11-03'}, ...METRICS.filter(m => m.tuned).map(m => el('option', {value: m.key, text: '◆ ' + m.label}))),
+    el('optgroup', {label: 'More'}, ...METRICS.filter(m => !m.key_ && !m.tuned).map(m => el('option', {value: m.key, text: m.label}))));
+  $('metric').value = st.metric;
+  $('metric').addEventListener('change', () => { st.metric = $('metric').value; if (st.data) renderChart(st.data); });
+  seg($('by'), [['agent', 'By agent'], ['model', 'By model'], ['all', 'All']], st.by, v => {
+    st.by = v; save('by', v); if (st.data) renderChart(st.data);
+  });
+  $('refresh').addEventListener('click', refresh);
+  $('project').addEventListener('change', () => { st.project = $('project').value; save('project', st.project); st.open.clear(); refresh(); });
+  let list;
+  try {
+    list = await api('');
+  } catch (e) {
+    $('err').textContent = e.message;
+    $('err').hidden = false;
+    return;
+  }
+  const periods = list.periods || ['5h', '1d', '7d', '30d'];
+  if (!periods.includes(st.period)) st.period = '1d';
+  st.bins = list.bins || {};
+  st.binDefault = list.bin_default || {};
+  setBins();
+  $('bin').addEventListener('change', () => { st.bin = $('bin').value; save('bin.' + st.period, st.bin); refresh(); });
+  seg($('period'), periods.map(p => [p, p]), st.period, v => { st.period = v; save('period', v); setBins(); refresh(); });
+  st.list = list.projects;
+  $('project').replaceChildren(...st.list.map(p => el('option', {value: p.id, text: p.label})));
+  const want = new URLSearchParams(location.search).get('project') || load('project', '');
+  st.project = st.list.some(p => p.id === want) ? want : (st.list[0] || {}).id || '';
+  $('project').value = st.project;
+  if (!st.project) {
+    $('err').textContent = 'This relay has no local Projects to measure.';
+    $('err').hidden = false;
+    return;
+  }
+  refresh();
+  let pending = 0;
+  new ResizeObserver(() => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => { if (st.data) renderChart(st.data); });
+  }).observe($('plot'));
+}
+
+boot();
+
+  </script>
+</body>
+
+</html>
