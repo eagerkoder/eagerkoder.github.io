@@ -3,6 +3,70 @@
 
 <head>
   <meta charset="UTF-8">
+  <script>
+    // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
+    // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
+    // machine's relay, and without this it would read and overwrite this app's own storage — the
+    // relay address and token first of all. Every localStorage and sessionStorage key is read and
+    // written under `ns:<name>:`, and `length` and `key()` see only those, so code that walks the
+    // keys walks its own. The theme and tint are this browser's, read from the page's own keys.
+    //
+    // `?m=<id>` is the other use of the same machinery: one of the relays this browser keeps a
+    // config for (machine_configs.js), opened as the top-level page. Its keys are under
+    // `machine:<id>:`, so each machine's address, token, layout and caches stay its own, and
+    // STORAGE_NS stays empty, because everything that asks for STORAGE_NS is asking "am I a remote
+    // room framed by the parent app", which this page is not. A remote room keeps its parent machine id as well.
+    //
+    // STORAGE_RAW reads and writes the browser's keys as they are, for the one module that has to
+    // see every machine's at once. The first script on the page: nothing may touch storage before it.
+    (function () {
+      const q = new URLSearchParams(location.search);
+      const ok = v => !!v && /^[A-Za-z0-9._-]{1,128}$/.test(v);
+      window.STORAGE_NS = ok(q.get('ns')) ? q.get('ns') : '';
+      window.MACHINE_ID = /^[a-z0-9]{1,16}$/.test(q.get('m') || '') ? q.get('m') : '';
+      window.storagePageHref = path => {
+        const url = new URL(path, location.href);
+        for (const [key, value] of [['m', window.MACHINE_ID], ['ns', window.STORAGE_NS]])
+          if (value) url.searchParams.set(key, value);
+        return url.href;
+      };
+      const S = Storage.prototype;
+      const get = S.getItem, set = S.setItem, remove = S.removeItem, key = S.key;
+      const size = (Object.getOwnPropertyDescriptor(S, 'length') || {}).get;
+      window.STORAGE_RAW = {
+        get: k => get.call(localStorage, k),
+        set: (k, v) => set.call(localStorage, k, v),
+        remove: k => remove.call(localStorage, k),
+        keys: () => Array.from({length: size.call(localStorage)}, (_, i) => key.call(localStorage, i)),
+      };
+      const prefix = (window.MACHINE_ID ? 'machine:' + window.MACHINE_ID + ':' : '')
+        + (window.STORAGE_NS ? 'ns:' + window.STORAGE_NS + ':' : '');
+      window.STORAGE_PREFIX = prefix;
+      const shared = new Set(['herdr_theme', 'herdr_tint']);
+      const own = store => {
+        const out = [];
+        const n = size.call(store);
+        for (let i = 0; i < n; i++) {
+          const k = key.call(store, i);
+          if (k && (prefix ? k.startsWith(prefix) : !k.startsWith('machine:') && k !== 'herdr_machines'))
+            out.push(k.slice(prefix.length));
+        }
+        return out;
+      };
+      if (prefix) {
+        S.getItem = function (k) {
+          const v = get.call(this, prefix + k);
+          return v === null && shared.has(String(k)) ? get.call(this, String(k)) : v;
+        };
+        S.setItem = function (k, v) { return set.call(this, prefix + k, v); };
+        S.removeItem = function (k) { return remove.call(this, prefix + k); };
+      }
+      S.key = function (i) { return own(this)[i] ?? null; };
+      S.clear = function () { for (const k of own(this)) remove.call(this, prefix + k); };
+      Object.defineProperty(S, 'length', {configurable: true, get() { return own(this).length; }});
+    })();
+
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
@@ -8519,9 +8583,12 @@ function convWebModeOf(conv) {
         'A7.7 7.7 0 0 1 3.5 11.5a8 8 0 0 1 8.5-8 8 8 0 0 1 8.5 8z"/></svg>';
     }
 
-    // Another machine's room opened here keeps its transcripts apart (storage_ns.js).
-    const CONV_DB_NAME = 'herdr' + (typeof window !== 'undefined' && window.STORAGE_NS
-      ? ':' + window.STORAGE_NS : ''), CONV_DB_STORE = 'transcripts';
+    // Another machine's room opened here, or another machine's config, keeps its transcripts
+    // apart (storage_ns.js).
+    const CONV_DB_NAME = 'herdr' + (typeof window === 'undefined' ? ''
+      : (window.MACHINE_ID ? ':machine:' + window.MACHINE_ID : '')
+        + (window.STORAGE_NS ? (window.MACHINE_ID ? ':ns:' : ':') + window.STORAGE_NS : '')),
+      CONV_DB_STORE = 'transcripts';
     // The relay's own record, kept beside the transcripts rather than mixed into them. They are two
     // sources for one conversation and they must never be folded together: one is what this browser
     // witnessed, the other is what the relay wrote for every pane whether anyone was watching. Its
@@ -11879,7 +11946,9 @@ function convWebModeOf(conv) {
     function connect() {
       const selfRelay = !location.hostname.includes('pages.dev') && !location.hostname.includes('github.io');
       const autoRelayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
-      let url = localStorage.getItem('herdr_relay_url') || (selfRelay ? autoRelayUrl : '');
+      // A machine config of its own (machine_configs.js) is somewhere else until it says where:
+      // falling back to the relay that served the page would connect a new tab to this machine.
+      let url = localStorage.getItem('herdr_relay_url') || (selfRelay && !window.MACHINE_ID ? autoRelayUrl : '');
       if (!url) { showSetup(); return; }
       let token = localStorage.getItem('herdr_relay_token') || '';
       const address = new URL(url);
@@ -12023,7 +12092,10 @@ function convWebModeOf(conv) {
         wsOutdated = true;
         showOutdated();
       }
-      else if (msg.type === 'versions') { if (typeof setRelayVersions === 'function') setRelayVersions(msg); }
+      else if (msg.type === 'versions') {
+        if (typeof setRelayVersions === 'function') setRelayVersions(msg);
+        if (typeof machNoteName === 'function') machNoteName(msg.machine);
+      }
       else if (msg.type === 'projects') {
         projects = msg.projects || [];
         render();
@@ -12762,7 +12834,7 @@ function convWebModeOf(conv) {
       const frag = inHash ? h.toString() : location.hash.slice(1);
       history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + (frag ? '#' + frag : ''));
     }
-    const savedUrl = localStorage.getItem('herdr_relay_url') || (isSelfRelay ? autoRelayUrl : '');
+    const savedUrl = localStorage.getItem('herdr_relay_url') || (isSelfRelay && !window.MACHINE_ID ? autoRelayUrl : '');
     const savedToken = localStorage.getItem('herdr_relay_token') || '';
     document.getElementById('relayUrl').value = savedUrl;
     document.getElementById('relayToken').value = savedToken;
@@ -22282,12 +22354,12 @@ function convWebModeOf(conv) {
     // the other two pages they open one in place; here they are a page change, because this page
     // draws no rooms. Same function name, so nothing upstream has to know which page it is on.
     function openConversation(id) {
-      if (id) window.location.href = 'desktop.html#conv/' + encodeURIComponent(id);
+      if (id) window.location.href = storagePageHref('desktop.html#conv/' + encodeURIComponent(id));
     }
 
     function openTerminal(paneId, aid) {
       const at = aid || paneId;
-      if (at) window.location.href = 'desktop.html#pane/' + encodeURIComponent(at);
+      if (at) window.location.href = storagePageHref('desktop.html#pane/' + encodeURIComponent(at));
     }
 
     // A pane is asked to fit the width it will be read at, and on this page it will be read on
@@ -22296,7 +22368,7 @@ function convWebModeOf(conv) {
     function slotFor() { return 'wide'; }
 
     function projHref(kind, id) {
-      return 'desktop.html#' + kind + '/' + encodeURIComponent(String(id || ''));
+      return storagePageHref('desktop.html#' + kind + '/' + encodeURIComponent(String(id || '')));
     }
 
     // --- the Projects rail ---------------------------------------------------------------------
@@ -23154,7 +23226,7 @@ function convWebModeOf(conv) {
       const row = projRailRows().find(p => p.id === ccProject);
       box.textContent = row ? String(row.label || row.id) : '';
       const out = document.getElementById('projToDesktop');
-      if (out) out.setAttribute('href', 'desktop.html');
+      if (out) out.setAttribute('href', storagePageHref('desktop.html'));
     }
 
     function projRenderKeep(render) {
@@ -23372,11 +23444,13 @@ function convWebModeOf(conv) {
       projColsBoot();
       if (typeof loadPairs === 'function') loadPairs();
       projRender();
+      for (const a of document.querySelectorAll('a[href="desktop.html"]')) a.href = storagePageHref('desktop.html');
 
       // Two tabs of this app share one relay address, so a change made in another one is a
       // reconnect here — the same listener desktop.html boots with, for the same reason.
       window.addEventListener('storage', e => {
-        if (e.key === 'herdr_relay_url' || e.key === 'herdr_relay_token') connect();
+        const prefix = window.STORAGE_PREFIX || '';
+        if (e.key === prefix + 'herdr_relay_url' || e.key === prefix + 'herdr_relay_token') connect();
       });
       connect();
     }

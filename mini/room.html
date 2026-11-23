@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-21">
+  <meta name="app-built" content="2026-11-22">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -15,31 +15,57 @@
     // relay address and token first of all. Every localStorage and sessionStorage key is read and
     // written under `ns:<name>:`, and `length` and `key()` see only those, so code that walks the
     // keys walks its own. The theme and tint are this browser's, read from the page's own keys.
-    // The first script on the page: nothing may touch storage before it.
+    //
+    // `?m=<id>` is the other use of the same machinery: one of the relays this browser keeps a
+    // config for (machine_configs.js), opened as the top-level page. Its keys are under
+    // `machine:<id>:`, so each machine's address, token, layout and caches stay its own, and
+    // STORAGE_NS stays empty, because everything that asks for STORAGE_NS is asking "am I a remote
+    // room framed by the parent app", which this page is not. A remote room keeps its parent machine id as well.
+    //
+    // STORAGE_RAW reads and writes the browser's keys as they are, for the one module that has to
+    // see every machine's at once. The first script on the page: nothing may touch storage before it.
     (function () {
-      const ns = new URLSearchParams(location.search).get('ns');
-      window.STORAGE_NS = ns && /^[A-Za-z0-9._-]{1,128}$/.test(ns) ? ns : '';
-      if (!window.STORAGE_NS) return;
-      const prefix = 'ns:' + window.STORAGE_NS + ':';
-      const shared = new Set(['herdr_theme', 'herdr_tint']);
+      const q = new URLSearchParams(location.search);
+      const ok = v => !!v && /^[A-Za-z0-9._-]{1,128}$/.test(v);
+      window.STORAGE_NS = ok(q.get('ns')) ? q.get('ns') : '';
+      window.MACHINE_ID = /^[a-z0-9]{1,16}$/.test(q.get('m') || '') ? q.get('m') : '';
+      window.storagePageHref = path => {
+        const url = new URL(path, location.href);
+        for (const [key, value] of [['m', window.MACHINE_ID], ['ns', window.STORAGE_NS]])
+          if (value) url.searchParams.set(key, value);
+        return url.href;
+      };
       const S = Storage.prototype;
       const get = S.getItem, set = S.setItem, remove = S.removeItem, key = S.key;
-      const size = Object.getOwnPropertyDescriptor(S, 'length').get;
+      const size = (Object.getOwnPropertyDescriptor(S, 'length') || {}).get;
+      window.STORAGE_RAW = {
+        get: k => get.call(localStorage, k),
+        set: (k, v) => set.call(localStorage, k, v),
+        remove: k => remove.call(localStorage, k),
+        keys: () => Array.from({length: size.call(localStorage)}, (_, i) => key.call(localStorage, i)),
+      };
+      const prefix = (window.MACHINE_ID ? 'machine:' + window.MACHINE_ID + ':' : '')
+        + (window.STORAGE_NS ? 'ns:' + window.STORAGE_NS + ':' : '');
+      window.STORAGE_PREFIX = prefix;
+      const shared = new Set(['herdr_theme', 'herdr_tint']);
       const own = store => {
         const out = [];
         const n = size.call(store);
         for (let i = 0; i < n; i++) {
           const k = key.call(store, i);
-          if (k && k.startsWith(prefix)) out.push(k.slice(prefix.length));
+          if (k && (prefix ? k.startsWith(prefix) : !k.startsWith('machine:') && k !== 'herdr_machines'))
+            out.push(k.slice(prefix.length));
         }
         return out;
       };
-      S.getItem = function (k) {
-        const v = get.call(this, prefix + k);
-        return v === null && shared.has(String(k)) ? get.call(this, String(k)) : v;
-      };
-      S.setItem = function (k, v) { return set.call(this, prefix + k, v); };
-      S.removeItem = function (k) { return remove.call(this, prefix + k); };
+      if (prefix) {
+        S.getItem = function (k) {
+          const v = get.call(this, prefix + k);
+          return v === null && shared.has(String(k)) ? get.call(this, String(k)) : v;
+        };
+        S.setItem = function (k, v) { return set.call(this, prefix + k, v); };
+        S.removeItem = function (k) { return remove.call(this, prefix + k); };
+      }
       S.key = function (i) { return own(this)[i] ?? null; };
       S.clear = function () { for (const k of own(this)) remove.call(this, prefix + k); };
       Object.defineProperty(S, 'length', {configurable: true, get() { return own(this).length; }});
@@ -1637,6 +1663,10 @@
        the drawing switches on the left as well as the right, the first agent bubble sat under
        them. The rows are 26px and hang 5px into the body. Scrolled text still passes beneath. */
     .desk-pane-body.desk-conv { padding-top: 34px; }
+
+    /* The record and the draft slots are painted apart (desktop_shell.js), but they lay out as one
+       thread: the bubbles stay flex items of .desk-conv and keep its gap. */
+    .desk-conv-part { display: contents; }
 
     /* Another machine's room: its own page, framed edge to edge (remote_rooms.js). */
     .desk-pane-body.desk-remote { overflow: hidden; padding: 0; }
@@ -7937,6 +7967,122 @@
 
   </style>
   <style>
+/* Machine configs (machine_configs.js): the tabs in the connect card on both pages, the desktop's
+   pill above the launcher, and its switcher. */
+
+.mach-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.mach-tabs[hidden] { display: none; }
+
+.mach-tab {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mach-tab.on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+
+/* The settings card styles every button in it as a wide primary one; these are tabs. */
+.mach-tabs button {
+  width: auto;
+  margin: 0;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mach-tab.on > button[role="tab"] { color: var(--blue); font-weight: 600; }
+.mach-tabs .mach-tab-x { padding: 4px 8px; color: var(--muted); border-left: 1px solid var(--border); }
+.mach-tabs .mach-tab-x:hover { color: var(--red); }
+.mach-tabs .mach-tab-add { border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); padding: 4px 12px; }
+.mach-tabs .mach-tab-add:hover { color: var(--blue); border-color: var(--blue); }
+.mach-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+/* The desktop pill: the machine this page is on, above the launcher. */
+.desk-mach-pill {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6ch;
+  margin: 8px 10px 6px;
+  padding: 0.35em 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-width: 0;
+}
+.desk-mach-pill[hidden] { display: none; }
+.desk-mach-pill:hover { border-color: var(--blue); }
+.desk-mach-pill .desk-launch-ico { color: var(--blue); }
+.desk-mach-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: left; }
+
+/* The switcher: a box per machine. */
+dialog#machSwitch {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  /* In the top layer, under body, which on the desktop has no font of its own. */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+}
+dialog#machSwitch::backdrop { background: rgb(0 0 0 / 0.45); }
+.mach-switch-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.mach-switch-hint { font-size: 0.75rem; color: var(--muted); }
+.mach-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.mach-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mach-box:hover, .mach-box:focus-visible { border-color: var(--blue); outline: none; }
+.mach-box:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 45%, transparent); }
+.mach-box.on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--bg)); }
+.mach-box-name { font-weight: 600; font-size: 0.95rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 30px; box-sizing: border-box; }
+.mach-box-host { font-size: 0.75rem; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mach-box kbd { position: absolute; top: 10px; right: 10px; font-size: 0.7rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+.mach-box-now { margin-top: auto; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--blue); }
+.mach-box-add { border-style: dashed; color: var(--muted); }
+.mach-box-add .mach-box-name { color: var(--muted); }
+
+.mach-close { flex: none; border: 0; background: transparent; color: var(--text);
+  font: inherit; font-size: 20px; min-width: 28px; min-height: 28px; cursor: pointer; }
+.mach-close:focus-visible { outline: 2px solid var(--blue); }
+
+  </style>
+  <style>
 /* One agent on a roster (arbitration.js arbMemberRowHtml): the pane picker's row, laid flat, then
    its role, its state and what can be done to it. The Commander's sheet, the loop's, and the forms
    that add to either all draw it, on the phone, the desktop and the Projects page, so who is set
@@ -9451,6 +9597,10 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
            reason that holds here too: a launcher under a list of what is already running is a
            launcher nobody presses. It was at the foot beside the gear and could not be found —
            the controls down there are about the page, and this one is about starting work. -->
+      <!-- The machine this page is on, and the way to another (machine_configs.js). -->
+      <button class="desk-mach-pill" id="deskMachPill" hidden aria-haspopup="dialog"
+        onclick="machSwitchOpen()"><svg class="desk-launch-ico" aria-hidden="true" focusable="false"><use href="#icoMachines" /></svg><span
+        class="desk-mach-name"></span><span class="desk-launch-key">&#8984;&#8679;K</span></button>
       <div class="desk-launch-row" id="deskLaunchRow">
         <button class="desk-launch-btn" id="deskLauncherOpen"
           title="Launcher &#183; the tiles that start things" aria-label="Launcher">
@@ -9567,6 +9717,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       </div>
       <div class="settings" id="settingsView">
         <div class="setting-group">
+          <!-- The machines this browser switches between (machine_configs.js), the current one
+               selected. The fields below are that one's. -->
+          <div class="mach-tabs" id="machTabs" role="tablist" aria-label="Machines"></div>
           <label for="relayUrl">Relay URL</label>
           <div class="field-clearable">
             <input id="relayUrl" type="text" inputmode="url" spellcheck="false" autocapitalize="none"
@@ -15451,9 +15604,12 @@ function convWebModeOf(conv) {
         'A7.7 7.7 0 0 1 3.5 11.5a8 8 0 0 1 8.5-8 8 8 0 0 1 8.5 8z"/></svg>';
     }
 
-    // Another machine's room opened here keeps its transcripts apart (storage_ns.js).
-    const CONV_DB_NAME = 'herdr' + (typeof window !== 'undefined' && window.STORAGE_NS
-      ? ':' + window.STORAGE_NS : ''), CONV_DB_STORE = 'transcripts';
+    // Another machine's room opened here, or another machine's config, keeps its transcripts
+    // apart (storage_ns.js).
+    const CONV_DB_NAME = 'herdr' + (typeof window === 'undefined' ? ''
+      : (window.MACHINE_ID ? ':machine:' + window.MACHINE_ID : '')
+        + (window.STORAGE_NS ? (window.MACHINE_ID ? ':ns:' : ':') + window.STORAGE_NS : '')),
+      CONV_DB_STORE = 'transcripts';
     // The relay's own record, kept beside the transcripts rather than mixed into them. They are two
     // sources for one conversation and they must never be folded together: one is what this browser
     // witnessed, the other is what the relay wrote for every pane whether anyone was watching. Its
@@ -20375,7 +20531,9 @@ convApplyTint();
     function connect() {
       const selfRelay = !location.hostname.includes('pages.dev') && !location.hostname.includes('github.io');
       const autoRelayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
-      let url = localStorage.getItem('herdr_relay_url') || (selfRelay ? autoRelayUrl : '');
+      // A machine config of its own (machine_configs.js) is somewhere else until it says where:
+      // falling back to the relay that served the page would connect a new tab to this machine.
+      let url = localStorage.getItem('herdr_relay_url') || (selfRelay && !window.MACHINE_ID ? autoRelayUrl : '');
       if (!url) { showSetup(); return; }
       let token = localStorage.getItem('herdr_relay_token') || '';
       const address = new URL(url);
@@ -20519,7 +20677,10 @@ convApplyTint();
         wsOutdated = true;
         showOutdated();
       }
-      else if (msg.type === 'versions') { if (typeof setRelayVersions === 'function') setRelayVersions(msg); }
+      else if (msg.type === 'versions') {
+        if (typeof setRelayVersions === 'function') setRelayVersions(msg);
+        if (typeof machNoteName === 'function') machNoteName(msg.machine);
+      }
       else if (msg.type === 'projects') {
         projects = msg.projects || [];
         render();
@@ -21164,6 +21325,8 @@ convApplyTint();
     function remoteAppHref(page, machine, room, phone) {
       const url = new URL(room ? (phone ? 'phone-room.html' : 'room.html') : 'index.html', page);
       url.search = '?ns=' + encodeURIComponent(machine);
+      const parent = new URL(page).searchParams.get('m') || '';
+      if (/^[a-z0-9]{1,16}$/.test(parent)) url.searchParams.set('m', parent);
       url.hash = room ? '#conv/' + encodeURIComponent(room) : '';
       return url.href;
     }
@@ -21217,12 +21380,13 @@ convApplyTint();
           if (m && !keep.has(m[1])) { localStorage.removeItem(k); gone.add(m[1]); }
         }
       } catch (e) { /* storage blocked: nothing to sweep */ }
-      const drop = name => { try { indexedDB.deleteDatabase('herdr:' + name); } catch (e) { /* none */ } };
+      const dbPrefix = window.MACHINE_ID ? 'herdr:machine:' + window.MACHINE_ID + ':ns:' : 'herdr:';
+      const drop = name => { try { indexedDB.deleteDatabase(dbPrefix + name); } catch (e) { /* none */ } };
       gone.forEach(drop);
       if (typeof indexedDB === 'undefined' || !indexedDB.databases) return;
       indexedDB.databases().then(dbs => dbs.forEach(d => {
-        const m = /^herdr:(.+)$/.exec(d.name || '');
-        if (m && !remoteRoutes.has(m[1])) drop(m[1]);
+        const name = String(d.name || '').startsWith(dbPrefix) ? d.name.slice(dbPrefix.length) : '';
+        if (/^[A-Za-z0-9._-]+$/.test(name) && !remoteRoutes.has(name)) drop(name);
       }), () => {});
     }
 
@@ -21449,14 +21613,15 @@ convApplyTint();
 
     // Points the machine's copy of this app at `/link/<machine>` with this page's token, written
     // into that copy's own storage namespace (`ns:<machine>:`, storage_ns.js). Same origin, so this
-    // page may; the token never enters an address.
+    // page may; the token never enters an address. Raw, because a page on a machine config of its
+    // own (`?m=`) would otherwise write it under its own namespace, where the framed copy never looks.
     function remoteAppPrepare(host) {
       const own = remoteOwnRelay();
-      const key = k => 'ns:' + host + ':' + k;
+      const key = k => (window.MACHINE_ID ? 'machine:' + window.MACHINE_ID + ':' : '') + 'ns:' + host + ':' + k;
       try {
-        localStorage.setItem(key('herdr_relay_url'), remoteLinkRelay(own.url, host));
-        if (own.token) localStorage.setItem(key('herdr_relay_token'), own.token);
-        else localStorage.removeItem(key('herdr_relay_token'));
+        STORAGE_RAW.set(key('herdr_relay_url'), remoteLinkRelay(own.url, host));
+        if (own.token) STORAGE_RAW.set(key('herdr_relay_token'), own.token);
+        else STORAGE_RAW.remove(key('herdr_relay_token'));
       } catch (e) { return false; }
       return true;
     }
@@ -23127,7 +23292,7 @@ convApplyTint();
       const frag = inHash ? h.toString() : location.hash.slice(1);
       history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + (frag ? '#' + frag : ''));
     }
-    const savedUrl = localStorage.getItem('herdr_relay_url') || (isSelfRelay ? autoRelayUrl : '');
+    const savedUrl = localStorage.getItem('herdr_relay_url') || (isSelfRelay && !window.MACHINE_ID ? autoRelayUrl : '');
     const savedToken = localStorage.getItem('herdr_relay_token') || '';
     document.getElementById('relayUrl').value = savedUrl;
     document.getElementById('relayToken').value = savedToken;
@@ -23366,6 +23531,219 @@ convApplyTint();
     }
 
     renderVersions();
+
+  </script>
+  <script>
+    // Machine configs: the relays this browser switches between, from one page. A tab each in the
+    // connect card on both pages; on the desktop, a pill above the launcher and ⌘/Ctrl+⇧K for a
+    // switcher of boxes.
+    //
+    // A config is a storage namespace (storage_ns.js). The page at `?m=<id>` keeps its relay
+    // address, token and everything else under `machine:<id>:`; the page with no `m` is the first
+    // config, the one this browser had before there were others, and it keeps its keys. So a config
+    // holds nothing of its own past its id, and switching is a page load: every module boots
+    // against the one relay it will talk to, and nothing has to be torn down. The list of ids is
+    // the one key outside every namespace. A config's name is the one its relay reports in
+    // `versions`: the links file's `as` for that machine, else its host name.
+    //
+    // A remote room framed by the parent app (`?ns=`) is that app's, and shows none of this.
+
+    const MACH_KEY = 'herdr_machines';
+    const MACH_ID = /^[a-z0-9]{1,16}$/;
+
+    function machIds() {
+      try {
+        const ids = JSON.parse(STORAGE_RAW.get(MACH_KEY) || '[]');
+        return Array.isArray(ids) ? ids.filter((id, i) => typeof id === 'string' && MACH_ID.test(id) && ids.indexOf(id) === i) : [];
+      } catch (e) { return []; }
+    }
+
+    // '' for the first config, the id for another, null in a frame owned by the parent app.
+    function machCurrent() { return window.STORAGE_NS || window.parent !== window ? null : (window.MACHINE_ID || ''); }
+
+    function machRaw(id, key) { return STORAGE_RAW.get((id ? 'machine:' + id + ':' : '') + key); }
+
+    function machList() {
+      const ids = machIds(), cur = machCurrent();
+      // A page opened at an id the list has lost (removed in another tab) still shows itself.
+      if (cur && !ids.includes(cur)) ids.push(cur);
+      const list = [''].concat(ids).map(id => {
+        const url = machRaw(id, 'herdr_relay_url') || (!id && isSelfRelay ? autoRelayUrl : '');
+        let host = '';
+        try { host = url ? new URL(url).host : ''; } catch (e) { /* a stored address that is not one */ }
+        return {id, url, host, name: machRaw(id, 'herdr_machine_name') || '', current: id === cur};
+      });
+      // The same machine on two configs (its LAN address and its tunnel) is told apart by address.
+      for (const m of list) {
+        m.label = m.name || m.host || 'new machine';
+        if (m.name && m.host && list.some(o => o !== m && o.name === m.name)) m.label += ' · ' + m.host;
+      }
+      return list;
+    }
+
+    function machHref(id) {
+      const page = /\/phone-room\.html$/.test(location.pathname) ? 'index.html'
+        : /\/room\.html$/.test(location.pathname) ? 'desktop.html' : location.href;
+      const u = new URL(page, location.href);
+      u.search = id ? '?m=' + encodeURIComponent(id) : '';
+      // A deep link names a room or a pane of the machine being left.
+      u.hash = '';
+      return u.href;
+    }
+
+    function machSwitch(id) {
+      if (id === machCurrent()) return;
+      location.assign(machHref(id));
+    }
+
+    // Opens the new config at once: an empty one has nothing to show but the connect card.
+    function machAdd() {
+      const ids = machIds();
+      let id;
+      do {
+        id = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => (b % 36).toString(36)).join('');
+      } while (ids.includes(id));
+      STORAGE_RAW.set(MACH_KEY, JSON.stringify(ids.concat(id)));
+      location.assign(machHref(id));
+    }
+
+    // Everything the config kept goes with it, its token first of all.
+    function machRemove(id) {
+      if (!id) return;
+      const prefix = 'machine:' + id + ':';
+      for (const k of STORAGE_RAW.keys()) if (k && k.startsWith(prefix)) STORAGE_RAW.remove(k);
+      try {
+        const name = 'herdr:machine:' + id;
+        indexedDB.deleteDatabase(name);
+        if (indexedDB.databases) indexedDB.databases().then(dbs => dbs.forEach(d => {
+          if (d.name && d.name.startsWith(name + ':ns:')) indexedDB.deleteDatabase(d.name);
+        }), () => {});
+      } catch (e) { /* no IndexedDB here */ }
+      STORAGE_RAW.set(MACH_KEY, JSON.stringify(machIds().filter(x => x !== id)));
+      if (id === machCurrent()) machSwitch('');
+      else machRender();
+    }
+
+    function machNoteName(name) {
+      if (machCurrent() === null || typeof name !== 'string' || !/^[\w.-]{1,128}$/.test(name)) return;
+      if (localStorage.getItem('herdr_machine_name') === name) return;
+      localStorage.setItem('herdr_machine_name', name);
+      machRender();
+    }
+
+    function machRender() {
+      const cur = machCurrent();
+      const list = cur === null ? [] : machList();
+      const tabs = document.getElementById('machTabs');
+      if (tabs) {
+        tabs.hidden = cur === null;
+        tabs.innerHTML = list.map(m => `<span class="mach-tab${m.current ? ' on' : ''}">` +
+          `<button type="button" role="tab" tabindex="${m.current ? 0 : -1}" aria-selected="${m.current}" data-mach="${escapeHtml(m.id)}"` +
+          ` title="${escapeHtml(m.host || 'No address yet')}">${escapeHtml(m.label)}</button>` +
+          (m.id ? `<button type="button" class="mach-tab-x" data-mach-rm="${escapeHtml(m.id)}"` +
+            ` data-arm-key="mach-rm-${escapeHtml(m.id)}" aria-label="Remove ${escapeHtml(m.label)}"` +
+            ` title="Remove · tap twice">✕</button>` : '') + '</span>').join('') +
+          '<button type="button" class="mach-tab-add" data-mach-add aria-label="Add a machine"' +
+          ' title="Add a machine">+</button>';
+      }
+      const pill = document.getElementById('deskMachPill');
+      if (pill) {
+        const m = list.find(x => x.current);
+        pill.hidden = !m;
+        if (m) {
+          pill.querySelector('.desk-mach-name').textContent = m.name || m.host || 'new machine';
+          pill.title = (m.host ? m.host + ' · ' : '') + 'Switch machine (⌘⇧K)';
+        }
+      }
+      const dlg = document.getElementById('machSwitch');
+      if (dlg && dlg.open) machDrawBoxes(dlg);
+    }
+
+    function machDrawBoxes(dlg) {
+      const active = dlg.querySelector('.mach-box:focus');
+      const focus = active && (active.hasAttribute('data-mach-add') ? '[data-mach-add]'
+        : `[data-mach="${active.dataset.mach}"]`);
+      const list = machList();
+      dlg.querySelector('.mach-boxes').innerHTML = list.map((m, i) =>
+        `<button type="button" class="mach-box${m.current ? ' on' : ''}" data-mach="${escapeHtml(m.id)}"` +
+        (m.current ? ' aria-current="true"' : '') + '>' +
+        `<span class="mach-box-name">${escapeHtml(m.name || m.host || 'new machine')}</span>` +
+        `<span class="mach-box-host">${escapeHtml(m.host || 'no address yet')}</span>` +
+        (i < 9 ? `<kbd>${i + 1}</kbd>` : '') + (m.current ? '<span class="mach-box-now">current</span>' : '') +
+        '</button>').join('') +
+        '<button type="button" class="mach-box mach-box-add" data-mach-add>' +
+        '<span class="mach-box-name">+ Add machine</span><span class="mach-box-host">a relay URL and token</span></button>';
+      if (focus) dlg.querySelector(focus)?.focus();
+    }
+
+    function machSwitchOpen() {
+      if (machCurrent() === null) return;
+      let dlg = document.getElementById('machSwitch');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'machSwitch';
+        dlg.setAttribute('aria-labelledby', 'machSwitchTitle');
+        dlg.innerHTML = '<div class="mach-switch-head"><strong id="machSwitchTitle">Switch machine</strong>' +
+          '<span class="mach-switch-hint">1–9 or ← → ⏎ · Esc</span>' +
+          '<button type="button" class="mach-close" aria-label="Close machine switcher">×</button></div><div class="mach-boxes"></div>';
+        dlg.querySelector('.mach-close').addEventListener('click', () => dlg.close());
+        dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+        dlg.addEventListener('keydown', e => {
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          const boxes = Array.from(dlg.querySelectorAll('.mach-box'));
+          if (e.key >= '1' && e.key <= '9') {
+            const box = boxes[Number(e.key) - 1];
+            if (box && !box.matches('.mach-box-add')) { e.preventDefault(); box.click(); }
+            return;
+          }
+          const step = {ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1}[e.key];
+          if (!step) return;
+          e.preventDefault();
+          const at = boxes.indexOf(document.activeElement);
+          boxes[(at + step + boxes.length) % boxes.length].focus();
+        });
+        document.body.appendChild(dlg);
+      }
+      if (dlg.open) { dlg.close(); return; }
+      machDrawBoxes(dlg);
+      dlg.showModal();
+      const on = dlg.querySelector('.mach-box.on') || dlg.querySelector('.mach-box');
+      if (on) on.focus();
+    }
+
+    document.addEventListener('click', e => {
+      const t = e.target.closest ? e.target.closest('[data-mach],[data-mach-rm],[data-mach-add]') : null;
+      if (!t) return;
+      if (t.hasAttribute('data-mach-add')) machAdd();
+      else if (t.hasAttribute('data-mach-rm')) {
+        const id = t.dataset.machRm;
+        armButton(t, 'Tap ✕ again to remove this machine and its token', () => machRemove(id), 'mach-rm-' + id);
+      } else machSwitch(t.dataset.mach);
+    });
+
+    document.addEventListener('keydown', e => {
+      const tab = e.target.closest && e.target.closest('#machTabs [role="tab"]');
+      if (!tab || e.ctrlKey || e.metaKey || e.altKey) return;
+      const tabs = Array.from(document.querySelectorAll('#machTabs [role="tab"]'));
+      const step = {ArrowRight: 1, ArrowLeft: -1}[e.key];
+      const i = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+        : step ? (tabs.indexOf(tab) + step + tabs.length) % tabs.length : -1;
+      if (i < 0) return;
+      e.preventDefault();
+      tabs[i].focus();
+    });
+
+    // Another tab added, removed or named one.
+    window.addEventListener('storage', e => {
+      if ((e.key === MACH_KEY || e.key === null) && machCurrent() && !machIds().includes(machCurrent())) {
+        if (typeof ws !== 'undefined' && ws) ws.close();
+        machSwitch('');
+        return;
+      }
+      if (e.key === MACH_KEY || (e.key && e.key.endsWith('herdr_machine_name'))) machRender();
+    });
+
+    machRender();
 
   </script>
   <script>
@@ -37416,7 +37794,7 @@ convApplyTint();
     // branched inside that module: what *opening* means is a fact about the page, which is the
     // same reason `openConversation` above is defined per page.
     ccOpen = function (projectId) {
-      if (projectId) window.location.href = 'projects.html#' + encodeURIComponent(projectId);
+      if (projectId) window.location.href = storagePageHref('projects.html#' + encodeURIComponent(projectId));
     };
 
     // How long a pane is given to be named before opening it is given up on. Ten seconds at the
@@ -37769,8 +38147,12 @@ convApplyTint();
       return convLiveEntries(keys).length;
     }
 
-    function deskConvHtml(conv) {
-      if (!conv) return '<p class="desk-empty">This conversation is no longer in the index.</p>';
+    // Two parts, because they change at different rates and are painted apart (deskPaintColumn):
+    // `record` is what was said, and moves when a turn ends; `slots` is what working members are
+    // saying now, and moves on nearly every pane read.
+    function deskConvParts(conv) {
+      const only = html => ({record: html, slots: ''});
+      if (!conv) return only('<p class="desk-empty">This conversation is no longer in the index.</p>');
       // Minus whoever this browser is not reading. Solo mode is the hide list with everyone but one
       // in it, so honouring the list is the whole of honouring solo — and the strip in the composer
       // is built from the same list, which is what keeps the two saying the same thing.
@@ -37787,7 +38169,7 @@ convApplyTint();
       if (typeof convLiveFetch === 'function') convLiveFetch(keys, false, true);
       const entries = keys.length && typeof convLiveEntries === 'function' ? convLiveEntries(keys) : [];
       if (!keys.length) {
-        return '<p class="desk-empty">Every member of this conversation is hidden.</p>';
+        return only('<p class="desk-empty">Every member of this conversation is hidden.</p>');
       }
       // What its members are saying right now, which is in neither record: the relay writes a row
       // when a turn *ends*, and this browser's transcript settles at the same moment. One standing
@@ -37796,10 +38178,10 @@ convApplyTint();
       // says so. conv_thread.js's, the same slot the phone draws.
       const slots = typeof convSlotsHtml === 'function' ? convSlotsHtml(keys, '') : '';
       if (!entries.length) {
-        if (slots) return slots;
-        return typeof convLiveSyncing === 'function' && convLiveSyncing()
+        if (slots) return {record: '', slots};
+        return only(typeof convLiveSyncing === 'function' && convLiveSyncing()
           ? '<p class="desk-empty">Reading the record…</p>'
-          : '<p class="desk-empty">Nothing recorded here yet.</p>';
+          : '<p class="desk-empty">Nothing recorded here yet.</p>');
       }
       // conv_thread.js's, which is the mobile page's thread and this one. A conversation reads one
       // way — the bubble, the arbitrator's decision and its rail, the rule between two sittings,
@@ -37812,7 +38194,7 @@ convApplyTint();
       // has no selection bar: what the desktop page offers instead is Transfer, off the composer.
       // `deskConvPick` rather than false: a bubble is picked here as it is on the phone, and the
       // pick is what the ⇥ transfer takes when the reader has not dragged over the text.
-      return convEntriesHtml(entries, null, false, 'deskConvPick', conv) + slots;
+      return {record: convEntriesHtml(entries, null, false, 'deskConvPick', conv), slots};
     }
 
     // --- picking bubbles, per column ---
@@ -42215,6 +42597,7 @@ convApplyTint();
       ['⌘⌥L', 'The launcher — the tiles that start things'],
       ['⌘⌥N', 'Start a session'],
       ['⌘⌥T', 'Open a terminal'],
+      ['⌘⇧K', 'Switch machine — the relays this browser keeps a config for'],
       ['Esc', 'Close the sheet in front, else leave the composer'],
       ['↑ ↓', 'In this palette: walk the list (also Ctrl+P / Ctrl+N, and Tab)'],
       ['Home End', 'In this palette: the first and last row (PgUp / PgDn move eight)'],
@@ -44021,8 +44404,8 @@ convApplyTint();
       const frame = body.querySelector('iframe');
       if (g) {
         const page = genBubbleDesk() ? 'room.html' : 'phone-room.html';
-        const src = new URL(page, location.href);
-        src.search = '';
+        const src = new URL(storagePageHref(page));
+        // The machine this page is on (storage_ns.js), so the room is this relay's.
         src.hash = '#conv/' + encodeURIComponent(genRoom());
         if (frame && frame.src === src.href) return;   // a new General in another room: a new frame
         body.innerHTML = `<iframe class="gen-panel-frame" title="The General's room" src="${escapeHtml(src.href)}"></iframe>`;
@@ -45830,9 +46213,27 @@ convApplyTint();
       let moved = false;
       if (tab.kind === 'conversation') {
         const conv = readConvIndex().find(c => c.id === tab.key);
-        moved = draw(deskConvHtml(conv));
-        // The markup carries no picks, so a repaint is where they would be lost.
-        if (moved && typeof deskDrawPicks === 'function') deskDrawPicks(i);
+        const parts = deskConvParts(conv);
+        // Two parts, each with its own signature. The record changes when a turn ends; the draft
+        // slots change on nearly every pane read. Joined into one string, every read beside the
+        // thread replaced all of its bubbles and laid them out again, which froze a split page
+        // while its panes loaded.
+        if (body.dataset.sig !== 'conv') {
+          body.innerHTML = '<div class="desk-conv-part" data-part="record"></div>' +
+            '<div class="desk-conv-part" data-part="slots"></div>';
+          body.dataset.sig = 'conv';
+        }
+        const put = (el, html) => {
+          if (el.dataset.sig === html) return false;
+          el.innerHTML = html;
+          el.dataset.sig = html;
+          return true;
+        };
+        const record = put(body.querySelector('[data-part="record"]'), parts.record);
+        const slots = put(body.querySelector('[data-part="slots"]'), parts.slots);
+        moved = record || slots;
+        // The markup carries no picks, so only a repaint of the record would lose them.
+        if (record && typeof deskDrawPicks === 'function') deskDrawPicks(i);
         // What each member is doing, on that member's newest bubble, with the Esc that stops it.
         // Written into the bubbles in place and on every paint rather than only on a repaint: the
         // status moves without the thread's markup moving, which is the whole reason it is not
@@ -46073,6 +46474,9 @@ convApplyTint();
         // there. A key a composer would consume is never also a shortcut (spec §8).
         const el = document.activeElement;
         if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && e.key === 'Enter') return;
+        // The machine switcher (machine_configs.js). ⌘⇧K, because ⌘K alone is the browser's
+        // search box in Firefox and Chrome's on some platforms.
+        if (e.shiftKey && !e.altKey && e.code === 'KeyK') { machSwitchOpen(); e.preventDefault(); return; }
         // The chords that carry ⌥ as well. They are on ⌥ because the plain ones are spoken for by
         // the browser: ⌘N is a window, ⌘T is a tab, and ⌘⇧N is a private one — none of which a
         // page can take back. ⌘⌥ is free on Chrome and Safari except for the arrows, which is why
@@ -46283,7 +46687,7 @@ convApplyTint();
       // that kept connecting to the old one after the other tab moved it is the whole of the bug
       // this listener exists for.
       window.addEventListener('storage', e => {
-        const prefix = window.STORAGE_NS ? 'ns:' + window.STORAGE_NS + ':' : '';
+        const prefix = window.STORAGE_PREFIX || '';
         if (e.key === prefix + 'herdr_relay_url' || e.key === prefix + 'herdr_relay_token') connect();
       });
 
