@@ -25,8 +25,8 @@
    padding, its 13px fields, and bare .chip and .seg rules of its own (a pointer, bold, a border
    on every bar). These put back what the browser gives planner.html. First in the file and next
    to no specificity, so they beat the phone's rules by order and every .planner rule beats them. */
-:where(#plannerView) :is(input, select, textarea, option, dialog) { margin: revert; padding: revert; font-size: revert; }
-:where(#plannerView) :is(.chip, .seg) { all: revert; }
+:where(#plannerView, #usageDlg) :is(input, select, textarea, option, dialog) { margin: revert; padding: revert; font-size: revert; }
+:where(#plannerView, #usageDlg) :is(.chip, .seg) { all: revert; }
 
 .planner {
   --bg: #f5f5f7; --panel: #ffffff; --line: #dcdde3; --fg: #24283b; --muted: #6b7089;
@@ -55,7 +55,7 @@
 }
 /* The phone's dark theme is the absence of its light one, whatever the system says; :where keeps
    this rule below the phone's surface mapping. */
-:root[data-theme="dark"] .planner, :where(:root:not([data-theme="light"])) #plannerView .planner {
+:root[data-theme="dark"] .planner, :where(:root:not([data-theme="light"])) :is(#plannerView, #usageDlg) .planner {
   color-scheme: dark;
   --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #7a80a8;
   --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;

@@ -10237,7 +10237,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       border-color: var(--red);
     }
 
-    .hang-guard svg {
+    .hang-guard svg, .hang-usage svg {
       display: block;
     }
 
@@ -13328,8 +13328,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
    padding, its 13px fields, and bare .chip and .seg rules of its own (a pointer, bold, a border
    on every bar). These put back what the browser gives planner.html. First in the file and next
    to no specificity, so they beat the phone's rules by order and every .planner rule beats them. */
-:where(#plannerView) :is(input, select, textarea, option, dialog) { margin: revert; padding: revert; font-size: revert; }
-:where(#plannerView) :is(.chip, .seg) { all: revert; }
+:where(#plannerView, #usageDlg) :is(input, select, textarea, option, dialog) { margin: revert; padding: revert; font-size: revert; }
+:where(#plannerView, #usageDlg) :is(.chip, .seg) { all: revert; }
 
 .planner {
   --bg: #f5f5f7; --panel: #ffffff; --line: #dcdde3; --fg: #24283b; --muted: #6b7089;
@@ -13358,7 +13358,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 }
 /* The phone's dark theme is the absence of its light one, whatever the system says; :where keeps
    this rule below the phone's surface mapping. */
-:root[data-theme="dark"] .planner, :where(:root:not([data-theme="light"])) #plannerView .planner {
+:root[data-theme="dark"] .planner, :where(:root:not([data-theme="light"])) :is(#plannerView, #usageDlg) .planner {
   color-scheme: dark;
   --bg: #1a1b26; --panel: #1f2335; --line: #2f334d; --fg: #c0caf5; --muted: #7a80a8;
   --track: #292e42; --accent: #7aa2f7; --claude: #ff9e64; --codex: #2ac3b4; --opencode: #bb9af7;
@@ -14493,6 +14493,14 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 2.5l7.5 3v6c0 4.6-3.2 8.4-7.5 10-4.3-1.6-7.5-5.4-7.5-10v-6z" />
           <path d="M8.8 12.2l2.3 2.3 4.3-4.5" />
+        </svg></button>
+      <!-- The usage planner in a dialog (usage_dialog.js), over the room rather than instead of it.
+           The icon is a gauge. -->
+      <button class="hang-btn hang-usage" id="convUsage" onclick="usageOpen()"
+        aria-label="Usage: accounts, room and the next switch" title="Usage: accounts, room and the next switch">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 16.5a10 10 0 1 1 20 0" /><path d="M12 16.5l5-6" /><circle cx="12" cy="16.5" r="1.5" />
         </svg></button>
     </div>
     <div class="hang-float">
@@ -57093,6 +57101,8 @@ function studioCardHtml() {
       // The send guard, wherever there is a member to send to. A panel's sends go to its providers
       // and the guard does not stand in front of those.
       hangSyncGuard(document.getElementById('convGuard'), !!convViewId && recorded);
+      // The usage planner, over any room: which account to be on is a question before any send.
+      document.getElementById('convUsage')?.classList.toggle('on', !!convViewId && typeof usageOpen === 'function');
       hangSyncPara(document.getElementById('panePara'), !!thread && !thread.hidden);
       hangSyncWho('conv');
       hangSyncWho('pane');
@@ -59051,6 +59061,98 @@ function pvMount(root, io = PV_HTTP) {
     function togglePlanner() {
       if (document.getElementById('plannerView').style.display !== 'none') { closePanel(); return; }
       openPanel('plannerView');
+    }
+
+  </script>
+  <script>
+// --- The usage dialog ------------------------------------------------------------------------
+//
+// The usage planner over a conversation, so account use and the next switch are a press away
+// without leaving the thread. Opened by the Usage button in the thread's left row of hanging
+// controls, beside the send guard: `.hang-float.left` on the phone, a column's `.desk-float.left`
+// on the desktop. Alt+U too.
+//
+// The planner is the phone's Usage tab's (planner_tab.js), mounted once into #plannerRoot and
+// reaching the relay over this page's socket (`planner_usage`, `planner_run`), since
+// /api/planner-usage is LAN only and a tunnel page has no other way to it. On the phone the tab's
+// root is moved into the dialog for as long as it is open and back after, so there is one planner
+// with one set of listeners; the desktop has no tab, and makes the root here. The answer names
+// every account's email, so it is asked for on first open and on Refresh, never polled.
+
+    const USAGE_DLG_CSS = `
+      dialog#usageDlg { width: min(1280px, calc(100vw - 32px)); height: calc(100vh - 48px);
+        max-width: none; max-height: none; padding: 0; border: 1px solid var(--border);
+        border-radius: 12px; background: var(--bg); color: var(--text); overflow: hidden;
+        box-shadow: 0 8px 30px rgba(0,0,0,.45);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+      @media (max-width: 600px) {
+        dialog#usageDlg { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+      }
+      dialog#usageDlg[open] { display: flex; flex-direction: column; }
+      dialog#usageDlg::backdrop { background: rgb(0 0 0 / 0.45); }
+      .usage-dlg-head { flex: none; display: flex; align-items: center; gap: 8px; min-height: 40px;
+        padding: 0 4px 0 14px; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+      .usage-dlg-head svg { width: 16px; height: 16px; flex: none; }
+      .usage-dlg-title { flex: 1; font-weight: 600; }
+      .usage-dlg-head kbd { font: inherit; font-size: 0.72rem; color: var(--muted); }
+      .usage-dlg-close { background: none; border: none; color: var(--muted); cursor: pointer;
+        min-width: 40px; min-height: 40px; border-radius: 4px; font-size: 22px; padding: 0; }
+      .usage-dlg-close:hover { color: var(--text); }
+      .usage-dlg-close:focus-visible { outline: 2px solid var(--blue); outline-offset: -3px; }
+      .usage-dlg-body { flex: 1; min-height: 0; overflow: auto; }
+    `;
+
+    // A gauge: an arc and its needle. The thread's button and the dialog's head both wear it.
+    function usageSign(size) {
+      return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor"`
+        + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        + '<path d="M2 16.5a10 10 0 1 1 20 0"/><path d="M12 16.5l5-6"/><circle cx="12" cy="16.5" r="1.5"/></svg>';
+    }
+
+    function usageDialog() {
+      let dlg = document.getElementById('usageDlg');
+      if (dlg) return dlg;
+      const style = document.createElement('style');
+      style.textContent = USAGE_DLG_CSS;
+      document.head.appendChild(style);
+      dlg = document.createElement('dialog');
+      dlg.id = 'usageDlg';
+      dlg.setAttribute('aria-labelledby', 'usageDlgTitle');
+      dlg.innerHTML = '<div class="usage-dlg-head">' + usageSign(16)
+        + '<span class="usage-dlg-title" id="usageDlgTitle">Usage</span>'
+        + (typeof deskRenderAll === 'function' ? '<kbd>Alt+U</kbd>' : '')
+        + '<button type="button" class="usage-dlg-close" aria-label="Close usage">×</button></div>'
+        + '<div class="usage-dlg-body"></div>';
+      dlg.querySelector('.usage-dlg-close').addEventListener('click', () => dlg.close());
+      dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+      // The phone's tab gets its root back, so the Usage tab still has its planner.
+      dlg.addEventListener('close', () => {
+        const root = document.getElementById('plannerRoot'), view = document.getElementById('plannerView');
+        if (root && view && !view.contains(root)) view.appendChild(root);
+      });
+      document.body.appendChild(dlg);
+      return dlg;
+    }
+
+    function usageOpen() {
+      if (typeof PLANNER_SOCKET === 'undefined') return;
+      const dlg = usageDialog();
+      if (dlg.open) { dlg.close(); return; }
+      const body = dlg.querySelector('.usage-dlg-body');
+      const root = document.getElementById('plannerRoot');
+      if (root) body.appendChild(root);
+      else body.innerHTML = '<div id="plannerRoot"></div>';
+      dlg.showModal();
+      plannerOpen();
+      dlg.querySelector('.usage-dlg-close').focus();
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener && window.self === window.top) {
+      document.addEventListener('keydown', e => {
+        if (e.code !== 'KeyU' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+        e.preventDefault();   // a Mac's Alt+U is a dead key, and it must not land in the composer
+        usageOpen();
+      });
     }
 
   </script>
