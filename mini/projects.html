@@ -4562,13 +4562,22 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     // Each page's own <title>, read once at load: the desktop page is called something else, and a
     // constant here would rename its tab the first time a pane wanted a person.
     const TAB_TITLE = (typeof document !== 'undefined' && document.title) || 'herdr-remote';
-    const favicon = fill => 'data:image/svg+xml,' + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">` +
-      `<rect width="16" height="16" rx="4" fill="${document.documentElement.style.getPropertyValue('--tint').trim() || '#1a1b26'}"/>` +
-      `<circle cx="8" cy="8" r="4.5" fill="${fill}"/></svg>`);
+    // With a machine (machine_configs.js), its glyph in its hue takes the disc's place, and what
+    // wants a person is a red dot in the corner instead: a machine whose hue is red would
+    // otherwise read as blocked for good.
+    const favicon = (fill, mark, alarm) => {
+      const bg = document.documentElement.style.getPropertyValue('--tint').trim() || '#1a1b26';
+      return 'data:image/svg+xml,' + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="${bg}"/>` +
+        (mark ? `<path transform="translate(1 1) scale(.5833)" fill-rule="evenodd" fill="hsl(${mark.hue} 85% 62%)" d="${mark.glyph}"/>` +
+          (alarm ? `<circle cx="12.5" cy="3.5" r="3" fill="#f7768e" stroke="${bg}" stroke-width="1"/>` : '')
+          : `<circle cx="8" cy="8" r="4.5" fill="${fill}"/>`) + '</svg>');
+    };
     function syncBrowserTab() {
       const n = attentionCount();
-      document.title = n ? `(${n}) ${TAB_TITLE}` : TAB_TITLE;
+      const mark = typeof machTabMark === 'function' ? machTabMark() : null;
+      const title = mark ? `${mark.name} · ${TAB_TITLE}` : TAB_TITLE;
+      document.title = n ? `(${n}) ${title}` : title;
       const el = document.getElementById('favicon');
       // Hex and not var(--red): this is an SVG in a data: URI, which resolves no custom property
       // from the page. The two are the dark theme's --red and --blue; the square is Settings'
@@ -4577,8 +4586,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       // Red is blocked alone, matching everything else. Done shares the resting blue rather than
       // getting a third colour: a 16px dot cannot carry three states apart at tab size, and the
       // count already in the title is what says a finished pane is waiting to be read.
-      const href = favicon(agents.some(a => attentionKind(a) === 'blocked') ||
-        (typeof arbNeedsHuman === 'function' && arbNeedsHuman()) ? '#f7768e' : '#7aa2f7');
+      const alarm = agents.some(a => attentionKind(a) === 'blocked') ||
+        (typeof arbNeedsHuman === 'function' && arbNeedsHuman());
+      const href = favicon(alarm ? '#f7768e' : '#7aa2f7', mark, alarm);
       if (el && el.getAttribute('href') !== href) el.setAttribute('href', href);
     }
 

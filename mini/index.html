@@ -2769,8 +2769,9 @@
 .mach-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 /* The desktop's machine bar: the machine this page is on, a thin strip across the top of the
-   sidebar, above the launcher. Its colour is the machine's own (--mach-hue, from its name), so two
-   windows on two machines are told apart before anything is read. */
+   sidebar, above the launcher. A label, not a control: the switcher is the button at its end. Its
+   colour is the machine's own (--mach-hue, from its name), so two windows on two machines are told
+   apart before anything is read. */
 .desk-mach-pill {
   --mach-tint: hsl(var(--mach-hue, 210) 70% 55%);
   flex: none;
@@ -2779,7 +2780,8 @@
   gap: 0.6ch;
   width: 100%;
   margin: 0;
-  padding: 0.2em 1.1em;
+  padding: 0.25em 0 0.25em 0.6em;
+  box-sizing: border-box;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--mach-tint) 45%, transparent);
   border-radius: 0;
@@ -2788,14 +2790,46 @@
   font: inherit;
   font-size: 0.68rem;
   line-height: 1.5;
-  cursor: pointer;
   min-width: 0;
 }
 .desk-mach-pill[hidden] { display: none; }
-.desk-mach-pill:hover { background: color-mix(in srgb, var(--mach-tint) 32%, var(--term-bg, var(--bg))); }
-.desk-mach-pill:focus-visible { outline: 1px solid var(--mach-tint); outline-offset: -1px; }
-.desk-mach-pill .desk-launch-ico { width: 0.95em; height: 0.95em; color: var(--mach-tint); }
-.desk-mach-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: left; letter-spacing: 0.02em; }
+.desk-mach-switch {
+  flex: none;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  margin: 0;
+  padding: 0.25em 0.9em;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--mach-tint) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.desk-mach-switch svg { width: 1.1em; height: 1.1em; }
+.desk-mach-switch:hover, .desk-mach-switch:focus-visible {
+  background: color-mix(in srgb, var(--mach-tint) 32%, transparent);
+  outline: none;
+}
+/* The name itself: a bright tag, read at a glance. Not a control. */
+.mach-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45ch;
+  min-width: 0;
+  padding: 0.05em 0.75em 0.05em 0.5em;
+  border-radius: 999px;
+  background: hsl(var(--mach-hue, 210) 85% 60%);
+  color: hsl(var(--mach-hue, 210) 60% 12%);
+  box-shadow: 0 0 0 1px hsl(var(--mach-hue, 210) 90% 72% / 0.6), 0 0 10px hsl(var(--mach-hue, 210) 90% 60% / 0.35);
+  cursor: default;
+  user-select: none;
+}
+.mach-glyph { flex: none; width: 1em; height: 1em; }
+.desk-mach-pill .mach-tag { margin-right: auto; max-width: calc(100% - 3em); }
+.mach-box .mach-tag { font-size: 0.85rem; max-width: calc(100% - 30px); cursor: inherit; }
+.mach-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; letter-spacing: 0.03em; }
 
 /* The switcher: a box per machine. */
 dialog#machSwitch {
@@ -16137,13 +16171,22 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     // Each page's own <title>, read once at load: the desktop page is called something else, and a
     // constant here would rename its tab the first time a pane wanted a person.
     const TAB_TITLE = (typeof document !== 'undefined' && document.title) || 'herdr-remote';
-    const favicon = fill => 'data:image/svg+xml,' + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">` +
-      `<rect width="16" height="16" rx="4" fill="${document.documentElement.style.getPropertyValue('--tint').trim() || '#1a1b26'}"/>` +
-      `<circle cx="8" cy="8" r="4.5" fill="${fill}"/></svg>`);
+    // With a machine (machine_configs.js), its glyph in its hue takes the disc's place, and what
+    // wants a person is a red dot in the corner instead: a machine whose hue is red would
+    // otherwise read as blocked for good.
+    const favicon = (fill, mark, alarm) => {
+      const bg = document.documentElement.style.getPropertyValue('--tint').trim() || '#1a1b26';
+      return 'data:image/svg+xml,' + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="${bg}"/>` +
+        (mark ? `<path transform="translate(1 1) scale(.5833)" fill-rule="evenodd" fill="hsl(${mark.hue} 85% 62%)" d="${mark.glyph}"/>` +
+          (alarm ? `<circle cx="12.5" cy="3.5" r="3" fill="#f7768e" stroke="${bg}" stroke-width="1"/>` : '')
+          : `<circle cx="8" cy="8" r="4.5" fill="${fill}"/>`) + '</svg>');
+    };
     function syncBrowserTab() {
       const n = attentionCount();
-      document.title = n ? `(${n}) ${TAB_TITLE}` : TAB_TITLE;
+      const mark = typeof machTabMark === 'function' ? machTabMark() : null;
+      const title = mark ? `${mark.name} · ${TAB_TITLE}` : TAB_TITLE;
+      document.title = n ? `(${n}) ${title}` : title;
       const el = document.getElementById('favicon');
       // Hex and not var(--red): this is an SVG in a data: URI, which resolves no custom property
       // from the page. The two are the dark theme's --red and --blue; the square is Settings'
@@ -16152,8 +16195,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       // Red is blocked alone, matching everything else. Done shares the resting blue rather than
       // getting a third colour: a 16px dot cannot carry three states apart at tab size, and the
       // count already in the title is what says a finished pane is waiting to be read.
-      const href = favicon(agents.some(a => attentionKind(a) === 'blocked') ||
-        (typeof arbNeedsHuman === 'function' && arbNeedsHuman()) ? '#f7768e' : '#7aa2f7');
+      const alarm = agents.some(a => attentionKind(a) === 'blocked') ||
+        (typeof arbNeedsHuman === 'function' && arbNeedsHuman());
+      const href = favicon(alarm ? '#f7768e' : '#7aa2f7', mark, alarm);
       if (el && el.getAttribute('href') !== href) el.setAttribute('href', href);
     }
 
@@ -19131,10 +19175,41 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     // A hue per machine name, the same in every browser: a string hash, not a stored choice. FNV-1a
     // spread by the golden ratio, because short names (`mini`, `laptop`) under a plain multiply
     // land a few degrees apart.
-    function machHue(name) {
+    function machHash(name) {
       let h = 2166136261;
       for (const ch of String(name)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
-      return Math.round(((h * 0.618033988749895) % 1) * 360);
+      return h;
+    }
+    function machHue(name) { return Math.round(((machHash(name) * 0.618033988749895) % 1) * 360); }
+
+    // And a glyph per name, from other bits of the same hash, so two machines whose hues land near
+    // each other still differ in shape. Filled paths on a 24-unit box.
+    const MACH_GLYPHS = [
+      'M12 2l10 10-10 10L2 12z',                                   // diamond
+      'M12 2l2.9 6.9 7.1.6-5.4 4.7 1.7 7.3L12 17.8 5.7 21.5l1.7-7.3L2 9.5l7.1-.6z', // star
+      'M12 2l8.7 5v10L12 22l-8.7-5V7z',                            // hexagon
+      'M12 3l10 18H2z',                                            // triangle
+      'M9 2h6v7h7v6h-7v7H9v-7H2V9h7z',                             // cross
+      'M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20zm0 5a5 5 0 1 1 0 10 5 5 0 1 1 0-10z', // ring
+      'M13 2L4 14h7l-2 8 11-13h-7z',                               // bolt
+      'M12 21C5 15 2 11.5 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 3.5-3 7-10 13z', // heart
+    ];
+    function machGlyph(name) { return MACH_GLYPHS[(machHash(name) >>> 11) % MACH_GLYPHS.length]; }
+
+    // What the browser tab shows of this machine (attention.js): its name, hue and glyph. None in
+    // a frame, which has no tab of its own.
+    function machTabMark() {
+      if (machCurrent() === null) return null;
+      const m = machList().find(x => x.current);
+      const name = m && (m.name || m.host);
+      return name ? {name, hue: machHue(name), glyph: machGlyph(name)} : null;
+    }
+
+    // A machine's tag, its colour and glyph: the bar's label and each switcher box's name.
+    function machTagHtml(name, host) {
+      return `<span class="mach-tag" style="--mach-hue:${machHue(name)}" title="${escapeHtml(host || 'No address yet')}">` +
+        `<svg class="mach-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor"` +
+        ` fill-rule="evenodd" d="${machGlyph(name)}"/></svg><span class="mach-tag-name">${escapeHtml(name)}</span></span>`;
     }
 
     function machHref(id) {
@@ -19228,13 +19303,13 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         pill.hidden = !m;
         if (m) {
           const shown = m.name || m.host || 'new machine';
-          pill.querySelector('.desk-mach-name').textContent = shown;
+          pill.querySelector('.mach-tag').outerHTML = machTagHtml(shown, m.host);
           pill.style.setProperty('--mach-hue', String(machHue(shown)));
-          pill.title = (m.host ? m.host + ' · ' : '') + 'Switch machine (⌘⇧K)';
         }
       }
       const dlg = document.getElementById('machSwitch');
       if (dlg && dlg.open) machDrawBoxes(dlg);
+      if (typeof syncBrowserTab === 'function') syncBrowserTab();
     }
 
     // Which config the switcher's form is editing: an id ('' is the first config), 'new' for one
@@ -19250,7 +19325,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       dlg.querySelector('.mach-boxes').innerHTML = list.map((m, i) => '<div class="mach-cell">' +
         `<button type="button" class="mach-box${m.current ? ' on' : ''}" data-mach="${escapeHtml(m.id)}"` +
         (m.current ? ' aria-current="true"' : '') + '>' +
-        `<span class="mach-box-name">${escapeHtml(m.name || m.host || 'new machine')}</span>` +
+        machTagHtml(m.name || m.host || 'new machine', m.host) +
         `<span class="mach-box-host">${escapeHtml(m.host || 'no address yet')}</span>` +
         (i < 9 ? `<kbd>${i + 1}</kbd>` : '') + (m.current ? '<span class="mach-box-now">current</span>' : '') +
         '</button>' +
