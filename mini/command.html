@@ -7978,6 +7978,10 @@
 }
 .mach-tabs[hidden] { display: none; }
 
+/* This config's name, over the Relay URL. */
+.mach-name-row { margin-bottom: 8px; }
+.mach-name-row[hidden] { display: none; }
+
 .mach-tab {
   display: inline-flex;
   align-items: stretch;
@@ -8012,27 +8016,34 @@
 .mach-tabs .mach-tab-add:hover { color: var(--blue); border-color: var(--blue); }
 .mach-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 
-/* The desktop pill: the machine this page is on, above the launcher. */
+/* The desktop's machine bar: the machine this page is on, a thin strip across the top of the
+   sidebar, above the launcher. Its colour is the machine's own (--mach-hue, from its name), so two
+   windows on two machines are told apart before anything is read. */
 .desk-mach-pill {
+  --mach-tint: hsl(var(--mach-hue, 210) 70% 55%);
   flex: none;
   display: flex;
   align-items: center;
   gap: 0.6ch;
-  margin: 8px 10px 6px;
-  padding: 0.35em 0.9em;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
+  width: 100%;
+  margin: 0;
+  padding: 0.2em 1.1em;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mach-tint) 45%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--mach-tint) 22%, var(--term-bg, var(--bg)));
+  color: color-mix(in srgb, var(--mach-tint) 55%, var(--text));
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.68rem;
+  line-height: 1.5;
   cursor: pointer;
   min-width: 0;
 }
 .desk-mach-pill[hidden] { display: none; }
-.desk-mach-pill:hover { border-color: var(--blue); }
-.desk-mach-pill .desk-launch-ico { color: var(--blue); }
-.desk-mach-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: left; }
+.desk-mach-pill:hover { background: color-mix(in srgb, var(--mach-tint) 32%, var(--term-bg, var(--bg))); }
+.desk-mach-pill:focus-visible { outline: 1px solid var(--mach-tint); outline-offset: -1px; }
+.desk-mach-pill .desk-launch-ico { width: 0.95em; height: 0.95em; color: var(--mach-tint); }
+.desk-mach-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: left; letter-spacing: 0.02em; }
 
 /* The switcher: a box per machine. */
 dialog#machSwitch {
@@ -8048,7 +8059,8 @@ dialog#machSwitch {
   font-size: 14px;
 }
 dialog#machSwitch::backdrop { background: rgb(0 0 0 / 0.45); }
-.mach-switch-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.mach-switch-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.mach-switch-head .mach-switch-hint { margin-left: auto; }
 .mach-switch-hint { font-size: 0.75rem; color: var(--muted); }
 .mach-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
 .mach-box {
@@ -8080,6 +8092,71 @@ dialog#machSwitch::backdrop { background: rgb(0 0 0 / 0.45); }
 .mach-close { flex: none; border: 0; background: transparent; color: var(--text);
   font: inherit; font-size: 20px; min-width: 28px; min-height: 28px; cursor: pointer; }
 .mach-close:focus-visible { outline: 2px solid var(--blue); }
+
+/* Each box with its edit button, which sits in the box's corner but is not inside it: a button
+   cannot hold a button. */
+.mach-cell { position: relative; display: flex; }
+.mach-cell > .mach-box { flex: 1; min-width: 0; }
+.mach-edit {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.mach-edit:hover, .mach-edit:focus-visible { color: var(--blue); border-color: var(--border); background: var(--surface); outline: none; }
+
+/* The edit form, under the boxes. */
+.mach-form-slot:empty { display: none; }
+.mach-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.mach-form-title { grid-column: 1 / -1; font-size: 0.9rem; }
+.mach-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--muted); min-width: 0; }
+.mach-form label:nth-of-type(2) { grid-column: 1 / -1; }
+.mach-form input:not([type="checkbox"]) {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.mach-form input:focus-visible { outline: none; border-color: var(--blue); }
+.mach-form .mach-form-check { flex-direction: row; align-items: center; gap: 6px; align-self: end; padding-bottom: 8px; }
+.mach-form-btns { grid-column: 1 / -1; display: flex; gap: 8px; }
+.mach-form-btns button {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.mach-form-btns button[type="submit"] { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+.mach-form-err { grid-column: 1 / -1; color: var(--red); font-size: 0.75rem; }
+.mach-form-err:empty { display: none; }
+@media (max-width: 480px) { .mach-form { grid-template-columns: 1fr; } }
 
   </style>
   <style>
@@ -9720,6 +9797,11 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
           <!-- The machines this browser switches between (machine_configs.js), the current one
                selected. The fields below are that one's. -->
           <div class="mach-tabs" id="machTabs" role="tablist" aria-label="Machines"></div>
+          <div class="mach-name-row" id="machNameRow" hidden>
+            <label for="machName">Name</label>
+            <input id="machName" type="text" maxlength="64" spellcheck="false" autocapitalize="none"
+              autocomplete="off" />
+          </div>
           <label for="relayUrl">Relay URL</label>
           <div class="field-clearable">
             <input id="relayUrl" type="text" inputmode="url" spellcheck="false" autocapitalize="none"
@@ -23543,8 +23625,9 @@ convApplyTint();
     // config, the one this browser had before there were others, and it keeps its keys. So a config
     // holds nothing of its own past its id, and switching is a page load: every module boots
     // against the one relay it will talk to, and nothing has to be torn down. The list of ids is
-    // the one key outside every namespace. A config's name is the one its relay reports in
-    // `versions`: the links file's `as` for that machine, else its host name.
+    // the one key outside every namespace. A config's name is the one typed in the connect card's
+    // Name field (`herdr_machine_label`), else the one its relay reports in `versions`
+    // (`herdr_machine_name`: the links file's `as` for that machine, else its host name).
     //
     // A remote room framed by the parent app (`?ns=`) is that app's, and shows none of this.
 
@@ -23571,7 +23654,8 @@ convApplyTint();
         const url = machRaw(id, 'herdr_relay_url') || (!id && isSelfRelay ? autoRelayUrl : '');
         let host = '';
         try { host = url ? new URL(url).host : ''; } catch (e) { /* a stored address that is not one */ }
-        return {id, url, host, name: machRaw(id, 'herdr_machine_name') || '', current: id === cur};
+        const name = machRaw(id, 'herdr_machine_label') || machRaw(id, 'herdr_machine_name') || '';
+        return {id, url, host, name, current: id === cur};
       });
       // The same machine on two configs (its LAN address and its tunnel) is told apart by address.
       for (const m of list) {
@@ -23579,6 +23663,15 @@ convApplyTint();
         if (m.name && m.host && list.some(o => o !== m && o.name === m.name)) m.label += ' · ' + m.host;
       }
       return list;
+    }
+
+    // A hue per machine name, the same in every browser: a string hash, not a stored choice. FNV-1a
+    // spread by the golden ratio, because short names (`mini`, `laptop`) under a plain multiply
+    // land a few degrees apart.
+    function machHue(name) {
+      let h = 2166136261;
+      for (const ch of String(name)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+      return Math.round(((h * 0.618033988749895) % 1) * 360);
     }
 
     function machHref(id) {
@@ -23631,9 +23724,29 @@ convApplyTint();
       machRender();
     }
 
+    // The Name field: what the person calls this config, over the name its relay reports, which is
+    // the placeholder. Saved as it is left, with no Connect: a name is not an address.
+    function machNameSave(input) {
+      const v = input.value.trim().slice(0, 64);
+      input.value = v;
+      if (v) localStorage.setItem('herdr_machine_label', v);
+      else localStorage.removeItem('herdr_machine_label');
+      machRender();
+    }
+
     function machRender() {
       const cur = machCurrent();
       const list = cur === null ? [] : machList();
+      const row = document.getElementById('machNameRow');
+      if (row) {
+        row.hidden = cur === null;
+        const input = document.getElementById('machName');
+        const m = list.find(x => x.current);
+        if (m && input) {
+          if (document.activeElement !== input) input.value = localStorage.getItem('herdr_machine_label') || '';
+          input.placeholder = localStorage.getItem('herdr_machine_name') || m.host || 'e.g. mini';
+        }
+      }
       const tabs = document.getElementById('machTabs');
       if (tabs) {
         tabs.hidden = cur === null;
@@ -23651,7 +23764,9 @@ convApplyTint();
         const m = list.find(x => x.current);
         pill.hidden = !m;
         if (m) {
-          pill.querySelector('.desk-mach-name').textContent = m.name || m.host || 'new machine';
+          const shown = m.name || m.host || 'new machine';
+          pill.querySelector('.desk-mach-name').textContent = shown;
+          pill.style.setProperty('--mach-hue', String(machHue(shown)));
           pill.title = (m.host ? m.host + ' · ' : '') + 'Switch machine (⌘⇧K)';
         }
       }
@@ -23659,21 +23774,96 @@ convApplyTint();
       if (dlg && dlg.open) machDrawBoxes(dlg);
     }
 
+    // Which config the switcher's form is editing: an id ('' is the first config), 'new' for one
+    // being added, null for none. The form is drawn under the boxes, so the boxes stay in reach.
+    let machEditing = null;
+
     function machDrawBoxes(dlg) {
-      const active = dlg.querySelector('.mach-box:focus');
-      const focus = active && (active.hasAttribute('data-mach-add') ? '[data-mach-add]'
+      const active = dlg.querySelector('.mach-box:focus, .mach-edit:focus');
+      const focus = active && (active.hasAttribute('data-mach-new') ? '[data-mach-new]'
+        : active.matches('.mach-edit') ? `[data-mach-edit="${active.dataset.machEdit}"]`
         : `[data-mach="${active.dataset.mach}"]`);
       const list = machList();
-      dlg.querySelector('.mach-boxes').innerHTML = list.map((m, i) =>
+      dlg.querySelector('.mach-boxes').innerHTML = list.map((m, i) => '<div class="mach-cell">' +
         `<button type="button" class="mach-box${m.current ? ' on' : ''}" data-mach="${escapeHtml(m.id)}"` +
         (m.current ? ' aria-current="true"' : '') + '>' +
         `<span class="mach-box-name">${escapeHtml(m.name || m.host || 'new machine')}</span>` +
         `<span class="mach-box-host">${escapeHtml(m.host || 'no address yet')}</span>` +
         (i < 9 ? `<kbd>${i + 1}</kbd>` : '') + (m.current ? '<span class="mach-box-now">current</span>' : '') +
-        '</button>').join('') +
-        '<button type="button" class="mach-box mach-box-add" data-mach-add>' +
-        '<span class="mach-box-name">+ Add machine</span><span class="mach-box-host">a relay URL and token</span></button>';
+        '</button>' +
+        `<button type="button" class="mach-edit" data-mach-edit="${escapeHtml(m.id)}"` +
+        ` aria-label="Edit ${escapeHtml(m.label)}" title="Edit">✎</button></div>`).join('') +
+        '<div class="mach-cell"><button type="button" class="mach-box mach-box-add" data-mach-new>' +
+        '<span class="mach-box-name">+ Add machine</span><span class="mach-box-host">a relay URL and token</span></button></div>';
+      machDrawForm(dlg, list);
       if (focus) dlg.querySelector(focus)?.focus();
+    }
+
+    function machDrawForm(dlg, list) {
+      const box = dlg.querySelector('.mach-form-slot');
+      const m = machEditing === 'new' ? null : list.find(x => x.id === machEditing);
+      if (machEditing === null || (machEditing !== 'new' && !m)) { machEditing = null; box.innerHTML = ''; return; }
+      // Drawn once per edit: a redraw from another tab's name must not take what is being typed.
+      if (box.dataset.for === machEditing && box.firstChild) return;
+      box.dataset.for = machEditing;
+      const key = k => machRaw(m ? m.id : '', k);
+      const hasToken = !!(m && key('herdr_relay_token'));
+      box.innerHTML = `<form class="mach-form" aria-label="${m ? 'Edit ' + escapeHtml(m.label) : 'New machine'}">` +
+        `<strong class="mach-form-title">${m ? 'Edit ' + escapeHtml(m.label) : 'New machine'}</strong>` +
+        '<label>Name<input name="name" maxlength="64" spellcheck="false" autocapitalize="none" autocomplete="off"' +
+        ` value="${escapeHtml(m ? key('herdr_machine_label') || '' : '')}"` +
+        ` placeholder="${escapeHtml((m && (key('herdr_machine_name') || m.host)) || 'e.g. mini')}"></label>` +
+        '<label>Relay URL<input name="url" inputmode="url" spellcheck="false" autocapitalize="none" autocomplete="off"' +
+        ` value="${escapeHtml(m ? key('herdr_relay_url') || '' : '')}" placeholder="${escapeHtml((m && m.url) || 'wss://your-tunnel.trycloudflare.com')}"></label>` +
+        '<label>Token<input name="token" type="password" autocomplete="off"' +
+        ` placeholder="${hasToken ? 'unchanged' : 'optional'}"></label>` +
+        (hasToken ? '<label class="mach-form-check"><input name="drop" type="checkbox"> Forget the stored token</label>' : '') +
+        '<div class="mach-form-btns"><button type="submit">Save</button>' +
+        '<button type="button" data-mach-cancel>Cancel</button></div>' +
+        '<div class="mach-form-err" role="alert"></div></form>';
+      box.querySelector('input').focus();
+    }
+
+    // Written straight into that config's namespace. The page on it reads them on its next load;
+    // the page this is, when it is that config, reconnects now.
+    function machSave(form) {
+      const f = form.elements;
+      const url = cleanRelayUrl(f.url.value);
+      if (url && !/^wss?:\/\/[^\s]+$/i.test(url)) {
+        form.querySelector('.mach-form-err').textContent = 'A relay URL starts with ws:// or wss://.';
+        f.url.focus();
+        return;
+      }
+      let id = machEditing;
+      if (id === 'new') {
+        if (!url) { form.querySelector('.mach-form-err').textContent = 'A new machine needs its relay URL.'; f.url.focus(); return; }
+        const ids = machIds();
+        do {
+          id = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => (b % 36).toString(36)).join('');
+        } while (ids.includes(id));
+        STORAGE_RAW.set(MACH_KEY, JSON.stringify(ids.concat(id)));
+      }
+      const key = k => (id ? 'machine:' + id + ':' : '') + k;
+      const before = [STORAGE_RAW.get(key('herdr_relay_url')), STORAGE_RAW.get(key('herdr_relay_token'))];
+      const name = f.name.value.trim().slice(0, 64);
+      if (name) STORAGE_RAW.set(key('herdr_machine_label'), name);
+      else STORAGE_RAW.remove(key('herdr_machine_label'));
+      if (url) STORAGE_RAW.set(key('herdr_relay_url'), url);
+      else STORAGE_RAW.remove(key('herdr_relay_url'));
+      const token = f.token.value.trim();
+      if (token) STORAGE_RAW.set(key('herdr_relay_token'), token);
+      else if (f.drop && f.drop.checked) STORAGE_RAW.remove(key('herdr_relay_token'));
+      machEditing = null;
+      if (id === machCurrent()) {
+        const now = [STORAGE_RAW.get(key('herdr_relay_url')), STORAGE_RAW.get(key('herdr_relay_token'))];
+        const urlBox = document.getElementById('relayUrl'), tokenBox = document.getElementById('relayToken');
+        if (urlBox) urlBox.value = now[0] || '';
+        if (tokenBox) tokenBox.value = now[1] || '';
+        if (now[0] !== before[0] || now[1] !== before[1]) connect();
+      }
+      machRender();
+      const dlg = document.getElementById('machSwitch');
+      if (dlg && dlg.open) dlg.querySelector(`[data-mach="${id}"]`)?.focus();
     }
 
     function machSwitchOpen() {
@@ -23685,11 +23875,24 @@ convApplyTint();
         dlg.setAttribute('aria-labelledby', 'machSwitchTitle');
         dlg.innerHTML = '<div class="mach-switch-head"><strong id="machSwitchTitle">Switch machine</strong>' +
           '<span class="mach-switch-hint">1–9 or ← → ⏎ · Esc</span>' +
-          '<button type="button" class="mach-close" aria-label="Close machine switcher">×</button></div><div class="mach-boxes"></div>';
+          '<button type="button" class="mach-close" aria-label="Close machine switcher">×</button></div><div class="mach-boxes"></div>' +
+          '<div class="mach-form-slot"></div>';
         dlg.querySelector('.mach-close').addEventListener('click', () => dlg.close());
-        dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+        dlg.addEventListener('click', e => {
+          if (e.target === dlg) { dlg.close(); return; }
+          const t = e.target.closest('[data-mach-edit],[data-mach-new],[data-mach-cancel]');
+          if (!t) return;
+          machEditing = t.hasAttribute('data-mach-cancel') ? null
+            : t.hasAttribute('data-mach-new') ? 'new' : t.dataset.machEdit;
+          // A press always draws afresh, even for the config already open: '' is an id too.
+          dlg.querySelector('.mach-form-slot').innerHTML = '';
+          machDrawBoxes(dlg);
+        });
+        dlg.addEventListener('submit', e => { e.preventDefault(); machSave(e.target); });
+        dlg.addEventListener('close', () => { machEditing = null; machDrawForm(dlg, []); });
         dlg.addEventListener('keydown', e => {
-          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          // The form's fields have the keys: a digit is part of a URL, an arrow moves the caret.
+          if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('.mach-form')) return;
           const boxes = Array.from(dlg.querySelectorAll('.mach-box'));
           if (e.key >= '1' && e.key <= '9') {
             const box = boxes[Number(e.key) - 1];
@@ -23740,7 +23943,12 @@ convApplyTint();
         machSwitch('');
         return;
       }
-      if (e.key === MACH_KEY || (e.key && e.key.endsWith('herdr_machine_name'))) machRender();
+      if (e.key === MACH_KEY || (e.key && /herdr_machine_(name|label)$/.test(e.key))) machRender();
+    });
+
+    document.addEventListener('change', e => { if (e.target.id === 'machName') machNameSave(e.target); });
+    document.addEventListener('keydown', e => {
+      if (e.target.id === 'machName' && e.key === 'Enter') { e.preventDefault(); machNameSave(e.target); }
     });
 
     machRender();
