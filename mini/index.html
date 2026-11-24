@@ -59355,6 +59355,7 @@ function pvMount(root, io = PV_HTTP) {
       .pv-tab-open:focus-visible, .pv-tab-x:focus-visible, .pv-btn:focus-visible,
       .pv-routes:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
       .pv-btn[disabled] { opacity: .4; cursor: default; }
+      .pv-btn[aria-pressed="true"] { color: var(--accent, var(--blue)); background: rgba(127,127,127,.15); }
       .pv-routes { flex: none; max-width: 200px; height: 30px; background: var(--bg);
         color: var(--text); border: 1px solid var(--border); border-radius: 6px; font: inherit;
         padding: 0 6px; }
@@ -59376,6 +59377,7 @@ function pvMount(root, io = PV_HTTP) {
 
     let previewTabs = [];          // {key, machine, name, port, base}
     let previewActive = '';
+    let previewToTab = false;      // ↗ pressed with nothing open: the next pick goes to a new tab
     let previewRoutes = null;      // the last preview_ports answer's machines, or null
     let previewTunnel = null;      // this relay's own tunnel: {running, fixed}
     const previewWaiting = new Map();
@@ -59453,9 +59455,14 @@ function pvMount(root, io = PV_HTTP) {
         const t = previewTabs.find(x => x.key === previewActive);
         if (t) previewLoad(t);
       });
+      // Always on. Over an open preview it opens that one; with none open it says the next port
+      // picked goes to a tab of its own, and pressed again it takes that back.
       dlg.querySelector('.pv-newtab').addEventListener('click', () => {
         const t = previewTabs.find(x => x.key === previewActive);
-        if (t) previewNewTab(t.machine, t.port);
+        if (t) { previewNewTab(t.machine, t.port); return; }
+        previewToTab = !previewToTab;
+        previewPaint();
+        dlg.querySelector('.pv-routes').focus();
       });
       dlg.querySelector('.pv-routes').addEventListener('change', e => {
         const v = e.target.value;
@@ -59464,16 +59471,28 @@ function pvMount(root, io = PV_HTTP) {
         if (v === 'other') {
           const got = prompt('Port to preview on this machine');
           const port = parseInt(got || '', 10);
-          if (port) previewOpenRoute('', '', port);
+          if (port) previewPick('', '', port);
           return;
         }
         const [machine, port] = JSON.parse(v);
         const row = (previewRoutes || []).find(m => m.machine === machine);
-        previewOpenRoute(machine, row ? row.name : machine, port);
+        previewPick(machine, row ? row.name : machine, port);
       });
       dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
       document.body.appendChild(dlg);
       return dlg;
+    }
+
+    // A pick from the list: into a tab of the dialog, or into a browser tab when ↗ was pressed
+    // with nothing open.
+    function previewPick(machine, name, port) {
+      if (previewToTab) {
+        previewToTab = false;
+        previewNewTab(machine, port);
+        previewPaint();
+        return;
+      }
+      previewOpenRoute(machine, name, port);
     }
 
     function previewRoutesHtml() {
@@ -59500,18 +59519,29 @@ function pvMount(root, io = PV_HTTP) {
         const label = `${t.name ? t.name + ' ' : ''}:${t.port}`;
         return `<div class="pv-tab" role="tab" aria-selected="${on}" data-key="${escapeHtml(t.key)}">`
           + `<button type="button" class="pv-tab-open" title="${escapeHtml(label)}">${escapeHtml(label)}</button>`
-          + `<button type="button" class="pv-tab-x" aria-label="Close ${escapeHtml(label)}">×</button></div>`;
+          + `<button type="button" class="pv-tab-x pv-tab-out" title="Open ${escapeHtml(label)} in a new tab"`
+          + ` aria-label="Open ${escapeHtml(label)} in a new tab">↗</button>`
+          + `<button type="button" class="pv-tab-x pv-tab-close" aria-label="Close ${escapeHtml(label)}">×</button></div>`;
       }).join('');
       dlg.querySelectorAll('.pv-tab').forEach(el => {
         const key = el.dataset.key;
         el.querySelector('.pv-tab-open').addEventListener('click', () => { previewActive = key; previewPaint(); });
-        el.querySelector('.pv-tab-x').addEventListener('click', () => previewCloseTab(key));
+        el.querySelector('.pv-tab-close').addEventListener('click', () => previewCloseTab(key));
+        el.querySelector('.pv-tab-out').addEventListener('click', () => {
+          const t = previewTabs.find(x => x.key === key);
+          if (t) previewNewTab(t.machine, t.port);
+        });
       });
       dlg.querySelector('.pv-routes').innerHTML = previewRoutesHtml();
       const body = dlg.querySelector('.pv-body');
       for (const f of body.querySelectorAll('iframe')) f.classList.toggle('on', f.dataset.key === previewActive);
       body.querySelector('.pv-empty').hidden = !!previewActive;
-      for (const b of dlg.querySelectorAll('.pv-reload, .pv-newtab')) b.disabled = !previewActive;
+      dlg.querySelector('.pv-reload').disabled = !previewActive;
+      const out = dlg.querySelector('.pv-newtab');
+      out.setAttribute('aria-pressed', String(!previewActive && previewToTab));
+      out.title = previewActive ? 'Open this preview in a new tab'
+        : previewToTab ? 'The next port picked opens in a new tab \u2014 press again to keep it here'
+        : 'Open the next port picked in a new tab';
     }
 
     function previewLoadRoutes() {
