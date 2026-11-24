@@ -8034,7 +8034,7 @@
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--mach-tint) 45%, transparent);
   border-radius: 0;
-  background: color-mix(in srgb, var(--mach-tint) 22%, var(--term-bg, var(--bg)));
+  background: none;
   color: color-mix(in srgb, var(--mach-tint) 55%, var(--text));
   font: inherit;
   font-size: 0.68rem;
@@ -8076,7 +8076,9 @@
   user-select: none;
 }
 .mach-glyph { flex: none; width: 1em; height: 1em; }
-.desk-mach-pill .mach-tag { margin-right: auto; max-width: calc(100% - 4.5em); }
+.desk-mach-pill .mach-tag { margin-right: auto; max-width: calc(100% - 9em); }
+/* The socket's state in a word, coloured by net.js setStatus as the phone's dot is. */
+.desk-mach-pill .conn-tag { flex: none; font-weight: 600; letter-spacing: 0.03em; }
 .mach-box .mach-tag { font-size: 0.85rem; max-width: calc(100% - 30px); cursor: inherit; }
 .mach-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; letter-spacing: 0.03em; }
 
@@ -10033,9 +10035,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
            reason that holds here too: a launcher under a list of what is already running is a
            launcher nobody presses. It was at the foot beside the gear and could not be found —
            the controls down there are about the page, and this one is about starting work. -->
-      <!-- The machine this page is on (machine_configs.js): the socket's state (net.js setStatus,
-           as the phone's header dot), a label, and the switcher's button at its end. -->
-      <div class="desk-mach-pill" id="deskMachPill" hidden><span class="status-dot"></span><span class="mach-tag"></span><button
+      <!-- The machine this page is on (machine_configs.js): a label, the socket's state in words
+           (net.js setStatus, in the phone's header dot colours), and the switcher's button at its end. -->
+      <div class="desk-mach-pill" id="deskMachPill" hidden><span class="mach-tag"></span><span class="conn-tag"></span><button
         type="button" class="desk-mach-switch" id="deskMachSwitch" aria-haspopup="dialog" onclick="machSwitchOpen()"
         title="Switch machine &#183; &#8984;&#8679;K" aria-label="Switch machine"><svg aria-hidden="true"
         focusable="false"><use href="#icoSwitch" /></svg></button></div>
@@ -21090,6 +21092,12 @@ convApplyTint();
       document.querySelectorAll('.status-dot').forEach(d => {
         d.style.background = color;
         d.title = label;
+      });
+      // The desktop machine bar says it in a word, in the same colour.
+      document.querySelectorAll('.conn-tag').forEach(t => {
+        t.textContent = s === 'connected' ? 'live' : s === 'connecting' ? 'connecting' : 'offline';
+        t.style.color = color;
+        t.title = label;
       });
     }
 

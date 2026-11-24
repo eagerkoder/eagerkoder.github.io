@@ -12063,6 +12063,12 @@ function convWebModeOf(conv) {
         d.style.background = color;
         d.title = label;
       });
+      // The desktop machine bar says it in a word, in the same colour.
+      document.querySelectorAll('.conn-tag').forEach(t => {
+        t.textContent = s === 'connected' ? 'live' : s === 'connecting' ? 'connecting' : 'offline';
+        t.style.color = color;
+        t.title = label;
+      });
     }
 
     function handleMessage(msg) {
