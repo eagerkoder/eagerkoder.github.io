@@ -10239,7 +10239,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       border-color: var(--red);
     }
 
-    .hang-guard svg, .hang-usage svg {
+    .hang-guard svg, .hang-usage svg, .hang-preview svg {
       display: block;
     }
 
@@ -14512,6 +14512,14 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M2 16.5A10 10 0 0 1 7 7.84" style="stroke:var(--green)"/><path d="M7 7.84a10 10 0 0 1 10 0" style="stroke:var(--orange)"/><path d="M17 7.84A10 10 0 0 1 22 16.5" style="stroke:var(--red)"/><path d="M12 16.5l5-6" /><circle cx="12" cy="16.5" r="1.5" />
+        </svg></button>
+      <!-- App preview (app_preview.js): a dev server here or on a linked machine, in a dialog over
+           the room. Shown only by a relay whose preview gate is up. The icon is a window playing. -->
+      <button class="hang-btn hang-preview" id="convPreview" onclick="previewOpen()"
+        aria-label="Preview a web app (Alt+P)" title="Preview a web app (Alt+P)">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 8.5h18" /><path d="M10.5 11.5v5l4-2.5z" />
         </svg></button>
     </div>
     <div class="hang-float">
@@ -20416,6 +20424,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       startOptions = null;
       // The tunnel map too: the next `tunnel` message on this socket says what it is.
       tunnelInfo = null;
+      // And app previews, whose gate is this relay's `preview_tunnel` message.
+      if (typeof previewReset === 'function') previewReset();
       wsBase = url;
       if (typeof renderTunnelPick === 'function') renderTunnelPick();
       // Same rule, same reason: arbitration is a capability of the relay on the other end of this
@@ -20534,6 +20544,10 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       else if (msg.type === 'state_conflict') { stateSyncConflict(msg); }
       else if (msg.type === 'conv_log') {
         convLiveReceive(msg);
+      }
+      else if (msg.type === 'preview_ports' || msg.type === 'preview_open'
+               || msg.type === 'preview_tunnel') {
+        if (typeof previewReceive === 'function') previewReceive(msg);
       }
       else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
         if (typeof plannerReceive === 'function') plannerReceive(msg);
@@ -28258,6 +28272,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
           title: 'Replace the tunnel and leave the relay running — a quick tunnel comes back on a'
             + ' new address, and this page follows it'});
       }
+      // The tunnel app previews share (app_preview.js), apart from the relay's own: start, stop or
+      // replace it without touching anything else.
+      if (typeof previewTunnelItems === 'function') items.push(...previewTunnelItems());
       // The panes and the agents in them are herdr's and keep running: this restarts the process
       // that watches them, not the work.
       if (typeof relayRebootOffered === 'function' && relayRebootOffered()) {
@@ -28277,8 +28294,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       if (!items.length) return '';
       return `<details class="section-action launcher-restart"${launcherRestartOpen ? ' open' : ''}` +
         ' ontoggle="launcherRestartToggle(this)">' +
-        '<summary aria-label="Restart the relay, the tunnel or herdr" aria-haspopup="menu"' +
-        ' title="Restart the relay, the tunnel or herdr">Restart \u25be</summary>' +
+        '<summary aria-label="Restart the relay, a tunnel or herdr" aria-haspopup="menu"' +
+        ' title="Restart the relay, a tunnel or herdr">Restart \u25be</summary>' +
         '<div class="launcher-restart-items" role="menu">' +
         items.map(launcherRestartItemHtml).join('') + '</div></details>';
     }
@@ -28321,6 +28338,12 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         // is drawn, because an add button that moves once the section has something in it is the
         // shape of a button people stop finding. Every other control here is conditional, and this
         // is the one position that has to be fixed.
+        // App preview (app_preview.js): a dev server here or on a linked machine, in a dialog.
+        + (typeof previewOffered === 'function' && previewOffered()
+          ? '<button class="section-action" onclick="previewOpen()"'
+            + ' title="Preview a web app running on this machine or a linked one (Alt+P)"'
+            + ' aria-label="Open app preview">Preview</button>'
+          : '')
         + launcherRestartHtml()
         + '<button class="section-action" onclick="openLauncherNew()"'
         + ' title="Add a tile" aria-label="Add a launcher tile">+ New</button>'
@@ -57128,6 +57151,9 @@ function studioCardHtml() {
       hangSyncGuard(document.getElementById('convGuard'), !!convViewId && recorded);
       // The usage planner, over any room: which account to be on is a question before any send.
       document.getElementById('convUsage')?.classList.toggle('on', !!convViewId && typeof usageOpen === 'function');
+      // App preview, over any room, once the relay has said its preview gate is up.
+      document.getElementById('convPreview')?.classList.toggle('on',
+        !!convViewId && typeof previewOffered === 'function' && previewOffered());
       hangSyncPara(document.getElementById('panePara'), !!thread && !thread.hidden);
       hangSyncWho('conv');
       hangSyncWho('pane');
@@ -59282,6 +59308,346 @@ function pvMount(root, io = PV_HTTP) {
         if (e.code !== 'KeyU' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();   // a Mac's Alt+U is a dead key, and it must not land in the composer
         usageOpen();
+      });
+    }
+
+  </script>
+  <script>
+// --- App preview ------------------------------------------------------------------------------
+//
+// A dev server on this machine or a linked one, seen in a dialog over the page: a tab per app
+// opened, and on the right a list of every port the machines are listening on to open another.
+// The relay (app_preview.py) puts each app under /p/<port>/ on its machine's one preview tunnel,
+// an origin of its own and never this page's, and hands back a one-time link (`preview_open`), so
+// nothing is typed and nothing is copied. A linked machine answers for itself through this relay,
+// and its own tunnel carries its app.
+//
+// The frames stay loaded while the dialog is closed, so opening it again is instant. Open in new
+// tab asks for a link of its own: the frame's session lives in this page's partition, a tab's in
+// its own. Alt+P opens and closes it; so do the launcher's Preview button and the desktop palette.
+
+    const PREVIEW_DLG_CSS = `
+      dialog#previewDlg { box-sizing: border-box; width: 75vw; height: 75vh; max-width: none;
+        max-height: none; padding: 0;
+        border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
+        color: var(--text); overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.45);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+      dialog#previewDlg[open] { display: flex; flex-direction: column; }
+      dialog#previewDlg::backdrop { background: rgb(0 0 0 / 0.45); }
+      .pv-head { flex: none; display: flex; align-items: center; gap: 6px; min-height: 40px;
+        padding: 0 4px 0 12px; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+      .pv-title { flex: none; font-weight: 600; }
+      .pv-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto;
+        scrollbar-width: none; align-self: stretch; align-items: flex-end; }
+      .pv-tab { flex: none; display: flex; align-items: center; max-width: 220px; height: 32px;
+        border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0;
+        color: var(--muted); }
+      .pv-tab[aria-selected="true"] { color: var(--text); background: var(--surface, rgba(255,255,255,.05));
+        border-color: var(--border); }
+      .pv-tab-open { background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
+        padding: 0 4px 0 10px; height: 100%; white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; }
+      .pv-tab-x, .pv-btn { background: none; border: 0; color: var(--muted); cursor: pointer;
+        border-radius: 4px; font: inherit; padding: 0; }
+      .pv-tab-x { width: 24px; height: 24px; font-size: 15px; }
+      .pv-btn { min-width: 32px; height: 32px; font-size: 16px; }
+      .pv-tab-x:hover, .pv-btn:hover { color: var(--text); }
+      .pv-tab-open:focus-visible, .pv-tab-x:focus-visible, .pv-btn:focus-visible,
+      .pv-routes:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+      .pv-btn[disabled] { opacity: .4; cursor: default; }
+      .pv-routes { flex: none; max-width: 200px; height: 30px; background: var(--bg);
+        color: var(--text); border: 1px solid var(--border); border-radius: 6px; font: inherit;
+        padding: 0 6px; }
+      .pv-close { font-size: 22px; min-width: 40px; height: 40px; }
+      .pv-body { flex: 1; min-height: 0; position: relative; background: #fff; }
+      .pv-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+        display: none; }
+      .pv-body iframe.on { display: block; }
+      .pv-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+        text-align: center; background: var(--bg); color: var(--muted); font-size: 0.9rem; }
+      @media (max-width: 900px) {
+        dialog#previewDlg { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+        .pv-head { flex-wrap: wrap; }
+        .pv-tabs { flex-basis: 0; }
+        .pv-routes { order: 1; flex: 1 1 calc(100% - 120px); min-width: 0; max-width: none; }
+        .pv-refresh, .pv-reload, .pv-newtab { order: 1; }
+      }
+    `;
+
+    let previewTabs = [];          // {key, machine, name, port, base}
+    let previewActive = '';
+    let previewRoutes = null;      // the last preview_ports answer's machines, or null
+    let previewTunnel = null;      // this relay's own tunnel: {running, fixed}
+    const previewWaiting = new Map();
+    let previewSeq = 0;
+
+    // The relay sends `preview_tunnel` on connect only when its gate is up: the message is the gate.
+    function previewOffered() {
+      return !!previewTunnel;
+    }
+
+    function previewHref(raw) {
+      try {
+        const url = new URL(raw);
+        if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+            && url.origin !== location.origin) return url.href;
+      } catch (_) { /* an invalid reply is not a navigation */ }
+      return '';
+    }
+
+    function previewAsk(msg, done) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { showToast('Not connected to the relay'); return false; }
+      const req = 'pv' + (++previewSeq);
+      if (done) previewWaiting.set(req, done);
+      ws.send(JSON.stringify({...msg, req}));
+      return true;
+    }
+
+    function previewReceive(msg) {
+      const done = msg.req && previewWaiting.get(msg.req);
+      if (done) { previewWaiting.delete(msg.req); done(msg); }
+      if (msg.type === 'preview_tunnel' && !msg.machine && !msg.error) {
+        previewTunnel = {running: !!msg.running, fixed: !!msg.fixed};
+        if (typeof renderLauncher === 'function') renderLauncher();
+        // And the room's Preview button, on whichever page this is.
+        if (typeof hangSync === 'function') hangSync();
+        if (typeof deskColumns !== 'undefined' && typeof deskHangSync === 'function') {
+          deskColumns.forEach((_, i) => deskHangSync(i));
+        }
+      }
+    }
+
+    function previewReset() {
+      previewTunnel = null;
+      previewRoutes = null;
+      previewWaiting.clear();
+    }
+
+    function previewDialog() {
+      let dlg = document.getElementById('previewDlg');
+      if (dlg) return dlg;
+      const style = document.createElement('style');
+      style.textContent = PREVIEW_DLG_CSS;
+      document.head.appendChild(style);
+      dlg = document.createElement('dialog');
+      dlg.id = 'previewDlg';
+      dlg.setAttribute('aria-label', 'App preview');
+      dlg.innerHTML = '<div class="pv-head"><span class="pv-title">Preview</span>'
+        + '<div class="pv-tabs" role="tablist" aria-label="Open previews"></div>'
+        + '<select class="pv-routes" aria-label="Open a preview of a port"></select>'
+        + '<button type="button" class="pv-btn pv-refresh" title="Look for listening ports again"'
+        + ' aria-label="Refresh ports">↻</button>'
+        + '<button type="button" class="pv-btn pv-reload" title="Reload this preview"'
+        + ' aria-label="Reload preview">⟳</button>'
+        + '<button type="button" class="pv-btn pv-newtab" title="Open this preview in a new tab"'
+        + ' aria-label="Open in new tab">↗</button>'
+        + '<button type="button" class="pv-btn pv-close" aria-label="Close preview">×</button></div>'
+        + '<div class="pv-body"><div class="pv-empty">' + (window.isSecureContext
+          ? 'Pick a port on the right to preview it.'
+          : 'This page is plain http, where a preview cannot run in a frame: a port picked on the'
+            + ' right opens in a new tab. Open this app over https or localhost to keep it here.')
+        + '</div></div>';
+      dlg.querySelector('.pv-close').addEventListener('click', () => dlg.close());
+      dlg.querySelector('.pv-refresh').addEventListener('click', previewLoadRoutes);
+      dlg.querySelector('.pv-reload').addEventListener('click', () => {
+        const t = previewTabs.find(x => x.key === previewActive);
+        if (t) previewLoad(t);
+      });
+      dlg.querySelector('.pv-newtab').addEventListener('click', () => {
+        const t = previewTabs.find(x => x.key === previewActive);
+        if (t) previewNewTab(t.machine, t.port);
+      });
+      dlg.querySelector('.pv-routes').addEventListener('change', e => {
+        const v = e.target.value;
+        e.target.value = '';
+        if (!v) return;
+        if (v === 'other') {
+          const got = prompt('Port to preview on this machine');
+          const port = parseInt(got || '', 10);
+          if (port) previewOpenRoute('', '', port);
+          return;
+        }
+        const [machine, port] = JSON.parse(v);
+        const row = (previewRoutes || []).find(m => m.machine === machine);
+        previewOpenRoute(machine, row ? row.name : machine, port);
+      });
+      dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+      document.body.appendChild(dlg);
+      return dlg;
+    }
+
+    function previewRoutesHtml() {
+      const open = new Set(previewTabs.map(t => t.key));
+      let html = '<option value="">' + (previewRoutes ? 'Open…' : 'Looking for ports…') + '</option>';
+      for (const m of previewRoutes || []) {
+        html += `<optgroup label="${escapeHtml(m.name || 'this machine')}">`;
+        if (m.error) html += `<option disabled>${escapeHtml(m.error)}</option>`;
+        else if (!m.ports.length) html += '<option disabled>nothing listening</option>';
+        for (const p of m.ports || []) {
+          const key = (m.machine || '') + ':' + p.port;
+          html += `<option value="${escapeHtml(JSON.stringify([m.machine || '', p.port]))}">`
+            + `${open.has(key) ? '● ' : ''}:${p.port}${p.command ? ' · ' + escapeHtml(p.command) : ''}</option>`;
+        }
+        html += '</optgroup>';
+      }
+      return html + '<option value="other">Another port here…</option>';
+    }
+
+    function previewPaint() {
+      const dlg = previewDialog();
+      dlg.querySelector('.pv-tabs').innerHTML = previewTabs.map(t => {
+        const on = t.key === previewActive;
+        const label = `${t.name ? t.name + ' ' : ''}:${t.port}`;
+        return `<div class="pv-tab" role="tab" aria-selected="${on}" data-key="${escapeHtml(t.key)}">`
+          + `<button type="button" class="pv-tab-open" title="${escapeHtml(label)}">${escapeHtml(label)}</button>`
+          + `<button type="button" class="pv-tab-x" aria-label="Close ${escapeHtml(label)}">×</button></div>`;
+      }).join('');
+      dlg.querySelectorAll('.pv-tab').forEach(el => {
+        const key = el.dataset.key;
+        el.querySelector('.pv-tab-open').addEventListener('click', () => { previewActive = key; previewPaint(); });
+        el.querySelector('.pv-tab-x').addEventListener('click', () => previewCloseTab(key));
+      });
+      dlg.querySelector('.pv-routes').innerHTML = previewRoutesHtml();
+      const body = dlg.querySelector('.pv-body');
+      for (const f of body.querySelectorAll('iframe')) f.classList.toggle('on', f.dataset.key === previewActive);
+      body.querySelector('.pv-empty').hidden = !!previewActive;
+      for (const b of dlg.querySelectorAll('.pv-reload, .pv-newtab')) b.disabled = !previewActive;
+    }
+
+    function previewLoadRoutes() {
+      previewRoutes = null;
+      if (document.getElementById('previewDlg')) previewPaint();
+      previewAsk({type: 'preview_ports', all: true}, msg => {
+        previewRoutes = msg.error ? [{machine: '', name: 'this machine', ports: [], error: msg.error}]
+          : msg.machines;
+        previewPaint();
+      });
+    }
+
+    // A one-time link into the frame. Also how a tab is reloaded: a ticket is spent on first use,
+    // and a link minted again is cheaper than reasoning about whether the frame still holds one.
+    function previewLoad(t) {
+      previewAsk({type: 'preview_open', machine: t.machine, port: t.port}, msg => {
+        if (!previewTabs.includes(t)) return;
+        const body = previewDialog().querySelector('.pv-body');
+        let frame = body.querySelector(`iframe[data-key="${CSS.escape(t.key)}"]`);
+        const url = previewHref(msg.url);
+        if (msg.error || !url) {
+          showToast(`Preview of :${t.port}: ${msg.error || 'the app needs a separate HTTP origin'}`, 'error');
+          if (!frame) previewCloseTab(t.key);
+          return;
+        }
+        if (!frame) {
+          frame = document.createElement('iframe');
+          frame.dataset.key = t.key;
+          frame.title = `Preview of :${t.port}`;
+          frame.allow = 'clipboard-read; clipboard-write; fullscreen';
+          body.appendChild(frame);
+        }
+        t.base = msg.base;
+        frame.src = url;
+        previewPaint();
+      });
+    }
+
+    function previewOpenRoute(machine, name, port) {
+      // A frame is a secure context only under a secure page, and the worker needs one: from a
+      // plain-http page (a LAN address) the app opens in a tab of its own instead.
+      if (!window.isSecureContext) { previewNewTab(machine, port); return; }
+      const key = (machine || '') + ':' + port;
+      if (!previewTabs.some(t => t.key === key)) {
+        const t = {key, machine: machine || '', name: machine ? name : '', port, base: ''};
+        previewTabs.push(t);
+        previewLoad(t);
+      }
+      previewActive = key;
+      previewPaint();
+    }
+
+    function previewCloseTab(key) {
+      const at = previewTabs.findIndex(t => t.key === key);
+      if (at === -1) return;
+      previewTabs.splice(at, 1);
+      const frame = previewDialog().querySelector(`.pv-body iframe[data-key="${CSS.escape(key)}"]`);
+      if (frame) frame.remove();
+      if (previewActive === key) {
+        const next = previewTabs[at] || previewTabs[at - 1];
+        previewActive = next ? next.key : '';
+      }
+      previewPaint();
+    }
+
+    // The window is opened now, in the press, and pointed at the link when it comes: one opened
+    // after the round trip is a popup the browser blocks.
+    function previewNewTab(machine, port) {
+      const w = window.open('about:blank', '_blank');
+      if (!w) { showToast('The browser blocked the new tab'); return; }
+      w.opener = null;
+      const sent = previewAsk({type: 'preview_open', machine, port}, msg => {
+        const url = previewHref(msg.url);
+        if (msg.error || !url) {
+          w.close();
+          showToast(`Preview of :${port}: ${msg.error || 'the app needs a separate HTTP origin'}`, 'error');
+          return;
+        }
+        w.location.href = url;
+      });
+      if (!sent) w.close();
+    }
+
+    function previewOpen() {
+      if (!previewOffered()) { showToast('This relay does not serve previews'); return; }
+      const dlg = previewDialog();
+      if (dlg.open) { dlg.close(); return; }
+      previewPaint();
+      dlg.showModal();
+      previewLoadRoutes();
+      dlg.querySelector('.pv-routes').focus();
+    }
+
+    // The launcher's Restart menu and the desktop palette: this relay's own preview tunnel.
+    function previewTunnelOffered() {
+      return previewOffered() && !previewTunnel.fixed;
+    }
+
+    function previewTunnelAct(action) {
+      const words = {start: 'Starting', stop: 'Stopping', restart: 'Restarting'}[action];
+      const sent = previewAsk({type: 'preview_tunnel', action}, msg => {
+        if (msg.error) { showToast('Preview tunnel: ' + msg.error, 'error'); return; }
+        showToast(msg.running ? 'Preview tunnel is up' : 'Preview tunnel stopped');
+        // A new address: every open frame's link points at the old one.
+        if (action !== 'stop') previewTabs.forEach(previewLoad);
+      });
+      if (sent) showToast(`${words} the preview tunnel…`);
+    }
+
+    // By name: the launcher's menu calls `${run}()`.
+    function previewTunnelStart() { previewTunnelAct('start'); }
+    function previewTunnelRestart() { previewTunnelAct('restart'); }
+    function previewTunnelStop() { previewTunnelAct('stop'); }
+
+    function previewTunnelItems() {
+      if (!previewTunnelOffered()) return [];
+      if (!previewTunnel.running) {
+        return [{key: 'preview-tunnel-start', label: 'Start preview tunnel',
+                 run: 'previewTunnelStart',
+                 title: 'Start the tunnel app previews share. The first preview starts it too'}];
+      }
+      return [
+        {key: 'preview-tunnel-restart', label: 'Restart preview tunnel',
+         run: 'previewTunnelRestart',
+         title: 'A new preview tunnel on a new address; open previews reload through it'},
+        {key: 'preview-tunnel-stop', label: 'Stop preview tunnel', run: 'previewTunnelStop',
+         title: 'Stop the tunnel app previews share; every open preview stops answering'},
+      ];
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener && window.self === window.top) {
+      document.addEventListener('keydown', e => {
+        if (e.code !== 'KeyP' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+        if (!previewOffered()) return;
+        e.preventDefault();   // a Mac's Alt+P is π, and it must not land in the composer
+        previewOpen();
       });
     }
 

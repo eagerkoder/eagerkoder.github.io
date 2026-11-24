@@ -11977,6 +11977,8 @@ function convWebModeOf(conv) {
       startOptions = null;
       // The tunnel map too: the next `tunnel` message on this socket says what it is.
       tunnelInfo = null;
+      // And app previews, whose gate is this relay's `preview_tunnel` message.
+      if (typeof previewReset === 'function') previewReset();
       wsBase = url;
       if (typeof renderTunnelPick === 'function') renderTunnelPick();
       // Same rule, same reason: arbitration is a capability of the relay on the other end of this
@@ -12095,6 +12097,10 @@ function convWebModeOf(conv) {
       else if (msg.type === 'state_conflict') { stateSyncConflict(msg); }
       else if (msg.type === 'conv_log') {
         convLiveReceive(msg);
+      }
+      else if (msg.type === 'preview_ports' || msg.type === 'preview_open'
+               || msg.type === 'preview_tunnel') {
+        if (typeof previewReceive === 'function') previewReceive(msg);
       }
       else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
         if (typeof plannerReceive === 'function') plannerReceive(msg);
