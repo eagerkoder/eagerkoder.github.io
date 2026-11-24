@@ -4165,6 +4165,7 @@
 
     .desk-menu button:hover:not(:disabled) { background: var(--border); }
     .desk-menu button:disabled { opacity: 0.4; cursor: default; }
+    .desk-menu .desk-menu-tick { float: right; margin-left: 12px; color: var(--accent); }
     .desk-menu button.danger { color: var(--red); }
 
     /* Asked once, the way the phone asks: the item keeps its label and its colour, and a bar
@@ -38552,19 +38553,21 @@ convApplyTint();
     }
 
     // Sortable key. Pinned first — most recently pinned at the top, because pinning something is a
-    // statement about what you are doing now — then everything else by activity. The id breaks
-    // ties so the order is total: two conversations created in the same millisecond must not swap
-    // places between two renders of the same data.
-    function deskConvRank(conv, pins) {
+    // statement about what you are doing now — then everything else by activity. With `used` (room
+    // ids, last opened first: the visit log), the pins sort among themselves by it instead, and a
+    // pin never opened keeps its pinned order below the opened ones. The id breaks ties so the
+    // order is total: two conversations created in the same millisecond must not swap places
+    // between two renders of the same data.
+    function deskConvRank(conv, pins, used) {
       const at = (pins || []).indexOf(conv.id);
-      return at === -1
-        ? [1, -deskConvActivity(conv), conv.id]
-        : [0, -at, conv.id];
+      if (at === -1) return [1, 0, -deskConvActivity(conv), conv.id];
+      const u = used ? used.indexOf(conv.id) : -1;
+      return [0, u === -1 ? Infinity : u, -at, conv.id];
     }
 
-    function deskSortConvs(convs, pins) {
+    function deskSortConvs(convs, pins, used) {
       return (convs || []).slice().sort((a, b) => {
-        const ka = deskConvRank(a, pins), kb = deskConvRank(b, pins);
+        const ka = deskConvRank(a, pins, used), kb = deskConvRank(b, pins, used);
         for (let i = 0; i < ka.length; i++) {
           if (ka[i] < kb[i]) return -1;
           if (ka[i] > kb[i]) return 1;
@@ -40277,10 +40280,13 @@ convApplyTint();
         if (!it.run) return `<strong>${escapeHtml(it.label)}</strong>`;
         const armed = deskMenuArmed === i;
         const cls = [it.danger ? 'danger' : '', armed ? 'armed' : ''].filter(Boolean).join(' ');
+        const check = 'checked' in it;
         return `<button data-item="${i}"${it.disabled ? ' disabled' : ''}` +
           `${cls ? ` class="${cls}"` : ''}` +
+          `${check ? ` role="menuitemcheckbox" aria-checked="${!!it.checked}"` : ''}` +
           `${armed ? ' aria-label="' + escapeHtml(it.label + ', press again to confirm') + '"' : ''}` +
-          `>${escapeHtml(it.label)}` +
+          `>${check ? `<span class="desk-menu-tick" aria-hidden="true">${it.checked ? '\u2713' : ''}</span>` : ''}` +
+          `${escapeHtml(it.label)}` +
           (it.hint ? `<small>${escapeHtml(it.hint)}</small>` : '') + '</button>';
       }).join('');
       if (focused != null) el.querySelector(`[data-item="${focused}"]`)?.focus();
@@ -40910,6 +40916,8 @@ convApplyTint();
     // row, and writing it into the shared conversations document would move it under everyone else
     // — see decision_log/2026-09-02_a_pin_is_a_view_not_a_fact.md.
     const DESK_PINS_KEY = 'herdr_desk_pins';
+    // Off: the starred rooms stay in pinned order, newest pin on top. On: last opened on top.
+    const DESK_STAR_USED_KEY = 'herdr_desk_star_by_use';
 
     function deskPins() {
       try {
@@ -41009,7 +41017,9 @@ convApplyTint();
       }
       const pins = deskPins();
       const now = Date.now();
-      const rows = deskSortConvs(convs, pins).map(c => {
+      const used = compactOn(DESK_STAR_USED_KEY) && typeof loadRecents === 'function'
+        ? loadRecents().filter(r => r.conv).map(r => r.conv) : null;
+      const rows = deskSortConvs(convs, pins, used).map(c => {
         const members = c.members || [];
         const live = members.map(m => agents.find(a => convMemberKey(a) === m.aid)).filter(Boolean);
         // The same lead, dot and badges the mobile landing card draws, and for the same reason: a
@@ -41121,6 +41131,9 @@ convApplyTint();
         {label: convFoldOn() ? 'Unfold inactive rooms' : 'Fold inactive rooms',
          hint: 'rooms with nothing running, under one fold below the rest',
          run: () => convListToggle(CONV_FOLD_KEY)},
+        {label: 'Sort starred by last used', checked: compactOn(DESK_STAR_USED_KEY),
+         hint: 'starred rooms, last opened on top',
+         run: () => convListToggle(DESK_STAR_USED_KEY)},
       ];
     }
 
