@@ -71,7 +71,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-22">
+  <meta name="app-built" content="2026-11-24">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -11959,7 +11959,7 @@ function convWebModeOf(conv) {
       // A machine config of its own (machine_configs.js) is somewhere else until it says where:
       // falling back to the relay that served the page would connect a new tab to this machine.
       let url = localStorage.getItem('herdr_relay_url') || (selfRelay && !window.MACHINE_ID ? autoRelayUrl : '');
-      if (!url) { showSetup(); return; }
+      if (!url) { if (ws) ws.close(); showSetup(); return; }
       let token = localStorage.getItem('herdr_relay_token') || '';
       const address = new URL(url);
       if (address.searchParams.has('token')) {

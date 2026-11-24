@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-23">
+  <meta name="app-built" content="2026-11-24">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -13390,6 +13390,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .planner h1 { font-size: 16px; margin: 0; }
 .planner h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .planner h3 { font-size: 15px; margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.planner h3 .now-switch { margin-left: auto; font-weight: 600; border-color: var(--accent); }
 .planner main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 1400px; margin: 0 auto; }
 .planner .muted { color: var(--muted); }
 .planner .small { font-size: 12px; }
@@ -19382,8 +19383,16 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     // the page this is, when it is that config, reconnects now.
     function machSave(form) {
       const f = form.elements;
-      const url = cleanRelayUrl(f.url.value);
-      if (url && !/^wss?:\/\/[^\s]+$/i.test(url)) {
+      let url = cleanRelayUrl(f.url.value), urlToken = '';
+      try {
+        if (url) {
+          const address = new URL(url);
+          if (!['ws:', 'wss:'].includes(address.protocol) || address.username || address.password || address.hash) throw new Error();
+          urlToken = address.searchParams.get('token') || '';
+          address.searchParams.delete('token');
+          url = address.pathname === '/' ? address.origin + address.search + address.hash : address.href;
+        }
+      } catch (e) {
         form.querySelector('.mach-form-err').textContent = 'A relay URL starts with ws:// or wss://.';
         f.url.focus();
         return;
@@ -19404,7 +19413,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       else STORAGE_RAW.remove(key('herdr_machine_label'));
       if (url) STORAGE_RAW.set(key('herdr_relay_url'), url);
       else STORAGE_RAW.remove(key('herdr_relay_url'));
-      const token = f.token.value.trim();
+      const token = f.token.value.trim() || (f.drop && f.drop.checked ? '' : urlToken);
       if (token) STORAGE_RAW.set(key('herdr_relay_token'), token);
       else if (f.drop && f.drop.checked) STORAGE_RAW.remove(key('herdr_relay_token'));
       machEditing = null;
@@ -20387,7 +20396,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       // A machine config of its own (machine_configs.js) is somewhere else until it says where:
       // falling back to the relay that served the page would connect a new tab to this machine.
       let url = localStorage.getItem('herdr_relay_url') || (selfRelay && !window.MACHINE_ID ? autoRelayUrl : '');
-      if (!url) { showSetup(); return; }
+      if (!url) { if (ws) ws.close(); showSetup(); return; }
       let token = localStorage.getItem('herdr_relay_token') || '';
       const address = new URL(url);
       if (address.searchParams.has('token')) {
@@ -58709,6 +58718,20 @@ function pvToggle(id) { const box = pv$(id); return box ? box.checked : PV_TOGGL
 // Claude counts a window's use and Codex what is left of it; this page always shows use.
 const pvPct = used => `${Math.round(used)}%`;
 // The amber line, in sessions: the hours of room asked for, at the fill time.
+// The card header's switch: shown only when the plan's first step is a switch due now, so the
+// action is one press away in Simple and detailed alike, whichever sections are shown.
+function pvNowSwitch(doc, plan, now) {
+  const s = plannerSteps(plan, PV.ranges[doc.provider])[0];
+  const active = (doc.accounts.find(a => a.active) || {}).id;
+  if (!s || s.kind !== 'use' || s.id === active || s.t > now + 15 * 60e3) return '';
+  const command = PV_CMD[doc.provider].switch(s.id);
+  if (!command) return '';
+  const name = pvEsc((doc.accounts.find(a => a.id === s.id) || {}).name || `#${s.id}`);
+  return pvCanRun()
+    ? `<button class="run now-switch" data-run="${pvEsc(doc.provider + ':' + s.id)}" data-arm-key="${pvEsc('runhead:' + doc.provider + ':' + s.id)}" title="Recommended now. Press twice to run ${pvEsc(command)} on the relay's machine">▶ Switch to ${name}</button>`
+    : `<button class="now-switch" data-copy="${pvEsc(command)}" title="Recommended now. Copy ${pvEsc(command)}">Switch to ${name}: copy</button>`;
+}
+
 const pvWarnSessions = doc => pvSetting('warnH', doc.provider) / pvF(doc);
 
 function pvRender() {
@@ -58750,7 +58773,7 @@ function pvRender() {
     };
     return `
     <section class="card prov-${doc.provider}">
-      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}</h3>
+      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}${pvNowSwitch(doc, plan, now)}</h3>
       ${pvChips(doc, plan, room, now)}
       ${PV.sections.filter(([, on]) => on).map(([id]) => `<div class="sec sec-${id}">${parts[id]()}</div>`).join('')}
     </section>`;
@@ -59225,6 +59248,7 @@ function pvMount(root, io = PV_HTTP) {
       dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
       // The phone's tab gets its root back, so the Usage tab still has its planner.
       dlg.addEventListener('close', () => {
+        dlg.querySelectorAll('dialog[open]').forEach(d => d.close());
         const root = document.getElementById('plannerRoot'), view = document.getElementById('plannerView');
         if (root && view && !view.contains(root)) view.appendChild(root);
       });
