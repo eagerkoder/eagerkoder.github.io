@@ -39432,6 +39432,7 @@ convApplyTint();
       deskRenderRoster();
       const tab = deskTabFor(deskColumns[next].tabKey);
       if (tab && tab.kind === 'project') deskReadColumn(next, true);
+      if (typeof deskNotePlace === 'function') deskNotePlace();
     }
 
     // The pane a tab names, or null when it names one that is not in the snapshot. A pane tab is
@@ -40214,6 +40215,107 @@ convApplyTint();
         if (t) deskOpenSplit(t.kind, t.key, t.label);
       });
     }
+
+
+    // --- the places used ---
+    //
+    // A place is a composer: the tab a column shows, in the room it was used in. The log is every
+    // place this reader used, the latest first, so ⌘⌥[ goes back to the pane before this one even
+    // when it was in another room, and ⌘⌥↑ to the room before this one, landing on the pane last
+    // used there. One log for both, because "the room before" is only the rooms of "the panes
+    // before". This browser's own, like the layout: what one reader used is not the shared record.
+    //
+    // A walk is ⌥ held: the log is read once when it starts, each press steps along that copy, and
+    // nothing is written until ⌥ is let go — then the place landed on becomes the latest, and the one
+    // the walk started from is second, so a single press and release goes back and forth between
+    // two, the way a window switcher does.
+
+    const DESK_PLACES_KEY = 'herdr_desk_places';
+    const DESK_PLACES_MAX = 40;
+    let deskPlaces = null;   // [{conv, tab}], the latest first; read on first use
+    let deskWalk = null;     // {kind: 'pane'|'conv', list, at} while ⌥ is held
+
+    function deskPlacesLog() {
+      if (deskPlaces) return deskPlaces;
+      let got = [];
+      try { got = JSON.parse(localStorage.getItem(DESK_PLACES_KEY) || '[]'); } catch (e) { /* none */ }
+      deskPlaces = (Array.isArray(got) ? got : []).filter(p => p && typeof p.tab === 'string'
+        && typeof p.conv === 'string');
+      return deskPlaces;
+    }
+
+    function deskNotePlace() {
+      if (deskWalk || DESK_ROOM !== null) return;
+      const col = deskFocused();
+      if (!col || !col.tabKey) return;
+      const here = {conv: deskSelectedConv || '', tab: col.tabKey};
+      const log = deskPlacesLog();
+      if (log[0] && log[0].conv === here.conv && log[0].tab === here.tab) return;
+      deskPlaces = [here].concat(log.filter(p => p.conv !== here.conv || p.tab !== here.tab))
+        .slice(0, DESK_PLACES_MAX);
+      try { localStorage.setItem(DESK_PLACES_KEY, JSON.stringify(deskPlaces)); }
+      catch (e) { /* private mode: this page only */ }
+    }
+
+    // Each room once, at the place last used in it.
+    function deskPlacesByRoom(log) {
+      const seen = new Set();
+      return log.filter(p => p.conv && !seen.has(p.conv) && seen.add(p.conv));
+    }
+
+    // Puts the reader at `p`: its room selected, its tab in front, its composer focused. False when
+    // there is nothing left of it to go to, so the walk steps past it.
+    function deskGoPlace(p) {
+      const rooms = readConvIndex();
+      if (p.conv && !rooms.some(c => c.id === p.conv)) return false;
+      const moved = (p.conv || '') !== (deskSelectedConv || '');
+      if (moved) {
+        if (!p.conv) return false;
+        deskSelectConv(p.conv);
+      }
+      const tab = deskTabFor(p.tab);
+      if (!tab) return moved;                // the pane is gone: its room is the place
+      deskOpen(tab.kind, tab.key, tab.label);
+      return true;
+    }
+
+    // `step` 1 is one further back in the order of use, -1 one forward again.
+    function deskWalkStep(kind, step) {
+      if (DESK_ROOM !== null) return;
+      if (deskWalk && deskWalk.kind !== kind) deskWalkEnd();
+      if (!deskWalk) {
+        deskNotePlace();
+        const log = deskPlacesLog().slice();
+        deskWalk = {kind, list: kind === 'conv' ? deskPlacesByRoom(log) : log, at: 0};
+      }
+      const w = deskWalk;
+      for (let at = w.at + step; at >= 0 && at < w.list.length; at += step) {
+        if (!deskGoPlace(w.list[at])) continue;
+        w.at = at;
+        deskWalkSay();
+        return;
+      }
+      showToast(step > 0 ? `No ${kind === 'conv' ? 'room' : 'pane'} used before this one`
+        : 'Back at the latest', 'info');
+    }
+
+    function deskWalkSay() {
+      const w = deskWalk;
+      const p = w.list[w.at];
+      const room = readConvIndex().find(c => c.id === p.conv);
+      const tab = deskTabFor(p.tab);
+      const what = [room ? (room.name || room.id) : '', w.kind === 'pane' && tab ? tab.label : '']
+        .filter(Boolean).join(' \u00b7 ');
+      showToast(`${w.kind === 'conv' ? 'Room' : 'Pane'} ${w.at + 1} of ${w.list.length}`
+        + (what ? ` \u2014 ${what}` : ''), 'info');
+    }
+
+    function deskWalkEnd() {
+      if (!deskWalk) return;
+      deskWalk = null;
+      deskNotePlace();
+    }
+
 
   </script>
   <script>
@@ -43267,6 +43369,8 @@ convApplyTint();
       ['⌘1…5', 'Focus the nth column'],
       ['⌘⌥←  ⌘⌥→', 'Focus the column to the left / right (Ctrl⌥ where the browser takes ⌘⌥)'],
       ['⌘⌥⇧←  ⌘⌥⇧→', 'Previous / next tab in the switchable column'],
+      ['⌘⌥[  ⌘⌥]', 'The pane used before / after this one, across rooms — hold ⌥ and press again to go further'],
+      ['⌘⌥↑  ⌘⌥↓', 'The room used before / after this one — hold ⌥ and press again to go further'],
       ['⌘\\', 'Split the focused tab into a column of its own, or merge it back'],
       ['⌘⌥L', 'The launcher — the tiles that start things'],
       ['⌘⌥N', 'Start a session'],
@@ -46718,10 +46822,10 @@ function pvMount(root, io = PV_HTTP) {
       .pv-title { flex: none; font-weight: 600; }
       .pv-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto;
         scrollbar-width: none; align-self: stretch; align-items: flex-end; }
-      .pv-tab { flex: 0 1 auto; min-width: 96px; display: flex; align-items: center; max-width: 220px; height: 32px;
+      .pv-tab { flex: none; display: flex; align-items: center; max-width: 260px; height: 32px;
         border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0;
         color: var(--muted); }
-      .pv-tab[aria-selected="true"] { flex-shrink: 0; color: var(--text); background: var(--surface, rgba(255,255,255,.05));
+      .pv-tab[aria-selected="true"] { color: var(--text); background: var(--surface, rgba(255,255,255,.05));
         border-color: var(--border); }
       .pv-tab-open { background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
         flex: 1 1 auto; min-width: 0; padding: 0 4px 0 10px; height: 100%; white-space: nowrap; overflow: hidden;
@@ -46729,7 +46833,7 @@ function pvMount(root, io = PV_HTTP) {
       .pv-tab-x, .pv-btn { background: none; border: 0; color: var(--muted); cursor: pointer;
         border-radius: 4px; font: inherit; padding: 0; }
       .pv-tab-x { flex: none; width: 24px; height: 24px; font-size: 15px; }
-      /* Tabs shrink first, then scroll under a fade at whichever edge has more. */
+      /* Tabs keep their width and scroll, under a fade at whichever edge has more. */
       .pv-tabs.pv-more-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
         mask-image: linear-gradient(to right, transparent, #000 28px); }
       .pv-tabs.pv-more-r { -webkit-mask-image: linear-gradient(to left, transparent, #000 28px);
@@ -46750,6 +46854,38 @@ function pvMount(root, io = PV_HTTP) {
       .pv-routes { flex: none; width: 128px; height: 30px; background: var(--bg);
         color: var(--text); border: 1px solid var(--border); border-radius: 6px; font: inherit;
         padding: 0 6px; }
+      /* Where the browser lets a select be styled, its list is the desktop's right-click menu:
+         the same panel, rows, group headings and separators. Elsewhere it stays the native one. */
+      @supports (appearance: base-select) {
+        .pv-routes, .pv-routes::picker(select) { appearance: base-select; }
+        .pv-routes { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+        .pv-routes:hover { border-color: var(--muted); }
+        .pv-routes::picker-icon { color: var(--muted); }
+        .pv-routes::picker(select) { min-width: 280px; max-width: min(440px, 92vw);
+          max-height: min(70vh, 560px); margin-top: 4px; padding: 4px; position-area: span-left bottom;
+          position-try-fallbacks: flip-block; border: 1px solid var(--border); border-radius: 10px;
+          background: var(--surface); color: var(--text); font-size: 13px;
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45); }
+        .pv-routes option { padding: 6px 10px; border-radius: 7px; white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis; }
+        .pv-routes option::checkmark { display: none; }
+        .pv-routes option[value=""] { display: none; }
+        .pv-routes option:not(:disabled):is(:hover, :focus-visible) { background: var(--border); outline: 0; }
+        .pv-routes option:disabled { color: var(--muted); opacity: .7; font-style: italic; }
+        .pv-routes optgroup { margin-top: 4px; padding-top: 2px; color: var(--muted); font-size: 11px;
+          font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+        .pv-routes optgroup option { color: var(--text); font-size: 13px; font-weight: 400;
+          text-transform: none; letter-spacing: normal; }
+        .pv-routes option.pv-down { opacity: .55; }
+        .pv-routes option.pv-reg { color: var(--text); font-weight: 600;
+          background: color-mix(in srgb, #e5a50a 12%, transparent); margin: 1px 0; }
+        .pv-routes option.pv-reg::before { content: "\\2605"; color: #e5a50a; margin-right: 6px; }
+        .pv-routes option.pv-reg:not(:disabled):is(:hover, :focus-visible) {
+          background: color-mix(in srgb, #e5a50a 24%, transparent); }
+        .pv-routes option.pv-act { color: var(--muted); }
+        .pv-routes option.pv-act:is(:hover, :focus-visible) { color: var(--text); }
+        .pv-routes hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--border); }
+      }
       .pv-close { font-size: 22px; min-width: 40px; height: 40px; }
       .pv-body { flex: 1; min-height: 0; position: relative; background: #fff; }
       .pv-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
@@ -46783,7 +46919,9 @@ function pvMount(root, io = PV_HTTP) {
     const PREVIEW_ICON_RELOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>';
     const PREVIEW_ICON_FULL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>';
     let previewMax = (() => { try { return !!localStorage.getItem(PREVIEW_MAX_KEY); } catch (_) { return false; } })();
-    let previewFullFrom = null;    // the size to go back to when full screen ends, or null
+    let previewFullFrom = null;
+    const PREVIEW_LOCAL_KEY = 'herdr_preview_local';
+    let previewLocal = (() => { try { return !!localStorage.getItem(PREVIEW_LOCAL_KEY); } catch (_) { return false; } })();    // the size to go back to when full screen ends, or null
     let previewScanning = false;   // a scan asked for and not answered yet
     let previewRoutesSeq = 0;      // the latest preview_ports asked: an older answer is dropped
     let previewTunnel = null;      // this relay's own tunnel: {running, fixed}
@@ -46850,7 +46988,7 @@ function pvMount(root, io = PV_HTTP) {
         + '<button type="button" class="pv-btn pv-newtab" title="Open this preview in a new tab"'
         + ' aria-label="Open in new tab">↗</button>'
         + '<button type="button" class="pv-btn pv-max-btn" aria-pressed="false"'
-        + ' title="Fill the window (Esc to restore)" aria-label="Fill the window">' + PREVIEW_ICON_MAX + '</button>'
+        + ' title="Fill the window" aria-label="Fill the window">' + PREVIEW_ICON_MAX + '</button>'
         + (document.fullscreenEnabled ? '<button type="button" class="pv-btn pv-full" aria-pressed="false"'
           + ' title="Full screen (Esc to leave)" aria-label="Full screen">' + PREVIEW_ICON_FULL + '</button>' : '')
         + '<button type="button" class="pv-btn pv-close" aria-label="Close preview">×</button></div>'
@@ -46887,6 +47025,7 @@ function pvMount(root, io = PV_HTTP) {
         e.target.value = '';
         if (!v) return;
         if (v === 'scan') { previewLoadRoutes(true); return; }
+        if (v === 'local') { previewSetLocal(!previewLocal); return; }
         if (v === 'others') {
           previewShowOther = !previewShowOther;
           previewPaint();
@@ -46910,13 +47049,15 @@ function pvMount(root, io = PV_HTTP) {
       dlg.querySelector('.pv-max-btn').addEventListener('click', () => previewSize(!previewMax));
       const full = dlg.querySelector('.pv-full');
       if (full) full.addEventListener('click', previewFullscreen);
-      // Esc steps back one size before it closes anything: full screen to where it was (the
-      // browser's own Esc does that), filling the window to 75%, and only then the dialog.
+      // Esc in full screen leaves it (the browser's own Esc), back to the size it had. Otherwise Esc
+      // closes the dialog, and the size it had is the size it opens at next time. The same Esc that
+      // left full screen never closes it too.
+      let fullLeft = 0;
       dlg.addEventListener('cancel', e => {
-        if (document.fullscreenElement) return;
-        if (previewMax) { e.preventDefault(); previewSize(false); }
+        if (document.fullscreenElement || Date.now() - fullLeft < 400) e.preventDefault();
       });
       document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) fullLeft = Date.now();
         if (!document.fullscreenElement && previewFullFrom !== null) {
           previewSize(previewFullFrom);
           previewFullFrom = null;
@@ -46935,6 +47076,16 @@ function pvMount(root, io = PV_HTTP) {
     function previewIsRegistered(t) {
       const m = (previewRoutes || []).find(r => (r.machine || '') === t.machine);
       return !!(m && (m.ports || []).some(p => p.port === t.port && p.registered));
+    }
+
+    // A registered app's tab reads `@Project name`, then its machine when it is not this one; the
+    // port is in the title. Anything else reads as before: the machine and the port.
+    function previewTabLabel(t) {
+      const m = (previewRoutes || []).find(r => (r.machine || '') === t.machine);
+      const p = m && (m.ports || []).find(x => x.port === t.port);
+      const app = (p && p.registered && p.name) || t.app;
+      if (!app) return (t.name ? t.name + ' ' : '') + ':' + t.port;
+      return (p && p.project ? '@' + p.project + ' ' : '') + app + (t.machine ? ' · ' + t.name : '');
     }
 
     function previewRegisterAsk(machine, port, name) {
@@ -46991,7 +47142,8 @@ function pvMount(root, io = PV_HTTP) {
     // listed, marked down.
     function previewRoutesHtml() {
       const open = new Set(previewTabs.map(t => t.key));
-      const opt = (m, p) => `<option value="${escapeHtml(JSON.stringify([m.machine || '', p.port]))}">`
+      const opt = (m, p) => `<option value="${escapeHtml(JSON.stringify([m.machine || '', p.port]))}"`
+        + ` class="${p.registered ? 'pv-reg' : ''}${p.up === false ? ' pv-down' : ''}">`
         + `${escapeHtml(previewPortLabel(m, p, open))}${p.up === false ? ' (down)' : ''}</option>`;
       let html = '<option value="">' + (previewScanning ? 'Scanning\u2026'
         : previewRoutes ? 'Open\u2026' : 'Loading\u2026') + '</option>';
@@ -47008,7 +47160,7 @@ function pvMount(root, io = PV_HTTP) {
         else if (!reg.length) html += '<option disabled>no registered apps</option>';
         html += reg.map(p => opt(m, p)).join('');
         if (!m.error) {
-          html += `<option value="${escapeHtml(JSON.stringify(['register', m.machine || '']))}">`
+          html += `<option class="pv-act" value="${escapeHtml(JSON.stringify(['register', m.machine || '']))}">`
             + '+ Register an app\u2026</option>';
         }
         html += '</optgroup>';
@@ -47017,6 +47169,7 @@ function pvMount(root, io = PV_HTTP) {
             + found.map(p => opt(m, p)).join('') + '</optgroup>';
         }
       }
+      html += '<hr>';
       if (others && previewShowOther) {
         for (const m of previewRoutes || []) {
           const rest = (m.ports || []).filter(p => !p.registered && !p.web);
@@ -47025,14 +47178,15 @@ function pvMount(root, io = PV_HTTP) {
               + rest.map(p => opt(m, p)).join('') + '</optgroup>';
           }
         }
-        html += '<option value="others">Hide other ports</option>';
+        html += '<option class="pv-act" value="others">Hide other ports</option>';
       } else if (others) {
-        html += `<option value="others">Show ${others} other port${others === 1 ? '' : 's'}\u2026</option>`;
+        html += `<option class="pv-act" value="others">Show ${others} other port${others === 1 ? '' : 's'}\u2026</option>`;
       }
       if (!previewScanning) {
-        html += `<option value="scan">${previewScanned ? 'Scan again' : 'Scan for listening ports'}\u2026</option>`;
+        html += `<option class="pv-act" value="scan">${previewScanned ? 'Scan again' : 'Scan for listening ports'}\u2026</option>`;
       }
-      return html + '<option value="other">Another port here\u2026</option>';
+      html += '<option class="pv-act" value="other">Another port here\u2026</option><hr>';
+      return html + `<option class="pv-act" value="local">${previewLocal ? '\u2713 ' : ''}This machine's apps on localhost</option>`;
     }
 
     function previewTabsEdges() {
@@ -47047,9 +47201,9 @@ function pvMount(root, io = PV_HTTP) {
       const strip = dlg.querySelector('.pv-tabs');
       strip.innerHTML = previewTabs.map(t => {
         const on = t.key === previewActive;
-        const label = [t.app, t.name].filter(Boolean).join(' \u00b7 ') + (t.app || t.name ? ' ' : '') + ':' + t.port;
+        const label = previewTabLabel(t);
         return `<div class="pv-tab" role="tab" aria-selected="${on}" data-key="${escapeHtml(t.key)}">`
-          + `<button type="button" class="pv-tab-open" title="${escapeHtml(label)}">${escapeHtml(label)}</button>`
+          + `<button type="button" class="pv-tab-open" title="${escapeHtml(label + ' \u2014 :' + t.port)}">${escapeHtml(label)}</button>`
           + `<button type="button" class="pv-tab-x pv-tab-reg" aria-pressed="${previewIsRegistered(t)}"`
           + ` title="${previewIsRegistered(t) ? 'Registered: press to take it off the list' : 'Keep it on the list'}"`
           + ` aria-label="${previewIsRegistered(t) ? 'Unregister' : 'Register'} ${escapeHtml(label)}">`
@@ -47124,6 +47278,15 @@ function pvMount(root, io = PV_HTTP) {
     // Fill the window: the dialog takes all of it, and stays that way in this browser until put
     // back. Full screen: the page goes full screen with the dialog filling it, and leaving full
     // screen puts the dialog back to the size it had before.
+    function previewSetLocal(on) {
+      previewLocal = on;
+      try { localStorage.setItem(PREVIEW_LOCAL_KEY, on ? '1' : ''); } catch (_) { /* this page only */ }
+      showToast(on ? "This machine's apps open straight from localhost"
+        : "This machine's apps open through the preview gate");
+      for (const t of previewTabs) if (!t.machine) previewLoad(t);
+      previewPaint();
+    }
+
     function previewSize(max) {
       previewMax = !!max;
       try { localStorage.setItem(PREVIEW_MAX_KEY, previewMax ? '1' : ''); } catch (_) { /* this page only */ }
@@ -47137,7 +47300,7 @@ function pvMount(root, io = PV_HTTP) {
       const max = dlg.querySelector('.pv-max-btn');
       max.setAttribute('aria-pressed', String(previewMax));
       max.innerHTML = previewMax ? PREVIEW_ICON_RESTORE : PREVIEW_ICON_MAX;
-      max.title = previewMax ? 'Back to 75% (Esc)' : 'Fill the window (Esc to restore)';
+      max.title = previewMax ? 'Back to 75%' : 'Fill the window';
       max.setAttribute('aria-label', previewMax ? 'Restore the size' : 'Fill the window');
       const full = dlg.querySelector('.pv-full');
       if (full) full.setAttribute('aria-pressed', String(!!document.fullscreenElement));
@@ -47162,11 +47325,32 @@ function pvMount(root, io = PV_HTTP) {
 
     // A one-time link into the frame. Also how a tab is reloaded: a ticket is spent on first use,
     // and a link minted again is cheaper than reasoning about whether the frame still holds one.
+    // This machine's apps straight from localhost, in this one place: for a browser on the relay's
+    // own machine, when the person turns it on in the list. The app runs at its own origin as it
+    // would in a tab of its own. Kept per browser; a linked machine's apps come through its tunnel.
+    // A new tab goes straight to the app. The frame comes through the relay's gate on loopback
+    // (`local`): an app that sends frame-ancestors 'none' refuses a frame, and only the gate drops it.
+    function previewDirect(machine, port) {
+      return previewLocal && !machine ? `http://localhost:${port}/` : '';
+    }
+
+    function previewFrame(t, url) {
+      const body = previewDialog().querySelector('.pv-body');
+      let frame = body.querySelector(`iframe[data-key="${CSS.escape(t.key)}"]`);
+      if (!frame) {
+        frame = document.createElement('iframe');
+        frame.dataset.key = t.key;
+        frame.title = `Preview of :${t.port}`;
+        frame.allow = 'clipboard-read; clipboard-write; fullscreen';
+        body.appendChild(frame);
+      }
+      frame.src = url;
+    }
+
     function previewLoad(t) {
-      previewAsk({type: 'preview_open', machine: t.machine, port: t.port}, msg => {
+      const local = !!previewDirect(t.machine, t.port);
+      previewAsk({type: 'preview_open', machine: t.machine, port: t.port, local}, msg => {
         if (!previewTabs.includes(t)) return;
-        const body = previewDialog().querySelector('.pv-body');
-        let frame = body.querySelector(`iframe[data-key="${CSS.escape(t.key)}"]`);
         const url = previewHref(msg.url);
         if (msg.error || !url) {
           // The tab stays: the person closes it, and ⟳ tries again once the app is back.
@@ -47176,15 +47360,8 @@ function pvMount(root, io = PV_HTTP) {
           return;
         }
         t.error = '';
-        if (!frame) {
-          frame = document.createElement('iframe');
-          frame.dataset.key = t.key;
-          frame.title = `Preview of :${t.port}`;
-          frame.allow = 'clipboard-read; clipboard-write; fullscreen';
-          body.appendChild(frame);
-        }
         t.base = msg.base;
-        frame.src = url;
+        previewFrame(t, url);
         previewPaint();
       });
     }
@@ -47252,6 +47429,8 @@ function pvMount(root, io = PV_HTTP) {
     // The window is opened now, in the press, and pointed at the link when it comes: one opened
     // after the round trip is a popup the browser blocks.
     function previewNewTab(machine, port) {
+      const direct = previewDirect(machine, port);
+      if (direct) { window.open(direct, '_blank', 'noopener'); return; }
       const w = window.open('about:blank', '_blank');
       if (!w) { showToast('The browser blocked the new tab'); return; }
       w.opener = null;
@@ -48789,6 +48968,8 @@ function pvMount(root, io = PV_HTTP) {
       // The tab, which is the one surface this page has when nobody is looking at it: a window of
       // five columns is behind another window as easily as a phone is in a pocket.
       syncBrowserTab();
+      // Whatever the render left in front of the reader is the place they are using now.
+      deskNotePlace();
     }
 
     // --- column widths ---
@@ -49342,6 +49523,19 @@ function pvMount(root, io = PV_HTTP) {
           // The arrows walk the columns, which is what is on screen; with ⇧ they walk the tabs of
           // the switchable column, which is what is behind it. That way round because moving
           // between the things in front of you is the commoner move by far.
+          // The panes, then the rooms, in the order this reader used them: ⌥ held, each press goes
+          // one further back (or forward again), and letting go makes the one landed on the latest.
+          // By code: ⌥[ is a curly quote to `e.key` on a Mac.
+          if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+            deskWalkStep('pane', e.code === 'BracketLeft' ? 1 : -1);
+            e.preventDefault();
+            return;
+          }
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            deskWalkStep('conv', e.key === 'ArrowUp' ? 1 : -1);
+            e.preventDefault();
+            return;
+          }
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
             const step = e.key === 'ArrowLeft' ? -1 : 1;
             if (e.shiftKey) deskCycleTab(step);
@@ -49377,6 +49571,12 @@ function pvMount(root, io = PV_HTTP) {
           if (n < deskColumns.length) { deskSetFocus(n); deskFocusComposer(); e.preventDefault(); }
         }
       });
+      // Letting go of ⌥ or of ⌘/Ctrl ends a walk through the places used; so does leaving the window,
+      // whose keyup this page never sees.
+      document.addEventListener('keyup', e => {
+        if (e.key === 'Alt' || e.key === 'Meta' || e.key === 'Control') deskWalkEnd();
+      });
+      window.addEventListener('blur', deskWalkEnd);
       // Focus follows the click, so the singletons follow the pane the user is looking at.
       document.getElementById('deskCols').addEventListener('mousedown', e => {
         const frame = e.target.closest('[data-col]');
