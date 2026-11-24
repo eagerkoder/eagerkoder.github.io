@@ -12099,7 +12099,8 @@ function convWebModeOf(conv) {
         convLiveReceive(msg);
       }
       else if (msg.type === 'preview_ports' || msg.type === 'preview_open'
-               || msg.type === 'preview_tunnel') {
+               || msg.type === 'preview_tunnel' || msg.type === 'preview_register'
+               || msg.type === 'preview_unregister') {
         if (typeof previewReceive === 'function') previewReceive(msg);
       }
       else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
