@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1d22">
   <!-- Stamped by scripts/build.py, exactly as index.html's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-24">
+  <meta name="app-built" content="2026-11-25">
   <script>
     // A storage namespace for this page, from `?ns=<name>`: another machine's room opened here
     // through this relay (`remote_rooms.js`) is this same app at this same origin, talking to that
@@ -46822,11 +46822,15 @@ function pvMount(root, io = PV_HTTP) {
       .pv-title { flex: none; font-weight: 600; }
       .pv-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto;
         scrollbar-width: none; align-self: stretch; align-items: flex-end; }
-      .pv-tab { flex: none; display: flex; align-items: center; max-width: 260px; height: 32px;
-        border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0;
+      .pv-tab { flex: none; display: flex; align-items: center; max-width: 260px; height: 30px; font-size: 12px;
+        border: 1px solid var(--border); border-bottom: 0; border-radius: 6px 6px 0 0;
         color: var(--muted); }
-      .pv-tab[aria-selected="true"] { color: var(--text); background: var(--surface, rgba(255,255,255,.05));
-        border-color: var(--border); }
+      .pv-tab { background: color-mix(in srgb, var(--text) 3%, transparent); }
+      .pv-tab:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+      /* The tab in front: an accent along its top, its name bold, filled as the page it shows. */
+      .pv-tab[aria-selected="true"] { color: var(--text); font-weight: 600;
+        background: color-mix(in srgb, var(--blue) 14%, var(--bg)); border-color: color-mix(in srgb, var(--blue) 55%, var(--border));
+        box-shadow: inset 0 2px 0 var(--blue); }
       .pv-tab-open { background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
         flex: 1 1 auto; min-width: 0; padding: 0 4px 0 10px; height: 100%; white-space: nowrap; overflow: hidden;
         text-overflow: ellipsis; }
@@ -46841,51 +46845,103 @@ function pvMount(root, io = PV_HTTP) {
       .pv-tabs.pv-more-l.pv-more-r {
         -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
         mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
-      .pv-tab-reg[aria-pressed="true"] { color: #e5a50a; }
-      /* ★ and ↗ on the tab in front, or under the pointer: the rest keep their room for a name. */
-      .pv-tab:not([aria-selected="true"]):not(:hover):not(:focus-within) :is(.pv-tab-reg, .pv-tab-out) {
-        display: none; }
+      .pv-badge { display: inline-block; margin-right: 5px; padding: 2px 6px; border-radius: 999px;
+        font-size: 10px; font-weight: 600; line-height: 1.2; vertical-align: 1px;
+        color: var(--ac-violet, var(--blue)); background: color-mix(in srgb, var(--ac-violet, var(--blue)) 16%, transparent); }
+      #previewRegDlg { box-sizing: border-box; width: min(340px, 92vw); padding: 16px; border: 1px solid var(--border);
+        border-radius: 12px; background: var(--surface, var(--bg)); color: var(--text);
+        box-shadow: 0 10px 28px rgba(0,0,0,.45); font: 13px -apple-system, system-ui, sans-serif; }
+      #previewRegDlg::backdrop { background: rgb(0 0 0 / 0.3); }
+      .pv-reg-form { display: grid; gap: 10px; margin: 0; }
+      .pv-reg-title { margin: 0 0 2px; font-size: 14px; }
+      .pv-reg-on[hidden] { display: none; }
+      .pv-reg-form label, .pv-reg-on { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.04em; }
+      .pv-reg-form input { height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
+        background: var(--bg); color: var(--text); font: 14px -apple-system, system-ui, sans-serif;
+        text-transform: none; letter-spacing: normal; }
+      .pv-reg-form input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+      .pv-reg-form input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .pv-reg-form input:focus-visible { outline: 2px solid var(--blue); outline-offset: -1px; }
+      .pv-reg-note { margin: 0; color: var(--muted); font-size: 12px; }
+      .pv-reg-note:empty { display: none; }
+      .pv-reg-btns { display: flex; gap: 8px; align-items: center; }
+      .pv-reg-btns span { flex: 1; }
+      .pv-reg-btns button { height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px;
+        background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
+      .pv-reg-btns .pv-reg-ok { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+      .pv-reg-btns .pv-reg-remove { color: var(--red); }
+      .pv-reg-list { display: grid; gap: 2px; max-height: 180px; overflow-y: auto; }
+      .pv-reg-list:empty { display: none; }
+      .pv-reg-row { display: flex; align-items: center; border-radius: 6px; }
+      .pv-reg-row:hover { background: var(--border); }
+      .pv-reg-pick { flex: 1; min-width: 0; display: flex; gap: 6px; align-items: center; height: 28px;
+        padding: 0 8px; border: 0; background: none; color: var(--text); font: inherit; text-align: left;
+        cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pv-reg-pick .pv-badge { margin: 0; }
+      .pv-reg-del { flex: none; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none;
+        color: var(--muted); font-size: 16px; cursor: pointer; }
+      .pv-reg-del:hover { color: var(--red); }
+      .pv-reg-pick:focus-visible, .pv-reg-del:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
       .pv-btn { min-width: 32px; height: 32px; font-size: 16px; display: inline-grid; place-items: center; }
       .pv-tab-x:hover, .pv-btn:hover { color: var(--text); }
       .pv-tab-open:focus-visible, .pv-tab-x:focus-visible, .pv-btn:focus-visible,
       .pv-routes:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
       .pv-btn[disabled] { opacity: .4; cursor: default; }
       .pv-btn[aria-pressed="true"] { color: var(--accent, var(--blue)); background: rgba(127,127,127,.15); }
-      .pv-routes { flex: none; width: 128px; height: 30px; background: var(--bg);
-        color: var(--text); border: 1px solid var(--border); border-radius: 6px; font: inherit;
-        padding: 0 6px; }
-      /* Where the browser lets a select be styled, its list is the desktop's right-click menu:
-         the same panel, rows, group headings and separators. Elsewhere it stays the native one. */
-      @supports (appearance: base-select) {
-        .pv-routes, .pv-routes::picker(select) { appearance: base-select; }
-        .pv-routes { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
-        .pv-routes:hover { border-color: var(--muted); }
-        .pv-routes::picker-icon { color: var(--muted); }
-        .pv-routes::picker(select) { min-width: 280px; max-width: min(440px, 92vw);
-          max-height: min(70vh, 560px); margin-top: 4px; padding: 4px; position-area: span-left bottom;
-          position-try-fallbacks: flip-block; border: 1px solid var(--border); border-radius: 10px;
-          background: var(--surface); color: var(--text); font-size: 13px;
-          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45); }
-        .pv-routes option { padding: 6px 10px; border-radius: 7px; white-space: nowrap;
-          overflow: hidden; text-overflow: ellipsis; }
-        .pv-routes option::checkmark { display: none; }
-        .pv-routes option[value=""] { display: none; }
-        .pv-routes option:not(:disabled):is(:hover, :focus-visible) { background: var(--border); outline: 0; }
-        .pv-routes option:disabled { color: var(--muted); opacity: .7; font-style: italic; }
-        .pv-routes optgroup { margin-top: 4px; padding-top: 2px; color: var(--muted); font-size: 11px;
-          font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-        .pv-routes optgroup option { color: var(--text); font-size: 13px; font-weight: 400;
-          text-transform: none; letter-spacing: normal; }
-        .pv-routes option.pv-down { opacity: .55; }
-        .pv-routes option.pv-reg { color: var(--text); font-weight: 600;
-          background: color-mix(in srgb, #e5a50a 12%, transparent); margin: 1px 0; }
-        .pv-routes option.pv-reg::before { content: "\\2605"; color: #e5a50a; margin-right: 6px; }
-        .pv-routes option.pv-reg:not(:disabled):is(:hover, :focus-visible) {
-          background: color-mix(in srgb, #e5a50a 24%, transparent); }
-        .pv-routes option.pv-act { color: var(--muted); }
-        .pv-routes option.pv-act:is(:hover, :focus-visible) { color: var(--text); }
-        .pv-routes hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--border); }
-      }
+      .pv-routes { flex: none; width: 128px; height: 30px; display: inline-flex; align-items: center;
+        gap: 4px; padding: 0 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; font: inherit; cursor: pointer; text-align: left; }
+      .pv-routes:hover, .pv-routes[aria-expanded="true"] { border-color: var(--muted); }
+      .pv-routes-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pv-routes::after { content: ""; flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0;
+        border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+      /* The list: the desktop's right-click menu, in every browser. A popover, so it sits above the
+         dialog, closes on Esc or a click outside, and is placed under its button by previewMenuPlace. */
+      .pv-menu { --pv-2: color-mix(in srgb, var(--text) 62%, var(--surface, var(--bg)));
+        --pv-hover: color-mix(in srgb, var(--blue) 15%, transparent);
+        position: fixed; inset: auto; margin: 0; box-sizing: border-box; min-width: 340px;
+        max-width: min(460px, calc(100vw - 16px)); overflow-y: auto; padding: 6px;
+        border: 1px solid color-mix(in srgb, var(--border) 80%, var(--text)); border-radius: 12px;
+        background: color-mix(in srgb, var(--surface, var(--bg)) 94%, var(--text)); color: var(--text);
+        font: 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25); }
+      .pv-mhead { display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px; color: var(--pv-2);
+        font-size: 12px; font-weight: 600; }
+      .pv-mhead > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pv-mhead-n { margin-left: auto; flex: none; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+        font-weight: 600; color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+      .pv-mhead-n.pv-some-down { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+      .pv-mgroup + .pv-mgroup { margin-top: 4px; }
+      .pv-mi { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; padding: 4px 10px;
+        border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: left;
+        cursor: pointer; white-space: nowrap; }
+      .pv-mi:hover, .pv-mi:focus-visible { background: var(--pv-hover); outline: 0; }
+      .pv-mi:focus-visible { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 70%, transparent); }
+      .pv-mi-note { padding: 6px 10px 6px 26px; color: var(--pv-2); font-size: 12px; font-style: italic; }
+      .pv-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 20%, transparent); }
+      .pv-mi-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+      .pv-mi .pv-badge { flex: none; margin: 0; vertical-align: 0; }
+      .pv-mi-sub { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--pv-2);
+        font-size: 12px; }
+      .pv-mi-end { flex: none; margin-left: auto; padding-left: 14px; display: flex; align-items: center; gap: 6px; }
+      .pv-mi-port { color: var(--pv-2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .pv-mi-tag { padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+        text-transform: uppercase; color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+      .pv-mi-tag.pv-open-tag { color: var(--blue); background: color-mix(in srgb, var(--blue) 16%, transparent); }
+      .pv-mi.pv-down .pv-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--pv-2); }
+      .pv-mi.pv-down .pv-mi-name { color: var(--pv-2); font-weight: 500; }
+      .pv-mi.pv-act { color: var(--pv-2); }
+      .pv-mi.pv-act:hover, .pv-mi.pv-act:focus-visible { color: var(--text); }
+      .pv-mi.pv-act svg { flex: none; width: 15px; height: 15px; margin: 0 -1px 0 -3px; }
+      .pv-switch { flex: none; position: relative; margin-left: auto; width: 30px; height: 17px; border-radius: 999px;
+        background: color-mix(in srgb, var(--text) 18%, transparent); transition: background .15s; }
+      .pv-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
+        border-radius: 50%; background: var(--text); transition: transform .15s; }
+      .pv-mi[aria-checked="true"] .pv-switch { background: var(--green); }
+      .pv-mi[aria-checked="true"] .pv-switch::after { transform: translateX(13px); background: #fff; }
+      .pv-menu hr { margin: 6px 4px; border: 0; border-top: 1px solid color-mix(in srgb, var(--border) 85%, transparent); }
       .pv-close { font-size: 22px; min-width: 40px; height: 40px; }
       .pv-body { flex: 1; min-height: 0; position: relative; background: #fff; }
       .pv-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
@@ -46982,7 +47038,9 @@ function pvMount(root, io = PV_HTTP) {
       dlg.setAttribute('aria-label', 'App preview');
       dlg.innerHTML = '<div class="pv-head"><span class="pv-title">Preview</span>'
         + '<div class="pv-tabs" role="tablist" aria-label="Open previews"></div>'
-        + '<select class="pv-routes" aria-label="Open a preview of a port"></select>'
+        + '<button type="button" class="pv-routes" popovertarget="previewMenu" aria-haspopup="menu"'
+        + ' aria-expanded="false" aria-label="Open a preview of a port"><span class="pv-routes-label">Open\u2026</span></button>'
+        + '<div class="pv-menu" id="previewMenu" popover role="menu" aria-label="Apps to preview"></div>'
         + '<button type="button" class="pv-btn pv-reload" title="Reload this preview"'
         + ' aria-label="Reload preview">' + PREVIEW_ICON_RELOAD + '</button>'
         + '<button type="button" class="pv-btn pv-newtab" title="Open this preview in a new tab"'
@@ -47020,30 +47078,38 @@ function pvMount(root, io = PV_HTTP) {
         previewPaint();
         dlg.querySelector('.pv-routes').focus();
       });
-      dlg.querySelector('.pv-routes').addEventListener('change', e => {
-        const v = e.target.value;
-        e.target.value = '';
-        if (!v) return;
-        if (v === 'scan') { previewLoadRoutes(true); return; }
-        if (v === 'local') { previewSetLocal(!previewLocal); return; }
-        if (v === 'others') {
-          previewShowOther = !previewShowOther;
-          previewPaint();
-          // Straight back open, on the list it now holds.
-          if (previewShowOther && e.target.showPicker) try { e.target.showPicker(); } catch (_) { /* needs a gesture */ }
-          return;
-        }
-        if (v === 'other') {
-          const got = prompt('Port to preview on this machine');
-          const port = parseInt(got || '', 10);
-          if (port) previewPick('', '', port);
-          return;
-        }
-        const [machine, port] = JSON.parse(v);
-        if (machine === 'register') { previewRegisterAsk(port, null, ''); return; }
-        const row = (previewRoutes || []).find(m => m.machine === machine);
-        const app = ((row && row.ports) || []).find(x => x.port === port);
-        previewPick(machine, row ? row.name : machine, port, (app && app.name) || '');
+      const btn = dlg.querySelector('.pv-routes');
+      const menu = dlg.querySelector('.pv-menu');
+      menu.addEventListener('toggle', e => {
+        const open = e.newState === 'open';
+        btn.setAttribute('aria-expanded', String(open));
+        if (!open) return;
+        previewMenuPlace();
+        // A click into the app's frame never reaches this page, so the popover's own light dismiss
+        // misses it; the window losing focus to the frame says the same thing.
+        window.addEventListener('blur', () => { if (menu.matches(':popover-open')) menu.hidePopover(); }, {once: true});
+        const first = menu.querySelector('.pv-mi');
+        if (first) first.focus();
+      });
+      btn.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        menu.showPopover();
+      });
+      menu.addEventListener('keydown', e => {
+        const items = [...menu.querySelectorAll('.pv-mi')];
+        const at = items.indexOf(document.activeElement);
+        const to = {ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1}[e.key];
+        if (to === undefined || !items.length) return;
+        e.preventDefault();
+        items[(to + items.length) % items.length].focus();
+      });
+      menu.addEventListener('click', e => {
+        const item = e.target.closest('.pv-mi');
+        if (!item) return;
+        // Show or hide other ports keeps the menu open, on the list it now holds.
+        if (item.dataset.v !== 'others') menu.hidePopover();
+        previewChoose(item.dataset.v);
       });
       dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
       dlg.querySelector('.pv-max-btn').addEventListener('click', () => previewSize(!previewMax));
@@ -47071,46 +47137,145 @@ function pvMount(root, io = PV_HTTP) {
       return dlg;
     }
 
-    // Registered by the person, as an agent registers with `app_preview.py add`: kept on the
-    // machine whose app it is, so every browser's list holds it.
-    function previewIsRegistered(t) {
-      const m = (previewRoutes || []).find(r => (r.machine || '') === t.machine);
-      return !!(m && (m.ports || []).some(p => p.port === t.port && p.registered));
-    }
-
-    // A registered app's tab reads `@Project name`, then its machine when it is not this one; the
-    // port is in the title. Anything else reads as before: the machine and the port.
-    function previewTabLabel(t) {
-      const m = (previewRoutes || []).find(r => (r.machine || '') === t.machine);
-      const p = m && (m.ports || []).find(x => x.port === t.port);
-      const app = (p && p.registered && p.name) || t.app;
-      if (!app) return (t.name ? t.name + ' ' : '') + ':' + t.port;
-      return (p && p.project ? '@' + p.project + ' ' : '') + app + (t.machine ? ' · ' + t.name : '');
-    }
-
-    function previewRegisterAsk(machine, port, name) {
-      const got = prompt(port ? `A name for :${port} in the Preview list` : 'Port and name, e.g. "3000 Shop UI"',
-                         port ? (name || '') : '');
-      if (got === null) return;
-      let n = port, label = got.trim();
-      if (!port) {
-        const m = /^(\d{2,5})\s*(.*)$/.exec(label);
-        if (!m) { showToast('Start with the port, then the name', 'error'); return; }
-        n = Number(m[1]); label = m[2].trim();
+    function previewChoose(v) {
+      if (!v) return;
+      if (v === 'scan') { previewLoadRoutes(true); return; }
+      if (v === 'local') { previewSetLocal(!previewLocal); return; }
+      if (v === 'others') {
+        previewShowOther = !previewShowOther;
+        previewPaint();
+        const again = document.querySelector('#previewMenu [data-v="others"]');
+        if (again) again.focus();
+        return;
       }
-      previewAsk({type: 'preview_register', machine, port: n, name: label}, msg => {
-        if (msg.error) { showToast('Register: ' + msg.error, 'error'); return; }
-        for (const t of previewTabs) if (t.machine === machine && t.port === n && label) t.app = label;
-        previewSave();
-        showToast(`:${n} is on the list${label ? ' as ' + label : ''}`);
-        previewLoadRoutes(previewScanned);
-      });
+      if (v === 'other') {
+        const got = prompt('Port to preview on this machine');
+        const port = parseInt(got || '', 10);
+        if (port) previewPick('', '', port);
+        return;
+      }
+      const [machine, port] = JSON.parse(v);
+      if (machine === 'register') { previewRegisterAsk(port); return; }
+      const row = (previewRoutes || []).find(m => m.machine === machine);
+      const app = ((row && row.ports) || []).find(x => x.port === port);
+      previewPick(machine, row ? row.name : machine, port, (app && app.name) || '');
     }
 
-    function previewUnregister(t) {
-      previewAsk({type: 'preview_unregister', machine: t.machine, port: t.port}, msg => {
+    // Under its button, right edges together, kept on screen; as tall as the room below it.
+    function previewMenuPlace() {
+      const btn = document.querySelector('#previewDlg .pv-routes');
+      const menu = document.getElementById('previewMenu');
+      if (!btn || !menu || !menu.matches(':popover-open')) return;
+      const r = btn.getBoundingClientRect();
+      menu.style.maxHeight = Math.max(160, window.innerHeight - r.bottom - 12) + 'px';
+      const w = menu.offsetWidth;
+      menu.style.top = (r.bottom + 4) + 'px';
+      menu.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px';
+    }
+
+    function previewRegistered(machine, port) {
+      const m = (previewRoutes || []).find(r => (r.machine || '') === machine);
+      return (m && (m.ports || []).find(p => p.port === port && p.registered)) || null;
+    }
+
+    // A registered app's tab reads its name behind an `@Project` badge, then its machine when it is
+    // not this one; the port is in the title. Anything else reads as before: the machine and the port.
+    function previewTabParts(t) {
+      const p = previewRegistered(t.machine, t.port);
+      const app = (p && p.name) || t.app;
+      if (!app) return {badge: '', text: (t.name ? t.name + ' ' : '') + ':' + t.port};
+      return {badge: (p && p.project) || '', text: app + (t.machine ? ' \u00b7 ' + t.name : '')};
+    }
+
+    // Registered by the person, as an agent registers with `app_preview.py add`: kept on the
+    // machine whose app it is, so every browser's list holds it. A port already on the list is
+    // renamed (its name filled in to edit), or taken off it.
+    function previewRegisterAsk(machine) {
+      let d = document.getElementById('previewRegDlg');
+      if (!d) {
+        d = document.createElement('dialog');
+        d.id = 'previewRegDlg';
+        d.setAttribute('aria-labelledby', 'previewRegTitle');
+        d.innerHTML = '<form method="dialog" class="pv-reg-form">'
+          + '<h3 class="pv-reg-title" id="previewRegTitle"></h3>'
+          + '<label>Port<input name="port" type="number" min="1024" max="65535" required'
+          + ' inputmode="numeric" placeholder="3000"></label>'
+          + '<label>Name<input name="label" type="text" maxlength="80" placeholder="Shop UI"'
+          + ' autocomplete="off"></label>'
+          + '<p class="pv-reg-note" aria-live="polite"></p>'
+          + '<div class="pv-reg-on" id="previewRegOn">On the list</div><div class="pv-reg-list" role="list" aria-labelledby="previewRegOn"></div>'
+          + '<div class="pv-reg-btns"><button type="button" class="pv-reg-remove" hidden>Remove</button>'
+          + '<span></span><button type="button" class="pv-reg-cancel">Cancel</button>'
+          + '<button value="ok" class="pv-reg-ok">Add</button></div></form>';
+        document.body.appendChild(d);
+        const f = d.querySelector('form');
+        f.port.addEventListener('input', () => {
+          const had = previewRegistered(d.dataset.machine, Number(f.port.value));
+          if (had && !f.label.value) f.label.value = had.name || '';
+          d.querySelector('.pv-reg-note').textContent = had
+            ? `:${had.port} is on the list${had.name ? ' as ' + had.name : ''}: this renames it.` : '';
+          d.querySelector('.pv-reg-ok').textContent = had ? 'Rename' : 'Add';
+          d.querySelector('.pv-reg-remove').hidden = !had;
+        });
+        d.querySelector('.pv-reg-cancel').addEventListener('click', () => d.close());
+        // A row of the list: picked, its port and name to rename; × takes it off at once.
+        d.querySelector('.pv-reg-list').addEventListener('click', e => {
+          const row = e.target.closest('.pv-reg-row');
+          if (!row) return;
+          const port = Number(row.dataset.port);
+          if (e.target.closest('.pv-reg-del')) {
+            previewUnregister(d.dataset.machine, port);
+            row.remove();
+            d.querySelector('.pv-reg-on').hidden = !d.querySelector('.pv-reg-row');
+            if (Number(f.port.value) === port) { f.reset(); f.port.dispatchEvent(new Event('input')); }
+            return;
+          }
+          f.port.value = port;
+          f.label.value = '';
+          f.port.dispatchEvent(new Event('input'));
+          f.label.focus();
+          f.label.select();
+        });
+        d.querySelector('.pv-reg-remove').addEventListener('click', () => {
+          previewUnregister(d.dataset.machine, Number(f.port.value));
+          d.close();
+        });
+        d.addEventListener('close', () => {
+          if (d.returnValue !== 'ok') return;
+          const machine = d.dataset.machine, port = Number(f.port.value), name = f.label.value.trim();
+          previewAsk({type: 'preview_register', machine, port, name}, msg => {
+            if (msg.error) { showToast('Register: ' + msg.error, 'error'); return; }
+            for (const t of previewTabs) if (t.machine === machine && t.port === port && name) t.app = name;
+            previewSave();
+            showToast(`:${port} is on the list${name ? ' as ' + name : ''}`);
+            previewLoadRoutes(previewScanned);
+          });
+        });
+      }
+      const m = (previewRoutes || []).find(r => (r.machine || '') === machine);
+      d.dataset.machine = machine;
+      d.returnValue = '';
+      d.querySelector('form').reset();
+      d.querySelector('.pv-reg-title').textContent = 'Apps on ' + ((m && m.name) || 'this machine');
+      d.querySelector('.pv-reg-note').textContent = '';
+      d.querySelector('.pv-reg-ok').textContent = 'Add';
+      d.querySelector('.pv-reg-remove').hidden = true;
+      const reg = ((m && m.ports) || []).filter(p => p.registered);
+      d.querySelector('.pv-reg-on').hidden = !reg.length;
+      d.querySelector('.pv-reg-list').innerHTML = reg.map(p => `<div class="pv-reg-row" role="listitem" data-port="${p.port}">`
+        + `<button type="button" class="pv-reg-pick" title="Rename :${p.port}">:${p.port}`
+        + `${p.project ? ` <span class="pv-badge">@${escapeHtml(p.project)}</span>` : ''}`
+        + ` ${escapeHtml(p.name || '')}</button>`
+        + `<button type="button" class="pv-reg-del" aria-label="Remove :${p.port} from the list"`
+        + ` title="Remove from the list">\u00d7</button></div>`).join('');
+      d.showModal();
+      d.querySelector('input[name="port"]').focus();
+    }
+
+    function previewUnregister(machine, port) {
+      previewAsk({type: 'preview_unregister', machine, port}, msg => {
         if (msg.error) { showToast('Unregister: ' + msg.error, 'error'); return; }
-        showToast(`:${t.port} is off the list`);
+        showToast(`:${port} is off the list`);
         previewLoadRoutes(previewScanned);
       });
     }
@@ -47130,11 +47295,34 @@ function pvMount(root, io = PV_HTTP) {
     // Web apps first, per machine: the ports an agent registered (`app_preview.py add`) and the
     // ones serving a page, each named by who started it and where. Every other
     // port is folded behind one option, there for a server started outside herdr.
-    function previewPortLabel(m, p, open) {
+    const PREVIEW_MI_ICON = {
+      register: '<path d="M12 5v14M5 12h14"/>',
+      scan: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+      other: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+      others: '<path d="M3 6h18M3 12h18M3 18h12"/>',
+      local: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    };
+
+    // One app of the list: up or down, its name (registered, else the agent or command that runs
+    // it), its Project, and its port; "open" when it has a tab.
+    function previewAppItem(m, p, open) {
       const key = (m.machine || '') + ':' + p.port;
-      const who = [p.name, p.agent, p.project].filter(Boolean);
-      if (!p.web && p.command) who.push(p.command);
-      return `${open.has(key) ? '\u25cf ' : ''}:${p.port}${who.length ? ' \u00b7 ' + who.join(' \u00b7 ') : ''}`;
+      const down = p.up === false;
+      const name = p.name || p.agent || (!p.web && p.command) || (p.web ? 'Web page' : 'Port');
+      const sub = p.name ? p.agent : (p.agent && !p.web && p.command ? p.command : '');
+      const label = [name, p.project && '@' + p.project, sub, ':' + p.port, down && 'down',
+        open.has(key) && 'open'].filter(Boolean).join(', ');
+      return `<button type="button" role="menuitem" class="pv-mi pv-app${p.registered ? ' pv-reg' : ''}`
+        + `${down ? ' pv-down' : ''}" data-v="${escapeHtml(JSON.stringify([m.machine || '', p.port]))}"`
+        + ` aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">`
+        + '<span class="pv-dot" aria-hidden="true"></span>'
+        + `<span class="pv-mi-name">${escapeHtml(name)}</span>`
+        + (p.project ? `<span class="pv-badge">@${escapeHtml(p.project)}</span>` : '')
+        + (sub ? `<span class="pv-mi-sub">${escapeHtml(sub)}</span>` : '')
+        + '<span class="pv-mi-end">'
+        + (open.has(key) ? '<span class="pv-mi-tag pv-open-tag">open</span>' : '')
+        + (down ? '<span class="pv-mi-tag">down</span>' : '')
+        + `<span class="pv-mi-port">:${p.port}</span></span></button>`;
     }
 
     // Registered apps only, until the person scans: a scan runs lsof and probes every port on
@@ -47142,11 +47330,17 @@ function pvMount(root, io = PV_HTTP) {
     // listed, marked down.
     function previewRoutesHtml() {
       const open = new Set(previewTabs.map(t => t.key));
-      const opt = (m, p) => `<option value="${escapeHtml(JSON.stringify([m.machine || '', p.port]))}"`
-        + ` class="${p.registered ? 'pv-reg' : ''}${p.up === false ? ' pv-down' : ''}">`
-        + `${escapeHtml(previewPortLabel(m, p, open))}${p.up === false ? ' (down)' : ''}</option>`;
-      let html = '<option value="">' + (previewScanning ? 'Scanning\u2026'
-        : previewRoutes ? 'Open\u2026' : 'Loading\u2026') + '</option>';
+      const icon = k => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+        + ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PREVIEW_MI_ICON[k]}</svg>`;
+      const item = (v, label, k) => `<button type="button" role="menuitem" class="pv-mi pv-act"`
+        + ` data-v="${escapeHtml(v)}">${icon(k)}<span>${escapeHtml(label)}</span></button>`;
+      const port = (m, p) => previewAppItem(m, p, open);
+      const group = (label, body, count) => `<div class="pv-mgroup" role="group" aria-label="${escapeHtml(label)}"`
+        + ` data-label="${escapeHtml(label)}"><div class="pv-mhead" aria-hidden="true">`
+        + `<span>${escapeHtml(label)}</span>${count ? `<span class="pv-mhead-n${count.down ? ' pv-some-down' : ''}">`
+        + `${escapeHtml(count.text)}</span>` : ''}</div>`
+        + body + '</div>';
+      let html = '';
       let others = 0;
       for (const m of previewRoutes || []) {
         const name = m.name || 'this machine';
@@ -47155,38 +47349,31 @@ function pvMount(root, io = PV_HTTP) {
         const reg = ports.filter(p => p.registered);
         const found = ports.filter(p => !p.registered && p.web);
         others += ports.length - reg.length - found.length;
-        html += `<optgroup label="${escapeHtml(name)}">`;
-        if (m.error) html += `<option disabled>${escapeHtml(m.error)}</option>`;
-        else if (!reg.length) html += '<option disabled>no registered apps</option>';
-        html += reg.map(p => opt(m, p)).join('');
-        if (!m.error) {
-          html += `<option class="pv-act" value="${escapeHtml(JSON.stringify(['register', m.machine || '']))}">`
-            + '+ Register an app\u2026</option>';
-        }
-        html += '</optgroup>';
-        if (found.length) {
-          html += `<optgroup label="${escapeHtml(name)} \u2014 found serving a page">`
-            + found.map(p => opt(m, p)).join('') + '</optgroup>';
-        }
+        let body = '';
+        if (m.error) body += `<div class="pv-mi-note">${escapeHtml(m.error)}</div>`;
+        else if (!reg.length) body += '<div class="pv-mi-note">No registered apps yet</div>';
+        body += reg.map(p => port(m, p)).join('');
+        if (!m.error) body += item(JSON.stringify(['register', m.machine || '']), 'Register or remove apps\u2026', 'register');
+        const up = reg.filter(p => p.up !== false).length;
+        html += group(name, body, reg.length ? {text: `${up}/${reg.length} up`, down: up < reg.length} : null);
+        if (found.length) html += group(name + ' \u2014 found serving a page', found.map(p => port(m, p)).join(''));
       }
+      if (!previewRoutes) html += '<div class="pv-mi-note">Loading\u2026</div>';
       html += '<hr>';
       if (others && previewShowOther) {
         for (const m of previewRoutes || []) {
           const rest = (m.ports || []).filter(p => !p.registered && !p.web);
-          if (rest.length) {
-            html += `<optgroup label="${escapeHtml(m.name || 'this machine')} \u2014 other ports">`
-              + rest.map(p => opt(m, p)).join('') + '</optgroup>';
-          }
+          if (rest.length) html += group((m.name || 'this machine') + ' \u2014 other ports', rest.map(p => port(m, p)).join(''));
         }
-        html += '<option class="pv-act" value="others">Hide other ports</option>';
+        html += item('others', 'Hide other ports', 'others');
       } else if (others) {
-        html += `<option class="pv-act" value="others">Show ${others} other port${others === 1 ? '' : 's'}\u2026</option>`;
+        html += item('others', `Show ${others} other port${others === 1 ? '' : 's'}\u2026`, 'others');
       }
-      if (!previewScanning) {
-        html += `<option class="pv-act" value="scan">${previewScanned ? 'Scan again' : 'Scan for listening ports'}\u2026</option>`;
-      }
-      html += '<option class="pv-act" value="other">Another port here\u2026</option><hr>';
-      return html + `<option class="pv-act" value="local">${previewLocal ? '\u2713 ' : ''}This machine's apps on localhost</option>`;
+      if (!previewScanning) html += item('scan', (previewScanned ? 'Scan again' : 'Scan for listening ports') + '\u2026', 'scan');
+      html += item('other', 'Another port here\u2026', 'other') + '<hr>';
+      return html + `<button type="button" role="menuitemcheckbox" aria-checked="${previewLocal}"`
+        + ` class="pv-mi pv-act" data-v="local" title="A browser on this machine: no tunnel">${icon('local')}`
+        + "<span>This machine's apps on localhost</span><span class=\"pv-switch\" aria-hidden=\"true\"></span></button>";
     }
 
     function previewTabsEdges() {
@@ -47201,13 +47388,11 @@ function pvMount(root, io = PV_HTTP) {
       const strip = dlg.querySelector('.pv-tabs');
       strip.innerHTML = previewTabs.map(t => {
         const on = t.key === previewActive;
-        const label = previewTabLabel(t);
+        const {badge, text} = previewTabParts(t);
+        const label = (badge ? '@' + badge + ' ' : '') + text;
         return `<div class="pv-tab" role="tab" aria-selected="${on}" data-key="${escapeHtml(t.key)}">`
-          + `<button type="button" class="pv-tab-open" title="${escapeHtml(label + ' \u2014 :' + t.port)}">${escapeHtml(label)}</button>`
-          + `<button type="button" class="pv-tab-x pv-tab-reg" aria-pressed="${previewIsRegistered(t)}"`
-          + ` title="${previewIsRegistered(t) ? 'Registered: press to take it off the list' : 'Keep it on the list'}"`
-          + ` aria-label="${previewIsRegistered(t) ? 'Unregister' : 'Register'} ${escapeHtml(label)}">`
-          + `${previewIsRegistered(t) ? '\u2605' : '\u2606'}</button>`
+          + `<button type="button" class="pv-tab-open" title="${escapeHtml(label + ' \u2014 :' + t.port)}">`
+          + `${badge ? `<span class="pv-badge">@${escapeHtml(badge)}</span>` : ''}${escapeHtml(text)}</button>`
           + `<button type="button" class="pv-tab-x pv-tab-out" title="Open ${escapeHtml(label)} in a new tab"`
           + ` aria-label="Open ${escapeHtml(label)} in a new tab">↗</button>`
           + `<button type="button" class="pv-tab-x pv-tab-close" aria-label="Close ${escapeHtml(label)}">×</button></div>`;
@@ -47216,12 +47401,6 @@ function pvMount(root, io = PV_HTTP) {
         const key = el.dataset.key;
         el.querySelector('.pv-tab-open').addEventListener('click', () => { previewActive = key; previewSave(); previewPaint(); });
         el.querySelector('.pv-tab-close').addEventListener('click', () => previewCloseTab(key));
-        el.querySelector('.pv-tab-reg').addEventListener('click', () => {
-          const t = previewTabs.find(x => x.key === key);
-          if (!t) return;
-          if (previewIsRegistered(t)) previewUnregister(t);
-          else previewRegisterAsk(t.machine, t.port, t.app);
-        });
         el.querySelector('.pv-tab-out').addEventListener('click', () => {
           const t = previewTabs.find(x => x.key === key);
           if (t) previewNewTab(t.machine, t.port);
@@ -47230,7 +47409,17 @@ function pvMount(root, io = PV_HTTP) {
       const on = strip.querySelector('.pv-tab[aria-selected="true"]');
       if (on) on.scrollIntoView({block: 'nearest', inline: 'nearest'});
       previewTabsEdges();
-      dlg.querySelector('.pv-routes').innerHTML = previewRoutesHtml();
+      // Repainted under an open menu (a list answered), focus stays on the item it was on.
+      const menu = dlg.querySelector('.pv-menu');
+      const was = menu.contains(document.activeElement) ? document.activeElement.dataset.v : null;
+      menu.innerHTML = previewRoutesHtml();
+      dlg.querySelector('.pv-routes-label').textContent = previewScanning ? 'Scanning\u2026'
+        : previewRoutes ? 'Open\u2026' : 'Loading\u2026';
+      if (was) {
+        const same = [...menu.querySelectorAll('.pv-mi')].find(b => b.dataset.v === was);
+        (same || menu.querySelector('.pv-mi') || menu).focus();
+      }
+      previewMenuPlace();
       const body = dlg.querySelector('.pv-body');
       for (const f of body.querySelectorAll('iframe')) f.classList.toggle('on', f.dataset.key === previewActive);
       const active = previewTabs.find(t => t.key === previewActive);
