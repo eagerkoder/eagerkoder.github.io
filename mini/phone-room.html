@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-25">
+  <meta name="app-built" content="2026-11-26">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -9964,7 +9964,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       width: 28px;
       height: 28px;
       border-radius: 8px;
-      border: 1px solid var(--border);
+      /* Lifted toward the text, as .hang-solo's edge is: at --border alone the square vanished into
+         the thread it floats over. */
+      border: 1px solid color-mix(in srgb, var(--text) 25%, var(--border));
       background: var(--surface);
       color: var(--muted);
       font-size: var(--input-font, 13px);
@@ -13952,6 +13954,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 
     <div class="setting-group">
       <label class="toggle-option"><input type="checkbox" id="genBubbleOn" onchange="genBubbleSetHidden(!this.checked)"> General bubble</label>
+      <label class="toggle-option"><input type="checkbox" id="pvBubbleOn" onchange="pvBubbleSetHidden(!this.checked)"> Preview bubble</label>
       <div class="hint">A round button over every screen for the General: its ring is the General's
         state and a press is its room in a panel. Drag it anywhere. Alt+G opens it.</div>
     </div>
@@ -25276,7 +25279,16 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     // The puck's drag, against this button and its own stored position. Long-press on the phone
     // and right-click on the desktop are the button's menu: the full room, or hide.
     function genBubbleBind(el) {
-      const btn = el.querySelector('#genBubbleBtn');
+      floatBubbleBind(el, el.querySelector('#genBubbleBtn'), {
+        save: genBubbleSave, place: genBubblePlace,
+        tap: () => genBubbleSet(!genBubbleOpen), menu: genBubbleMenu, desk: genBubbleDesk,
+      });
+    }
+
+    // A floating bubble's gestures, shared by the General's and the preview's: drag (the recents
+    // puck's slop, inset and room) saved as fractions, tap, and the menu on a long-press on the
+    // phone or a right-click on the desktop.
+    function floatBubbleBind(el, btn, {save, place, tap, menu, desk}) {
       let from = null, suppress = false, hold = 0;
       btn.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
@@ -25285,7 +25297,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         from = {x: e.clientX, y: e.clientY, left: r.left, top: r.top, moved: false};
         btn.setPointerCapture(e.pointerId);
         if (e.pointerType === 'touch') {
-          hold = setTimeout(() => { from = null; suppress = true; genBubbleMenu(); }, 550);
+          hold = setTimeout(() => { from = null; suppress = true; menu(); }, 550);
         }
       });
       btn.addEventListener('pointermove', e => {
@@ -25299,8 +25311,8 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         const max = {x: Math.max(1, room.w - el.offsetWidth), y: Math.max(1, room.h - el.offsetHeight)};
         const x = Math.min(max.x, Math.max(0, from.left - RECENT_FLOAT_INSET + dx));
         const y = Math.min(max.y, Math.max(0, from.top - RECENT_FLOAT_INSET + dy));
-        genBubbleSave({fx: x / max.x, fy: y / max.y});
-        genBubblePlace(el);
+        save({fx: x / max.x, fy: y / max.y});
+        place(el);
       });
       const end = e => {
         clearTimeout(hold);
@@ -25312,10 +25324,10 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       btn.addEventListener('pointerup', end);
       btn.addEventListener('pointercancel', end);
       btn.addEventListener('click', e => {
-        if (!suppress || e.detail === 0) genBubbleSet(!genBubbleOpen);
+        if (!suppress || e.detail === 0) tap();
         suppress = false;
       });
-      btn.addEventListener('contextmenu', e => { e.preventDefault(); if (genBubbleDesk()) genBubbleMenu(e); });
+      btn.addEventListener('contextmenu', e => { e.preventDefault(); if (desk()) menu(e); });
     }
 
     // The desktop's right-click: the full room, or hide. The phone's long-press is the full room
@@ -46889,6 +46901,23 @@ function nlmSourceDelete(source) {
         if (projMenu && !projMenu.hidden && !e.target.closest('#newAgentProjMenu, .chip-line'))
           projMenu.hidden = true;
       }, true);
+      // A double tap on the empty composer opens the list of who to talk to: the box is where the
+      // thumb already is, and the list's own button sits at the far end of the address row. Empty
+      // only, because in a box with text a double tap is how a word is selected. Read from two
+      // clicks rather than `dblclick`, which a phone rarely fires on a focused textarea; and on the
+      // click, after the capture listener above has closed whatever was open, so it is not closed
+      // again on the tap that opened it.
+      const convInput = document.getElementById('convInput');
+      if (convInput) {
+        let lastInputTap = 0;
+        convInput.addEventListener('click', () => {
+          // Not reset after a double: a third quick tap is the capture listener closing the list
+          // it just opened, and this opens it again rather than leaving the gesture undone.
+          const now = Date.now(), twice = now - lastInputTap < 350;
+          lastInputTap = now;
+          if (twice && !convInput.value.trim() && dockMembers().length) openWhoMenu();
+        });
+      }
       const thread = document.getElementById('convViewThread');
       if (thread) {
         function onBubbleDouble(e) {
@@ -59532,6 +59561,7 @@ function pvMount(root, io = PV_HTTP) {
       if (msg.type === 'preview_tunnel' && !msg.machine && !msg.error) {
         previewTunnel = {running: !!msg.running, fixed: !!msg.fixed};
         if (typeof renderLauncher === 'function') renderLauncher();
+        pvBubbleDraw();
         // And the room's Preview button, on whichever page this is.
         if (typeof hangSync === 'function') hangSync();
         if (typeof deskColumns !== 'undefined' && typeof deskHangSync === 'function') {
@@ -59542,6 +59572,7 @@ function pvMount(root, io = PV_HTTP) {
 
     function previewReset() {
       previewTunnel = null;
+      pvBubbleDraw();
       // The list stays on screen across a reconnect; the next open asks again.
       previewScanning = false;
       previewWaiting.clear();
@@ -60211,6 +60242,103 @@ function pvMount(root, io = PV_HTTP) {
         e.preventDefault();   // a Mac's Alt+P is π, and it must not land in the composer
         previewOpen();
       });
+    }
+
+// --- The preview bubble ------------------------------------------------------------------------
+//
+// A round button over every screen, beside the General's, for the preview dialog: Alt+P without a
+// keyboard, and without first opening a room for its Preview button. Drawn only while this relay
+// serves previews and never inside a framed page. Its ring is green while the preview tunnel is up
+// — the thing a phone off the LAN needs. Dragged like the General's and kept per device; a
+// long-press on the phone or a right-click on the desktop hides it, and Settings brings it back.
+
+    const PV_BUBBLE_KEY = 'herdr_preview_bubble';
+
+    function pvBubblePrefs() {
+      try {
+        const v = JSON.parse(localStorage.getItem(PV_BUBBLE_KEY) || 'null');
+        if (v && typeof v === 'object') return v;
+      } catch (e) { /* fall through to the defaults */ }
+      return {};
+    }
+
+    function pvBubbleSave(patch) {
+      try { localStorage.setItem(PV_BUBBLE_KEY, JSON.stringify(Object.assign(pvBubblePrefs(), patch))); }
+      catch (e) { /* private mode: this session only */ }
+    }
+
+    function pvBubbleShown() {
+      return previewOffered() && !pvBubblePrefs().hidden;
+    }
+
+    // On the right edge, above the General's (fy 0.6).
+    function pvBubblePlace(el) {
+      const v = pvBubblePrefs();
+      const pos = typeof v.fx === 'number' && typeof v.fy === 'number' ? v : {fx: 1, fy: 0.48};
+      const at = recentFloatXY(pos, recentFloatRoom(), {w: el.offsetWidth || 44, h: el.offsetHeight || 44});
+      el.style.left = at.x + RECENT_FLOAT_INSET + 'px';
+      el.style.top = at.y + RECENT_FLOAT_INSET + 'px';
+    }
+
+    function pvBubbleSetHidden(hidden) {
+      pvBubbleSave({hidden: !!hidden});
+      pvBubbleDraw();
+      if (hidden) showToast('Preview bubble hidden — Settings brings it back');
+    }
+
+    function pvBubbleDraw() {
+      const box = document.getElementById('pvBubbleOn');
+      if (box) box.checked = !pvBubblePrefs().hidden;
+      const el = document.getElementById('pvBubble');
+      if (!el) return;
+      const show = pvBubbleShown();
+      el.classList.toggle('on', show);
+      const up = !!(previewTunnel && previewTunnel.running);
+      el.style.setProperty('--pv-ring', up ? 'var(--green)' : 'var(--muted)');
+      el.firstChild.title = `Preview a web app · tunnel ${up ? 'up' : 'down'} — Alt+P`;
+      if (show) pvBubblePlace(el);
+    }
+
+    function pvBubbleMount() {
+      if (document.getElementById('pvBubble') || typeof floatBubbleBind !== 'function') return;
+      const style = document.createElement('style');
+      style.textContent = `
+        .pv-bubble { position: fixed; z-index: 91; display: none; }
+        .pv-bubble.on { display: block; }
+        .pv-bubble.dragging button { cursor: grabbing; }
+        .pv-bubble button { width: 44px; height: 44px; border-radius: 50%; box-sizing: border-box;
+          border: 3px solid var(--pv-ring, var(--muted)); background: var(--surface); cursor: grab;
+          opacity: .9; box-shadow: 0 2px 10px rgba(0,0,0,.35); padding: 0; touch-action: none;
+          display: flex; align-items: center; justify-content: center; }
+        .pv-bubble button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }`;
+      document.head.appendChild(style);
+      const el = document.createElement('div');
+      el.id = 'pvBubble';
+      el.className = 'pv-bubble';
+      // The room's Preview icon: a window playing.
+      el.innerHTML = '<button type="button" aria-label="Preview a web app" aria-haspopup="dialog">'
+        + '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"'
+        + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        + '<rect x="3" y="4" width="18" height="16" rx="2" stroke="#4f8ff7" /><path d="M3 8.5h18" stroke="#a66bf2" />'
+        + '<path d="M9 10.75v7l6.5-3.5z" stroke="#2fb760" fill="#2fb760" /></svg></button>';
+      document.body.appendChild(el);
+      const desk = () => typeof deskRenderAll === 'function';
+      floatBubbleBind(el, el.firstChild, {
+        save: pvBubbleSave, place: pvBubblePlace, tap: previewOpen, desk,
+        menu: e => {
+          if (!desk() || typeof deskMenuOpen !== 'function' || !e) { pvBubbleSetHidden(true); return; }
+          deskMenuOpen(e.clientX, e.clientY, [
+            {label: 'Hide the bubble', hint: 'Settings brings it back', run: () => pvBubbleSetHidden(true)},
+          ]);
+        },
+      });
+      window.addEventListener('resize', () => pvBubbleDraw());
+      pvBubbleDraw();
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener && window.self === window.top) {
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pvBubbleMount);
+      else pvBubbleMount();
     }
 
   </script>
