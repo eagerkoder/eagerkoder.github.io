@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, as every page's are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-24">
+  <meta name="app-built" content="2026-11-27">
   <title>Usage Planner</title>
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='4'%20fill='%231a1b26'/%3E%3Crect%20x='2'%20y='9'%20width='3'%20height='4'%20rx='1'%20fill='%237aa2f7'/%3E%3Crect%20x='6.5'%20y='6'%20width='3'%20height='7'%20rx='1'%20fill='%239ece6a'/%3E%3Crect%20x='11'%20y='3'%20width='3'%20height='10'%20rx='1'%20fill='%23ff9e64'/%3E%3C/svg%3E">
@@ -87,7 +87,9 @@
 .planner h1 { font-size: 16px; margin: 0; }
 .planner h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .planner h3 { font-size: 15px; margin: 0; display: flex; gap: 8px; align-items: baseline; }
-.planner h3 .now-switch { margin-left: auto; font-weight: 600; border-color: var(--accent); }
+.planner h3 .h3-end { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.planner h3 .now-switch { font-weight: 600; border-color: var(--accent); }
+.planner h3 .auto-switch { font-weight: 400; }
 .planner main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 1400px; margin: 0 auto; }
 .planner .muted { color: var(--muted); }
 .planner .small { font-size: 12px; }
@@ -828,6 +830,17 @@ function plannerSteps(plan, hours = 24) {
   return steps.sort((a, b) => a.t - b.t || (b.kind === 'burn') - (a.kind === 'burn'));
 }
 
+// The account to switch to now, or null: the plan's first step, when it is a use of an account
+// other than the active one, due within `leadMs`. The card's "Switch to" button asks it with 15
+// minutes of lead; the relay's auto switch (relay/planner_pick.js) with none, on a plan made with
+// no credits, so it never resumes into an account only a reset would free.
+function plannerNowSwitch(doc, plan, now, leadMs = 15 * 60e3) {
+  const s = plannerSteps(plan, 24)[0];
+  const active = (doc.accounts.find(a => a.active) || {}).id;
+  if (!s || s.kind !== 'use' || s.id === active || s.t > now + leadMs) return null;
+  return s.id;
+}
+
 // A plan in numbers, to set modes side by side: sessions of use (main line and parallel), hours
 // with nothing usable (off hours are not a gap), credits burned and lapsed, sessions left unused at 7d resets, and how many
 // times the main line changes account (a gap between two runs on one account is not a switch).
@@ -938,7 +951,10 @@ const PV_PAGE_SECTIONS_DEFAULT = [['cards', true], ['all', true], ['modes', true
 // On until switched off.
 const PV_SORT_KEY = 'planner_sort';
 // Each provider's chart opens on 7 days and the combined one on 30.
-const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: true, codex: true, opencode: true, all: true}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {}};
+const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: true, codex: true, opencode: true, all: true}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {},
+  // The relay's Auto switch per provider (relay/auto_switch.py), null until read; the settings each
+  // card was last planned with; and whether the person changed a setting since the last render.
+  auto: null, opts: {}, touched: new Set()};
 // The providers, in card order. OpenCode is optional: a relay without its CLI shows no card for it.
 const PV_PROVIDERS = ['claude', 'codex', 'opencode'];
 const PV_OPTIONAL = ['opencode'];
@@ -1356,14 +1372,13 @@ const pvPct = used => `${Math.round(used)}%`;
 // The card header's switch: shown only when the plan's first step is a switch due now, so the
 // action is one press away in Simple and detailed alike, whichever sections are shown.
 function pvNowSwitch(doc, plan, now) {
-  const s = plannerSteps(plan, PV.ranges[doc.provider])[0];
-  const active = (doc.accounts.find(a => a.active) || {}).id;
-  if (!s || s.kind !== 'use' || s.id === active || s.t > now + 15 * 60e3) return '';
-  const command = PV_CMD[doc.provider].switch(s.id);
+  const id = plannerNowSwitch(doc, plan, now);
+  if (id == null) return '';
+  const command = PV_CMD[doc.provider].switch(id);
   if (!command) return '';
-  const name = pvEsc((doc.accounts.find(a => a.id === s.id) || {}).name || `#${s.id}`);
+  const name = pvEsc((doc.accounts.find(a => a.id === id) || {}).name || `#${id}`);
   return pvCanRun()
-    ? `<button class="run now-switch" data-run="${pvEsc(doc.provider + ':' + s.id)}" data-arm-key="${pvEsc('runhead:' + doc.provider + ':' + s.id)}" title="Recommended now. Press twice to run ${pvEsc(command)} on the relay's machine">▶ Switch to ${name}</button>`
+    ? `<button class="run now-switch" data-run="${pvEsc(doc.provider + ':' + id)}" data-arm-key="${pvEsc('runhead:' + doc.provider + ':' + id)}" title="Recommended now. Press twice to run ${pvEsc(command)} on the relay's machine">▶ Switch to ${name}</button>`
     : `<button class="now-switch" data-copy="${pvEsc(command)}" title="Recommended now. Copy ${pvEsc(command)}">Switch to ${name}: copy</button>`;
 }
 
@@ -1398,8 +1413,10 @@ function pvRender() {
     d.accounts.forEach((a, i) => { colors[a.id] = pvColor(i); });
     const opts = {weekPerFive: pvS(d), monthPerFive: pvM(d), fillH: pvF(d), windows: pvWindows(d),
                   parallel: pvToggle('parallel'), rotate: pvToggle('rotate')};
+    PV.opts[d.provider] = opts;
     return {doc: d, colors, plan: plannerSimulate(d.accounts, now, opts), room: plannerRoom(d.accounts, now, opts)};
   });
+  if (PV.touched.size) { const touched = [...PV.touched]; PV.touched.clear(); pvAutoResend(touched); }
   const cards = () => plans.map(({doc, colors, plan, room}) => {
     const parts = {
       accounts: () => `<h2>Accounts · plan order</h2>${pvAccounts(doc, plan, room, now, colors)}`,
@@ -1408,7 +1425,7 @@ function pvRender() {
     };
     return `
     <section class="card prov-${doc.provider}">
-      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}${pvNowSwitch(doc, plan, now)}</h3>
+      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}<span class="h3-end">${pvAutoSwitch(doc.provider)}${pvNowSwitch(doc, plan, now)}</span></h3>
       ${pvChips(doc, plan, room, now)}
       ${PV.sections.filter(([, on]) => on).map(([id]) => `<div class="sec sec-${id}">${parts[id]()}</div>`).join('')}
     </section>`;
@@ -1482,6 +1499,14 @@ const PV_HTTP = {
     const a = await r.json().catch(() => ({}));
     return {ok: !!a.ok, error: a.error || `the relay answered ${r.status}`};
   },
+  // Auto switch: read with no argument, set with {provider, on, opts, zone}.
+  async auto(set) {
+    const q = new URLSearchParams(location.search);
+    if (set) for (const [k, v] of Object.entries(set)) q.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+    const r = await fetch(`/api/planner-auto?${q}`, {headers: {'X-Herdr-Planner': 'run'}, cache: 'no-store'});
+    const a = await r.json().catch(() => ({}));
+    return {ok: !!a.ok, auto: a.auto, error: a.error || `the relay answered ${r.status}`};
+  },
 };
 
 async function pvFetch() {
@@ -1534,6 +1559,46 @@ async function pvRun(btn) {
     status.textContent = `${command} failed: ${e.message}`;
   }
   btn.disabled = false;
+}
+
+// Auto switch, per provider: on, the relay switches account by this plan when a turn ends on the
+// usage limit and types continue. Never a reset. Off by default, kept by the relay with
+// the settings it plans with; this page only reads it, and writes on a press or a settings edit.
+const PV_AUTO_TITLE = 'When a turn ends on the usage limit, the relay switches account by this plan and types continue. Never spends a reset.';
+const pvZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+
+function pvAutoSwitch(provider) {
+  const a = PV.auto?.[provider];
+  if (!a || !PV_CMD[provider].switch(1)) return '';
+  return `<label class="switch auto-switch" title="${pvEsc(PV_AUTO_TITLE)}"><input type="checkbox" role="switch" data-auto="${provider}"${a.on ? ' checked' : ''}>Auto switch${PV.auto.dry_run ? ' (dry run)' : ''}</label>`;
+}
+
+async function pvAutoRead() {
+  if (!PV.io.auto || !PV.io.reachable()) return;
+  try {
+    const a = await PV.io.auto();
+    if (a.ok) { PV.auto = a.auto; pvRender(); }
+  } catch (e) { /* a relay without auto switch: no toggle */ }
+}
+
+async function pvAutoSet(provider, on) {
+  const status = pv$('runMsg');
+  try {
+    const a = await PV.io.auto({provider, on, opts: PV.opts[provider] || {}, zone: pvZone()});
+    if (a.ok) PV.auto = a.auto;
+    status.textContent = a.ok ? `Auto switch ${on ? 'on' : 'off'} for ${PV_CMD[provider].name}` : `Auto switch: ${a.error}`;
+  } catch (e) {
+    status.textContent = `Auto switch: ${e.message}`;
+  }
+  pvRender();
+}
+
+// A settings edit while Auto switch is on: the relay plans with the new settings from now on.
+function pvAutoResend(providers) {
+  for (const p of providers) {
+    const a = PV.auto?.[p];
+    if (a?.on && PV.opts[p] && JSON.stringify(PV.opts[p]) !== JSON.stringify(a.opts)) pvAutoSet(p, true);
+  }
 }
 
 // One ordered list of sections in Settings, each on or off, kept under key: the stored order with
@@ -1589,7 +1654,7 @@ function pvMount(root, io = PV_HTTP) {
       const shared = p !== 'claude' && defaults[p] === defaults.claude ? pvGet(`planner_${stem}`) : null;
       const saved = parseFloat(pvGet(key) ?? shared);
       if (Number.isFinite(saved) && ok(saved)) input.value = saved;
-      input.addEventListener('input', () => { pvSet(key, input.value); pvRender(); });
+      input.addEventListener('input', () => { pvSet(key, input.value); if (field !== 'warnH') PV.touched.add(p); pvRender(); });
     }
   }
   // The Session tabs: one provider's settings shown at a time; arrow keys move between tabs.
@@ -1639,13 +1704,13 @@ function pvMount(root, io = PV_HTTP) {
   };
   hoursChanged();
   for (const id of ['hoursAll', 'hoursWindow', ...PV_HOURS_FIELDS]) {
-    pv$(id).addEventListener('input', () => { hoursChanged(); pvRender(); });
+    pv$(id).addEventListener('input', () => { hoursChanged(); PV.touched.add('claude').add('codex'); pvRender(); });
   }
   for (const [id, [key, fallback]] of Object.entries(PV_TOGGLES)) {
     const box = pv$(id);
     const saved = pvGet(key);
     box.checked = saved == null ? fallback : saved === '1';
-    box.addEventListener('change', () => { pvSet(key, box.checked ? '1' : '0'); pvRender(); });
+    box.addEventListener('change', () => { pvSet(key, box.checked ? '1' : '0'); if (id !== 'simple') PV.touched.add('claude').add('codex'); pvRender(); });
   }
   // Tips: hover or focus shows one, a click pins it, a click anywhere else or Escape lets it go.
   const out = pv$('out');
@@ -1715,6 +1780,7 @@ function pvMount(root, io = PV_HTTP) {
   });
   pv$('refresh').addEventListener('click', pvFetch);
   pv$('out').addEventListener('change', e => {
+    if (e.target.dataset.auto) { pvAutoSet(e.target.dataset.auto, e.target.checked); return; }
     const sort = e.target.dataset.sort;
     if (sort in PV.sorts) {
       PV.sorts[sort] = e.target.checked;
@@ -1732,6 +1798,7 @@ function pvMount(root, io = PV_HTTP) {
   });
   pvRender();
   pvFetch();
+  pvAutoRead();
   setInterval(() => { if (pvShown()) pvRender(); }, 60e3);
 }
 

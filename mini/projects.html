@@ -71,7 +71,7 @@
   <meta name="theme-color" content="#1a1b26">
   <!-- Stamped by scripts/build.py, exactly as the other two pages' are. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-26">
+  <meta name="app-built" content="2026-11-27">
   <!-- Settings' background tint, before first paint; src/app_tint.css draws it. -->
   <script>
     try {
@@ -12023,6 +12023,7 @@ function convWebModeOf(conv) {
         if (typeof convActivityOpen === 'function') convActivityOpen(socket);
         stateSyncOpen(socket);
         if (typeof plannerSocketOpened === 'function') plannerSocketOpened();
+        if (typeof notifyLoad === 'function') notifyLoad();
       };
       socket.onclose = () => {
         if (ws !== socket) return;
@@ -12103,7 +12104,10 @@ function convWebModeOf(conv) {
                || msg.type === 'preview_unregister') {
         if (typeof previewReceive === 'function') previewReceive(msg);
       }
-      else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
+      else if (msg.type === 'notify_settings') {
+        if (typeof notifyReceive === 'function') notifyReceive(msg);
+      }
+      else if (msg.type === 'planner_usage' || msg.type === 'planner_run' || msg.type === 'planner_auto') {
         if (typeof plannerReceive === 'function') plannerReceive(msg);
       }
       else if (msg.type === 'git_commits') {

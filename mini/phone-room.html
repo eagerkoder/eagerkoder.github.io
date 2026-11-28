@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-26">
+  <meta name="app-built" content="2026-11-27">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -2945,6 +2945,114 @@ dialog#machSwitch::backdrop { background: rgb(0 0 0 / 0.45); }
 .mach-form-err { grid-column: 1 / -1; color: var(--red); font-size: 0.75rem; }
 .mach-form-err:empty { display: none; }
 @media (max-width: 480px) { .mach-form { grid-template-columns: 1fr; } }
+
+  </style>
+    <style>
+/* The Notifications group in Settings (notify_settings.js), on both pages. */
+.notify-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.notify-head {
+  margin: 12px 0 2px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.notify-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.setting-group .notify-row input[type=checkbox] {
+  flex: none;
+  width: auto;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--blue);
+}
+.setting-group .notify-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+.notify-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notify-off .notify-name { color: var(--muted); }
+.notify-edited {
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+}
+.notify-caret { margin-left: auto; padding: 0 4px; font-size: 0.95rem; color: var(--muted); }
+.notify-ready { color: var(--green); }
+/* A <label>, so .setting-group label's block display and small muted type are taken back. */
+.setting-group .notify-opt {
+  display: flex;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.notify-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0 8px 24px;
+}
+.notify-sub { font-size: 0.65rem; color: var(--muted); }
+.setting-group .notify-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  resize: vertical;
+}
+.notify-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.setting-group .notify-chip,
+.setting-group .notify-btn {
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.setting-group .notify-chip { font-family: monospace; color: var(--blue); }
+.notify-actions { display: flex; gap: 6px; margin-top: 4px; }
+.notify-error { color: var(--red) !important; }
+.setting-group .notify-opt:has(input:disabled) { color: var(--muted); cursor: default; }
 
   </style>
     <style>
@@ -13394,7 +13502,9 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
 .planner h1 { font-size: 16px; margin: 0; }
 .planner h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .planner h3 { font-size: 15px; margin: 0; display: flex; gap: 8px; align-items: baseline; }
-.planner h3 .now-switch { margin-left: auto; font-weight: 600; border-color: var(--accent); }
+.planner h3 .h3-end { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.planner h3 .now-switch { font-weight: 600; border-color: var(--accent); }
+.planner h3 .auto-switch { font-weight: 400; }
 .planner main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 1400px; margin: 0 auto; }
 .planner .muted { color: var(--muted); }
 .planner .small { font-size: 12px; }
@@ -13750,6 +13860,11 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
       <div class="hint">Lock Screen alerts when an agent needs you or finishes, even with this
         closed. On iPhone: open this page in <b>Safari</b>, Share ▸ Add to Home Screen, then enable
         push from the installed app — iOS delivers push nowhere else.</div>
+    </div>
+
+    <div class="setting-group" id="notifyGroup">
+      <label>Notifications</label>
+      <div id="notifyBody"></div>
     </div>
 
     <div class="setting-group">
@@ -20473,6 +20588,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
         if (typeof convActivityOpen === 'function') convActivityOpen(socket);
         stateSyncOpen(socket);
         if (typeof plannerSocketOpened === 'function') plannerSocketOpened();
+        if (typeof notifyLoad === 'function') notifyLoad();
       };
       socket.onclose = () => {
         if (ws !== socket) return;
@@ -20553,7 +20669,10 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
                || msg.type === 'preview_unregister') {
         if (typeof previewReceive === 'function') previewReceive(msg);
       }
-      else if (msg.type === 'planner_usage' || msg.type === 'planner_run') {
+      else if (msg.type === 'notify_settings') {
+        if (typeof notifyReceive === 'function') notifyReceive(msg);
+      }
+      else if (msg.type === 'planner_usage' || msg.type === 'planner_run' || msg.type === 'planner_auto') {
         if (typeof plannerReceive === 'function') plannerReceive(msg);
       }
       else if (msg.type === 'git_commits') {
@@ -22539,6 +22658,7 @@ button.conv-role:hover { background: color-mix(in srgb, var(--blue) 12%, transpa
     function toggleSettings() {
       if (document.getElementById('settingsView').style.display === 'block') { closePanel(); return; }
       openPanel('settingsView');
+      if (typeof notifyLoad === 'function') notifyLoad();
       document.getElementById('settingsStatus').innerHTML = ws && ws.readyState === 1
         ? `<span style="color:var(--green)">● Connected</span> · ${agents.length} agents`
         : `<span style="color:var(--red)">● Disconnected</span>`;
@@ -58257,6 +58377,17 @@ function plannerSteps(plan, hours = 24) {
   return steps.sort((a, b) => a.t - b.t || (b.kind === 'burn') - (a.kind === 'burn'));
 }
 
+// The account to switch to now, or null: the plan's first step, when it is a use of an account
+// other than the active one, due within `leadMs`. The card's "Switch to" button asks it with 15
+// minutes of lead; the relay's auto switch (relay/planner_pick.js) with none, on a plan made with
+// no credits, so it never resumes into an account only a reset would free.
+function plannerNowSwitch(doc, plan, now, leadMs = 15 * 60e3) {
+  const s = plannerSteps(plan, 24)[0];
+  const active = (doc.accounts.find(a => a.active) || {}).id;
+  if (!s || s.kind !== 'use' || s.id === active || s.t > now + leadMs) return null;
+  return s.id;
+}
+
 // A plan in numbers, to set modes side by side: sessions of use (main line and parallel), hours
 // with nothing usable (off hours are not a gap), credits burned and lapsed, sessions left unused at 7d resets, and how many
 // times the main line changes account (a gap between two runs on one account is not a switch).
@@ -58367,7 +58498,10 @@ const PV_PAGE_SECTIONS_DEFAULT = [['cards', true], ['all', true], ['modes', true
 // On until switched off.
 const PV_SORT_KEY = 'planner_sort';
 // Each provider's chart opens on 7 days and the combined one on 30.
-const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: true, codex: true, opencode: true, all: true}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {}};
+const PV = {root: null, io: null, sections: PV_SECTIONS_DEFAULT.map(x => [...x]), pageSections: PV_PAGE_SECTIONS_DEFAULT.map(x => [...x]), sorts: {claude: true, codex: true, opencode: true, all: true}, docs: {}, tips: [], ranges: {claude: 168, codex: 168, opencode: 168, all: 720}, pages: {claude: 0, codex: 0, opencode: 0, all: 0}, more: {},
+  // The relay's Auto switch per provider (relay/auto_switch.py), null until read; the settings each
+  // card was last planned with; and whether the person changed a setting since the last render.
+  auto: null, opts: {}, touched: new Set()};
 // The providers, in card order. OpenCode is optional: a relay without its CLI shows no card for it.
 const PV_PROVIDERS = ['claude', 'codex', 'opencode'];
 const PV_OPTIONAL = ['opencode'];
@@ -58785,14 +58919,13 @@ const pvPct = used => `${Math.round(used)}%`;
 // The card header's switch: shown only when the plan's first step is a switch due now, so the
 // action is one press away in Simple and detailed alike, whichever sections are shown.
 function pvNowSwitch(doc, plan, now) {
-  const s = plannerSteps(plan, PV.ranges[doc.provider])[0];
-  const active = (doc.accounts.find(a => a.active) || {}).id;
-  if (!s || s.kind !== 'use' || s.id === active || s.t > now + 15 * 60e3) return '';
-  const command = PV_CMD[doc.provider].switch(s.id);
+  const id = plannerNowSwitch(doc, plan, now);
+  if (id == null) return '';
+  const command = PV_CMD[doc.provider].switch(id);
   if (!command) return '';
-  const name = pvEsc((doc.accounts.find(a => a.id === s.id) || {}).name || `#${s.id}`);
+  const name = pvEsc((doc.accounts.find(a => a.id === id) || {}).name || `#${id}`);
   return pvCanRun()
-    ? `<button class="run now-switch" data-run="${pvEsc(doc.provider + ':' + s.id)}" data-arm-key="${pvEsc('runhead:' + doc.provider + ':' + s.id)}" title="Recommended now. Press twice to run ${pvEsc(command)} on the relay's machine">▶ Switch to ${name}</button>`
+    ? `<button class="run now-switch" data-run="${pvEsc(doc.provider + ':' + id)}" data-arm-key="${pvEsc('runhead:' + doc.provider + ':' + id)}" title="Recommended now. Press twice to run ${pvEsc(command)} on the relay's machine">▶ Switch to ${name}</button>`
     : `<button class="now-switch" data-copy="${pvEsc(command)}" title="Recommended now. Copy ${pvEsc(command)}">Switch to ${name}: copy</button>`;
 }
 
@@ -58827,8 +58960,10 @@ function pvRender() {
     d.accounts.forEach((a, i) => { colors[a.id] = pvColor(i); });
     const opts = {weekPerFive: pvS(d), monthPerFive: pvM(d), fillH: pvF(d), windows: pvWindows(d),
                   parallel: pvToggle('parallel'), rotate: pvToggle('rotate')};
+    PV.opts[d.provider] = opts;
     return {doc: d, colors, plan: plannerSimulate(d.accounts, now, opts), room: plannerRoom(d.accounts, now, opts)};
   });
+  if (PV.touched.size) { const touched = [...PV.touched]; PV.touched.clear(); pvAutoResend(touched); }
   const cards = () => plans.map(({doc, colors, plan, room}) => {
     const parts = {
       accounts: () => `<h2>Accounts · plan order</h2>${pvAccounts(doc, plan, room, now, colors)}`,
@@ -58837,7 +58972,7 @@ function pvRender() {
     };
     return `
     <section class="card prov-${doc.provider}">
-      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}${pvNowSwitch(doc, plan, now)}</h3>
+      <h3><span class="dot"></span>${PV_CMD[doc.provider].name}<span class="h3-end">${pvAutoSwitch(doc.provider)}${pvNowSwitch(doc, plan, now)}</span></h3>
       ${pvChips(doc, plan, room, now)}
       ${PV.sections.filter(([, on]) => on).map(([id]) => `<div class="sec sec-${id}">${parts[id]()}</div>`).join('')}
     </section>`;
@@ -58911,6 +59046,14 @@ const PV_HTTP = {
     const a = await r.json().catch(() => ({}));
     return {ok: !!a.ok, error: a.error || `the relay answered ${r.status}`};
   },
+  // Auto switch: read with no argument, set with {provider, on, opts, zone}.
+  async auto(set) {
+    const q = new URLSearchParams(location.search);
+    if (set) for (const [k, v] of Object.entries(set)) q.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+    const r = await fetch(`/api/planner-auto?${q}`, {headers: {'X-Herdr-Planner': 'run'}, cache: 'no-store'});
+    const a = await r.json().catch(() => ({}));
+    return {ok: !!a.ok, auto: a.auto, error: a.error || `the relay answered ${r.status}`};
+  },
 };
 
 async function pvFetch() {
@@ -58963,6 +59106,46 @@ async function pvRun(btn) {
     status.textContent = `${command} failed: ${e.message}`;
   }
   btn.disabled = false;
+}
+
+// Auto switch, per provider: on, the relay switches account by this plan when a turn ends on the
+// usage limit and types continue. Never a reset. Off by default, kept by the relay with
+// the settings it plans with; this page only reads it, and writes on a press or a settings edit.
+const PV_AUTO_TITLE = 'When a turn ends on the usage limit, the relay switches account by this plan and types continue. Never spends a reset.';
+const pvZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+
+function pvAutoSwitch(provider) {
+  const a = PV.auto?.[provider];
+  if (!a || !PV_CMD[provider].switch(1)) return '';
+  return `<label class="switch auto-switch" title="${pvEsc(PV_AUTO_TITLE)}"><input type="checkbox" role="switch" data-auto="${provider}"${a.on ? ' checked' : ''}>Auto switch${PV.auto.dry_run ? ' (dry run)' : ''}</label>`;
+}
+
+async function pvAutoRead() {
+  if (!PV.io.auto || !PV.io.reachable()) return;
+  try {
+    const a = await PV.io.auto();
+    if (a.ok) { PV.auto = a.auto; pvRender(); }
+  } catch (e) { /* a relay without auto switch: no toggle */ }
+}
+
+async function pvAutoSet(provider, on) {
+  const status = pv$('runMsg');
+  try {
+    const a = await PV.io.auto({provider, on, opts: PV.opts[provider] || {}, zone: pvZone()});
+    if (a.ok) PV.auto = a.auto;
+    status.textContent = a.ok ? `Auto switch ${on ? 'on' : 'off'} for ${PV_CMD[provider].name}` : `Auto switch: ${a.error}`;
+  } catch (e) {
+    status.textContent = `Auto switch: ${e.message}`;
+  }
+  pvRender();
+}
+
+// A settings edit while Auto switch is on: the relay plans with the new settings from now on.
+function pvAutoResend(providers) {
+  for (const p of providers) {
+    const a = PV.auto?.[p];
+    if (a?.on && PV.opts[p] && JSON.stringify(PV.opts[p]) !== JSON.stringify(a.opts)) pvAutoSet(p, true);
+  }
 }
 
 // One ordered list of sections in Settings, each on or off, kept under key: the stored order with
@@ -59018,7 +59201,7 @@ function pvMount(root, io = PV_HTTP) {
       const shared = p !== 'claude' && defaults[p] === defaults.claude ? pvGet(`planner_${stem}`) : null;
       const saved = parseFloat(pvGet(key) ?? shared);
       if (Number.isFinite(saved) && ok(saved)) input.value = saved;
-      input.addEventListener('input', () => { pvSet(key, input.value); pvRender(); });
+      input.addEventListener('input', () => { pvSet(key, input.value); if (field !== 'warnH') PV.touched.add(p); pvRender(); });
     }
   }
   // The Session tabs: one provider's settings shown at a time; arrow keys move between tabs.
@@ -59068,13 +59251,13 @@ function pvMount(root, io = PV_HTTP) {
   };
   hoursChanged();
   for (const id of ['hoursAll', 'hoursWindow', ...PV_HOURS_FIELDS]) {
-    pv$(id).addEventListener('input', () => { hoursChanged(); pvRender(); });
+    pv$(id).addEventListener('input', () => { hoursChanged(); PV.touched.add('claude').add('codex'); pvRender(); });
   }
   for (const [id, [key, fallback]] of Object.entries(PV_TOGGLES)) {
     const box = pv$(id);
     const saved = pvGet(key);
     box.checked = saved == null ? fallback : saved === '1';
-    box.addEventListener('change', () => { pvSet(key, box.checked ? '1' : '0'); pvRender(); });
+    box.addEventListener('change', () => { pvSet(key, box.checked ? '1' : '0'); if (id !== 'simple') PV.touched.add('claude').add('codex'); pvRender(); });
   }
   // Tips: hover or focus shows one, a click pins it, a click anywhere else or Escape lets it go.
   const out = pv$('out');
@@ -59144,6 +59327,7 @@ function pvMount(root, io = PV_HTTP) {
   });
   pv$('refresh').addEventListener('click', pvFetch);
   pv$('out').addEventListener('change', e => {
+    if (e.target.dataset.auto) { pvAutoSet(e.target.dataset.auto, e.target.checked); return; }
     const sort = e.target.dataset.sort;
     if (sort in PV.sorts) {
       PV.sorts[sort] = e.target.checked;
@@ -59161,6 +59345,7 @@ function pvMount(root, io = PV_HTTP) {
   });
   pvRender();
   pvFetch();
+  pvAutoRead();
   setInterval(() => { if (pvShown()) pvRender(); }, 60e3);
 }
 
@@ -59202,6 +59387,7 @@ function pvMount(root, io = PV_HTTP) {
     // net.js's onopen: whatever was asked while the socket was down goes out now.
     function plannerSocketOpened() {
       for (const ask of plannerAsks.values()) plannerSend(ask);
+      if (PV.root && PV.io === PLANNER_SOCKET) pvAutoRead();
     }
 
     function plannerReceive(msg) {
@@ -59232,19 +59418,196 @@ function pvMount(root, io = PV_HTTP) {
         const a = await plannerAsk({type: 'planner_run', provider, account});
         return {ok: !!a.ok, error: a.error || 'the relay refused it'};
       },
+      // Auto switch: read with no argument, set with {provider, on, opts, zone}. A set offline fails
+      // rather than turning automation on minutes later.
+      auto: async set => {
+        if (set && (!ws || ws.readyState !== 1)) throw new Error('not connected to the relay');
+        const a = await plannerAsk({type: 'planner_auto', ...(set || {})});
+        return {ok: !!a.ok, auto: a.auto, error: a.error || 'the relay refused it'};
+      },
     };
 
     // Called by openPanel whenever the tab comes up, however it was reached: the button, #planner,
     // or a step back through the walk. The first mount fetches; later opens redraw what is held,
     // since the steps are times from now.
     function plannerOpen() {
-      if (PV.root) { pvRender(); return; }
+      if (PV.root) { pvRender(); pvAutoRead(); return; }
       pvMount(document.getElementById('plannerRoot'), PLANNER_SOCKET);
     }
 
     function togglePlanner() {
       if (document.getElementById('plannerView').style.display !== 'none') { closePanel(); return; }
       openPanel('plannerView');
+    }
+
+  </script>
+  <script>
+    // The notification manager's Settings group, on the phone and the desktop. The settings are
+    // the relay's (notify.json beside its config), read when Settings opens and written on every
+    // change; this page keeps no copy of its own. See relay/notify.py.
+    const NOTIFY = {view: null, open: null, error: '', note: '', timers: {}, field: null};
+
+    function notifySend(extra) {
+      if (!ws || ws.readyState !== 1) {
+        NOTIFY.error = 'Not connected to the relay.';
+        notifyRender();
+        return;
+      }
+      ws.send(JSON.stringify({type: 'notify_settings', ...(extra || {})}));
+    }
+
+    // Settings' open hook (status_bar.js, desktop_settings.js) and net.js's onopen.
+    function notifyLoad() {
+      if (ws && ws.readyState === 1) notifySend();
+    }
+
+    function notifyReceive(msg) {
+      NOTIFY.error = msg.ok === false ? (msg.error || 'The relay refused the change.') : '';
+      if (msg.tested) {
+        NOTIFY.note = msg.sent ? 'Test sent.'
+          : 'Test reached nothing: no device took the push, and Discord is off or not configured.';
+      }
+      if (msg.events) NOTIFY.view = msg;
+      // A reply to a keystroke must not redraw the field under the caret.
+      const active = document.activeElement;
+      if (active && active.classList && active.classList.contains('notify-field')) {
+        notifyRenderStatus();
+        return;
+      }
+      notifyRender();
+    }
+
+    function notifyPut(put) {
+      NOTIFY.note = '';
+      notifySend({put});
+    }
+
+    function notifyEdit(key, field, value) {
+      clearTimeout(NOTIFY.timers[key + field]);
+      NOTIFY.timers[key + field] = setTimeout(
+        () => notifyPut({events: {[key]: {[field]: value}}}), 400);
+    }
+
+    function notifyEl(tag, props, ...kids) {
+      const el = Object.assign(document.createElement(tag), props || {});
+      for (const k of kids) if (k != null) el.append(k);
+      return el;
+    }
+
+    function notifyEditor(ev) {
+      const field = (name, multi) => {
+        const input = notifyEl(multi ? 'textarea' : 'input', {
+          className: 'notify-field', value: ev[name], rows: multi ? 2 : undefined,
+          placeholder: ev['default_' + name] || '(empty)', spellcheck: false,
+        });
+        input.setAttribute('aria-label', `${ev.label}: ${name}`);
+        input.addEventListener('focus', () => { NOTIFY.field = input; });
+        input.addEventListener('input', () => notifyEdit(ev.key, name, input.value));
+        return input;
+      };
+      const title = field('title', false);
+      const body = field('body', true);
+      NOTIFY.field = title;
+      const chips = notifyEl('div', {className: 'notify-chips'},
+        ...ev.placeholders.map(p => {
+          const chip = notifyEl('button', {type: 'button', className: 'notify-chip', textContent: `{${p}}`});
+          // mousedown, not click: a click moves focus to the chip before it can read the caret.
+          chip.addEventListener('mousedown', e => e.preventDefault());
+          chip.addEventListener('click', () => {
+            const f = NOTIFY.field || title;
+            const at = f.selectionStart ?? f.value.length;
+            f.setRangeText(`{${p}}`, at, f.selectionEnd ?? at, 'end');
+            f.focus();
+            f.dispatchEvent(new Event('input'));
+          });
+          return chip;
+        }));
+      const reset = notifyEl('button', {type: 'button', className: 'notify-btn', textContent: 'Reset'});
+      reset.addEventListener('click', () => {
+        notifyPut({events: {[ev.key]: {title: null, body: null}}});
+      });
+      const test = notifyEl('button', {type: 'button', className: 'notify-btn', textContent: 'Send test'});
+      test.addEventListener('click', () => {
+        NOTIFY.note = 'Sending…';
+        notifyRenderStatus();
+        notifySend({test: ev.key});
+      });
+      return notifyEl('div', {className: 'notify-editor'},
+        notifyEl('span', {className: 'notify-sub', textContent: 'Title'}), title,
+        notifyEl('span', {className: 'notify-sub', textContent: 'Body'}), body,
+        chips,
+        notifyEl('div', {className: 'notify-actions'}, reset, test));
+    }
+
+    function notifyRow(ev) {
+      const box = notifyEl('input', {type: 'checkbox', checked: ev.on});
+      box.setAttribute('aria-label', ev.label);
+      box.addEventListener('change', () => notifyPut({events: {[ev.key]: {on: box.checked}}}));
+      const edited = ev.title !== ev.default_title || ev.body !== ev.default_body;
+      const open = NOTIFY.open === ev.key;
+      const name = notifyEl('button', {type: 'button', className: 'notify-name'},
+        notifyEl('span', {textContent: ev.label}),
+        edited ? notifyEl('span', {className: 'notify-edited', textContent: 'edited'}) : null,
+        notifyEl('span', {className: 'notify-caret', textContent: open ? '▾' : '▸'}));
+      name.setAttribute('aria-expanded', String(open));
+      name.addEventListener('click', () => {
+        NOTIFY.open = open ? null : ev.key;
+        NOTIFY.note = '';
+        notifyRender();
+      });
+      return notifyEl('div', {className: 'notify-event' + (ev.on ? '' : ' notify-off')},
+        notifyEl('div', {className: 'notify-row'}, box, name),
+        open ? notifyEditor(ev) : null);
+    }
+
+    function notifyRenderStatus() {
+      const el = document.getElementById('notifyStatus');
+      if (!el) return;
+      el.textContent = NOTIFY.error || NOTIFY.note;
+      el.classList.toggle('notify-error', !!NOTIFY.error);
+    }
+
+    function notifyRender() {
+      const root = document.getElementById('notifyBody');
+      if (!root) return;
+      const v = NOTIFY.view;
+      if (!v) {
+        root.replaceChildren(notifyEl('div', {className: 'hint',
+          textContent: NOTIFY.error || 'Connect to read the relay’s notification settings.'}));
+        return;
+      }
+      const groups = [];
+      for (const ev of v.events) {
+        let g = groups.find(x => x.name === ev.group);
+        if (!g) groups.push(g = {name: ev.group, events: []});
+        g.events.push(ev);
+      }
+      const discord = notifyEl('input', {type: 'checkbox', checked: v.fallback.discord,
+                                         disabled: !v.channels.discord});
+      discord.addEventListener('change', () => notifyPut({fallback: {discord: discord.checked}}));
+      const text = notifyEl('input', {type: 'checkbox', checked: v.fallback.text,
+                                      disabled: !v.channels.discord || !v.fallback.discord});
+      text.addEventListener('change', () => notifyPut({fallback: {text: text.checked}}));
+      root.replaceChildren(
+        notifyEl('div', {className: 'notify-channels'},
+          notifyEl('span', {className: v.channels.push ? 'notify-ready' : '',
+                            textContent: v.channels.push ? '● Push ready' : '○ No push device'}),
+          notifyEl('span', {className: v.channels.discord ? 'notify-ready' : '',
+                            textContent: v.channels.discord ? '● Discord webhook' : '○ No Discord webhook'})),
+        ...groups.map(g => notifyEl('div', {className: 'notify-group'},
+          notifyEl('div', {className: 'notify-head', textContent: g.name}),
+          ...g.events.map(notifyRow))),
+        notifyEl('div', {className: 'notify-head', textContent: 'When push reaches no device'}),
+        notifyEl('label', {className: 'notify-row notify-opt'}, discord, notifyEl('span', {textContent:
+          v.channels.discord ? 'Send to the Discord webhook' : 'Send to Discord (no webhook configured)'})),
+        notifyEl('label', {className: 'notify-row notify-opt'}, text,
+          notifyEl('span', {textContent: 'Include pane text'})),
+        notifyEl('div', {className: 'hint', textContent:
+          'Push is encrypted to your device. A Discord channel keeps a readable history, so by '
+          + 'default it gets the title alone. Set HERDR_NOTIFY_WEBHOOK in the relay’s config to '
+          + 'configure the webhook.'}),
+        notifyEl('div', {id: 'notifyStatus', className: 'hint', role: 'status'}));
+      notifyRenderStatus();
     }
 
   </script>
