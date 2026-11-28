@@ -39,11 +39,42 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// Where a tapped notification points, kept until the page asks for it. iOS brings a home-screen
+// app forward on the tap but can drop the `navigate` message posted to a page still waking up, and
+// can start a closed app at its start URL rather than the notification's. So the page asks each
+// time it comes to the front (see terminal.js), and the answer is here whatever happened to the
+// message. In the Cache API rather than a variable: iOS ends an idle worker between the tap and the
+// ask. A link older than two minutes is a tap nobody is waiting on any more.
+const NAV_CACHE = 'herdr-nav';
+const NAV_KEY = appUrl('__pending_nav');
+const NAV_TTL_MS = 120000;
+
+async function putPendingNav(url) {
+  const cache = await caches.open(NAV_CACHE);
+  await cache.put(NAV_KEY, new Response(JSON.stringify({ url, at: Date.now() })));
+}
+
+async function takePendingNav() {
+  const cache = await caches.open(NAV_CACHE);
+  const hit = await cache.match(NAV_KEY);
+  if (!hit) return null;
+  await cache.delete(NAV_KEY);
+  const p = await hit.json().catch(() => null);
+  return p && Date.now() - p.at < NAV_TTL_MS ? p.url : null;
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'pending_nav') return;
+  event.waitUntil(takePendingNav().then((url) => {
+    if (url && event.source) event.source.postMessage({ type: 'navigate', url });
+  }));
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || APP_SCOPE;
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+  event.waitUntil(putPendingNav(url).catch(() => {}).then(() =>
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })).then((clients) => {
       for (const client of clients) {
         if (client.frameType !== 'nested' && new URL(client.url).origin === self.location.origin
             && !new URL(client.url).searchParams.has('ns')

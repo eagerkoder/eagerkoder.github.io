@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-27 19:18 f49538b1">
+  <meta name="app-built" content="2026-11-27 19:38 64253edf">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -42161,8 +42161,22 @@ function nlmSourceDelete(source) {
           const url = new URL(event.data.url, location.href);
           if (url.origin !== location.origin) return;
           notificationPane = url.searchParams.get('pane') || '';
-          openNotificationPane();
+          if (notificationPane) openNotificationPane();
+          // A notification about something other than a pane (the planner, say) names it by hash.
+          else if (url.hash && url.hash !== location.hash) location.hash = url.hash;
         } catch (e) { /* malformed service-worker message */ }
+      });
+      // The worker keeps a tapped notification's link until asked (see sw.js): iOS can drop the
+      // message above while the app is waking, or start it without the link. Asked on load and each
+      // time the app comes to the front, and once more a moment later, because the tap's event can
+      // reach the worker after the page is already visible.
+      const askPendingNav = () => navigator.serviceWorker.ready
+        .then(reg => reg.active && reg.active.postMessage({type: 'pending_nav'}))
+        .catch(() => {});
+      const askSoon = () => { askPendingNav(); setTimeout(askPendingNav, 1500); };
+      askSoon();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') askSoon();
       });
     }
     // isShell was here. It is asked by the send paths before they decide what a send means, so it
