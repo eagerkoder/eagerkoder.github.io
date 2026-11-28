@@ -49,9 +49,9 @@ const NAV_CACHE = 'herdr-nav';
 const NAV_KEY = appUrl('__pending_nav');
 const NAV_TTL_MS = 120000;
 
-async function putPendingNav(url) {
+async function putPendingNav(entry) {
   const cache = await caches.open(NAV_CACHE);
-  await cache.put(NAV_KEY, new Response(JSON.stringify({ url, at: Date.now() })));
+  await cache.put(NAV_KEY, new Response(JSON.stringify(entry)));
 }
 
 async function takePendingNav() {
@@ -60,31 +60,32 @@ async function takePendingNav() {
   if (!hit) return null;
   await cache.delete(NAV_KEY);
   const p = await hit.json().catch(() => null);
-  return p && Date.now() - p.at < NAV_TTL_MS ? p.url : null;
+  return p && p.url && Date.now() - p.at < NAV_TTL_MS ? p : null;
 }
 
 self.addEventListener('message', (event) => {
   if (event.data?.type !== 'pending_nav') return;
-  event.waitUntil(takePendingNav().then((url) => {
-    if (url && event.source) event.source.postMessage({ type: 'navigate', url });
+  event.waitUntil(takePendingNav().then((p) => {
+    if (p && event.source) event.source.postMessage({ type: 'navigate', ...p, via: 'pending:' + p.via });
   }));
 });
 
+// `at` names the tap, so a page that hears it twice (the message, then its own ask) opens it once.
+// `via` says which way the tap went, for the page to report: it is the only way to see on a phone.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || APP_SCOPE;
-  event.waitUntil(putPendingNav(url).catch(() => {}).then(() =>
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true })).then((clients) => {
-      for (const client of clients) {
-        if (client.frameType !== 'nested' && new URL(client.url).origin === self.location.origin
-            && !new URL(client.url).searchParams.has('ns')
-            && !new URL(client.url).searchParams.has('m')) {
-          client.focus();
-          client.postMessage({ type: 'navigate', url });
-          return;
-        }
-      }
-      return self.clients.openWindow(url);
-    })
-  );
+  const at = Date.now();
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
+    const client = clients.find((c) => {
+      const u = new URL(c.url);
+      return c.frameType !== 'nested' && u.origin === self.location.origin
+        && !u.searchParams.has('ns') && !u.searchParams.has('m');
+    });
+    const via = (client ? 'focus' : 'open') + ':' + clients.length;
+    await putPendingNav({ url, at, via }).catch(() => {});
+    if (!client) return self.clients.openWindow(url);
+    try { await client.focus(); } catch (e) { /* iOS may refuse; the page asks on coming forward */ }
+    client.postMessage({ type: 'navigate', url, at, via: 'message:' + via });
+  }));
 });

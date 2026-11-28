@@ -11,7 +11,7 @@
        this project's version is written down. Served unbuilt from the relay these keep saying
        "dev", which is what the page then is: the working copy on disk, not a release. -->
   <meta name="app-version" content="0.6.0">
-  <meta name="app-built" content="2026-11-27 19:38 64253edf">
+  <meta name="app-built" content="2026-11-27 20:14 7a50b8c8">
   <!-- A file, not the data: URI this used to be. iOS only offers Add to Home Screen for a page
        with a fetchable manifest and a real icon, and only a home-screen web app can receive Web
        Push — so these two lines are load-bearing for Lock Screen notifications, not polish.
@@ -42139,8 +42139,31 @@ function nlmSourceDelete(source) {
       setTimeout(refreshPane, 600);
     }
 
+    // What a tapped notification did, sent to the relay's client events once the socket is up: a
+    // phone is the one place this runs and the one place nobody can watch it.
+    const navNotes = [];
+    let navNotedMissing = '';
+    function noteNav(stage, fields) {
+      navNotes.push({type: 'client_event', event: 'notify_nav', at: Date.now(), stage, ...fields});
+      flushNavNotes();
+    }
+    function flushNavNotes() {
+      while (navNotes.length && ws && ws.readyState === 1) {
+        try { ws.send(JSON.stringify(navNotes.shift())); } catch (e) { return; }
+      }
+    }
+
     function openNotificationPane() {
-      if (!notificationPane || !paneOf(notificationPane)) return;
+      flushNavNotes();
+      if (!notificationPane) return;
+      if (!paneOf(notificationPane)) {
+        if (agents.length && navNotedMissing !== notificationPane) {
+          navNotedMissing = notificationPane;
+          noteNav('no_pane', {pane: notificationPane});
+        }
+        return;
+      }
+      noteNav('open', {pane: notificationPane});
       openTerminal(notificationPane);
       notificationPane = '';
       const url = new URL(location.href);
@@ -42155,11 +42178,17 @@ function nlmSourceDelete(source) {
     // ServiceWorkerContainer, which is a different EventTarget. A window listener hears iframes
     // and other windows — everything except the one sender this is for.
     if ('serviceWorker' in navigator && !window.STORAGE_NS && !window.MACHINE_ID) {
+      let navSeenAt = 0;
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type !== 'navigate') return;
         try {
           const url = new URL(event.data.url, location.href);
           if (url.origin !== location.origin) return;
+          const at = Number(event.data.at) || 0;
+          if (at && at <= navSeenAt) return;     // the same tap, heard again by the page's own ask
+          navSeenAt = at || navSeenAt;
+          noteNav('heard', {via: String(event.data.via || ''), pane: url.searchParams.get('pane') || '',
+                            age: at ? Date.now() - at : -1});
           notificationPane = url.searchParams.get('pane') || '';
           if (notificationPane) openNotificationPane();
           // A notification about something other than a pane (the planner, say) names it by hash.
@@ -42173,11 +42202,13 @@ function nlmSourceDelete(source) {
       const askPendingNav = () => navigator.serviceWorker.ready
         .then(reg => reg.active && reg.active.postMessage({type: 'pending_nav'}))
         .catch(() => {});
-      const askSoon = () => { askPendingNav(); setTimeout(askPendingNav, 1500); };
+      // Asked over eight seconds: iOS can start the worker for the tap well after the page is up.
+      const askSoon = () => { askPendingNav(); [1500, 4000, 8000].forEach(ms => setTimeout(askPendingNav, ms)); };
       askSoon();
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') askSoon();
       });
+      window.addEventListener('pageshow', askSoon);
     }
     // isShell was here. It is asked by the send paths before they decide what a send means, so it
     // moved to send.js with them.
