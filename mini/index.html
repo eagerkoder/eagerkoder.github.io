@@ -47040,26 +47040,31 @@ function nlmSourceDelete(source) {
       }
       const thread = document.getElementById('convViewThread');
       if (thread) {
+        // A working member's draft slot (`.conv-slot`) addresses its agent too: it is the bubble a
+        // reader is most likely to be looking at while that agent works.
+        const BUBBLE = '.conv-msg, .conv-slot';
         function onBubbleDouble(e) {
-          const msg = e.target.closest && e.target.closest('.conv-msg');
+          const msg = e.target.closest && e.target.closest(BUBBLE);
           if (!msg || (e.target.closest && e.target.closest('.conv-pick'))) return;
           addressConvAuthor(msg.dataset.key);
         }
         thread.addEventListener('dblclick', onBubbleDouble);
 
-        let lastTap = 0, lastMsg = null;
+        // Two taps on the same author, by key and not by element: a streaming draft slot is
+        // redrawn between the taps, so the second one lands on a new element.
+        let lastTap = 0, lastKey = null;
         thread.addEventListener('touchend', e => {
-          const msg = e.target.closest && e.target.closest('.conv-msg');
+          const msg = e.target.closest && e.target.closest(BUBBLE);
           if (!msg || (e.target.closest && e.target.closest('.conv-pick'))) return;
           const now = Date.now();
-          if (now - lastTap < 350 && lastMsg === msg) {
+          if (now - lastTap < 350 && lastKey === msg.dataset.key) {
             e.preventDefault();
             onBubbleDouble(e);
             lastTap = 0;
-            lastMsg = null;
+            lastKey = null;
           } else {
             lastTap = now;
-            lastMsg = msg;
+            lastKey = msg.dataset.key;
           }
         });
       }

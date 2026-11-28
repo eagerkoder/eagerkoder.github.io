@@ -39396,10 +39396,17 @@ convApplyTint();
           const msg = tick.closest('.conv-msg');
           if (msg) deskTogglePick(col, Number(msg.dataset.i));
         });
-        body.addEventListener('dblclick', e => {
-          const msg = e.target.closest && e.target.closest('.conv-msg');
-          if (!msg || !msg.dataset.key) return;
-          if (e.target.closest('.conv-pick')) return;
+        // Two clicks on the same author, read by key rather than from `dblclick`: a working
+        // member's draft slot (`.conv-slot`) is redrawn as it streams, and a bubble replaced
+        // between the clicks gets no `dblclick` of its own.
+        let lastClick = 0, lastKey = null;
+        body.addEventListener('click', e => {
+          const msg = e.target.closest && e.target.closest('.conv-msg, .conv-slot');
+          if (!msg || !msg.dataset.key || e.target.closest('.conv-pick')) return;
+          const now = Date.now(), twice = now - lastClick < 400 && lastKey === msg.dataset.key;
+          lastClick = twice ? 0 : now;
+          lastKey = twice ? null : msg.dataset.key;
+          if (!twice) return;
           const tab = deskTabFor((deskColumns[col] || {}).tabKey);
           if (!tab || tab.kind !== 'conversation') return;
           deskTargets.set(tab.key, msg.dataset.key);
