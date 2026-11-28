@@ -19486,7 +19486,11 @@ function markdownHtml(source) {
     // phone draws this over two threads and the desktop page over up to five columns.
     function convSyncBadges(box) {
       if (!box || box.hidden) return;
-      const msgs = Array.from(box.querySelectorAll('.conv-msg'));
+      // The draft slots are drawn below the record, so a working member whose draft is on screen
+      // has its slot as its newest bubble, and the tag and Esc hang on what it is writing now
+      // rather than on what it finished last. With no slot drawn ("final messages only", or a
+      // member not working) the newest message keeps them.
+      const msgs = Array.from(box.querySelectorAll('.conv-msg, .conv-slot'));
       // The newest bubble of each member, not the newest bubble of the thread. In a joint thread
       // the two are only the same for whoever spoke last, and a partner working while someone else
       // spoke is the case the joint thread exists to show.
@@ -19501,7 +19505,7 @@ function markdownHtml(source) {
         const status = live && ['working', 'done', 'blocked'].includes(live.status)
           ? live.status : '';
         let wrap = el.querySelector('.conv-live');
-        if (!status) { if (wrap) { if (wrap.contains(armedEl)) disarmButton(); wrap.remove(); } return; }
+        if (!status) { if (wrap) wrap.remove(); return; }
         if (!wrap) {
           wrap = document.createElement('span');
           wrap.className = 'conv-live';
@@ -19517,17 +19521,23 @@ function markdownHtml(source) {
         // Esc, immediately left of the tag it belongs to. One per working pane rather than one for
         // the app: a bar at the bottom of the screen could only ever stop the open pane, and the
         // thread a reader is watching may have three members working at once.
+        // Armed by the member's key and not by the element: a streaming slot is redrawn between the
+        // two taps, and the second tap lands on a new button that must still fire.
+        const armKey = 'esc:' + el.dataset.key;
         let esc = wrap.querySelector('.conv-esc');
         if (status !== 'working') {
           // An arm must not survive the pane leaving the state the button existed for: it would
           // come back armed the next time it worked, one tap from firing.
-          if (esc) { if (esc === armedEl) disarmButton(); esc.remove(); }
+          if (armButtonArmed(armKey)) disarmButton();
+          if (esc) esc.remove();
           return;
         }
         if (!esc) {
           esc = document.createElement('button');
           esc.className = 'conv-esc arm-btn';
           esc.textContent = 'Esc';
+          esc.dataset.armKey = armKey;
+          if (armButtonArmed(armKey)) esc.dataset.armed = '1';
           esc.setAttribute('aria-label', 'Stop this agent');
           esc.onclick = () => convArmEsc(esc, el.dataset.key);
           wrap.insertBefore(esc, badge);
@@ -19546,7 +19556,7 @@ function markdownHtml(source) {
         ws.send(JSON.stringify(Object.assign({type: 'send_keys', keys: ['Escape']}, paneAddr(live))));
         showToast(`Sent Escape to ${paneLabel(live)}`, 'info');
         if (typeof burstPoll === 'function') burstPoll();
-      });
+      }, 'esc:' + key);
     }
 
     // --- who is working, drawn over the thread ---
